@@ -107,6 +107,45 @@ daily, never contested. Don't use a console: on Walmart those are often held by
 marketplace sellers, so an out-of-stock reading would be *correct* and you'd
 chase a bug that isn't there.
 
+## Verifying it works
+
+```bash
+make verify           # everything, including live retailer checks
+make verify-offline   # same minus the live check — for CI
+```
+
+That is how you answer "is bot-y still working" without reading any code. It
+exits **0** only if every check below passed, and prints `VERIFY: PASS` or
+`VERIFY: FAIL (<stage>)`.
+
+| Stage | Proves |
+|---|---|
+| `test` | The 36 offline tests still pass — no network touched |
+| `types` | `mypy` is clean over `boty/` and `scripts/` |
+| `fixtures` | Warns about fixtures older than 90 days or missing a capture note. Never fails |
+| `controls` | Live control products still read in stock |
+| `mutation` | The suite would actually notice a broken extractor |
+
+**Fixtures and controls answer different questions, and neither substitutes for
+the other.** Fixtures are frozen copies of real retailer pages: they catch
+*code* regressions, deterministically and offline, but they will keep passing
+forever after a retailer redesigns its site. Live control products — a gallon of
+milk, a console that never sells out — catch *reality*: if one stops reading
+in stock, the detector is broken, because a control is chosen precisely because
+it is always available.
+
+`mutation` exists because a green suite is not evidence that it detects
+anything. It corrupts three specific things in a throwaway copy of the package —
+inverting the buyable check, turning "I could not read this page" into
+out-of-stock, disabling the seller filter — and requires the tests to go red for
+each. A survivor names a real hole: that breakage could ship with every test
+green.
+
+If you have no internet, the live check **skips** and says so rather than
+failing. A verify that goes red because someone's wifi dropped gets ignored
+within a week. But if the network is up and a retailer turns us away, that is a
+failure — being blocked is the monitor not working, not an infrastructure hiccup.
+
 ## Being a good citizen
 
 Default cadence is 5 minutes with jitter, which is plenty for a drought that
