@@ -16,6 +16,8 @@ page or a dead browser quietly becomes a stock verdict.
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -24,6 +26,11 @@ from boty import browser, fixtures
 from boty.fetch import Blocked, FetchError
 
 URL = "https://www.example.com/site/thing/6577129.p"
+
+#: Captured at import time, before the autouse network guard replaces the module
+#: attribute. Two tests below need the real launch path, driven against a fake
+#: nodriver — the guard is doing its job by hiding it from everything else.
+_REAL_RENDER = browser._render
 
 
 def _render_returns(monkeypatch: pytest.MonkeyPatch, html: str) -> None:
@@ -127,6 +134,73 @@ def test_find_browser_returns_none_when_nothing_is_installed(monkeypatch: pytest
     monkeypatch.setattr(browser.shutil, "which", lambda name: None)
 
     assert browser.find_browser() is None
+
+
+def _fake_nodriver(monkeypatch: pytest.MonkeyPatch, seen: dict, explode: bool = False) -> None:
+    """Stand in for nodriver so `_render`'s real body can be exercised offline.
+
+    Nothing here opens a socket or spawns a process — it records the launch
+    keywords and hands back a tab-shaped object. `explode=True` makes navigation
+    raise, to exercise the failure path through the `finally`.
+    """
+
+    class _Tab:
+        async def get_content(self) -> str:
+            return "<html>fake</html>"
+
+    class _Browser:
+        async def get(self, url: str) -> _Tab:
+            seen["url"] = url
+            if explode:
+                raise RuntimeError("navigation blew up")
+            return _Tab()
+
+        def stop(self) -> None:
+            seen["stopped"] = True
+
+    async def _start(**kwargs: object) -> _Browser:
+        seen.update(kwargs)
+        return _Browser()
+
+    monkeypatch.setitem(sys.modules, "nodriver", types.SimpleNamespace(start=_start))
+
+
+def test_the_chrome_sandbox_is_on_unless_explicitly_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A security downgrade must be something somebody chose, not a default.
+
+    This transport *executes* a retailer's JavaScript, so Chrome's sandbox is
+    the boundary between a renderer exploit and this host. The unset case is the
+    assertion that matters: nobody reviews a downgrade that happens silently.
+
+    Calls the real `_render` (captured at import, before the autouse guard swaps
+    it out) against a fake nodriver, so this tests the launch call rather than
+    restating the env lookup.
+    """
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen)
+    monkeypatch.delenv(browser.NO_SANDBOX_ENV, raising=False)
+
+    assert _REAL_RENDER("https://example.com/", None, 5.0, 0.0) == "<html>fake</html>"
+    assert seen["sandbox"] is True, "the Chrome sandbox must be on by default"
+    assert seen["headless"] is True
+    assert seen["stopped"] is True, "the browser must be stopped on the success path too"
+
+    seen.clear()
+    _fake_nodriver(monkeypatch, seen)
+    monkeypatch.setenv(browser.NO_SANDBOX_ENV, "1")
+    _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+    assert seen["sandbox"] is False, "the opt-out did not reach the launch"
+
+
+def test_the_browser_is_stopped_even_when_the_page_explodes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A wedged or hostile page must not leak a Chrome process onto the box."""
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen, explode=True)
+
+    with pytest.raises(RuntimeError, match="navigation blew up"):
+        _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+
+    assert seen["stopped"] is True, "browser.stop() did not run on the failure path"
 
 
 def test_importing_browser_does_not_import_nodriver() -> None:

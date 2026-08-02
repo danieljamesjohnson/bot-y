@@ -46,6 +46,24 @@ log = logging.getLogger(__name__)
 #: stay honest for a fresh clone on someone else's machine.
 BROWSER_PATH_ENV = "BOTY_BROWSER_PATH"
 
+#: Set to a truthy value to launch Chrome with `--no-sandbox`.
+#:
+#: Off by default and it should stay that way: this transport *executes*
+#: attacker-controlled JavaScript from a retailer, and Chrome's sandbox is the
+#: thing standing between a renderer exploit and the host. Turning it off is a
+#: real reduction in isolation, so it is opt-in, per-host, and never the
+#: default — a security downgrade that happens silently is not one anybody
+#: reviewed.
+#:
+#: The reason it exists at all: Ubuntu 24.04 ships
+#: `kernel.apparmor_restrict_unprivileged_userns=1`, which denies unprivileged
+#: user namespaces to binaries without an AppArmor profile. An unpackaged
+#: Chrome (a Chrome-for-Testing download, say) then cannot build its namespace
+#: sandbox and aborts on startup. The better fixes are a distro Chrome package,
+#: an AppArmor profile for the binary, or a setuid `chrome_sandbox` helper; this
+#: is the escape hatch for when none of those is available.
+NO_SANDBOX_ENV = "BOTY_BROWSER_NO_SANDBOX"
+
 #: Tried in order when the env var is unset. Covers the usual Debian/Ubuntu,
 #: Fedora and upstream-Google package names.
 _CANDIDATES = (
@@ -92,10 +110,19 @@ def _render(url: str, executable: str | None, timeout: float, settle_seconds: fl
     # actionable message rather than a traceback.
     import nodriver
 
+    sandbox = not os.environ.get(NO_SANDBOX_ENV)
+    if not sandbox:
+        log.warning(
+            "%s is set — Chrome's sandbox is OFF and retailer JavaScript runs "
+            "with this process's privileges",
+            NO_SANDBOX_ENV,
+        )
+
     async def _run() -> str:
         browser = await nodriver.start(
             headless=True,
             browser_executable_path=executable,
+            sandbox=sandbox,
             # No extensions, no persistent profile, no credentials: this browser
             # sees public product URLs and nothing else. nodriver creates and
             # removes a throwaway user-data dir per run.
