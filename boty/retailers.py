@@ -101,22 +101,40 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
     the field we want — no adversarial relationship at all.
 
     `watch.target` is the SKU.
+
+    The API key is interpolated into the request URL, which makes it a secret
+    that must never reach the returned Result. `boty.status.write` copies both
+    `Result.url` and `Result.detail` verbatim into `served/boty/status.json`,
+    and that file is served over HTTP — so a credentialed URL in either field
+    is a published credential, in flat contradiction of the constraint that
+    they live only in ~/.config/boty/env at mode 600. REQ-04 records HTTP 403
+    as Best Buy's normal answer, so the error paths are the common case here,
+    not the rare one. Every Result below therefore carries `product_url`, and
+    anything derived from an exception goes through `_redact` first: curl error
+    strings routinely echo the URL they were given.
     """
-    url = (
+    product_url = f"https://www.bestbuy.com/site/-/{watch.target}.p"
+    api_url = (
         f"https://api.bestbuy.com/v1/products(sku={watch.target})"
         f"?apiKey={api_key}&format=json&show=sku,name,salePrice,onlineAvailability"
     )
+
+    def _redact(text: str) -> str:
+        return text.replace(api_key, "***") if api_key else text
+
     try:
-        page = get(url)
+        page = get(api_url)
         data = page.json
     except (Blocked, FetchError) as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"api error: {exc}", url=url)
+        return Result(watch, Availability.UNKNOWN, detail=_redact(f"api error: {exc}"), url=product_url)
     except ValueError as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"bad api json: {exc}", url=url)
+        return Result(watch, Availability.UNKNOWN, detail=_redact(f"bad api json: {exc}"), url=product_url)
 
     products = data.get("products") or []
     if not products:
-        return Result(watch, Availability.UNKNOWN, detail=f"sku {watch.target} not found", url=url)
+        return Result(
+            watch, Availability.UNKNOWN, detail=f"sku {watch.target} not found", url=product_url
+        )
 
     p = products[0]
     available = bool(p.get("onlineAvailability"))
@@ -125,5 +143,5 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
         Availability.IN_STOCK if available else Availability.OUT_OF_STOCK,
         price=p.get("salePrice"),
         detail=f"bestbuy api: onlineAvailability={available}",
-        url=f"https://www.bestbuy.com/site/-/{watch.target}.p",
+        url=product_url,
     )

@@ -187,6 +187,73 @@ def test_fetch_error_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------
+# Best Buy: the API key must never reach a Result
+# --------------------------------------------------------------------------
+
+#: Realistic shape — long enough that a substring check is meaningful.
+API_KEY = "SUPERSECRETKEY123abcdefghijklmnop"
+
+
+def _bestbuy_watch() -> Watch:
+    return Watch(name="GO Plus +", retailer="bestbuy", target="6577129")
+
+
+@pytest.mark.parametrize(
+    ("name", "install"),
+    [
+        # curl error strings routinely echo the requested URL back, so the
+        # credential arrives in `detail` as well as in `url`.
+        ("transport error", lambda mp: _raise(mp, FetchError(f"HTTP 403 for url: {_bestbuy_url()}"))),
+        ("blocked", lambda mp: _raise(mp, Blocked(f"challenge page for {_bestbuy_url()}"))),
+        ("bad json", lambda mp: _serve(mp, "<html>403 Forbidden</html>")),
+        ("sku not found", lambda mp: _serve(mp, '{"products": []}')),
+    ],
+)
+def test_bestbuy_api_key_never_reaches_the_result(
+    monkeypatch: pytest.MonkeyPatch, name: str, install: object
+) -> None:
+    """A credential in a Result is a credential on the public status page.
+
+    `boty.status.write` copies `r.url` and `r.detail` verbatim into
+    `served/boty/status.json`, which is served over HTTP through the Mission
+    Control /tools/boty proxy. Every error path here used to return the full
+    credentialed API URL as `Result.url`, and REQ-04 records HTTP 403 as Best
+    Buy's *normal* behaviour — so this is the ordinary case, not the edge one.
+    It also violates the project constraint that credentials live only in
+    ~/.config/boty/env at mode 600.
+    """
+    install(monkeypatch)  # type: ignore[operator]
+
+    result = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY)
+
+    assert API_KEY not in result.url, f"{name}: api key leaked into Result.url"
+    assert API_KEY not in result.detail, f"{name}: api key leaked into Result.detail"
+    assert "apiKey" not in result.url
+    assert result.url == "https://www.bestbuy.com/site/-/6577129.p"
+    assert result.availability is Availability.UNKNOWN
+    assert result.detail, "a UNKNOWN verdict must still say why"
+
+
+def _bestbuy_url() -> str:
+    return (
+        f"https://api.bestbuy.com/v1/products(sku=6577129)?apiKey={API_KEY}"
+        "&format=json&show=sku,name,salePrice,onlineAvailability"
+    )
+
+
+def test_bestbuy_success_reports_the_public_product_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _serve(monkeypatch, '{"products": [{"salePrice": 54.99, "onlineAvailability": true}]}')
+
+    result = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY)
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.price == 54.99
+    assert API_KEY not in result.url and API_KEY not in result.detail
+
+
+# --------------------------------------------------------------------------
 # The guard itself
 # --------------------------------------------------------------------------
 
