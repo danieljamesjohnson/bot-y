@@ -1,0 +1,17 @@
+# changedetection.io datastore — holds its API key and notification URLs
+datastore/
+
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+.env
+*.log
+state.json
+
+# changedetection.io stack — separate tool, kept on disk for the dashboard
+# of unguarded sites, but not part of bot-y
+docker-compose.yml

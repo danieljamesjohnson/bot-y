@@ -1,0 +1,55 @@
+# bot-y — what to watch.
+#
+# Adding a product is editing this file. No code, no type unions, no rebuild.
+
+settings:
+  # Only count offers sold by the retailer itself. On marketplaces a sold-out
+  # product is nearly always "in stock" from resellers at a markup — alerting
+  # on those trains you to ignore the notifications.
+  first_party_only: true
+
+  # Seconds between passes. A drought lasts weeks; polling every few seconds
+  # buys nothing and is what gets an IP blocked.
+  interval_seconds: 300
+
+  state_path: state.json
+
+  # Free key from https://developer.bestbuy.com/ — Best Buy rejects
+  # impersonated HTTP at the connection layer, so the official API is the
+  # only sane path there. Without a key, bestbuy watches are skipped.
+  bestbuy_api_key: ${BESTBUY_API_KEY}
+
+# Apprise URLs. Keep the secrets in the environment, not in this file.
+#   tgram://<bot-token>/<chat-id>     ntfy://<topic>     discord://<id>/<token>
+notify:
+  - ${BOTY_NOTIFY_URL}
+
+watches:
+  # ---- what we actually want -------------------------------------------
+  - name: Pokémon GO Plus +
+    retailer: gamestop
+    target: https://www.gamestop.com/consoles-hardware/nintendo-switch/gaming-accessories/controllers/products/pokemon-go-plus-plus/20003961.html
+    max_price: 80          # MSRP is $54.99; anything near $140 is a flip
+
+  - name: Pokémon GO Plus +
+    retailer: walmart
+    target: https://www.walmart.com/ip/Pok-mon-GO-Plus-for-Nintendo-Switch/1203950273
+    max_price: 80
+
+  # ---- controls: known-good products that prove the detector works ------
+  # If one of these stops reading in-stock, the detector is broken and you
+  # get told. Without them, a stale parser reports "out of stock" forever
+  # and you never hear anything again — which looks exactly like a drought.
+  - name: CONTROL — PS5 console
+    retailer: gamestop
+    target: https://www.gamestop.com/consoles-hardware/playstation-5/consoles/products/playstation-5-console/11108140.html
+    control: true
+
+  # A grocery staple is the ideal control: sold by Walmart itself, restocked
+  # daily, and never the subject of a marketplace buy-box fight. Do not use a
+  # console here — on Walmart those are frequently held by resellers, so an
+  # out-of-stock reading would be correct and you would chase a phantom bug.
+  - name: CONTROL — Great Value whole milk
+    retailer: walmart
+    target: https://www.walmart.com/ip/Great-Value-Whole-Vitamin-D-Milk-Gallon-Plastic-Jug-128-Fl-Oz/10450114
+    control: true

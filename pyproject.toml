@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bot-y"
+version = "0.1.0"
+description = "Self-hosted restock monitor for big retailers — TLS-impersonation fetching, structured stock data, and control products that catch broken detectors instead of failing silently."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Dan Johnson" }]
+keywords = ["restock", "monitor", "stock", "scraping", "notifications"]
+
+dependencies = [
+    "curl_cffi>=0.7",   # browser TLS/JA3 impersonation — the load-bearing dep
+    "PyYAML>=6.0",
+    "apprise>=1.7",     # ~100 notification services behind one URL syntax
+]
+
+[project.urls]
+Homepage = "https://github.com/danieljamesjohnson/bot-y"
+
+[project.scripts]
+boty = "boty.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["boty*"]
