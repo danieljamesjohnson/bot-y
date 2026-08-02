@@ -65,13 +65,26 @@ works. Record which rung each retailer landed on in the support matrix.
   3. A test proves a marketplace-seller offer above the price ceiling is not alertable
   4. `mypy` (or equivalent) runs clean over `boty/`
   5. Deliberately corrupting an extractor makes the suite fail, not pass quietly
+  6. `make verify` exits 0 on a healthy tree and non-zero if ANY check fails — tests, types, live control products, and the mutation check
 
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [ ] 01-01: Fixture capture tooling — save a live page to `tests/fixtures/<retailer>/`, with a note on when and what state it captured
 - [ ] 01-02: Extraction tests over fixtures — the three states, seller filtering, price ceiling, and the UNKNOWN guarantee
-- [ ] 01-03: Type hints across `boty/`, `mypy` config, and a `make check` entry point
+- [ ] 01-03: Type hints across `boty/` and `mypy` config
+- [ ] 01-04: `make verify` — one command, one exit code, covering offline tests + mypy + live control health + the mutation check
+
+### Why `make verify` exists
+
+GSD's verifier is an LLM forming a judgement, and a judgement can be
+confidently wrong in the same direction as the code that produced it. The fix
+is not a better prompt — it is success criteria that are *executable*, so the
+verifier reads an exit code instead of forming an impression.
+
+Every phase from here is verified as "`make verify` passes, plus these
+specific observable facts." It also outlives the agents: Dan can run it
+himself in six months and get a real answer.
 
 ### Phase 2: Five Retailers Green
 **Goal**: Five retailers reporting trustworthy stock for the GO Plus +, each control-verified. This is the MVP bar.
@@ -84,6 +97,7 @@ Plans:
   4. `boty check` reports five or more retailers with no health warnings
   5. Each new adapter has fixture-backed tests from Phase 1
   6. The support matrix records which escalation rung each retailer landed on
+  7. `make verify` exits 0
 
 **Plans**: 3 plans (parallelizable — adapters are independent)
 
@@ -102,6 +116,7 @@ Plans:
   3. Any retailer reached via rung 3 is flagged DEGRADED in the matrix and in `boty check` output
   4. All controls still green; no regression in the five from Phase 2
   5. A single `boty check` completes in under 2 minutes
+  6. `make verify` exits 0
 
 **Plans**: 2 plans (parallelizable)
 

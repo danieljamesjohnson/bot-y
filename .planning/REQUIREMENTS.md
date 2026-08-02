@@ -24,6 +24,7 @@ has not worked.
 - **REQ-01**: Extraction logic is testable offline against saved HTML fixtures, with no network access.
 - **REQ-02**: Tests assert the three-state contract explicitly — in particular that an unparseable page produces UNKNOWN and never OUT_OF_STOCK — and that seller filtering plus the price ceiling each independently suppress a marketplace listing.
 - **REQ-03**: `boty/` carries type hints and passes a static type check.
+- **REQ-12**: A single `make verify` runs every mechanical check — offline fixture tests, static types, live control-product health, and a mutation check that corrupts an extractor — and exits non-zero if any fails. Phase success criteria are stated in terms of it, so verification is an exit code rather than a judgement.
 
 ### Phase 2 — Five Retailers Green
 
@@ -53,7 +54,8 @@ has not worked.
 ## Acceptance Criteria
 
 - `boty check` shows ≥5 retailers, every control in stock, no health warnings
-- Deliberately breaking an extractor makes the test suite fail
+- `make verify` exits 0 on a healthy tree
+- Deliberately breaking an extractor makes `make verify` exit non-zero
 - A retailer with no control watch is surfaced as unhealthy
 - A marketplace listing above the price ceiling does not produce an alert
 - A blocked or unparseable fetch produces UNKNOWN, never OUT_OF_STOCK
