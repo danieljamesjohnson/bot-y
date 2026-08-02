@@ -63,7 +63,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: would exit 2, and `check_mutation` would abort as a harness error rather
 #: than quietly scoring it — but the run would still be dead. The sandbox has
 #: to be a faithful copy of everything the suite reaches for.
-SANDBOX_CONTENTS = ("boty", "tests", "scripts", "pyproject.toml", "Makefile")
+#: Everything the suite reads. The sandbox has to be a faithful copy or the
+#: run proves nothing: a test that fails inside it for want of a file is
+#: indistinguishable from a mutation being caught, and the baseline check
+#: turns that into "nothing was proved either way". `config` is here because
+#: tests/test_config.py asserts the shipped products.yaml still loads — a
+#: guard against validation that rejects the repo's own config.
+SANDBOX_CONTENTS = ("boty", "tests", "scripts", "config", "pyproject.toml", "Makefile")
 
 _IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "*.egg-info")
 
