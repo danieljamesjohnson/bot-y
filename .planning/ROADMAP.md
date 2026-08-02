@@ -13,6 +13,7 @@ can contribute to.
 ## Phases
 
 **Phase Numbering:**
+
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
@@ -50,19 +51,23 @@ works. Record which rung each retailer landed on in the support matrix.
    credential. Best Buy's API requires manual approval and a non-free email
    domain, so it fails this test and cannot be a primary path; it stays
    available as an optional enhancement for those who have a key
+
 3. **Browser (`nodriver`), marked DEGRADED** — allowed, but that retailer is
    flagged lower-confidence, because it depends on the fragile path we
    deliberately moved away from
+
 4. **Drop, with evidence** — documented as unreachable in the support matrix,
    including what was tried. Never left silently broken.
 
 ## Phase Details
 
 ### Phase 1: Detector Safety Net
+
 **Goal**: A contributor (or I) can add a retailer adapter and be told immediately if it breaks an existing one — offline, without hitting a live site.
 **Depends on**: Nothing (first phase)
 **Requirements**: REQ-01, REQ-02, REQ-03, REQ-12
 **Success Criteria** (what must be TRUE):
+
   1. Saved HTML fixtures for GameStop and Walmart drive tests that pass without network access
   2. A test proves each of the three availability states, including that an unparseable page yields UNKNOWN and never OUT_OF_STOCK
   3. A test proves a marketplace-seller offer above the price ceiling is not alertable
@@ -73,7 +78,8 @@ works. Record which rung each retailer landed on in the support matrix.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01: Fixture capture tooling — save a live page to `tests/fixtures/<retailer>/`, with a note on when and what state it captured
+
+- [x] 01-01: Fixture capture tooling — save a live page to `tests/fixtures/<retailer>/`, with a note on when and what state it captured
 - [ ] 01-02: Extraction tests over fixtures — the three states, seller filtering, price ceiling, and the UNKNOWN guarantee
 - [ ] 01-03: Type hints across `boty/` and `mypy` config
 - [ ] 01-04: `make verify` — one command, one exit code, covering offline tests + mypy + live control health + the mutation check
@@ -90,10 +96,12 @@ specific observable facts." It also outlives the agents: Dan can run it
 himself in six months and get a real answer.
 
 ### Phase 2: Five Retailers Green
+
 **Goal**: Five retailers reporting trustworthy stock for the GO Plus +, each control-verified. This is the MVP bar.
 **Depends on**: Phase 1
 **Requirements**: REQ-04, REQ-05, REQ-06
 **Success Criteria** (what must be TRUE):
+
   1. Best Buy reports stock with NO credentials configured, flagged DEGRADED; and reports stock without the DEGRADED flag when an API key IS present
   2. Pokémon Center and the Nintendo store each report stock for a real product
   3. Every retailer has at least one control watch, and `boty check` shows all controls in stock
@@ -105,15 +113,18 @@ himself in six months and get a real answer.
 **Plans**: 3 plans (parallelizable — adapters are independent)
 
 Plans:
+
 - [ ] 02-01: Best Buy — rung 3 browser adapter (nodriver) flagged DEGRADED, plus optional API path when BESTBUY_API_KEY is set, plus control product
 - [ ] 02-02: Pokémon Center — first-party for Pokémon goods, plausibly the most likely restock source
 - [ ] 02-03: Nintendo store — first-party for the hardware itself
 
 ### Phase 3: The Hard Two
+
 **Goal**: Target and Amazon either working, or documented as unreachable with the evidence that established it. No silent gaps.
 **Depends on**: Phase 2
 **Requirements**: REQ-07, REQ-08
 **Success Criteria** (what must be TRUE):
+
   1. Target reports stock, or the support matrix records what was tried and why it failed
   2. Amazon reports stock, or the same
   3. Any retailer reached via rung 3 is flagged DEGRADED in the matrix and in `boty check` output
@@ -124,14 +135,17 @@ Plans:
 **Plans**: 2 plans (parallelizable)
 
 Plans:
+
 - [ ] 03-01: Target — RedSky is CAPTCHA-gated even with a warmed session; product pages fetch clean, so the blocker is finding a valid `www` TCIN. Walk the ladder
 - [ ] 03-02: Amazon — expected hostile. Establish reachability cheaply *before* investing in an adapter; drop with evidence if rung 3 also fails
 
 ### Phase 4: Open Source Ready
+
 **Goal**: Someone who isn't me can install bot-y, add a retailer, and open a PR that I can trust.
 **Depends on**: Phase 3
 **Requirements**: REQ-09, REQ-10, REQ-11
 **Success Criteria** (what must be TRUE):
+
   1. `docs/adding-a-retailer.md` walks through a real adapter end to end, and states why a control product is mandatory
   2. CI runs the test suite on every PR, offline, against fixtures
   3. `pip install bot-y` works from PyPI
@@ -141,6 +155,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
+
 - [ ] 04-01: Contributor docs — adding a retailer, the control-product requirement, the UNKNOWN contract
 - [ ] 04-02: GitHub Actions CI — lint, mypy, tests on fixtures, no network
 - [ ] 04-03: Packaging and v1.0.0 release
