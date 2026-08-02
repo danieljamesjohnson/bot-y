@@ -81,6 +81,65 @@ def _capture_fixture(args: argparse.Namespace) -> int:
     return 0
 
 
+def watch_cycle(
+    cfg: Config,
+    checker: Callable[[Watch], Result],
+    state: State,
+    warned: set[str],
+) -> set[str]:
+    """One poll: check every watch, publish the status, send what is due.
+
+    Extracted from the `while True` below so the loop's behaviour can be tested
+    at all. A cycle is the only unit here that has a beginning and an end; the
+    loop itself does not terminate, and a bug that only shows up across cycles
+    (see `tests/test_restock_replay.py`) cannot be pinned through a function
+    that never returns.
+
+    `warned` is which retailers have already been warned about in the current
+    failure episode, and the new set is returned rather than mutated so the
+    caller holds exactly one copy of that memory.
+    """
+    results, health, alerts = run_once(cfg.watches, checker, state)
+    write_status(cfg.status_path, results, health)
+    if alerts:
+        send_restock(cfg.notify_urls, alerts)
+
+    # Warn once per retailer per failure episode, not every cycle.
+    unhealthy = [h for h in health if not h.ok]
+    fresh = [h for h in unhealthy if h.retailer not in warned]
+    if fresh:
+        send_health_warning(cfg.notify_urls, fresh)
+    return {h.retailer for h in unhealthy}
+
+
+def watch_loop(
+    cfg: Config,
+    checker: Callable[[Watch], Result],
+    state: State,
+    *,
+    cycles: int | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
+    """Poll forever. `cycles` and `sleep` exist so tests can bound and observe it.
+
+    `cycles=None` is the production behaviour — run until killed. Passing a
+    number runs exactly that many polls and returns, which is what lets the
+    tests assert on what a *sequence* of cycles does.
+    """
+    warned: set[str] = set()
+    completed = 0
+    while cycles is None or completed < cycles:
+        try:
+            warned = watch_cycle(cfg, checker, state, warned)
+        except Exception:
+            logging.exception("check cycle failed; continuing")
+
+        completed += 1
+        # Jitter so we do not hammer on a fixed cadence, which is itself a signal.
+        sleep(cfg.interval_seconds * random.uniform(0.85, 1.15))
+    return 0
+
+
 def _add_shared(p: argparse.ArgumentParser) -> None:
     p.add_argument("-c", "--config", default="config/products.yaml")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -140,25 +199,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     print(f"watching {len(cfg.watches)} product(s) every ~{cfg.interval_seconds}s. ctrl-c to stop.")
-    warned: set[str] = set()
-    while True:
-        try:
-            results, health, alerts = run_once(cfg.watches, checker, state)
-            write_status(cfg.status_path, results, health)
-            if alerts:
-                send_restock(cfg.notify_urls, alerts)
-
-            # Warn once per retailer per failure episode, not every cycle.
-            unhealthy = [h for h in health if not h.ok]
-            fresh = [h for h in unhealthy if h.retailer not in warned]
-            if fresh:
-                send_health_warning(cfg.notify_urls, fresh)
-            warned = {h.retailer for h in unhealthy}
-        except Exception:
-            logging.exception("check cycle failed; continuing")
-
-        # Jitter so we do not hammer on a fixed cadence, which is itself a signal.
-        time.sleep(cfg.interval_seconds * random.uniform(0.85, 1.15))
+    return watch_loop(cfg, checker, state)
 
 
 if __name__ == "__main__":
