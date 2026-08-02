@@ -116,6 +116,27 @@ MUTATIONS = (
         replace="if False:",
         breaks="disables the first-party seller filter — reseller listings become alertable",
     ),
+    # M4 and M5 cover the two decisions that live OUTSIDE the extractors.
+    # M1-M3 all mutate parse.py/retailers.py, which meant the gate said nothing
+    # about the price ceiling or the state machine. That was not hypothetical:
+    # CR-01 lived in `run_once`, passed all 36 tests of the day, and deleting
+    # every test that now pins it still produced `VERIFY: PASS` at exit 0.
+    # A mutation gate that cannot see the layer where the worst bug lived is
+    # not guarding the thing it claims to guard.
+    Mutation(
+        ident="M4",
+        target="boty/models.py",
+        search="        if self.price is None:\n            return False\n        return self.price <= self.watch.max_price",
+        replace="        if self.price is None:\n            return True\n        return self.price <= self.watch.max_price",
+        breaks="an unreadable price clears the ceiling — a flip at any price becomes alertable",
+    ),
+    Mutation(
+        ident="M5",
+        target="boty/monitor.py",
+        search="    transitions = [state.transitioned_to_stock(r) for r in results]",
+        replace="    transitions = [r.alertable and state.transitioned_to_stock(r) for r in results]",
+        breaks="restores the CR-01 short-circuit — state is only recorded when alertable, so every restock after the first is silently missed",
+    ),
 )
 
 
