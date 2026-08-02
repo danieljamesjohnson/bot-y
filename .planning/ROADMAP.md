@@ -81,7 +81,7 @@ Plans:
 
 - [x] 01-01: Fixture capture tooling — save a live page to `tests/fixtures/<retailer>/`, with a note on when and what state it captured
 - [x] 01-02: Extraction tests over fixtures — the three states, seller filtering, price ceiling, and the UNKNOWN guarantee
-- [ ] 01-03: Type hints across `boty/` and `mypy` config
+- [x] 01-03: Type hints across `boty/` and `mypy` config
 - [ ] 01-04: `make verify` — one command, one exit code, covering offline tests + mypy + live control health + the mutation check
 
 ### Why `make verify` exists

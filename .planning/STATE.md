@@ -4,12 +4,12 @@ milestone: v1.0.0
 milestone_name: milestone
 status: Ready to execute
 stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-08-02T17:00:02.177Z"
+last_updated: "2026-08-02T17:06:19.127Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,8 +26,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Milestone:** v1.0
 **Phase:** 1 of 4 — in progress
-**Plan:** 3 of 4 in current phase
-**Last session:** 2026-08-02T16:59:48.903Z
+**Plan:** 4 of 4 in current phase
+**Last session:** 2026-08-02T17:06:01.160Z
 **Stopped At:** Completed 01-01-PLAN.md
 **Resume File:** None
 **Next command:** `/gsd-execute-phase 1` — running autonomously through Phase 3, halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
@@ -68,6 +68,7 @@ Working and deployed on danserver before this roadmap was written:
 |-------|------|----------|-------|
 | Phase 01 P01 | 8min | 4 tasks | 11 files |
 | Phase 01 P02 | 4min | 6 tasks | 5 files |
+| Phase 01 P03 | 5min | 3 tasks tasks | 10 files files |
 
 ## Decisions
 
@@ -77,3 +78,7 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 01]: The network guard has its own self-test — a guard nobody verifies can rot after an upstream rename and the suite would start hitting live retailers with no visible symptom
 - [Phase 01]: Offline-ness proved by running the suite in an interface-less network namespace, not just by trusting the monkeypatch
 - [Phase 01]: REQ-03 left unchecked by 01-02 — type hints and mypy are 01-03's deliverable, and marking it here would be a false green in the traceability table
+- [Phase 01]: The planned mypy config was a false green — non-strict mypy skips unannotated function bodies, so the whole package passed before a single annotation was written — disallow_untyped_defs makes the check enforce REQ-03 rather than decorate it
+- [Phase 01]: The type check was proved to bite by deleting the offer-is-None branch and confirming mypy flags it — A Success line over an unannotated codebase asserts nothing
+- [Phase 01]: dev extra mypy floor raised 1.8 -> 2.0 — mypy 2.x is meaningfully stricter by default, so a contributor resolving 1.x would run a weaker check than the one this config was verified against
+- [Phase 01]: Any confined to the JSON boundary in boty — _as_float, _dig, Page.json and _expand sit where a retailer payload shape is not ours to promise; every one of boty's own types is named
