@@ -200,6 +200,41 @@ def test_the_network_guard_actually_fires() -> None:
     """
     from boty import fetch
 
-    with pytest.raises(FetchError) as excinfo:
+    with pytest.raises(BaseException, match="test attempted a live network request"):
         fetch.get("https://example.invalid/", jitter=(0, 0))
-    assert "test attempted a live network request" in str(excinfo.value)
+
+
+def test_the_network_guard_is_not_downgraded_to_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The guard must escape `fetch.get`'s `except Exception`, not become UNKNOWN.
+
+    This is the shape a Phase 2 adapter test will have: call the checker,
+    assert on the verdict. If the author forgets to monkeypatch
+    `retailers.get`, the guard fires — but an Exception-derived guard is caught
+    by `fetch.get`'s blanket handler, re-raised as FetchError, and turned into
+    Availability.UNKNOWN by `check_html`. The test then PASSES while asserting
+    on a verdict the guard itself manufactured, and on any machine where the
+    guard is not active the same test quietly makes a real request to GameStop
+    and still passes.
+    """
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)  # skip fetch.get's politeness jitter
+    watch = Watch(name="GO Plus +", retailer="gamestop", target="https://example.invalid/")
+
+    with pytest.raises(BaseException, match="test attempted a live network request"):
+        retailers.check_html(watch)
+
+
+def test_the_network_guard_covers_transports_that_bypass_curl_cffi() -> None:
+    """apprise reaches the network through `requests`, control_check through a raw socket.
+
+    Patching only `curl_cffi.requests` leaves both wide open, so the first test
+    to touch notifications or the connectivity probe would silently go live.
+    """
+    import socket
+
+    with pytest.raises(BaseException, match="test attempted a live network request"):
+        socket.create_connection(("1.1.1.1", 443), timeout=1)
+
+    with pytest.raises(BaseException, match="test attempted a live network request"):
+        socket.socket().connect(("1.1.1.1", 443))
