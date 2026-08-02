@@ -186,3 +186,41 @@ def test_a_control_not_reading_in_stock_fails(
     config = _write_config(tmp_path, [("ps5", "gamestop", True)])
 
     assert control_check.check_controls(config, retries=0) == 1
+
+
+# --------------------------------------------------------------------------
+# A skip is not a pass
+# --------------------------------------------------------------------------
+
+
+def test_skipping_the_live_check_is_not_reported_as_success() -> None:
+    """"We could not check" must be distinguishable from "we checked".
+
+    The skip-when-offline policy is deliberate and correct — a check that fails
+    because someone's wifi dropped gets ignored within a week. The defect was
+    that the *verdict* carried no caveat: the script returned 0, so `make
+    verify` printed "VERIFY: PASS" and exited 0, identical in every
+    machine-readable respect to a run where the live controls actually passed.
+    Phase success criteria are written as "`make verify` exits 0", so a run
+    that verified nothing about any retailer was indistinguishable from a fully
+    green one.
+    """
+    assert control_check.main(["--offline"]) == control_check.SKIPPED
+    assert control_check.SKIPPED not in (0, 1, 2), (
+        "the skip needs its own exit code: 0 is a pass, 1 is a control failure, "
+        "2 is a config error"
+    )
+
+
+def test_no_connectivity_skips_rather_than_passing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The residual risk WR-05 names: a host that cannot reach 1.1.1.1 or
+    8.8.8.8 but can reach walmart.com fine skips a live check that would have
+    failed. That is tolerable only if the skip is visible in the exit code."""
+    monkeypatch.setattr(control_check, "have_connectivity", lambda: False)
+
+    assert control_check.main([]) == control_check.SKIPPED
+
+
+def test_the_fixture_report_still_exits_zero() -> None:
+    """`--fixtures` warns and never fails — that is its whole contract."""
+    assert control_check.main(["--fixtures"]) == 0

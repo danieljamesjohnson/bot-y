@@ -32,14 +32,21 @@ retailer refusing us would hide the exact failure it exists to catch. So the
 two cases are separated:
 
 - **No connectivity at all** (pre-flight probe to neutral hosts fails): the
-  live check is SKIPPED and this exits 0, printing why. We learned nothing, and
-  pretending otherwise in either direction is a lie.
+  live check is SKIPPED. We learned nothing, and pretending otherwise in either
+  direction is a lie.
 - **Connectivity present, but a control does not read IN_STOCK** — including a
   fetch failure or a bot wall from the retailer: FAIL. Being blocked by Walmart
   is not an infrastructure hiccup, it is the monitor not working.
 
 `--offline` forces the skip unconditionally, for CI, which has no business
 hitting live retailers.
+
+A skip has its OWN exit code (`SKIPPED`, 3) rather than reusing 0. It is not a
+failure — nothing was discovered to be wrong — but it is not a pass either, and
+returning 0 made the two indistinguishable to a machine: `make verify` printed
+"VERIFY: PASS" and exited 0 for a run that verified nothing about any retailer,
+while phase success criteria are written as "`make verify` exits 0". The
+Makefile translates 3 into a qualified verdict; it stays green, and it says why.
 """
 
 from __future__ import annotations
@@ -61,6 +68,12 @@ from boty.models import Availability, Result, Watch  # noqa: E402
 #: A fixture older than this is worth a look. It is a warning, never a failure —
 #: see `report_fixture_staleness`.
 STALE_AFTER_DAYS = 90
+
+#: Exit code for "the live check did not run". Deliberately not 0: nothing was
+#: learned, and a caller that cannot tell that apart from a real pass will
+#: report a green it has not earned. Not 1 or 2 either — those mean a control
+#: failed and the config is wrong respectively, and both are real findings.
+SKIPPED = 3
 
 #: Neutral hosts for the connectivity pre-flight. Raw IPs so a broken resolver
 #: is caught too, and two providers so one being down is not read as "offline".
@@ -278,13 +291,13 @@ def main(argv: list[str] | None = None) -> int:
         print("control check: SKIPPED (--offline) — no live retailer request made.")
         print("  Nothing here says the retailers still work. Run `make controls` on a")
         print("  networked machine before trusting a green run.")
-        return 0
+        return SKIPPED
 
     if not have_connectivity():
         print("control check: SKIPPED — no outbound connectivity from this machine.")
         print("  This is not a pass. The live controls are the only check that can tell")
         print("  you a retailer changed its page; nothing was learned about them here.")
-        return 0
+        return SKIPPED
 
     return check_controls(args.config)
 

@@ -16,6 +16,12 @@ PYTHON ?= .venv/bin/python
 # the live control check can be skipped where hitting real retailers is wrong.
 CONTROL_FLAGS ?=
 
+# One definition of how the live control check is invoked, shared by the
+# `controls` target and by `verify`. `verify` cannot delegate to `controls`
+# through $(MAKE), because it needs to tell exit code 3 (SKIPPED) apart from a
+# real failure and a sub-make that exits 3 prints its own "Error 3" first.
+CONTROL_CMD = $(PYTHON) scripts/control_check.py $(CONTROL_FLAGS)
+
 MAKE_Q := $(MAKE) --no-print-directory
 
 .DEFAULT_GOAL := help
@@ -52,8 +58,10 @@ types: check-venv
 fixtures: check-venv
 	@$(PYTHON) scripts/control_check.py --fixtures
 
+# Exits 3 when the live check was SKIPPED. That is not a pass — see the
+# SKIPPED constant in scripts/control_check.py — so it is not flattened to 0.
 controls: check-venv
-	@$(PYTHON) scripts/control_check.py $(CONTROL_FLAGS)
+	@$(CONTROL_CMD)
 
 mutation: check-venv
 	@$(PYTHON) scripts/mutation_check.py
@@ -65,14 +73,33 @@ mutation: check-venv
 # never reach a closing verdict. Each step therefore carries its own trap that
 # names the stage and re-raises the failure — the verdict is printed AND the
 # exit code survives.
+#
+# The live control check is the exception: it has THREE outcomes, not two, and
+# the third has to reach the final line. Exit 3 means the check was skipped
+# because this machine has no outbound connectivity, which is neither a pass
+# nor a failure — nothing was learned. Flattening that to 0 made a run that
+# verified nothing about any retailer print exactly the same "VERIFY: PASS" as
+# a fully green one, and phase success criteria are written as "`make verify`
+# exits 0". So the last three stages share one shell: `skipped` has to survive
+# from the control check down to the verdict, and make gives every recipe LINE
+# its own shell. Every failure path still exits non-zero explicitly.
 verify:
 	@echo "=== verify: tests, types, fixtures, controls, mutation ==="
 	@$(MAKE_Q) test     || { echo "VERIFY: FAIL (tests)"; exit 1; }
 	@$(MAKE_Q) types    || { echo "VERIFY: FAIL (types)"; exit 1; }
 	@$(MAKE_Q) fixtures || { echo "VERIFY: FAIL (fixtures)"; exit 1; }
-	@$(MAKE_Q) controls || { echo "VERIFY: FAIL (live controls)"; exit 1; }
-	@$(MAKE_Q) mutation || { echo "VERIFY: FAIL (mutation check)"; exit 1; }
-	@echo "VERIFY: PASS"
+	@$(CONTROL_CMD); rc=$$?; \
+	 case $$rc in \
+	   0) skipped= ;; \
+	   3) skipped=yes ;; \
+	   *) echo "VERIFY: FAIL (live controls)"; exit 1 ;; \
+	 esac; \
+	 $(MAKE_Q) mutation || { echo "VERIFY: FAIL (mutation check)"; exit 1; }; \
+	 if [ -n "$$skipped" ]; then \
+	   echo "VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)"; \
+	 else \
+	   echo "VERIFY: PASS"; \
+	 fi
 
 # Delegates to `verify` rather than duplicating it, so there is one definition
 # of the order and one definition of the verdict.
