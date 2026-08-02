@@ -74,3 +74,23 @@ Delivered before this roadmap; listed so they are not re-planned:
 - GameStop and Walmart adapters
 - YAML config, Apprise notifications, state and edge-triggered alerts
 - systemd deployment, status page, Mission Control tool button
+
+
+## Traceability
+
+Maintained by `gsd-tools`; a requirement flips to Complete when its phase completes.
+
+| Requirement | Phase | Status |
+|---|---|---|
+| REQ-01 | Phase 1 | Complete |
+| REQ-02 | Phase 1 | Complete |
+| REQ-03 | Phase 1 | Complete |
+| REQ-04 | Phase 2 | Pending |
+| REQ-05 | Phase 2 | Pending |
+| REQ-06 | Phase 2 | Pending |
+| REQ-07 | Phase 3 | Pending |
+| REQ-08 | Phase 3 | Pending |
+| REQ-09 | Phase 4 | Pending |
+| REQ-10 | Phase 4 | Pending |
+| REQ-11 | Phase 4 | Pending |
+| REQ-12 | Phase 1 | Complete |
