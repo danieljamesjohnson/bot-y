@@ -110,14 +110,25 @@ def run_once(
         )
 
     health = assess_health(results)
+
+    # One pass over every result, with no short-circuiting, because
+    # `transitioned_to_stock` is the only thing that writes the memory and it
+    # mutates `state.seen` as a side effect. Both halves of that matter:
+    #
+    #   - It must run for EVERY result. `alertable` and `control` decide what
+    #     we NOTIFY about, never what we REMEMBER. Calling it as the last term
+    #     of an `and` chain meant Python skipped it for anything not alertable,
+    #     so a product watch reading OUT_OF_STOCK was never recorded and stayed
+    #     pinned at "in_stock" — swallowing every restock after the first.
+    #   - It must run EXACTLY once per result. A second call compares against
+    #     the value the first one just wrote, so a real transition would read
+    #     as no transition at all.
+    transitions = [state.transitioned_to_stock(r) for r in results]
+
     alerts = [
         r
-        for r in results
-        if not r.watch.control and r.alertable and state.transitioned_to_stock(r)
+        for r, transitioned in zip(results, transitions)
+        if not r.watch.control and r.alertable and transitioned
     ]
-    # Controls still need their state recorded so they do not alert as products.
-    for r in results:
-        if r.watch.control:
-            state.transitioned_to_stock(r)
     state.save()
     return results, health, alerts

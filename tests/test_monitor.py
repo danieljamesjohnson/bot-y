@@ -220,3 +220,85 @@ def test_run_once_does_not_alert_above_the_price_ceiling(tmp_path: Path) -> None
     _, _, alerts = run_once([watch], checker, state)
 
     assert alerts == []
+
+
+def test_run_once_records_state_for_every_result_not_just_alertable_ones(
+    tmp_path: Path,
+) -> None:
+    """`alertable` decides what we NOTIFY, never what we REMEMBER.
+
+    The memory used to be written from inside the `alerts` comprehension, as
+    the last term of an `and` chain. Python short-circuits, so a product watch
+    reading OUT_OF_STOCK never reached the call and its state was never
+    recorded — the remembered value stayed pinned at whatever it last alerted
+    on.
+    """
+    watch = Watch(name="goplusplus", retailer="gamestop", target="https://x/1")
+
+    def checker(w: Watch) -> Result:
+        return Result(w, Availability.OUT_OF_STOCK, price=54.99, detail="synthetic")
+
+    state = State.load(tmp_path / "state.json")
+    run_once([watch], checker, state)
+
+    assert state.seen == {"gamestop:goplusplus": Availability.OUT_OF_STOCK.value}
+
+
+def test_run_once_alerts_again_on_the_restock_after_a_sellout(tmp_path: Path) -> None:
+    """in_stock -> out_of_stock -> in_stock must alert TWICE, not once.
+
+    This is the failure the whole project exists to prevent, and it is worse
+    than a missed alert: after the first alert the watch was silently pinned at
+    "in_stock" forever, so EVERY subsequent restock was swallowed while the
+    dashboard stayed green. It survived 36 passing tests because no existing
+    test ever fed a non-control watch anything but IN_STOCK.
+    """
+    watch = Watch(name="goplusplus", retailer="gamestop", target="https://x/1", max_price=80)
+    state = State.load(tmp_path / "state.json")
+
+    fired: list[int] = []
+    for availability in (
+        Availability.IN_STOCK,
+        Availability.OUT_OF_STOCK,
+        Availability.IN_STOCK,
+    ):
+
+        def checker(w: Watch, av: Availability = availability) -> Result:
+            return Result(w, av, price=54.99, detail="synthetic")
+
+        _, _, alerts = run_once([watch], checker, state)
+        fired.append(len(alerts))
+
+    assert fired == [1, 0, 1], (
+        "the second restock was swallowed: the out-of-stock reading between "
+        "them was never recorded, so the monitor still believed it was in stock"
+    )
+
+
+def test_run_once_records_a_control_exactly_once(tmp_path: Path) -> None:
+    """A control's state must be written once per cycle, not twice.
+
+    `transitioned_to_stock` mutates `state.seen` as a side effect, so calling
+    it twice for the same result would compare the second call against the
+    value the first call just wrote — turning a genuine transition into a
+    non-transition. Controls never alert, so that corruption would be invisible
+    on a control; it becomes a missed alert the moment a control is promoted to
+    a product watch.
+    """
+    control = Watch(name="ps5", retailer="gamestop", target="https://x/2", control=True)
+    state = State.load(tmp_path / "state.json")
+
+    calls: list[str] = []
+    real = State.transitioned_to_stock
+
+    def counting(self: State, result: Result) -> bool:
+        calls.append(result.watch.key)
+        return real(self, result)
+
+    State.transitioned_to_stock = counting  # type: ignore[method-assign]
+    try:
+        run_once([control], lambda w: Result(w, Availability.IN_STOCK, detail="synthetic"), state)
+    finally:
+        State.transitioned_to_stock = real  # type: ignore[method-assign]
+
+    assert calls == ["gamestop:ps5"]
