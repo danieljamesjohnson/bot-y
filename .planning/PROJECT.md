@@ -44,7 +44,7 @@ looking yourself.
 <!-- v1 scope. Done = 5+ retailers with green controls, AND Dan gets a GO Plus +. -->
 
 - [ ] Curated adapters for ~10 big US retailers, each with a control product
-- [ ] Best Buy via the official API (scraping is refused at the connection layer)
+- [ ] Best Buy via a credential-free path (rung 3, browser, DEGRADED); official API optional on top
 - [ ] Test suite covering the extraction layer — the place where a silent regression is most dangerous
 - [ ] Type hints throughout
 - [ ] Contributor-facing docs: how to add a retailer, why controls are mandatory
@@ -105,6 +105,7 @@ when they disagree — retailers' JSON-LD does lie. Worth adopting.
 | Skip async and a plugin API for now | "Only what is necessary." Neither earns its complexity at current scale | — Pending |
 | Narrow to ~7 likely stockists | The list of ten was padded. Newegg, B&H and Micro Center are PC-parts stores that do not carry Pokémon accessories; watching them manufactures fake breadth and real maintenance | — Pending |
 | Four-rung escalation ladder | TLS → official API → browser (flagged DEGRADED) → drop with evidence. Gets coverage without lying about confidence: a retailer reached only via a browser rests on the fragile path we moved away from, and the matrix says so | — Pending |
+| Primary paths must work from a fresh clone | Best Buy's official API needs manual approval and a non-free email domain — most people cloning the repo cannot get one, so building Best Buy support on it would make the retailer a footnote rather than supported. Credential-gated paths are optional enhancements only | — Pending |
 | Fixtures frozen, not auto-refreshed | Auto-refreshing in CI would let a real breakage land disguised as a fixture update — the exact silent failure this project exists to catch. Fixtures catch code regressions; live control products catch reality | — Pending |
 | Tests + type hints in scope | Follows from choosing a real open-source project — a contributor's PR must not be able to silently break a detector | — Pending |
 

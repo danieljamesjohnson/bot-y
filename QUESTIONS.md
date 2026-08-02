@@ -23,7 +23,15 @@ Until this is set, `boty watch` runs and logs normally but sends nothing. The
 systemd unit is wired and will pick it up on next restart:
 `sudo systemctl restart boty`
 
-## 2. Best Buy API key
+## 2. Best Buy API key — NO LONGER BLOCKING (optional enhancement)
+
+Downgraded: the signup requires manual approval and rejects free email domains,
+so anyone cloning this repo hits the same wall. Best Buy's primary path is now
+rung 3 (browser, flagged DEGRADED) which needs no credentials. If your key is
+approved, set it and Best Buy upgrades to the more reliable API path and loses
+the DEGRADED flag — but nothing waits on it.
+
+### Original note
 
 Best Buy refuses impersonated HTTP at the connection layer regardless of TLS
 fingerprint (HTTP/2 stream reset; HTTP/1.1 times out). Verified across

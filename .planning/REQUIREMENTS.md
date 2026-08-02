@@ -28,7 +28,7 @@ has not worked.
 
 ### Phase 2 — Five Retailers Green
 
-- **REQ-04**: Best Buy stock is read via the official Products API, since impersonated HTTP is refused at the connection layer. Absent a key, Best Buy watches are skipped, not reported as failures.
+- **REQ-04**: Best Buy's primary path must work without credentials. Impersonated HTTP is refused at the connection layer (verified: HTTP/2 stream reset, HTTP/1.1 timeout, across chrome and safari fingerprints), so rung 2 was the plan — but the official API requires manual approval AND a non-free email domain, which most people cloning this repo cannot satisfy. Best Buy therefore escalates to rung 3 (browser, flagged DEGRADED). The official API remains supported as an OPTIONAL enhancement for anyone who has a key: when `BESTBUY_API_KEY` is set, prefer it and drop the DEGRADED flag, since it is strictly more reliable.
 - **REQ-05**: Pokémon Center and the Nintendo store each report stock for a real product, or are documented as unreachable with the evidence that established it.
 - **REQ-06**: Every configured retailer has at least one control watch. A retailer without one is reported unhealthy — an unverified detector is treated as a broken one.
 
@@ -50,6 +50,7 @@ has not worked.
 - **Polite polling.** 5-minute default with jitter. Never sub-minute.
 - **Secrets never in the repo.** Credentials live in a mode-600 env file loaded by systemd, set through a tool that prompts hidden and verifies before writing.
 - **Small dependency surface.** Every dependency is another thing that can silently break a monitor.
+- **Works from a fresh clone.** A retailer's PRIMARY path must work for someone who clones the repo and adds no credentials. Paths requiring a credential most people cannot obtain — manual approval, a paid domain, a commercial agreement — may be supported as an OPTIONAL enhancement, but never as the documented way that retailer works. A capability the average user cannot enable is a footnote, not support.
 
 ## Acceptance Criteria
 

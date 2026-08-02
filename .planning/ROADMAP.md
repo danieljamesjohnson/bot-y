@@ -34,7 +34,7 @@ Target list — places a GO Plus + could genuinely appear:
 |---|---|
 | GameStop | ✅ done, control-verified |
 | Walmart | ✅ done, control-verified |
-| Best Buy | Phase 2 — official API |
+| Best Buy | Phase 2 — rung 3 (browser, DEGRADED); official API optional if you have a key |
 | Pokémon Center | Phase 2 |
 | Nintendo store | Phase 2 |
 | Target | Phase 3 — RedSky CAPTCHA-gated |
@@ -46,7 +46,10 @@ When a retailer resists, work down this ladder and stop at the first rung that
 works. Record which rung each retailer landed on in the support matrix.
 
 1. **TLS impersonation** (`curl_cffi`) — the default
-2. **Official / structured API** — Best Buy's Products API, or equivalent
+2. **Official / structured API** — but ONLY if a fresh clone can obtain the
+   credential. Best Buy's API requires manual approval and a non-free email
+   domain, so it fails this test and cannot be a primary path; it stays
+   available as an optional enhancement for those who have a key
 3. **Browser (`nodriver`), marked DEGRADED** — allowed, but that retailer is
    flagged lower-confidence, because it depends on the fragile path we
    deliberately moved away from
@@ -91,7 +94,7 @@ himself in six months and get a real answer.
 **Depends on**: Phase 1
 **Requirements**: REQ-04, REQ-05, REQ-06
 **Success Criteria** (what must be TRUE):
-  1. Best Buy reports stock through the official API, given a key
+  1. Best Buy reports stock with NO credentials configured, flagged DEGRADED; and reports stock without the DEGRADED flag when an API key IS present
   2. Pokémon Center and the Nintendo store each report stock for a real product
   3. Every retailer has at least one control watch, and `boty check` shows all controls in stock
   4. `boty check` reports five or more retailers with no health warnings
@@ -102,7 +105,7 @@ himself in six months and get a real answer.
 **Plans**: 3 plans (parallelizable — adapters are independent)
 
 Plans:
-- [ ] 02-01: Best Buy — official API adapter (rung 2), key handling, control product
+- [ ] 02-01: Best Buy — rung 3 browser adapter (nodriver) flagged DEGRADED, plus optional API path when BESTBUY_API_KEY is set, plus control product
 - [ ] 02-02: Pokémon Center — first-party for Pokémon goods, plausibly the most likely restock source
 - [ ] 02-03: Nintendo store — first-party for the hardware itself
 
