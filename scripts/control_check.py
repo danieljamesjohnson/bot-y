@@ -115,6 +115,27 @@ def check_controls(config_path: str, retries: int = 1) -> int:
         )
         return 2
 
+    # Per-retailer, not all-or-nothing. `boty.monitor.assess_health` already
+    # implements this rule — "a retailer with no control watch is reported
+    # unhealthy" — but this gate never consulted it, so a retailer with product
+    # watches and no control was simply invisible: `make verify` went green
+    # while that detector had never been verified by anything at all.
+    #
+    # Checked before any request, because the answer does not depend on what
+    # the retailers say today.
+    configured = {w.retailer for w in cfg.watches}
+    verified = {w.retailer for w in cfg.watches if w.control}
+    unverified = sorted(configured - verified)
+    if unverified:
+        print(
+            "control check: FAIL — no control watch for: " + ", ".join(unverified) + "\n"
+            "  An unverified detector is treated as a broken one: nothing here can tell\n"
+            "  you whether these retailers still parse, so a silent regression in one of\n"
+            "  them would look exactly like a drought. Add `control: true` to a watch.",
+            file=sys.stderr,
+        )
+        return 2
+
     checker = _make_checker(cfg)
     print(f"control check: {len(controls)} control(s), live")
 

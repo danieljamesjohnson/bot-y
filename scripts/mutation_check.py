@@ -55,7 +55,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: Copied into every sandbox. pyproject.toml is required: it carries the pytest
 #: ini options, and `boty.fixtures` anchors FIXTURE_ROOT to the directory
 #: containing it — without it the sandbox would read the real fixture tree.
-SANDBOX_CONTENTS = ("boty", "tests", "pyproject.toml")
+#:
+#: `scripts` and `Makefile` are here because the suite tests them too:
+#: tests/test_control_check.py loads scripts/control_check.py by path and
+#: tests/test_verify_makefile.py runs the Makefile's verify recipe against a
+#: stub interpreter. A sandbox missing either would fail at collection, pytest
+#: would exit 2, and `check_mutation` would abort as a harness error rather
+#: than quietly scoring it — but the run would still be dead. The sandbox has
+#: to be a faithful copy of everything the suite reaches for.
+SANDBOX_CONTENTS = ("boty", "tests", "scripts", "pyproject.toml", "Makefile")
 
 _IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "*.egg-info")
 
