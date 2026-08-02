@@ -34,3 +34,9 @@ boty = "boty.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["boty*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# -ra surfaces skipped/xfailed tests in the summary. A test that quietly stops
+# running is the same class of silent failure this project exists to prevent.
+addopts = "-ra"
