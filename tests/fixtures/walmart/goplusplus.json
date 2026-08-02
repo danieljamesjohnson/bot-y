@@ -1,0 +1,9 @@
+{
+  "url": "https://www.walmart.com/ip/Pok-mon-GO-Plus-for-Nintendo-Switch/1203950273",
+  "retailer": "walmart",
+  "name": "goplusplus",
+  "captured_at": "2026-08-02T16:49:18Z",
+  "status": 200,
+  "bytes": 483194,
+  "note": "IN_STOCK but seller is a marketplace reseller at ~4x MSRP; must be rejected by first-party filter AND by price ceiling. Verified at capture: sellerName 'Clove Brothers LLC', currentPrice $229.99, availabilityStatus IN_STOCK, against a $54.99 MSRP and an $80 ceiling."
+}

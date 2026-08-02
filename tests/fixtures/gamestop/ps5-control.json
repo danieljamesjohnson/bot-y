@@ -1,0 +1,9 @@
+{
+  "url": "https://www.gamestop.com/consoles-hardware/playstation-5/consoles/products/playstation-5-console/11108140.html",
+  "retailer": "gamestop",
+  "name": "ps5-control",
+  "captured_at": "2026-08-02T16:49:13Z",
+  "status": 200,
+  "bytes": 486481,
+  "note": "InStock control, $549.99, seller GameStop, via schema.org ld+json. NOTE: this page carries three Product offers, not one — an OutOfStock $749.99 bundle plus two InStock $549.99 offers. A test must assert that SOME first-party offer is buyable, not that the first one is."
+}
