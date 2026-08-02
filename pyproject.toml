@@ -35,6 +35,28 @@ boty = "boty.cli:main"
 [tool.setuptools.packages.find]
 include = ["boty*"]
 
+[tool.mypy]
+# Committed so `mypy` with no arguments checks the same thing for everyone.
+# A check that only passes with the right invocation flags is a check that
+# quietly stops being run.
+python_version = "3.10"
+files = ["boty"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+# Deliberately NOT strict. The goal is catching real None-handling errors in an
+# ~1000-line codebase — the class of bug that produces a wrong stock verdict
+# rather than a crash — not winning a strictness contest. An over-strict config
+# that contributors immediately start `# type: ignore`-ing is worse than a
+# moderate one they respect.
+
+# These ship without complete type stubs. Their absence says nothing about our
+# code, and treating it as an error would train everyone to ignore mypy output.
+[[tool.mypy.overrides]]
+module = ["curl_cffi.*", "apprise.*", "yaml.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # -ra surfaces skipped/xfailed tests in the summary. A test that quietly stops
