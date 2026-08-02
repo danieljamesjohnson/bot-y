@@ -28,6 +28,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 _PACKAGE_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _PACKAGE_DIR.parent
@@ -112,7 +113,7 @@ def load(retailer: str, name: str) -> str:
         ) from exc
 
 
-def metadata(retailer: str, name: str) -> dict | None:
+def metadata(retailer: str, name: str) -> dict[str, Any] | None:
     """Return a fixture's capture metadata, or None if missing/unreadable."""
     try:
         raw = meta_path(retailer, name).read_text(encoding="utf-8")

@@ -12,9 +12,10 @@ import logging
 import random
 import sys
 import time
+from collections.abc import Callable
 
 from .config import Config
-from .models import Availability
+from .models import Availability, Health, Result, Watch
 from .monitor import State, run_once
 from .notify import send_health_warning, send_restock
 from .retailers import check_bestbuy_api, check_html
@@ -27,8 +28,8 @@ SYMBOL = {
 }
 
 
-def _make_checker(cfg: Config):
-    def check(watch):
+def _make_checker(cfg: Config) -> Callable[[Watch], Result]:
+    def check(watch: Watch) -> Result:
         if watch.retailer == "bestbuy" and cfg.bestbuy_api_key:
             return check_bestbuy_api(watch, cfg.bestbuy_api_key)
         return check_html(watch, first_party_only=cfg.first_party_only)
@@ -36,7 +37,7 @@ def _make_checker(cfg: Config):
     return check
 
 
-def _report(results, health) -> None:
+def _report(results: list[Result], health: list[Health]) -> None:
     for r in results:
         price = f"${r.price:>8.2f}" if r.price is not None else " " * 9
         tag = " [control]" if r.watch.control else ""
@@ -49,7 +50,7 @@ def _report(results, health) -> None:
                 print(f"      {c}")
 
 
-def _capture_fixture(args) -> int:
+def _capture_fixture(args: argparse.Namespace) -> int:
     """Freeze one live page as a fixture, or refuse and say why.
 
     A blocked fetch must never become a file on disk: a CAPTCHA interstitial
@@ -85,7 +86,7 @@ def _add_shared(p: argparse.ArgumentParser) -> None:
     p.add_argument("-v", "--verbose", action="store_true")
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="boty", description="Restock monitor that tells you when it breaks.")
     sub = ap.add_subparsers(dest="command", required=True)
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -92,7 +93,11 @@ def assess_health(results: list[Result]) -> list[Health]:
     return health
 
 
-def run_once(watches: list[Watch], checker, state: State) -> tuple[list[Result], list[Health], list[Result]]:
+def run_once(
+    watches: list[Watch],
+    checker: Callable[[Watch], Result],
+    state: State,
+) -> tuple[list[Result], list[Health], list[Result]]:
     """Check every watch once. Returns (results, health, alerts)."""
     results = [checker(w) for w in watches]
     for r in results:

@@ -19,6 +19,7 @@ import logging
 import random
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from curl_cffi import requests
 
@@ -55,7 +56,9 @@ class Page:
     text: str
 
     @property
-    def json(self):
+    def json(self) -> Any:
+        """Parsed body. `Any` because a retailer API's shape is not ours to
+        promise — callers narrow what they read and raise ValueError on junk."""
         import json
 
         return json.loads(self.text)

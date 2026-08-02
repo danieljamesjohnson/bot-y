@@ -12,6 +12,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -20,7 +21,7 @@ from .models import Watch
 _ENV_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
 
 
-def _expand(value):
+def _expand(value: Any) -> Any:
     """Expand ${VAR} from the environment so secrets stay out of the file."""
     if isinstance(value, str):
         return _ENV_RE.sub(lambda m: os.environ.get(m.group(1), ""), value)

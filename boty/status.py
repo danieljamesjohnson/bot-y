@@ -11,12 +11,15 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import Any
+
+from .models import Health, Result
 
 log = logging.getLogger(__name__)
 
 
-def write(path: Path, results, health) -> None:
-    payload = {
+def write(path: Path, results: list[Result], health: list[Health]) -> None:
+    payload: dict[str, Any] = {
         "updated": int(time.time()),
         "healthy": all(h.ok for h in health),
         "retailers": [

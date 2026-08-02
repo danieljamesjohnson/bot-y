@@ -13,11 +13,19 @@ Tokens come from the environment or the config file, never from source.
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+from .models import Health, Result
 
 log = logging.getLogger(__name__)
 
 
-def _client(urls: list[str]):
+def _client(urls: list[str]) -> Any | None:
+    """An Apprise instance, or None if apprise is missing.
+
+    Typed `Any` because apprise ships no stubs — see the ignore_missing_imports
+    override in pyproject.toml.
+    """
     try:
         import apprise
     except ImportError:  # pragma: no cover
@@ -30,7 +38,7 @@ def _client(urls: list[str]):
     return client
 
 
-def send_restock(urls: list[str], results) -> bool:
+def send_restock(urls: list[str], results: list[Result]) -> bool:
     """Alert that something is buyable. Includes the price and a direct link."""
     if not urls or not results:
         return False
@@ -38,7 +46,7 @@ def send_restock(urls: list[str], results) -> bool:
     if client is None:
         return False
 
-    lines = []
+    lines: list[str] = []
     for r in results:
         price = f"${r.price:.2f}" if r.price is not None else "price unknown"
         lines.append(f"{r.watch.name} — {price} at {r.watch.retailer}\n{r.url}")
@@ -48,7 +56,7 @@ def send_restock(urls: list[str], results) -> bool:
     return bool(client.notify(title=title, body=body))
 
 
-def send_health_warning(urls: list[str], unhealthy) -> bool:
+def send_health_warning(urls: list[str], unhealthy: list[Health]) -> bool:
     """Alert that a detector looks broken.
 
     Deliberately as loud as a restock alert. A monitor you wrongly believe is
@@ -60,7 +68,7 @@ def send_health_warning(urls: list[str], unhealthy) -> bool:
     if client is None:
         return False
 
-    lines = []
+    lines: list[str] = []
     for h in unhealthy:
         lines.append(f"[{h.retailer}] {h.reason}")
         lines.extend(f"  • {c}" for c in h.failing_controls)
