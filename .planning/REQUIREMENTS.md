@@ -24,7 +24,7 @@ has not worked.
 - [x] **REQ-01**: Extraction logic is testable offline against saved HTML fixtures, with no network access.
 - [x] **REQ-02**: Tests assert the three-state contract explicitly — in particular that an unparseable page produces UNKNOWN and never OUT_OF_STOCK — and that seller filtering plus the price ceiling each independently suppress a marketplace listing.
 - [x] **REQ-03**: `boty/` carries type hints and passes a static type check.
-- [ ] **REQ-12**: A single `make verify` runs every mechanical check — offline fixture tests, static types, live control-product health, and a mutation check that corrupts an extractor — and exits non-zero if any fails. Phase success criteria are stated in terms of it, so verification is an exit code rather than a judgement.
+- [x] **REQ-12**: A single `make verify` runs every mechanical check — offline fixture tests, static types, live control-product health, and a mutation check that corrupts an extractor — and exits non-zero if any fails. Phase success criteria are stated in terms of it, so verification is an exit code rather than a judgement.
 
 ### Phase 2 — Five Retailers Green
 

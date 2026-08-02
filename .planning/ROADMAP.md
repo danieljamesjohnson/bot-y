@@ -17,7 +17,7 @@ can contribute to.
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Detector Safety Net** - Tests, fixtures and types, so new adapters can't silently break each other
+- [x] **Phase 1: Detector Safety Net** - Tests, fixtures and types, so new adapters can't silently break each other (completed 2026-08-02)
 - [ ] **Phase 2: Five Retailers Green** - Best Buy, Pokémon Center, Nintendo — the tractable ones; hits the MVP bar
 - [ ] **Phase 3: The Hard Two** - Target and Amazon, both known to resist; escalate or document honestly
 - [ ] **Phase 4: Open Source Ready** - Contributor docs, CI, packaging, release
@@ -82,7 +82,7 @@ Plans:
 - [x] 01-01: Fixture capture tooling — save a live page to `tests/fixtures/<retailer>/`, with a note on when and what state it captured
 - [x] 01-02: Extraction tests over fixtures — the three states, seller filtering, price ceiling, and the UNKNOWN guarantee
 - [x] 01-03: Type hints across `boty/` and `mypy` config
-- [ ] 01-04: `make verify` — one command, one exit code, covering offline tests + mypy + live control health + the mutation check
+- [x] 01-04: `make verify` — one command, one exit code, covering offline tests + mypy + live control health + the mutation check
 
 ### Why `make verify` exists
 
