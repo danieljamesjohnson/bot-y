@@ -110,13 +110,19 @@ himself in six months and get a real answer.
   6. The support matrix records which escalation rung each retailer landed on
   7. `make verify` exits 0
 
-**Plans**: 3 plans (parallelizable — adapters are independent)
+**Plans**: 4 plans, in 3 waves
+
+Adapters are not as parallelizable as they look: all three touch `boty/retailers.py`,
+`config/products.yaml` and `tests/test_retailers.py`, so they serialize. DEGRADED is
+shared infrastructure rather than Best Buy-local, and the browser rung is unvalidated
+(`nodriver` has no precedent here), so both are front-loaded into wave 1.
 
 Plans:
 
-- [ ] 02-01: Best Buy — rung 3 browser adapter (nodriver) flagged DEGRADED, plus optional API path when BESTBUY_API_KEY is set, plus control product
-- [ ] 02-02: Pokémon Center — first-party for Pokémon goods, plausibly the most likely restock source
-- [ ] 02-03: Nintendo store — first-party for the hardware itself
+- [ ] 02-01-PLAN.md — Rung-3 browser transport, an offline guard that covers it, and a live spike answering whether Best Buy is reachable at all (wave 1)
+- [ ] 02-02-PLAN.md — The Rung/DEGRADED reading-method field on Result, surfaced in `status.json` and `boty check`, plus the IN-03 compound-`@type` fix (wave 1)
+- [ ] 02-03-PLAN.md — Best Buy: browser adapter flagged DEGRADED, optional API path when `BESTBUY_API_KEY` is set, control product, support-matrix row (wave 2)
+- [ ] 02-04-PLAN.md — Pokémon Center and Nintendo, their controls, and the five-retailers-green end-to-end proof (wave 3)
 
 ### Phase 3: The Hard Two
 
