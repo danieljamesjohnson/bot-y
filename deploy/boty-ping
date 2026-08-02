@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# boty-ping — send a test notification through the configured Apprise URL.
+#
+# For debugging delivery end-to-end without waiting for a real restock. A
+# monitor whose alerts do not actually reach you is the same silent failure
+# this project exists to catch, so this is worth exercising deliberately.
+#
+#   boty-ping              # one message
+#   boty-ping "custom text"
+set -euo pipefail
+
+ENV_FILE="${BOTY_ENV_FILE:-$HOME/.config/boty/env}"
+[ -f "$ENV_FILE" ] || { echo "no $ENV_FILE — run boty-secret telegram first" >&2; exit 1; }
+# shellcheck disable=SC1090
+set -a; . "$ENV_FILE"; set +a
+
+[ -n "${BOTY_NOTIFY_URL:-}" ] || { echo "BOTY_NOTIFY_URL is empty — run boty-secret telegram" >&2; exit 1; }
+
+TEXT="${1:-bot-y test ping $(date +%H:%M:%S) — if this arrives silently, the problem is client-side notification settings, not delivery.}"
+
+# tgram://<token>/<chat-id>
+TOKEN="$(printf '%s' "$BOTY_NOTIFY_URL" | sed -E 's#^tgram://([^/]+)/.*#\1#')"
+CHAT="$(printf '%s' "$BOTY_NOTIFY_URL" | sed -E 's#^tgram://[^/]+/([0-9-]+).*#\1#')"
+
+if [ "$TOKEN" = "$BOTY_NOTIFY_URL" ]; then
+  echo "notify url is not tgram:// — falling back to apprise" >&2
+  exec "$(dirname "$0")/../.venv/bin/python" -c "
+import sys, apprise
+a = apprise.Apprise(); a.add(sys.argv[1])
+sys.exit(0 if a.notify(title='bot-y test', body=sys.argv[2]) else 1)
+" "$BOTY_NOTIFY_URL" "$TEXT"
+fi
+
+# disable_notification=false forces a real push rather than a silent message —
+# rules out the message having been sent silently by the sender.
+resp="$(curl -fsS --max-time 15 -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+  -d "chat_id=${CHAT}" \
+  -d "disable_notification=false" \
+  --data-urlencode "text=${TEXT}")"
+
+if printf '%s' "$resp" | grep -q '"ok":true'; then
+  echo "delivered to chat ${CHAT} at $(date +%H:%M:%S)"
+  echo "Telegram accepted it — if no banner appeared, the issue is on the device."
+else
+  echo "Telegram rejected it:" >&2
+  printf '%s\n' "$resp" >&2
+  exit 1
+fi

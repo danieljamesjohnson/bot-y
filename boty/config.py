@@ -39,6 +39,8 @@ class Config:
     first_party_only: bool = True
     interval_seconds: int = 300
     state_path: Path = Path("state.json")
+    #: Snapshot for the dashboard. Written every cycle; served as a static file.
+    status_path: Path = Path("served/boty/status.json")
 
     @classmethod
     def load(cls, path: str | Path) -> Config:
@@ -64,4 +66,5 @@ class Config:
             first_party_only=bool(settings.get("first_party_only", True)),
             interval_seconds=int(settings.get("interval_seconds", 300)),
             state_path=Path(settings.get("state_path", "state.json")),
+            status_path=Path(settings.get("status_path", "served/boty/status.json")),
         )

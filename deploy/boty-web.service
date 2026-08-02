@@ -1,0 +1,27 @@
+[Unit]
+Description=bot-y status page
+After=network.target
+
+[Service]
+Type=simple
+User=dan
+Group=dan
+WorkingDirectory=/home/dan/CodeProjects/pokemongoplusplus/served/boty
+
+# Loopback only. Reached from the tailnet through Mission Control's
+# /tools/boty reverse proxy, never published directly.
+ExecStart=/usr/bin/python3 -m http.server 8821 --bind 127.0.0.1
+
+Restart=always
+RestartSec=10
+StandardOutput=null
+StandardError=journal
+SyslogIdentifier=boty-web
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

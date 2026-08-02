@@ -1,0 +1,40 @@
+[Unit]
+Description=bot-y restock monitor
+Documentation=https://github.com/danieljamesjohnson/bot-y
+After=network-online.target
+Wants=network-online.target
+# A restart here means something structural broke, so back off rather than spin.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=dan
+Group=dan
+WorkingDirectory=/home/dan/CodeProjects/pokemongoplusplus
+
+# Secrets live here, mode 600, outside the repo. Missing file is fatal by
+# design — running with no notification target is a silent monitor, which is
+# the exact failure mode this project exists to prevent.
+EnvironmentFile=/home/dan/.config/boty/env
+
+ExecStart=/home/dan/CodeProjects/pokemongoplusplus/.venv/bin/boty watch -c config/products.yaml
+
+# The check loop already catches per-cycle exceptions, so a process exit is
+# unexpected by definition.
+Restart=always
+RestartSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=boty
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# State file and the status page it feeds.
+ReadWritePaths=/home/dan/CodeProjects/pokemongoplusplus
+
+[Install]
+WantedBy=multi-user.target

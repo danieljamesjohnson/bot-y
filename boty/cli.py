@@ -17,6 +17,7 @@ from .models import Availability
 from .monitor import State, run_once
 from .notify import send_health_warning, send_restock
 from .retailers import check_bestbuy_api, check_html
+from .status import write as write_status
 
 SYMBOL = {
     Availability.IN_STOCK: "\033[32m●\033[0m",
@@ -70,6 +71,7 @@ def main(argv=None) -> int:
     if args.command == "check":
         results, health, alerts = run_once(cfg.watches, checker, state)
         _report(results, health)
+        write_status(cfg.status_path, results, health)
         if alerts:
             print(f"\n  {len(alerts)} alertable transition(s)")
         return 0
@@ -79,6 +81,7 @@ def main(argv=None) -> int:
     while True:
         try:
             results, health, alerts = run_once(cfg.watches, checker, state)
+            write_status(cfg.status_path, results, health)
             if alerts:
                 send_restock(cfg.notify_urls, alerts)
 
