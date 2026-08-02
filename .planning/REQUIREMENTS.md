@@ -21,27 +21,27 @@ has not worked.
 
 ### Phase 1 — Detector Safety Net
 
-- **REQ-01**: Extraction logic is testable offline against saved HTML fixtures, with no network access.
-- **REQ-02**: Tests assert the three-state contract explicitly — in particular that an unparseable page produces UNKNOWN and never OUT_OF_STOCK — and that seller filtering plus the price ceiling each independently suppress a marketplace listing.
-- **REQ-03**: `boty/` carries type hints and passes a static type check.
-- **REQ-12**: A single `make verify` runs every mechanical check — offline fixture tests, static types, live control-product health, and a mutation check that corrupts an extractor — and exits non-zero if any fails. Phase success criteria are stated in terms of it, so verification is an exit code rather than a judgement.
+- [x] **REQ-01**: Extraction logic is testable offline against saved HTML fixtures, with no network access.
+- [ ] **REQ-02**: Tests assert the three-state contract explicitly — in particular that an unparseable page produces UNKNOWN and never OUT_OF_STOCK — and that seller filtering plus the price ceiling each independently suppress a marketplace listing.
+- [ ] **REQ-03**: `boty/` carries type hints and passes a static type check.
+- [ ] **REQ-12**: A single `make verify` runs every mechanical check — offline fixture tests, static types, live control-product health, and a mutation check that corrupts an extractor — and exits non-zero if any fails. Phase success criteria are stated in terms of it, so verification is an exit code rather than a judgement.
 
 ### Phase 2 — Five Retailers Green
 
-- **REQ-04**: Best Buy's primary path must work without credentials. Impersonated HTTP is refused at the connection layer (verified: HTTP/2 stream reset, HTTP/1.1 timeout, across chrome and safari fingerprints), so rung 2 was the plan — but the official API requires manual approval AND a non-free email domain, which most people cloning this repo cannot satisfy. Best Buy therefore escalates to rung 3 (browser, flagged DEGRADED). The official API remains supported as an OPTIONAL enhancement for anyone who has a key: when `BESTBUY_API_KEY` is set, prefer it and drop the DEGRADED flag, since it is strictly more reliable.
-- **REQ-05**: Pokémon Center and the Nintendo store each report stock for a real product, or are documented as unreachable with the evidence that established it.
-- **REQ-06**: Every configured retailer has at least one control watch. A retailer without one is reported unhealthy — an unverified detector is treated as a broken one.
+- [ ] **REQ-04**: Best Buy's primary path must work without credentials. Impersonated HTTP is refused at the connection layer (verified: HTTP/2 stream reset, HTTP/1.1 timeout, across chrome and safari fingerprints), so rung 2 was the plan — but the official API requires manual approval AND a non-free email domain, which most people cloning this repo cannot satisfy. Best Buy therefore escalates to rung 3 (browser, flagged DEGRADED). The official API remains supported as an OPTIONAL enhancement for anyone who has a key: when `BESTBUY_API_KEY` is set, prefer it and drop the DEGRADED flag, since it is strictly more reliable.
+- [ ] **REQ-05**: Pokémon Center and the Nintendo store each report stock for a real product, or are documented as unreachable with the evidence that established it.
+- [ ] **REQ-06**: Every configured retailer has at least one control watch. A retailer without one is reported unhealthy — an unverified detector is treated as a broken one.
 
 ### Phase 3 — The Hard Two
 
-- **REQ-07**: Target and Amazon are each either working or documented as unreachable with evidence. Any retailer reached via a browser is flagged DEGRADED in the support matrix and in `boty check` output.
-- **REQ-08**: A full `boty check` completes in under two minutes at ~7 retailers, sequentially.
+- [ ] **REQ-07**: Target and Amazon are each either working or documented as unreachable with evidence. Any retailer reached via a browser is flagged DEGRADED in the support matrix and in `boty check` output.
+- [ ] **REQ-08**: A full `boty check` completes in under two minutes at ~7 retailers, sequentially.
 
 ### Phase 4 — Open Source Ready
 
-- **REQ-09**: `docs/adding-a-retailer.md` walks a contributor through a real adapter end to end and states why a control product is mandatory.
-- **REQ-10**: CI runs lint, type check and the offline test suite on every PR.
-- **REQ-11**: `pip install bot-y` works from PyPI, and a v1.0.0 tag exists.
+- [ ] **REQ-09**: `docs/adding-a-retailer.md` walks a contributor through a real adapter end to end and states why a control product is mandatory.
+- [ ] **REQ-10**: CI runs lint, type check and the offline test suite on every PR.
+- [ ] **REQ-11**: `pip install bot-y` works from PyPI, and a v1.0.0 tag exists.
 
 ## Non-Functional Requirements
 
