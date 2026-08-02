@@ -23,7 +23,10 @@ dependencies = [
 # deployed monitor does not pull a test framework onto the box.
 dev = [
     "pytest>=8.0",
-    "mypy>=1.8",
+    # 2.x, not the original >=1.8: mypy 2 is meaningfully stricter by default,
+    # so a contributor resolving 1.x would run a WEAKER check than the one this
+    # config was verified against and get a green that means less than ours.
+    "mypy>=2.0",
 ]
 
 [project.urls]
@@ -44,6 +47,15 @@ files = ["boty"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
+
+# Without these two, non-strict mypy does not check the body of an unannotated
+# function AT ALL — it just skips it. So the whole package would pass this check
+# with zero annotations, and the next contributor to add a bare `def` would get
+# a silent free pass while the badge stayed green. That is the same shape of
+# failure as a detector reporting out-of-stock forever: green, and meaningless.
+# These make "boty carries type hints" enforced rather than a one-time snapshot.
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
 
 # Deliberately NOT strict. The goal is catching real None-handling errors in an
 # ~1000-line codebase — the class of bug that produces a wrong stock verdict
