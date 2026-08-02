@@ -30,6 +30,15 @@ FIRST_PARTY = {
 }
 
 
+#: Retailers where a third party can hold the buy box. These are in
+#: FIRST_PARTY precisely *because* they are marketplaces, so on them an offer
+#: with no seller recorded means "I do not know who is selling this" — which is
+#: UNKNOWN territory, not an implicit first-party pass. Stated explicitly here
+#: rather than left to fall out of the data, because the difference decides
+#: whether a $229.99 flip listing can alert.
+MARKETPLACES = {"walmart", "target", "amazon", "bestbuy"}
+
+
 def _pick(offers: list[parse.Offer], retailer: str, first_party_only: bool) -> parse.Offer | None:
     """Choose the offer we care about, preferring first-party and cheapest."""
     candidates = offers
@@ -37,8 +46,12 @@ def _pick(offers: list[parse.Offer], retailer: str, first_party_only: bool) -> p
         allowed = FIRST_PARTY.get(retailer, set())
         named = [o for o in offers if o.seller and o.seller.strip().lower() in allowed]
         # A page with no seller attribution at all (single-seller retailers
-        # like GameStop) is implicitly first-party.
-        candidates = named or [o for o in offers if o.seller is None]
+        # like GameStop) is implicitly first-party — but only where there is no
+        # marketplace to be unattributed *on*. `nextdata_offers` reads
+        # `sellerName`, which Walmart's payload simply omits sometimes, so on a
+        # marketplace this fallback was handing the buy box to whoever held it.
+        unattributed = [] if retailer in MARKETPLACES else [o for o in offers if o.seller is None]
+        candidates = named or unattributed
     if not candidates:
         return None
     live = [o for o in candidates if o.available]
@@ -74,6 +87,19 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
 
     offer = _pick(offers, watch.retailer, first_party_only)
     if offer is None:
+        if first_party_only and watch.retailer in MARKETPLACES and any(o.seller is None for o in offers):
+            # The page says something is buyable but does not say by whom, on a
+            # site where that is a real question. OUT_OF_STOCK would be a
+            # confident wrong answer; IN_STOCK could be a flipper's listing.
+            return Result(
+                watch,
+                Availability.UNKNOWN,
+                detail=(
+                    f"{len(offers)} offer(s) via {source} with no seller recorded, and "
+                    f"{watch.retailer} is a marketplace — cannot tell whose offer this is"
+                ),
+                url=watch.target,
+            )
         return Result(
             watch,
             Availability.OUT_OF_STOCK,

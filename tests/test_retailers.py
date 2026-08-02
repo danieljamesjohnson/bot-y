@@ -19,9 +19,12 @@ from __future__ import annotations
 
 import pytest
 
+import json
+
 from boty import retailers
 from boty.fetch import Blocked, FetchError, Page
 from boty.models import Availability, Watch
+from boty.parse import Offer
 
 GAMESTOP_URL = "https://www.gamestop.com/example"
 WALMART_URL = "https://www.walmart.com/ip/example/1"
@@ -41,6 +44,17 @@ def _raise(monkeypatch: pytest.MonkeyPatch, exc: Exception) -> None:
         raise exc
 
     monkeypatch.setattr(retailers, "get", _get)
+
+
+def _nextdata(**product: object) -> str:
+    """A minimal Walmart hydration payload, shaped like the real fixture."""
+    doc = {"props": {"pageProps": {"initialData": {"data": {"product": product}}}}}
+    return f'<html><script id="__NEXT_DATA__" type="application/json">{json.dumps(doc)}</script></html>'
+
+
+def _ldjson(**offer: object) -> str:
+    doc = {"@type": "Product", "name": "thing", "offers": [offer]}
+    return f'<html><script type="application/ld+json">{json.dumps(doc)}</script></html>'
 
 
 # --------------------------------------------------------------------------
@@ -130,6 +144,60 @@ def test_walmart_first_party_offer_is_accepted(
     assert result.availability is Availability.IN_STOCK
     assert "Walmart.com" in result.detail
     assert result.price == 2.42
+
+
+# --------------------------------------------------------------------------
+# Who is selling this? — the seller filter's own failure modes
+# --------------------------------------------------------------------------
+
+
+def test_unattributed_offer_is_not_first_party_on_a_marketplace() -> None:
+    """"No seller recorded" is not the same claim on Walmart as on GameStop.
+
+    `nextdata_offers` sets `seller=product.get("sellerName")`, which is None
+    whenever Walmart's hydration payload omits that key. The fallback that
+    treats unattributed offers as first-party is right for a single-seller
+    retailer, but Walmart and Target are in FIRST_PARTY precisely *because*
+    a third party can hold their buy box — so there, "I do not know who is
+    selling this" must not read as "the retailer is selling this".
+    """
+    flip = Offer(available=True, price=229.99, seller=None, raw_availability="IN_STOCK")
+
+    assert retailers._pick([flip], "walmart", first_party_only=True) is None
+    assert retailers._pick([flip], "target", first_party_only=True) is None
+
+
+def test_unattributed_offer_is_still_first_party_on_a_single_seller_retailer() -> None:
+    """The fallback exists for a reason and must survive: GameStop's schema.org
+    markup carries no seller node at all, and nothing there is a marketplace."""
+    offer = Offer(available=True, price=54.99, seller=None, raw_availability="InStock")
+
+    assert retailers._pick([offer], "gamestop", first_party_only=True) is offer
+
+
+def test_walmart_offer_with_no_seller_recorded_is_unknown_not_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End to end: an unattributed marketplace offer is UNKNOWN, both ways.
+
+    It must not be IN_STOCK (that would alert on a possible flipper), and it
+    must not be OUT_OF_STOCK either — the page says something IS buyable, and
+    claiming otherwise is the confident-wrong-answer failure this project
+    exists to prevent. The only true statement is "I cannot tell whose offer
+    this is".
+    """
+    _serve(
+        monkeypatch,
+        _nextdata(availabilityStatus="IN_STOCK", priceInfo={"currentPrice": {"price": 229.99}}),
+        WALMART_URL,
+    )
+    watch = Watch(name="GO Plus +", retailer="walmart", target=WALMART_URL, max_price=80)
+
+    result = retailers.check_html(watch, first_party_only=True)
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.alertable is False
+    assert "seller" in result.detail.lower()
 
 
 # --------------------------------------------------------------------------
