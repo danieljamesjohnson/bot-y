@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from typing import Any
 
 #: schema.org availability values that mean "you can buy it now".
 BUYABLE = {"InStock", "PreOrder", "LimitedAvailability", "BackOrder"}
@@ -35,16 +37,16 @@ class Offer:
     raw_availability: str = ""
 
 
-def _as_float(v) -> float | None:
+def _as_float(v: Any) -> float | None:
     try:
         return float(str(v).replace(",", "").replace("$", "").strip())
     except (TypeError, ValueError):
         return None
 
 
-def _iter_nodes(doc):
+def _iter_nodes(doc: Any) -> Iterator[dict[str, Any]]:
     """Walk a JSON-LD document, which may be a node, a list, or an @graph."""
-    stack = [doc]
+    stack: list[Any] = [doc]
     while stack:
         node = stack.pop()
         if isinstance(node, list):
@@ -96,7 +98,7 @@ def ldjson_offers(html: str) -> list[Offer] | None:
 _WALMART_PRODUCT_PATH = ("props", "pageProps", "initialData", "data", "product")
 
 
-def _dig(doc, path):
+def _dig(doc: Any, path: Iterable[str]) -> Any | None:
     for key in path:
         if not isinstance(doc, dict):
             return None

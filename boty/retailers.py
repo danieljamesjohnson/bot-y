@@ -30,7 +30,7 @@ FIRST_PARTY = {
 }
 
 
-def _pick(offers: list[parse.Offer], retailer: str, first_party_only: bool):
+def _pick(offers: list[parse.Offer], retailer: str, first_party_only: bool) -> parse.Offer | None:
     """Choose the offer we care about, preferring first-party and cheapest."""
     candidates = offers
     if first_party_only:
