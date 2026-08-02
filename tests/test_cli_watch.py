@@ -162,6 +162,139 @@ def test_a_delivered_health_warning_is_not_repeated_every_cycle(
     assert sent["health"] == [["gamestop"]]
 
 
+# --------------------------------------------------------------------------
+# WR-08: a permanently broken monitor must not look alive
+# --------------------------------------------------------------------------
+
+
+def _explodes(exc: Exception, *, after: int = 0):
+    """A checker that succeeds `after` times, then raises forever."""
+    calls = {"n": 0}
+
+    def check(watch: Watch) -> Result:
+        calls["n"] += 1
+        if calls["n"] > after:
+            raise exc
+        return Result(watch, Availability.OUT_OF_STOCK, detail="synthetic")
+
+    return check
+
+
+def test_a_transient_failure_is_tolerated(cfg: Config, sent: dict[str, list]) -> None:
+    """One bad cycle is normal — a timeout, a hiccup. Keep going, stay quiet."""
+    state = State.load(cfg.state_path)
+
+    rc = cli.watch_loop(
+        cfg, _explodes(RuntimeError("boom"), after=1), state, cycles=2, sleep=lambda s: None
+    )
+
+    assert rc == 0
+    assert sent["health"] == [["gamestop"]], "only the ordinary no-control warning"
+
+
+def test_three_consecutive_failures_are_announced(cfg: Config, sent: dict[str, list]) -> None:
+    """The failure mode this project exists to eliminate, one level up.
+
+    Under systemd a loop that catches everything leaves the unit `active
+    (running)` forever: the process never exits non-zero, the health-warning
+    call is itself inside the `try` so it never runs, and status.json keeps
+    serving whatever it last held. A stale green dashboard over a monitor that
+    has not checked anything in a week.
+    """
+    state = State.load(cfg.state_path)
+
+    cli.watch_loop(cfg, _explodes(RuntimeError("boom")), state, cycles=3, sleep=lambda s: None)
+
+    assert sent["health"] == [["(all)"]], (
+        "three cycles raised in a row and nothing was said — the monitor is "
+        "running but not monitoring, and only it can know that"
+    )
+
+
+def test_the_stuck_warning_is_sent_once_not_every_cycle(
+    cfg: Config, sent: dict[str, list]
+) -> None:
+    """A warning per poll is a warning you filter out."""
+    state = State.load(cfg.state_path)
+
+    cli.watch_loop(cfg, _explodes(RuntimeError("boom")), state, cycles=6, sleep=lambda s: None)
+
+    assert sent["health"] == [["(all)"]]
+
+
+def test_a_recovery_resets_the_failure_count(cfg: Config, sent: dict[str, list]) -> None:
+    """Two failures, a success, two failures is not "four in a row"."""
+    calls = {"n": 0}
+
+    def check(watch: Watch) -> Result:
+        calls["n"] += 1
+        if calls["n"] in (1, 2, 4, 5):
+            raise RuntimeError("boom")
+        return Result(watch, Availability.OUT_OF_STOCK, detail="synthetic")
+
+    state = State.load(cfg.state_path)
+    rc = cli.watch_loop(cfg, check, state, cycles=5, sleep=lambda s: None)
+
+    assert rc == 0
+    assert ["(all)"] not in sent["health"], "an intermittent fault is not a stuck monitor"
+
+
+def test_the_loop_gives_up_after_ten_consecutive_failures(
+    cfg: Config, sent: dict[str, list]
+) -> None:
+    """Exiting non-zero is the only thing systemd can actually see.
+
+    A persistent fault — a config error, a parser AttributeError, a full disk
+    on state.save() — is not something to log forever. Returning 1 lets the
+    unit restart or be marked failed, which is what makes the failure visible
+    outside this process.
+    """
+    state = State.load(cfg.state_path)
+
+    rc = cli.watch_loop(
+        cfg, _explodes(RuntimeError("boom")), state, cycles=50, sleep=lambda s: None
+    )
+
+    assert rc == 1
+
+
+def test_giving_up_does_not_happen_before_the_threshold(
+    cfg: Config, sent: dict[str, list]
+) -> None:
+    """Bounded on both sides: nine failures is still "keep trying"."""
+    state = State.load(cfg.state_path)
+
+    rc = cli.watch_loop(
+        cfg, _explodes(RuntimeError("boom")), state, cycles=9, sleep=lambda s: None
+    )
+
+    assert rc == 0
+
+
+def test_a_failing_notifier_cannot_stop_the_loop_giving_up(
+    cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stuck-monitor warning is a best effort, not a new way to crash.
+
+    If whatever broke the cycle also broke notification, raising from inside
+    the failure handler would replace a diagnosable exit with a stack trace
+    from the wrong place.
+    """
+
+    def _raises(*args: object, **kwargs: object) -> bool:
+        raise RuntimeError("notifier is down too")
+
+    monkeypatch.setattr(cli, "send_health_warning", _raises)
+    monkeypatch.setattr(cli, "send_restock", _raises)
+    state = State.load(cfg.state_path)
+
+    rc = cli.watch_loop(
+        cfg, _explodes(RuntimeError("boom")), state, cycles=50, sleep=lambda s: None
+    )
+
+    assert rc == 1
+
+
 def test_watch_refuses_to_start_with_nothing_to_notify(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

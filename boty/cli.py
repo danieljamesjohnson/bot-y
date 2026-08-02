@@ -83,6 +83,41 @@ def _capture_fixture(args: argparse.Namespace) -> int:
     return 0
 
 
+#: Consecutive failed cycles before the monitor reports itself broken. Low,
+#: because the thing being reported is "nothing is being checked at all".
+FAILURES_BEFORE_WARNING = 3
+
+#: Consecutive failed cycles before it stops and exits non-zero. A persistent
+#: fault is not something to log forever: the exit code is the only signal a
+#: supervisor can act on.
+FAILURES_BEFORE_GIVING_UP = 10
+
+
+def _warn_monitor_is_stuck(cfg: Config, failures: int) -> None:
+    """Announce that the loop itself is failing, best-effort.
+
+    Wrapped, because whatever broke the cycle may well have broken
+    notification too — and raising from inside the failure handler would
+    replace a diagnosable exit with a stack trace from the wrong place.
+    """
+    try:
+        send_health_warning(
+            cfg.notify_urls,
+            [
+                Health(
+                    retailer="(all)",
+                    ok=False,
+                    reason=(
+                        f"{failures} consecutive check cycles raised — the monitor is "
+                        f"running but not monitoring, and the status page is stale"
+                    ),
+                )
+            ],
+        )
+    except Exception:
+        log.exception("could not send the stuck-monitor warning either")
+
+
 def watch_cycle(
     cfg: Config,
     checker: Callable[[Watch], Result],
@@ -151,12 +186,33 @@ def watch_loop(
     tests assert on what a *sequence* of cycles does.
     """
     warned: set[str] = set()
+    consecutive_failures = 0
     completed = 0
     while cycles is None or completed < cycles:
         try:
             warned = watch_cycle(cfg, checker, state, warned)
+            consecutive_failures = 0
         except Exception:
-            logging.exception("check cycle failed; continuing")
+            # Tolerating a transient failure is right — a timeout should not
+            # take the service down. Tolerating a permanent one is the exact
+            # failure this project exists to eliminate: under systemd the unit
+            # stays `active (running)`, the process never exits non-zero, the
+            # health-warning call is itself inside this `try` so it never runs,
+            # and status.json goes on serving whatever it last held. A stale
+            # green dashboard over a monitor that has not checked anything in
+            # a week. So: count them, say so out loud, and eventually stop
+            # pretending.
+            consecutive_failures += 1
+            log.exception("check cycle failed (%d in a row); continuing", consecutive_failures)
+            if consecutive_failures == FAILURES_BEFORE_WARNING:
+                _warn_monitor_is_stuck(cfg, consecutive_failures)
+            if consecutive_failures >= FAILURES_BEFORE_GIVING_UP:
+                log.error(
+                    "giving up after %d consecutive failed cycles — exiting non-zero so "
+                    "the supervisor can restart this or mark it failed",
+                    consecutive_failures,
+                )
+                return 1
 
         completed += 1
         # Jitter so we do not hammer on a fixed cadence, which is itself a signal.
