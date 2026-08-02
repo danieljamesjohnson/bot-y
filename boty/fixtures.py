@@ -66,22 +66,36 @@ def meta_path(retailer: str, name: str) -> Path:
     return FIXTURE_ROOT / retailer / f"{name}.json"
 
 
-def capture(retailer: str, name: str, url: str, note: str = "") -> Path:
+def capture(retailer: str, name: str, url: str, note: str = "", browser: bool = False) -> Path:
     """Fetch `url` live and freeze it as a fixture. Returns the HTML path.
 
     `note` records what stock state the page represented at capture time — a
     fixture without one is a wall of HTML nobody can interpret later.
 
-    `Blocked` and `FetchError` propagate deliberately. A capture that swallowed
-    them would write a CAPTCHA interstitial to disk under a product's name and
-    poison every test that reads it, which is the exact silent failure this
-    project exists to prevent.
+    `browser=True` captures through rung 3 (a real browser) instead of rung 1
+    (impersonated HTTP). Without it, a retailer that refuses rung 1 outright
+    could never be frozen as a fixture at all — which would mean the retailers
+    that most need offline regression tests are exactly the ones that cannot
+    have them. Note that a rung-3 capture is a snapshot of *rendered* DOM, so
+    the sidecar's byte count will not match what curl would have seen.
+
+    `Blocked` and `FetchError` propagate deliberately, on both paths. A capture
+    that swallowed them would write a CAPTCHA interstitial to disk under a
+    product's name and poison every test that reads it, which is the exact
+    silent failure this project exists to prevent.
     """
     # Imported here, not at module scope, so that merely importing this module
-    # (as the test suite does) cannot reach the network.
-    from . import fetch
+    # (as the test suite does) cannot reach the network. `boty.browser` is lazy
+    # for a second reason too: it is behind an optional extra, so a contributor
+    # without `bot-y[browser]` must still be able to import this module.
+    if browser:
+        from . import browser as browser_transport
 
-    page = fetch.get(url)
+        page = browser_transport.fetch_rendered(url)
+    else:
+        from . import fetch
+
+        page = fetch.get(url)
 
     target = html_path(retailer, name)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -95,6 +109,11 @@ def capture(retailer: str, name: str, url: str, note: str = "") -> Path:
         "status": page.status,
         "bytes": len(page.text.encode("utf-8")),
         "note": note,
+        # Which rung of the escalation ladder produced this. A rendered capture
+        # is a different artefact from an HTTP one — its `status` is always 200
+        # because a browser has no response code to report — and a reader six
+        # months from now cannot tell them apart by looking at the HTML.
+        "transport": "browser" if browser else "http",
     }
     meta_path(retailer, name).write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 

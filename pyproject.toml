@@ -29,6 +29,25 @@ dev = [
     "mypy>=2.0",
 ]
 
+# Rung 3 of the escalation ladder: a real browser, for the one retailer that
+# refuses impersonated HTTP at the connection layer. Optional for the same
+# reason `dev` is — a deployed monitor, or a contributor who only touches the
+# HTTP retailers, must not be forced to pull a browser driver onto the box.
+# `boty.browser` imports it lazily so `import boty` never touches it.
+#
+#   .venv/bin/pip install -e '.[browser]'
+#
+# Supply-chain note (audited 2026-08-02, approved by the maintainer before
+# install): PyPI `nodriver` 0.50.3 declares Homepage/Source/Bug Reports all
+# pointing at github.com/UltrafunkAmsterdam/nodriver — 4.6k stars, 43 releases
+# since 2024-02, last push same day as the last release. It is the upstream
+# successor to undetected-chromedriver. No typosquat neighbours exist on PyPI
+# (`no-driver`, `nodriver-py`, `nodrivers`, `nodriver2`, `py-nodriver` are all
+# 404). It is AGPL-3.0 while this project is MIT: keeping it an *optional*
+# dependency the user installs themselves — never vendored, never redistributed
+# — is what keeps that distinction clean.
+browser = ["nodriver>=0.38"]
+
 [project.urls]
 Homepage = "https://github.com/danieljamesjohnson/bot-y"
 
@@ -70,7 +89,7 @@ disallow_incomplete_defs = true
 # These ship without complete type stubs. Their absence says nothing about our
 # code, and treating it as an error would train everyone to ignore mypy output.
 [[tool.mypy.overrides]]
-module = ["curl_cffi.*", "apprise.*", "yaml.*"]
+module = ["curl_cffi.*", "apprise.*", "yaml.*", "nodriver.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -13,11 +13,13 @@ exactly what happened.
 
 from __future__ import annotations
 
+import asyncio
 import socket
 
 import curl_cffi
 import pytest
 
+import boty.browser
 from boty.fixtures import load
 
 _MESSAGE = "test attempted a live network request"
@@ -56,6 +58,22 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     ``scripts/control_check.have_connectivity`` opens a raw socket, so both
     bypass it entirely. Blocking at the socket layer as well closes every
     transport in the process, present and future.
+
+    ``boty.browser`` breaks that "present and future" claim, which is why it is
+    patched here explicitly. Rung 3 does not open a socket in this process at
+    all: it forks a Chrome subprocess, and Chrome does the fetching. Every patch
+    above would sit there untriggered while a test quietly launched a browser at
+    bestbuy.com — passing green, hammering a live retailer, and hollowing out
+    Phase 1's offline guarantee without a single red test to show for it. So the
+    guard patches ``boty.browser._render``, the one seam every rendered byte
+    comes through, and ``BaseEventLoop.create_connection`` as belt and braces
+    for the CDP websocket. ``tests/test_browser.py`` proves both fire rather
+    than trusting that they would.
+
+    Note what is deliberately NOT patched: ``subprocess.Popen``.
+    ``tests/test_verify_makefile.py`` and ``tests/test_control_check.py``
+    legitimately shell out, and blocking that would break the suite for a reason
+    that has nothing to do with the network.
     """
 
     def _blocked(*args: object, **kwargs: object) -> None:
@@ -67,6 +85,9 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket, "create_connection", _blocked)
     monkeypatch.setattr(socket.socket, "connect", _blocked)
     monkeypatch.setattr(socket.socket, "connect_ex", _blocked)
+
+    monkeypatch.setattr(boty.browser, "_render", _blocked)
+    monkeypatch.setattr(asyncio.base_events.BaseEventLoop, "create_connection", _blocked)
 
 
 @pytest.fixture
