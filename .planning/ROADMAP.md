@@ -58,7 +58,7 @@ works. Record which rung each retailer landed on in the support matrix.
 ### Phase 1: Detector Safety Net
 **Goal**: A contributor (or I) can add a retailer adapter and be told immediately if it breaks an existing one — offline, without hitting a live site.
 **Depends on**: Nothing (first phase)
-**Requirements**: REQ-01, REQ-02, REQ-03
+**Requirements**: REQ-01, REQ-02, REQ-03, REQ-12
 **Success Criteria** (what must be TRUE):
   1. Saved HTML fixtures for GameStop and Walmart drive tests that pass without network access
   2. A test proves each of the three availability states, including that an unparseable page yields UNKNOWN and never OUT_OF_STOCK
