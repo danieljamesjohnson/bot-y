@@ -53,9 +53,14 @@ from pathlib import Path
 # Run from a checkout without installing: make the repo root importable.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from boty import fixtures  # noqa: E402
 from boty.cli import _make_checker  # noqa: E402
 from boty.config import Config  # noqa: E402
 from boty.models import Availability, Result, Watch  # noqa: E402
+
+#: A fixture older than this is worth a look. It is a warning, never a failure —
+#: see `report_fixture_staleness`.
+STALE_AFTER_DAYS = 90
 
 #: Neutral hosts for the connectivity pre-flight. Raw IPs so a broken resolver
 #: is caught too, and two providers so one being down is not read as "offline".
@@ -159,6 +164,68 @@ def check_controls(config_path: str, retries: int = 1) -> int:
     return 1
 
 
+def report_fixture_staleness(max_age_days: int = STALE_AFTER_DAYS) -> int:
+    """Warn about old or unlabelled fixtures. Always returns 0.
+
+    This warns and does not fail, on purpose. A stale fixture is a prompt to
+    re-capture and see whether the expected values changed — and if they did,
+    that is a real signal about the retailer rather than a chore. Failing the
+    build on age would train people to re-capture blindly on a deadline, which
+    converts the signal into noise and leaves the suite asserting against
+    whatever the page happens to say today.
+
+    Missing and unparseable sidecars are reported too. An unlabelled fixture is
+    a wall of HTML with no record of what stock state it represented, which is
+    not much better than no fixture at all.
+    """
+    pairs = fixtures.list_fixtures()
+    if not pairs:
+        print(f"fixtures: WARNING — no fixtures found under {fixtures.FIXTURE_ROOT}")
+        return 0
+
+    print(f"fixtures: {len(pairs)} fixture(s) under {fixtures.FIXTURE_ROOT}")
+    warnings = 0
+
+    for retailer, name in pairs:
+        meta = fixtures.metadata(retailer, name)
+        age = fixtures.age_days(retailer, name)
+
+        if meta is None:
+            sidecar = fixtures.meta_path(retailer, name)
+            why = "sidecar missing" if not sidecar.exists() else "sidecar unreadable or not JSON"
+            print(
+                f"  WARNING  {retailer}/{name}: {why} ({sidecar.name}) —\n"
+                "           no record of what stock state this page represented"
+            )
+            warnings += 1
+            continue
+
+        if age is None:
+            print(f"  WARNING  {retailer}/{name}: sidecar has no usable captured_at — age unknown")
+            warnings += 1
+            continue
+
+        if age > max_age_days:
+            print(
+                f"  WARNING  {retailer}/{name}: captured {age:.0f} days ago "
+                f"(over {max_age_days}) — re-capture and see whether the expected values moved"
+            )
+            warnings += 1
+            continue
+
+        note = str(meta.get("note") or "").strip()
+        if not note:
+            print(f"  WARNING  {retailer}/{name}: no capture note — the stock state it represents is unrecorded")
+            warnings += 1
+            continue
+
+        print(f"  ok       {retailer}/{name}: {age:.0f}d — {note[:60]}")
+
+    if warnings:
+        print(f"fixtures: {warnings} warning(s) — not a failure, but worth a look")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="control_check",
@@ -170,7 +237,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the live check entirely and exit 0 (for CI, which should not hit retailers)",
     )
+    ap.add_argument(
+        "--fixtures",
+        action="store_true",
+        help="report stale or unlabelled fixtures instead; warns, never fails",
+    )
+    ap.add_argument(
+        "--max-age-days",
+        type=int,
+        default=STALE_AFTER_DAYS,
+        help=f"fixture age that triggers a warning (default {STALE_AFTER_DAYS})",
+    )
     args = ap.parse_args(argv)
+
+    if args.fixtures:
+        return report_fixture_staleness(args.max_age_days)
 
     if args.offline:
         print("control check: SKIPPED (--offline) — no live retailer request made.")
