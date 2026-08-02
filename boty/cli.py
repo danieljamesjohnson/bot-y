@@ -21,6 +21,8 @@ from .notify import send_health_warning, send_restock
 from .retailers import check_bestbuy_api, check_html
 from .status import write as write_status
 
+log = logging.getLogger(__name__)
+
 SYMBOL = {
     Availability.IN_STOCK: "\033[32m●\033[0m",
     Availability.OUT_OF_STOCK: "\033[90m○\033[0m",
@@ -101,15 +103,37 @@ def watch_cycle(
     """
     results, health, alerts = run_once(cfg.watches, checker, state)
     write_status(cfg.status_path, results, health)
-    if alerts:
-        send_restock(cfg.notify_urls, alerts)
+
+    # Alerts are edge-triggered, and `run_once` has already committed the
+    # transition to `state.seen` and saved it. So a send that does not arrive
+    # is not a retry — it is a drop nothing will ever mention again: the next
+    # cycle sees the same in-stock reading, finds it already remembered, and
+    # stays quiet while the status page shows green. Un-remembering the
+    # transition is what converts a lost alert into one more attempt.
+    if alerts and not send_restock(cfg.notify_urls, alerts):
+        log.error(
+            "restock alert NOT delivered for %s — rolling the remembered state "
+            "back so the next cycle tries again",
+            ", ".join(r.watch.key for r in alerts),
+        )
+        for r in alerts:
+            state.seen.pop(r.watch.key, None)
+        state.save()
 
     # Warn once per retailer per failure episode, not every cycle.
     unhealthy = [h for h in health if not h.ok]
     fresh = [h for h in unhealthy if h.retailer not in warned]
-    if fresh:
-        send_health_warning(cfg.notify_urls, fresh)
-    return {h.retailer for h in unhealthy}
+    still_unhealthy = {h.retailer for h in unhealthy}
+    if fresh and not send_health_warning(cfg.notify_urls, fresh):
+        # Same defect, same fix: marking a retailer as warned on the strength
+        # of an attempt rather than a delivery means a broken detector gets
+        # reported once, into the void, and never again.
+        log.error(
+            "detector health warning NOT delivered for %s — will retry next cycle",
+            ", ".join(h.retailer for h in fresh),
+        )
+        return still_unhealthy - {h.retailer for h in fresh}
+    return still_unhealthy
 
 
 def watch_loop(
@@ -197,6 +221,21 @@ def main(argv: list[str] | None = None) -> int:
         if alerts:
             print(f"\n  {len(alerts)} alertable transition(s)")
         return 0
+
+    # `watch` exists only to notify. With no URLs configured `send_restock`
+    # returns False on its first line without logging anything, so the loop
+    # would poll forever, find the restock, and tell nobody — outwardly
+    # identical to a working monitor. This is easy to arrive at by accident:
+    # `notify: [${BOTY_NOTIFY_URL}]` with the variable unset expands to an
+    # empty string, which `Config.load` filters out.
+    if not cfg.notify_urls:
+        print(
+            "no notify URLs configured — `watch` would run forever and tell nobody.\n"
+            "Set one in the config's `notify:` list (or via ${BOTY_NOTIFY_URL}), "
+            "or use `boty check` if you meant to look at this by hand.",
+            file=sys.stderr,
+        )
+        return 2
 
     print(f"watching {len(cfg.watches)} product(s) every ~{cfg.interval_seconds}s. ctrl-c to stop.")
     return watch_loop(cfg, checker, state)
