@@ -53,3 +53,43 @@ watches:
     retailer: walmart
     target: https://www.walmart.com/ip/Great-Value-Whole-Vitamin-D-Milk-Gallon-Plastic-Jug-128-Fl-Oz/10450114
     control: true
+
+  # ---- transition controls: products SUPPOSED to change state ---------------
+  # The controls above prove "can we still read this page". These prove "do we
+  # still NOTICE when the page changes" — a different question, and the one the
+  # detector actually exists to answer.
+  #
+  # Nothing in the 36-test suite caught the bug where every restock after the
+  # first was silently dropped: the pages read perfectly, only the transition
+  # was lost. An always-in-stock control can never catch that, because it never
+  # transitions. These can.
+  #
+  # Deliberately NOT `control: true`. They are EXPECTED to read OUT_OF_STOCK
+  # regularly, and `make verify` must never fail because the market moved.
+  # `control_check.py` and `assess_health()` both filter on `control`, so a
+  # watch without it cannot fail the gate whatever it reads.
+  #
+  # No `max_price` on purpose: the ceiling gates `alertable`, which gates the
+  # notification. Leaving it off means a transition produces a real push, so the
+  # whole chain — parse, state, edge detection, Apprise — is proved end to end,
+  # not just the part that writes state.json. If the pings get noisy, set
+  # `max_price: 0` and they go quiet while still recording state.
+  #
+  # GameStop only. Walmart cannot supply one: its flappy listings are held by
+  # marketplace resellers (so they'd flap on reseller churn, not real restocks)
+  # and its first-party listings are evergreen staples that never move. GameStop
+  # publishes exactly one first-party ld+json offer per page — no buy-box fight.
+
+  - name: TRANSITION — Pitch Black Booster Bundle
+    retailer: gamestop
+    target: https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-pitch-black-booster-bundle/20034822.html
+
+  - name: TRANSITION — Ascended Heroes Mini Tin
+    retailer: gamestop
+    target: https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-ascended-heroes-mini-tin-styles-may-vary/20030566.html
+
+  # Currently OUT of stock — the complement to the two above, so we observe an
+  # OUT→IN edge without waiting for the in-stock pair to sell through first.
+  - name: TRANSITION — Mega Evolution Booster Bundle
+    retailer: gamestop
+    target: https://www.gamestop.com/toys-games/trading-cards/products/pokemon-trading-card-game-mega-evolution-booster-bundle/20023793.html
