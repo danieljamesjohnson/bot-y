@@ -200,6 +200,56 @@ def test_walmart_offer_with_no_seller_recorded_is_unknown_not_a_verdict(
     assert "seller" in result.detail.lower()
 
 
+def test_retailer_with_no_first_party_list_is_unknown_not_out_of_stock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A config gap is not a stock fact.
+
+    `FIRST_PARTY.get(retailer, set())` returns an empty set for any retailer
+    key not in the dict, so `named` is always empty and — for a page that does
+    name its seller, as most schema.org markup does — `_pick` returns None.
+    That used to become a confident OUT_OF_STOCK, when the truth is "this
+    retailer has no first-party allow-list configured, so I cannot tell whose
+    offer this is". FIRST_PARTY covers four keys and REQUIREMENTS targets
+    seven retailers, so three Phase 2 adapters land straight into this path.
+    """
+    _serve(
+        monkeypatch,
+        _ldjson(availability="https://schema.org/InStock", price="54.99",
+                seller={"@type": "Organization", "name": "Pokémon Center"}),
+        "https://www.pokemoncenter.com/product/1",
+    )
+    watch = Watch(
+        name="GO Plus +", retailer="pokemoncenter", target="https://www.pokemoncenter.com/product/1"
+    )
+
+    result = retailers.check_html(watch, first_party_only=True)
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.availability is not Availability.OUT_OF_STOCK
+    assert result.alertable is False
+    assert "pokemoncenter" in result.detail
+
+
+def test_a_configured_retailer_still_reports_out_of_stock_for_a_third_party_offer(
+    monkeypatch: pytest.MonkeyPatch, walmart_goplusplus: str
+) -> None:
+    """The WR-03 escape hatch must not swallow the genuine verdict.
+
+    Walmart HAS an allow-list, and the fixture's offer is from a named
+    reseller. "Walmart itself is not selling this" is a true stock fact, so it
+    stays OUT_OF_STOCK rather than being softened to UNKNOWN along with the
+    unconfigured case.
+    """
+    _serve(monkeypatch, walmart_goplusplus, WALMART_URL)
+    watch = Watch(name="GO Plus +", retailer="walmart", target=WALMART_URL)
+
+    result = retailers.check_html(watch, first_party_only=True)
+
+    assert result.availability is Availability.OUT_OF_STOCK
+    assert "none first-party" in result.detail
+
+
 # --------------------------------------------------------------------------
 # 6-8: the negative contract — every failure mode is UNKNOWN
 # --------------------------------------------------------------------------

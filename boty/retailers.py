@@ -87,6 +87,22 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
 
     offer = _pick(offers, watch.retailer, first_party_only)
     if offer is None:
+        if first_party_only and watch.retailer not in FIRST_PARTY:
+            # `FIRST_PARTY.get(retailer, set())` yields an empty allow-list for
+            # an unconfigured retailer, so nothing can ever match it and any
+            # page that names its seller lands here. The truth is a config gap,
+            # not a stock fact — reporting OUT_OF_STOCK would be the same
+            # conflation UNKNOWN exists to prevent, and REQUIREMENTS targets
+            # three more retailers that arrive through this door.
+            return Result(
+                watch,
+                Availability.UNKNOWN,
+                detail=(
+                    f"{len(offers)} offer(s) via {source}, but no first-party seller list "
+                    f"is configured for '{watch.retailer}' — cannot tell whose they are"
+                ),
+                url=watch.target,
+            )
         if first_party_only and watch.retailer in MARKETPLACES and any(o.seller is None for o in offers):
             # The page says something is buyable but does not say by whom, on a
             # site where that is a real question. OUT_OF_STOCK would be a
