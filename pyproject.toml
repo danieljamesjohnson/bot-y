@@ -18,6 +18,14 @@ dependencies = [
     "apprise>=1.7",     # ~100 notification services behind one URL syntax
 ]
 
+[project.optional-dependencies]
+# Everything needed to run `make verify`. Kept out of the runtime deps so a
+# deployed monitor does not pull a test framework onto the box.
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.8",
+]
+
 [project.urls]
 Homepage = "https://github.com/danieljamesjohnson/bot-y"
 
