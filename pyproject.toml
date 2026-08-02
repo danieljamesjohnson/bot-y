@@ -43,7 +43,11 @@ include = ["boty*"]
 # A check that only passes with the right invocation flags is a check that
 # quietly stops being run.
 python_version = "3.10"
-files = ["boty"]
+# `scripts` is included on purpose: control_check.py and mutation_check.py are
+# what `make verify` trusts to tell the truth about everything else. Leaving the
+# verifier itself unchecked would put the one thing nobody re-reads outside the
+# net that guards the code it judges.
+files = ["boty", "scripts"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
