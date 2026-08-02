@@ -97,11 +97,11 @@ completed: 2026-08-02
 
 | Task | Name | Commit | Type |
 |---|---|---|---|
-| 0 | Install dev dependencies | `a26ef4a` | chore |
-| 1 | pytest scaffolding and network guard | `8c9786b` | test |
-| 2 | Parser tests | `60c69b0` | test |
-| 3 | Retailer and alerting contract tests | `6e42d13` | test |
-| 4 | Monitor health and state tests | `c23e0c1` | test |
+| 0 | Install dev dependencies | `f266e82` | chore |
+| 1 | pytest scaffolding and network guard | `2d55ca8` | test |
+| 2 | Parser tests | `7d091ad` | test |
+| 3 | Retailer and alerting contract tests | `dc02e09` | test |
+| 4 | Monitor health and state tests | `f71fdbe` | test |
 | 5 | Full suite green, offline | — | verification only, no file changes |
 
 ## Files Created/Modified
@@ -151,7 +151,7 @@ completed: 2026-08-02
 - **Fix:** `test_the_network_guard_actually_fires` invokes `boty.fetch.get` and
   asserts the guard's sentinel message reaches the caller.
 - **Files modified:** `tests/test_retailers.py`
-- **Committed in:** `6e42d13`
+- **Committed in:** `dc02e09`
 
 **2. [Rule 2 - Missing Critical] Guard also patches `post` and `request`**
 
@@ -164,7 +164,7 @@ completed: 2026-08-02
   covers the surface a new adapter is likely to reach for without breaking if
   those attributes are absent.
 - **Files modified:** `tests/conftest.py`
-- **Committed in:** `8c9786b`
+- **Committed in:** `2d55ca8`
 
 ### Scope Notes (not deviations)
 

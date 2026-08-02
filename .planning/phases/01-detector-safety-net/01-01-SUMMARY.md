@@ -78,10 +78,10 @@ completed: 2026-08-02
 
 ## Task Commits
 
-1. **Task 1: Fixture capture and load module** — `b5385da` (feat)
-2. **Task 2: capture-fixture CLI subcommand** — `bdce4f7` (feat)
-3. **Task 3: Capture the GameStop and Walmart fixtures** — `7bfc21c` (feat)
-4. **Task 4: Document the fixture contract** — `e49b3ea` (docs)
+1. **Task 1: Fixture capture and load module** — `5da3fa2` (feat)
+2. **Task 2: capture-fixture CLI subcommand** — `22c7766` (feat)
+3. **Task 3: Capture the GameStop and Walmart fixtures** — `58e38ef` (feat)
+4. **Task 4: Document the fixture contract** — `e102733` (docs)
 
 ## Files Created/Modified
 
@@ -107,7 +107,7 @@ completed: 2026-08-02
 - **Fix:** `_default_root()` anchors to the package's repo root when `pyproject.toml` is present, honours a `BOTY_FIXTURE_ROOT` override, and falls back to the relative path otherwise.
 - **Files modified:** `boty/fixtures.py`
 - **Verification:** `load()` succeeds from `/tmp` and from the repo root; the override was used to keep the CLI failure tests out of the real fixture tree.
-- **Committed in:** `b5385da`
+- **Committed in:** `5da3fa2`
 
 **2. [Rule 2 - Missing Critical] `capture()` takes a `note` argument**
 
@@ -116,7 +116,7 @@ completed: 2026-08-02
 - **Fix:** Added `note: str = ""`; the CLI warns on stderr when no note is supplied.
 - **Files modified:** `boty/fixtures.py`, `boty/cli.py`
 - **Verification:** All four captured sidecars carry a non-empty note.
-- **Committed in:** `b5385da`, `bdce4f7`
+- **Committed in:** `5da3fa2`, `22c7766`
 
 **3. [Rule 2 - Missing Critical] Enriched two fixture notes with what the extractor actually sees**
 
@@ -125,7 +125,7 @@ completed: 2026-08-02
 - **Fix:** Amended both sidecar notes with the verified-at-capture values and, for the PS5 page, an explicit warning to assert that *some* first-party offer is buyable rather than the first one.
 - **Files modified:** `tests/fixtures/gamestop/ps5-control.json`, `tests/fixtures/walmart/goplusplus.json`
 - **Verification:** `boty.parse` output cross-checked against each note.
-- **Committed in:** `7bfc21c`
+- **Committed in:** `58e38ef`
 
 ---
 

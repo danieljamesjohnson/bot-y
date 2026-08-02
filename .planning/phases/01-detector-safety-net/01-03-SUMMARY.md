@@ -100,10 +100,10 @@ zero annotations until `disallow_untyped_defs` was added.**
 
 | Task | Name | Commit | Type |
 |---|---|---|---|
-| 1 | mypy configuration | `ef8f83d` | chore |
-| 2 | Annotate extraction and retailer modules | `c0edc53` | feat |
-| 3 | Annotate the remaining modules | `e2b6bbb` | feat |
-| 3b | Make the check enforce rather than permit | `d4a75b8` | fix |
+| 1 | mypy configuration | `fb06496` | chore |
+| 2 | Annotate extraction and retailer modules | `b856707` | feat |
+| 3 | Annotate the remaining modules | `fa63201` | feat |
+| 3b | Make the check enforce rather than permit | `8a6aed2` | fix |
 
 ## Verification
 
@@ -185,7 +185,7 @@ file was restored (`git diff` clean) before committing.
   `disallow_incomplete_defs = true`, with a config comment stating what
   silently passes without them. Verified free at HEAD before committing.
 - **Files modified:** `pyproject.toml`
-- **Commit:** `d4a75b8`
+- **Commit:** `8a6aed2`
 
 **2. [Rule 2 - Missing Critical] dev extra could resolve a weaker mypy than the one verified**
 
@@ -198,7 +198,7 @@ file was restored (`git diff` clean) before committing.
 - **Fix:** Raised to `mypy>=2.0` (2.0.0 confirmed available on PyPI), with the
   reason in a comment.
 - **Files modified:** `pyproject.toml`
-- **Commit:** `d4a75b8`
+- **Commit:** `8a6aed2`
 
 ### Scope Notes (not deviations)
 
@@ -254,7 +254,7 @@ No blockers.
 ## Self-Check: PASSED
 
 All 10 claimed modified files exist on disk; all 4 task commits
-(`ef8f83d`, `c0edc53`, `e2b6bbb`, `d4a75b8`) present in git history.
+(`fb06496`, `b856707`, `fa63201`, `8a6aed2`) present in git history.
 
 ---
 *Phase: 01-detector-safety-net*

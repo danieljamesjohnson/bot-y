@@ -96,11 +96,11 @@ rejects because the mutation check found a hole in it.**
 
 | Task | Name | Commit | Type |
 |---|---|---|---|
-| 1 | Live control-product check | `effc2cc` | feat |
-| 2 | Mutation check | `5e897fb` | feat |
-| 3 | Fixture staleness warning | `de48d26` | feat |
-| 4 | The Makefile | `ba3b502` | feat |
-| 5 | Document it | `20d1eed` | docs |
+| 1 | Live control-product check | `7b455b5` | feat |
+| 2 | Mutation check | `9faf06b` | feat |
+| 3 | Fixture staleness warning | `1524965` | feat |
+| 4 | The Makefile | `dc6baa1` | feat |
+| 5 | Document it | `c2bf36f` | docs |
 | 6 | Restart the live services | — | verification only, no file change |
 
 ## Verification — every check proved to bite
@@ -210,7 +210,7 @@ had to stay out of them.)
   Free at HEAD: both scripts were written fully annotated and mypy passes over
   13 files.
 - **Files modified:** `pyproject.toml`
-- **Commit:** `ba3b502`
+- **Commit:** `dc6baa1`
 
 **2. [Rule 2 - Missing Critical] `make` with no `.venv` failed uninformatively**
 
@@ -223,7 +223,7 @@ had to stay out of them.)
   `PYTHON ?=` override. Verified: `make PYTHON=/nonexistent/python verify` prints
   the guidance and exits non-zero.
 - **Files modified:** `Makefile`
-- **Commit:** `ba3b502`
+- **Commit:** `dc6baa1`
 
 **3. [Rule 1 - Bug] `IndexError` in the mutation baseline on empty pytest output**
 
@@ -233,7 +233,7 @@ had to stay out of them.)
   its own diagnostic is a harness whose failure mode nobody can read.
 - **Fix:** Guarded the index, falling back to `"no pytest output"`.
 - **Files modified:** `scripts/mutation_check.py`
-- **Commit:** `5e897fb`
+- **Commit:** `9faf06b`
 
 **4. [Rule 1 - Bug] Failed-test names reported as the literal string `FAILED`**
 
@@ -244,7 +244,7 @@ had to stay out of them.)
   *which* test is holding that line.
 - **Fix:** Index `[1]`. Output now names the tests.
 - **Files modified:** `scripts/mutation_check.py`
-- **Commit:** `5e897fb`
+- **Commit:** `9faf06b`
 
 **5. [Rule 1 - Bug] Failure explanation printed above the results it explained**
 
@@ -254,7 +254,7 @@ had to stay out of them.)
 - **Fix:** `sys.stdout.flush()` before the stderr block, with a comment saying
   why.
 - **Files modified:** `scripts/control_check.py`
-- **Commit:** `effc2cc`
+- **Commit:** `7b455b5`
 
 ### Scope Notes (not deviations)
 
@@ -316,7 +316,7 @@ No blockers.
 
 All 5 claimed files exist on disk (`Makefile`, `scripts/control_check.py`,
 `scripts/mutation_check.py`, `pyproject.toml`, `README.md`); all 5 task commits
-(`effc2cc`, `5e897fb`, `de48d26`, `ba3b502`, `20d1eed`) present in git history.
+(`7b455b5`, `9faf06b`, `1524965`, `dc6baa1`, `c2bf36f`) present in git history.
 
 ---
 *Phase: 01-detector-safety-net*
