@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: unknown
+status: Ready to execute
 stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-08-02T16:53:03.362Z"
+last_updated: "2026-08-02T17:00:02.177Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,8 +26,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Milestone:** v1.0
 **Phase:** 1 of 4 — in progress
-**Plan:** 2 of 4 in current phase
-**Last session:** 2026-08-02T16:53:03.303Z
+**Plan:** 3 of 4 in current phase
+**Last session:** 2026-08-02T16:59:48.903Z
 **Stopped At:** Completed 01-01-PLAN.md
 **Resume File:** None
 **Next command:** `/gsd-execute-phase 1` — running autonomously through Phase 3, halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
@@ -67,9 +67,13 @@ Working and deployed on danserver before this roadmap was written:
 | Phase | Plan | Duration | Notes |
 |-------|------|----------|-------|
 | Phase 01 P01 | 8min | 4 tasks | 11 files |
+| Phase 01 P02 | 4min | 6 tasks | 5 files |
 
 ## Decisions
 
 - [Phase 01]: FIXTURE_ROOT anchors to the repo root, not cwd — A cwd-relative fixture path makes load() succeed or fail depending on where the test runner was invoked from — flakiness that fixtures exist to remove
 - [Phase 01]: A blocked or failed fetch writes no fixture at all — A CAPTCHA interstitial saved under a product name would make the whole suite assert against a bot wall while looking green
 - [Phase 01]: Walmart GO Plus + reseller fixture is real, not synthetic — The live buy box is still held by Clove Brothers LLC at $229.99, so the plan's synthetic-fixture contingency was not needed
+- [Phase 01]: The network guard has its own self-test — a guard nobody verifies can rot after an upstream rename and the suite would start hitting live retailers with no visible symptom
+- [Phase 01]: Offline-ness proved by running the suite in an interface-less network namespace, not just by trusting the monkeypatch
+- [Phase 01]: REQ-03 left unchecked by 01-02 — type hints and mypy are 01-03's deliverable, and marking it here would be a false green in the traceability table
