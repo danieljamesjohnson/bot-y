@@ -103,6 +103,9 @@ when they disagree — retailers' JSON-LD does lie. Worth adopting.
 | UNKNOWN as a first-class state | Conflating "can't parse" with "out of stock" is the silent failure that makes a monitor look healthy while missing every drop | ✓ Good |
 | Control products mandatory per retailer | The only way to detect the above from outside. Already caught a missing-control gap on Walmart on its first run | ✓ Good |
 | Skip async and a plugin API for now | "Only what is necessary." Neither earns its complexity at current scale | — Pending |
+| Narrow to ~7 likely stockists | The list of ten was padded. Newegg, B&H and Micro Center are PC-parts stores that do not carry Pokémon accessories; watching them manufactures fake breadth and real maintenance | — Pending |
+| Four-rung escalation ladder | TLS → official API → browser (flagged DEGRADED) → drop with evidence. Gets coverage without lying about confidence: a retailer reached only via a browser rests on the fragile path we moved away from, and the matrix says so | — Pending |
+| Fixtures frozen, not auto-refreshed | Auto-refreshing in CI would let a real breakage land disguised as a fixture update — the exact silent failure this project exists to catch. Fixtures catch code regressions; live control products catch reality | — Pending |
 | Tests + type hints in scope | Follows from choosing a real open-source project — a contributor's PR must not be able to silently break a detector | — Pending |
 
 ---

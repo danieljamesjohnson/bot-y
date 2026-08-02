@@ -5,13 +5,13 @@
 See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 1 — Detector Safety Net (not yet planned)
+**Current focus:** Phase 1 — Detector Safety Net (autonomous run, phases 1–3)
 
 ## Status
 
 **Milestone:** v1.0
 **Phase:** 1 of 4 — not started
-**Next command:** `/gsd-plan-phase 1`
+**Next command:** `/gsd-plan-phase 1` — running autonomously through Phase 3, halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
 
 ## What Exists
 

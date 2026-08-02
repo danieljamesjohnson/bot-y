@@ -16,10 +16,42 @@ can contribute to.
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Detector Safety Net** - Tests, fixtures and types, so 8 more adapters can't silently break each other
-- [ ] **Phase 2: Five Retailers Green** - Best Buy, Target, Amazon, Pokémon Center — hits the MVP bar
-- [ ] **Phase 3: Ten Retailers Green** - Costco, Sam's Club, Newegg, B&H, Micro Center
+- [ ] **Phase 1: Detector Safety Net** - Tests, fixtures and types, so new adapters can't silently break each other
+- [ ] **Phase 2: Five Retailers Green** - Best Buy, Pokémon Center, Nintendo — the tractable ones; hits the MVP bar
+- [ ] **Phase 3: The Hard Two** - Target and Amazon, both known to resist; escalate or document honestly
 - [ ] **Phase 4: Open Source Ready** - Contributor docs, CI, packaging, release
+
+## Retailer Scope
+
+Deliberately narrowed from a padded list of ten. Newegg, B&H and Micro Center
+are PC-parts retailers that do not carry Pokémon accessories; Costco and Sam's
+Club are unlikely to stock a $55 peripheral. Watching stores that will never
+list the product manufactures fake breadth and real maintenance.
+
+Target list — places a GO Plus + could genuinely appear:
+
+| Retailer | Status |
+|---|---|
+| GameStop | ✅ done, control-verified |
+| Walmart | ✅ done, control-verified |
+| Best Buy | Phase 2 — official API |
+| Pokémon Center | Phase 2 |
+| Nintendo store | Phase 2 |
+| Target | Phase 3 — RedSky CAPTCHA-gated |
+| Amazon | Phase 3 — expected hostile |
+
+## Escalation Ladder
+
+When a retailer resists, work down this ladder and stop at the first rung that
+works. Record which rung each retailer landed on in the support matrix.
+
+1. **TLS impersonation** (`curl_cffi`) — the default
+2. **Official / structured API** — Best Buy's Products API, or equivalent
+3. **Browser (`nodriver`), marked DEGRADED** — allowed, but that retailer is
+   flagged lower-confidence, because it depends on the fragile path we
+   deliberately moved away from
+4. **Drop, with evidence** — documented as unreachable in the support matrix,
+   including what was tried. Never left silently broken.
 
 ## Phase Details
 
@@ -42,40 +74,40 @@ Plans:
 - [ ] 01-03: Type hints across `boty/`, `mypy` config, and a `make check` entry point
 
 ### Phase 2: Five Retailers Green
-**Goal**: Five retailers reporting trustworthy stock for the GO Plus +, each with a control product proving its detector is alive.
+**Goal**: Five retailers reporting trustworthy stock for the GO Plus +, each control-verified. This is the MVP bar.
 **Depends on**: Phase 1
 **Requirements**: REQ-04, REQ-05, REQ-06
 **Success Criteria** (what must be TRUE):
   1. Best Buy reports stock through the official API, given a key
-  2. Target, Amazon and Pokémon Center each report stock for a real product
+  2. Pokémon Center and the Nintendo store each report stock for a real product
   3. Every retailer has at least one control watch, and `boty check` shows all controls in stock
   4. `boty check` reports five or more retailers with no health warnings
   5. Each new adapter has fixture-backed tests from Phase 1
+  6. The support matrix records which escalation rung each retailer landed on
 
-**Plans**: 4 plans (parallelizable — adapters are independent)
+**Plans**: 3 plans (parallelizable — adapters are independent)
 
 Plans:
-- [ ] 02-01: Best Buy — official API adapter, key handling, control product
-- [ ] 02-02: Target — resolve the TCIN/URL problem that blocked us (RedSky is CAPTCHA-gated; product pages fetch clean)
-- [ ] 02-03: Amazon — likely the hardest; establish whether it is reachable at all before investing
-- [ ] 02-04: Pokémon Center — first-party for Pokémon goods, plausibly the most likely restock source
+- [ ] 02-01: Best Buy — official API adapter (rung 2), key handling, control product
+- [ ] 02-02: Pokémon Center — first-party for Pokémon goods, plausibly the most likely restock source
+- [ ] 02-03: Nintendo store — first-party for the hardware itself
 
-### Phase 3: Ten Retailers Green
-**Goal**: Roughly ten curated retailers, each control-verified, covering where a GO Plus + would realistically appear.
+### Phase 3: The Hard Two
+**Goal**: Target and Amazon either working, or documented as unreachable with the evidence that established it. No silent gaps.
 **Depends on**: Phase 2
 **Requirements**: REQ-07, REQ-08
 **Success Criteria** (what must be TRUE):
-  1. Costco, Sam's Club, Newegg, B&H and Micro Center report stock for real products
-  2. All controls green; `boty check` shows ~10 retailers healthy
-  3. Retailers that cannot be reached are documented as such with evidence, not left silently broken
-  4. A single `boty check` completes in under 2 minutes at this watch count
+  1. Target reports stock, or the support matrix records what was tried and why it failed
+  2. Amazon reports stock, or the same
+  3. Any retailer reached via rung 3 is flagged DEGRADED in the matrix and in `boty check` output
+  4. All controls still green; no regression in the five from Phase 2
+  5. A single `boty check` completes in under 2 minutes
 
-**Plans**: 3 plans (parallelizable)
+**Plans**: 2 plans (parallelizable)
 
 Plans:
-- [ ] 03-01: Micro Center + Newegg — Micro Center already works via the generic JSON-LD path; Newegg publishes no Product markup and needs investigation
-- [ ] 03-02: Costco + Sam's Club — membership warehouses, likely to need session handling
-- [ ] 03-03: B&H — returned 403 on first contact; determine whether a different approach reaches it
+- [ ] 03-01: Target — RedSky is CAPTCHA-gated even with a warmed session; product pages fetch clean, so the blocker is finding a valid `www` TCIN. Walk the ladder
+- [ ] 03-02: Amazon — expected hostile. Establish reachability cheaply *before* investing in an adapter; drop with evidence if rung 3 also fails
 
 ### Phase 4: Open Source Ready
 **Goal**: Someone who isn't me can install bot-y, add a retailer, and open a PR that I can trust.

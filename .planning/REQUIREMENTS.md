@@ -4,7 +4,7 @@
 
 v1.0 ships when **both** are true:
 
-1. Five or more retailers report stock with all control products green
+1. Five or more retailers report stock with all control products green (of ~7 targeted: GameStop, Walmart, Best Buy, Pokémon Center, Nintendo, Target, Amazon)
 2. Dan has successfully bought a Pokémon GO Plus +
 
 The second is not a joke requirement. The tool exists to solve one concrete
@@ -28,13 +28,13 @@ has not worked.
 ### Phase 2 — Five Retailers Green
 
 - **REQ-04**: Best Buy stock is read via the official Products API, since impersonated HTTP is refused at the connection layer. Absent a key, Best Buy watches are skipped, not reported as failures.
-- **REQ-05**: Target, Amazon and Pokémon Center each report stock for a real product, or are documented as unreachable with the evidence that established it.
+- **REQ-05**: Pokémon Center and the Nintendo store each report stock for a real product, or are documented as unreachable with the evidence that established it.
 - **REQ-06**: Every configured retailer has at least one control watch. A retailer without one is reported unhealthy — an unverified detector is treated as a broken one.
 
-### Phase 3 — Ten Retailers Green
+### Phase 3 — The Hard Two
 
-- **REQ-07**: Roughly ten curated retailers are supported, each control-verified.
-- **REQ-08**: A full `boty check` completes in under two minutes at that watch count, sequentially.
+- **REQ-07**: Target and Amazon are each either working or documented as unreachable with evidence. Any retailer reached via a browser is flagged DEGRADED in the support matrix and in `boty check` output.
+- **REQ-08**: A full `boty check` completes in under two minutes at ~7 retailers, sequentially.
 
 ### Phase 4 — Open Source Ready
 
