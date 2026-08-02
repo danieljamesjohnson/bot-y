@@ -60,8 +60,18 @@ class Result:
         """In stock, and cheap enough to be a real restock rather than a flip."""
         if self.availability is not Availability.IN_STOCK:
             return False
-        if self.watch.max_price is None or self.price is None:
+        if self.watch.max_price is None:
             return True
+        # A ceiling was configured and the price could not be read. "I could
+        # not tell" must not resolve to "cheap enough" — that is the same
+        # conflation as reporting out-of-stock for a page we failed to parse,
+        # and it fails in the permissive direction: the alert goes out, with
+        # `notify.send_restock` writing "price unknown" where the number
+        # should be. Walmart's `priceInfo.currentPrice` has already been
+        # reshaped once, so an unpriced IN_STOCK offer is a live possibility
+        # rather than a hypothetical.
+        if self.price is None:
+            return False
         return self.price <= self.watch.max_price
 
 
