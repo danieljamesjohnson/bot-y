@@ -104,7 +104,7 @@ def find_browser() -> str | None:
 _REAP_TIMEOUT = 10.0
 
 
-async def _teardown(browser: Any) -> None:
+async def _teardown(browser: Any, registry: set[Any] | None = None) -> None:
     """Stop a browser, reap its child, and delete its throwaway profile.
 
     `browser.stop()` is not teardown, and believing it was cost this project a
@@ -145,6 +145,14 @@ async def _teardown(browser: Any) -> None:
     if data_dir and not getattr(cfg, "uses_custom_data_dir", False):
         shutil.rmtree(data_dir, ignore_errors=True)
 
+    # Third instance of the same root cause: nodriver holds every Browser it
+    # ever started in a module-level set and only clears it from `atexit`. A
+    # daemon that never exits therefore accumulates one dead Browser — with its
+    # Config and connection objects — per poll cycle, forever. Smaller than a
+    # zombie and a 17 MB profile, and unbounded in exactly the same way.
+    if registry is not None:
+        registry.discard(browser)
+
 
 def _render(url: str, executable: str | None, timeout: float, settle_seconds: float) -> str:
     """Launch a browser, navigate to `url`, and return the rendered HTML.
@@ -158,6 +166,13 @@ def _render(url: str, executable: str | None, timeout: float, settle_seconds: fl
     profile removed. A hostile or merely slow page must not be able to wedge a
     monitor cycle or leak a Chrome process; a monitor that stops polling is as
     useless as one that lies, and one that fills its own disk stops polling.
+
+    "Every browser it started" is doing real work in that sentence, and it is
+    the part this docstring used to get wrong. It once said the browser was
+    stopped on every path, while `nodriver.start()` sat outside the `try` — so a
+    start that spawned Chrome and then failed its DevTools handshake, which is
+    what a loaded box produces, leaked a *live* browser and nothing said so.
+    Hence `_registered()`: the browser that never got returned is still findable.
 
     The timeout deliberately wraps the *inner* coroutine rather than the whole
     thing. Teardown has to `await` — reaping a child is an await — and an
@@ -179,10 +194,33 @@ def _render(url: str, executable: str | None, timeout: float, settle_seconds: fl
             NO_SANDBOX_ENV,
         )
 
+    def _registered() -> set[Any]:
+        """nodriver's own registry of live Browser instances, defensively.
+
+        The only handle on a browser whose `start()` never returned. nodriver
+        adds the instance the moment Chrome is spawned — before the DevTools
+        handshake that can raise — so a failed start is still findable here.
+        Wrapped because this is an internal of an optional dependency: if a
+        future nodriver moves it, the teardown of the *normal* path must not
+        start throwing on the way past.
+
+        Returns the live set, not a copy — `_teardown` discards from it.
+        """
+        try:
+            got = nodriver.util.get_registered_instances()
+            return got if isinstance(got, set) else set(got)
+        except Exception:  # pragma: no cover - depends on nodriver internals
+            log.debug("nodriver has no instance registry — cannot recover a failed start")
+            return set()
+
     async def _run() -> str:
         # Every browser this call started, so the teardown has a handle on it
         # even when `_drive` did not get far enough to return one.
         started: list[Any] = []
+        # `registry` is nodriver's live set; `preexisting` is a snapshot of it
+        # from before this render, so the difference is exactly what we started.
+        registry = _registered()
+        preexisting = set(registry)
 
         async def _drive() -> str:
             browser = await nodriver.start(
@@ -208,8 +246,14 @@ def _render(url: str, executable: str | None, timeout: float, settle_seconds: fl
         try:
             return await asyncio.wait_for(_drive(), timeout)
         finally:
-            for browser in started:
-                await _teardown(browser)
+            # `started` is empty when `nodriver.start()` itself raised or was
+            # cancelled — and that is the path that leaks a *live* Chrome with a
+            # real RSS rather than a defunct one, because nodriver spawns the
+            # process before the handshake it can fail on and does not terminate
+            # it when it does. Fall back to whatever appeared in the registry on
+            # our watch.
+            for browser in started or (registry - preexisting):
+                await _teardown(browser, registry)
 
     return asyncio.run(_run())
 

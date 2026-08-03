@@ -293,6 +293,63 @@ def test_a_render_reaps_its_chrome_and_deletes_its_profile(
     )
 
 
+def test_a_chrome_spawned_by_a_failing_start_is_still_torn_down(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The worse half of CR-01: these are *live* Chromes, not zombies.
+
+    nodriver's `Browser.start()` spawns Chrome and only then polls the DevTools
+    endpoint five times over ~2.75 s before raising "Failed to connect to
+    browser" — without terminating the process it just spawned. So the failure
+    path leaks a full browser with a real RSS, where the success path leaked
+    only a defunct one. On a loaded box (danserver runs several agents) missing
+    that 2.75 s budget is an ordinary event, and `_render` turns it into a
+    FetchError, Best Buy reads UNKNOWN correctly, and nothing reports the Chrome
+    still sitting there.
+
+    A browser whose `start()` never returned cannot be recovered from the return
+    value, because there is no return value. nodriver registers the instance the
+    moment the subprocess exists — before the handshake that fails — so the
+    registry is the handle, and this test is what says so out loud.
+    """
+    profile = tmp_path / "uc_halfstarted"
+    (profile / "Default").mkdir(parents=True)
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen, profile=profile, start_explodes=True)
+
+    with pytest.raises(RuntimeError, match="Failed to connect to browser"):
+        _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+
+    assert seen.get("stopped") is True, "a half-started browser was never stopped"
+    assert seen.get("waited") is True, "a half-started browser's child was never reaped"
+    assert not profile.exists(), "a half-started browser's profile survived"
+
+
+def test_a_torn_down_browser_is_dropped_from_nodrivers_registry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The same never-exits root cause, third instance, smallest blast radius.
+
+    nodriver keeps every Browser it ever started in a module-level set and only
+    clears it from an `atexit` handler. `boty watch` therefore accumulates one
+    dead Browser — with its Config and connection objects — per poll cycle, on
+    top of the zombie and the profile directory, and for the same reason: this
+    process never exits. Unbounded is unbounded regardless of the constant.
+    """
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen, profile=tmp_path / "uc_x")
+    (tmp_path / "uc_x").mkdir()
+
+    for _ in range(3):
+        _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+
+    assert seen["instances"] == set(), (
+        f"{len(seen['instances'])} dead Browser instance(s) still registered after "
+        "3 renders — this set is only cleared at interpreter exit, which a "
+        "monitor never reaches"
+    )
+
+
 def test_a_caller_supplied_profile_is_not_deleted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
