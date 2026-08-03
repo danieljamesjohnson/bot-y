@@ -262,7 +262,42 @@ one of them `zip`-in-free-text, which is this thread's founding leak; and the
 grid itself being guttable — downgrading a cell to `None` was green.
 
 The grid is now 14 classes × 5 carriers, 34 filled cells, with the fill count
-pinned. **36 mutations, zero silent.**
+pinned.
+
+**SEVENTH CORRECTION — and this one retracts a claim I have now made three
+times.** I wrote *"36 mutations, zero silent."* The seventh verification round
+ran **149 mutations and found 56 silent**. My sweep was 36 mutations of my own
+choosing, which is a measure of my imagination, not of the guard. Two other
+claims above were also wrong:
+
+- *"Verified: reusing the ISP … turns the suite red."* **It did not.** The
+  provenance test extracted `leak.rsplit(" ", 1)[-1]`, and the EdgeScape rule
+  emits `geolocation <marker>=<value>` — so the token extracted was
+  `marker=value`, never the value. **Every query-carrier cell was silently
+  exempt from both new mechanisms**, including the real city and the real ZIP.
+  The query carrier is the one that leaked the whole EdgeScape record in
+  `02-REVIEW.md`. Fixed, and the mutation is red now.
+- *"every probe value is checked against the whole fixture corpus"* — true only
+  of the grid, not of the older `cases` dict, which is where round 6's ISP
+  finding actually lived.
+
+Three more real values were found and are now gone: `"xForwardedFor"` in
+camelCase carrying two real Akamai hops (the header rule matched kebab-case
+only, so it was invisible for seven rounds); `{"itemId":"00000000"}` — the real
+ZIP as the leading digits of a value labelled *"a ZIP-shaped substring"*,
+introduced by round 2's fix; and one line in `docs/retailer-evidence.md`.
+
+**Where this actually stands, stated without a bow on it.** The guard is far
+stronger than it was: 31/31 known shapes caught, five carriers, the coverage
+grid pinned against shrinkage, and two mechanisms that check "this value is
+invented" instead of asserting it. It is **not** exhaustive — 56 of 149
+mutations still weaken it without a red test, mostly narrowings of the form
+"require one more character" or "require a leading 9". I have stopped claiming
+otherwise, because claiming otherwise is what made seven rounds necessary.
+
+**None of that changes what you are deciding.** The guard governs what gets
+committed *next*. Your decision is about what is *already pushed*, and no code
+change reaches that.
 
 **FIFTH CORRECTION — and then I stopped writing status claims and built the
 thing that makes them unnecessary.** The fourth correction retracted the state
