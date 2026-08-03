@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-08-03T04:28:14.150Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-08-03T05:18:41.424Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
-  percent: 50
+  completed_plans: 11
+  percent: 75
 ---
 
 # State: bot-y
@@ -28,12 +28,12 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 3 of 4 (the hard two)
 **Plan:** 3 of 3
-**Last session:** 2026-08-03T04:28:14.146Z
-**Stopped At:** Completed 03-02-PLAN.md
+**Last session:** 2026-08-03T05:18:41.420Z
+**Stopped At:** Completed 03-03-PLAN.md
 **Last Activity:** 2026-08-03
-**Last Activity Description:** 03-02 complete — Target is rung 4 by its Terms & Conditions (zero product-page requests, 4 policy reads), so BOTH of the hard two refused in writing and the five-retailer criterion is recorded unmet at four
+**Last Activity Description:** 03-03 complete — Phase 3 closed. REQ-08 measured rather than assumed (`duration_seconds` published by every pass: 61.4 s manual, 35.0 s from the service, against a 120 s budget at 10 watches / 4 retailers); `evidence_check.py --phase` and a new `tests/test_support_matrix.py` now run inside `make verify`; `VERIFY: PASS` unqualified under the service's own `EnvironmentFile`; criterion 5 recorded UNMET at four with nothing padded; and CR-01 durability closed — 0 zombies and 0 leaked browser profiles, flat across 41 min and 7 cycles
 **Resume File:** None
-**Next command:** `/gsd-execute-phase 3` — 03-03 closes the phase. `evidence_check.py --phase` now exits 0 on the real tree for the first time, so the gate can be wired into `make verify`; note there is NO registered Target and no 03-04. Still halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
+**Next command:** `/gsd-verify-phase 3` — every Phase 3 criterion now has an answer (5 is honestly unmet, the rest are met) and `02-VERIFICATION.md`'s open CR-01 human item can be marked answered. Then **halt before Phase 4**: the PyPI publish and the v1.0.0 tag are outward-facing and Dan's to trigger
 
 ## What Exists
 
@@ -82,6 +82,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 02 P04 | 35min | 3 tasks | 15 files |
 | Phase 03 P01 | 34min | 3 tasks | 6 files |
 | Phase 03 P02 | 19min | 3 tasks | 4 files |
+| Phase 03 P03 | 47min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -113,6 +114,9 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 03]: Rung 2 (RedSky) closed four ways — redsky.target.com/robots.txt is Disallow: / for every agent; the key is Target's internal front-end constant not an issuable credential; the terms cover all hosts; and it is CAPTCHA-gated
 - [Phase 03]: FIRST_PARTY['target'] stays a guarded guess, neither widened nor deleted — Widening needs a live page the terms forbid fetching; deleting would edit boty/retailers.py in a plan whose finding is that no code change is warranted. An offline test now fails the moment a target watch makes it live
 - [Phase 03]: The five-retailer criterion is UNMET at four, and now final — Both Phase 3 candidates refused in writing and Phase 2's fifth-retailer search established no other US retailer stocks the GO Plus +, so there is no honest path to five
+- [Phase 03]: Phase 3 criterion 5 recorded UNMET at four retailers, final: both hard-two retailers are rung 4 by written prohibition and nothing was added to config/products.yaml — Amazon and Target each refused in writing with zero product-page requests; there is no sixth US retailer stocking the GO Plus +, and a control-only fifth was declined in Phase 2
+- [Phase 03]: REQ-08 measured rather than asserted: duration_seconds is published by every pass, 61.4s manual and 35.0s service-published against a 120s budget at 10 watches / 4 retailers — The only prior figure was hand-timed; a published key means the budget can be read after any pass instead of re-measured, and None distinguishes an untimed pass from a zero-length one
+- [Phase 03]: CR-01 durability closed by elapsed time: zero zombie children and zero leaked browser profiles, flat across 41 minutes and 7 completed cycles — 02-VERIFICATION.md left it open because the teardown tests drive a fake nodriver and a one-shot make verify cannot measure a daemon-lifetime property
 
 ### Blockers
 

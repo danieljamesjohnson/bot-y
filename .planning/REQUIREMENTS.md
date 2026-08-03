@@ -34,8 +34,20 @@ has not worked.
 
 ### Phase 3 — The Hard Two
 
-- [ ] **REQ-07**: Target and Amazon are each either working or documented as unreachable with evidence. Any retailer reached via a browser is flagged DEGRADED in the support matrix and in `boty check` output.
-- [ ] **REQ-08**: A full `boty check` completes in under two minutes at ~7 retailers, sequentially.
+- [x] **REQ-07**: Target and Amazon are each either working or documented as unreachable with evidence. Any retailer reached via a browser is flagged DEGRADED in the support matrix and in `boty check` output.
+- [x] **REQ-08**: A full `boty check` completes in under two minutes at ~7 retailers, sequentially.
+  **Measured at four retailers, not seven, and that is not a shortfall in the
+  measurement — it is the shipped configuration.** Three of the roadmap's seven
+  are rung 4 (Pokémon Center, Amazon, Target), each refused in writing or after
+  a ladder walked to exhaustion, so a seven-retailer pass cannot be run and
+  extrapolating one would invent the number this requirement exists to pin.
+  What was measured, under the service's own `EnvironmentFile`: **61.4 s** for a
+  manual pass at 10 watches across 4 retailers (one on rung 3), and **35.0 s**
+  published by `boty.service`'s own next cycle for the same config — the
+  difference being one transient `curl: (28)` timeout, which read UNKNOWN rather
+  than OUT_OF_STOCK. Both are readable off `served/boty/status.json`'s
+  `duration_seconds` rather than re-timed by hand. Evidence:
+  `docs/retailer-evidence.md` § *REQ-08: how long a full pass actually takes*.
 
 ### Phase 4 — Open Source Ready
 
@@ -87,8 +99,8 @@ Maintained by `gsd-tools`; a requirement flips to Complete when its phase comple
 | REQ-04 | Phase 2 | Complete |
 | REQ-05 | Phase 2 | Complete |
 | REQ-06 | Phase 2 | Complete |
-| REQ-07 | Phase 3 | Pending |
-| REQ-08 | Phase 3 | Pending |
+| REQ-07 | Phase 3 | Complete |
+| REQ-08 | Phase 3 | Complete |
 | REQ-09 | Phase 4 | Pending |
 | REQ-10 | Phase 4 | Pending |
 | REQ-11 | Phase 4 | Pending |
