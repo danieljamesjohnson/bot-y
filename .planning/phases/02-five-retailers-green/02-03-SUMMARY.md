@@ -180,7 +180,7 @@ restated for this adapter deliberately.
 downgraded to an Exception, since `check_bestbuy_browser` would otherwise turn a
 live-network attempt into a quiet UNKNOWN.
 
-- Commits: `9ad2fe2` (RED — 1 failed, 6 errors), `cd39ae7` (GREEN — 150 passed)
+- Commits: `e5e4b90` (RED — 1 failed, 6 errors), `a91e3e0` (GREEN — 150 passed)
 
 ### Task 3 — the matrix, the evidence, the gate
 
@@ -194,7 +194,7 @@ things" (it is six).
 the GO Plus + disproof, and the confirmed control with a reserve candidate. It
 still ends its Best Buy section in exactly one bold Verdict line.
 
-- Commit: `0818adb`
+- Commit: `90f2c45`
 
 ## Deviations from Plan
 
@@ -364,4 +364,4 @@ Chrome needs none of it.
   `tests/test_retailers.py`, `tests/test_browser.py`, `README.md`,
   `docs/retailer-evidence.md` — FOUND
 - `tests/fixtures/bestbuy/{pikachu-control,unresolved-sku}.{html,json}` — FOUND
-- Commits `1e67464`, `5596e72`, `9ad2fe2`, `cd39ae7`, `0818adb` — FOUND in `git log`
+- Commits `1e67464`, `5596e72`, `e5e4b90`, `a91e3e0`, `90f2c45` — FOUND in `git log`

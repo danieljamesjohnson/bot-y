@@ -133,7 +133,7 @@ that would answer the stock question. Taking data a retailer has asked in writin
 that we not take, to power a monitor whose entire pitch is trustworthy readings,
 is not a trade this project makes.
 
-- Commit: `213f928`
+- Commit: `acca199`
 
 ## Task 2 — one line of allow-list, and a bug we found in ourselves
 
@@ -170,7 +170,7 @@ new one asserting `costco` is not in `FIRST_PARTY`. `pokemoncenter` was tempting
 now that it is rung 4, but "unreachable today" is a weaker promise than "out of
 scope on purpose", and walls come down again.
 
-- Commits: `60b9ac1` (RED — 8 failed, 159 passed), `a9ccda0` (GREEN — 167 passed)
+- Commits: `ac71c0b` (RED — 8 failed, 159 passed), `b5665e1` (GREEN — 167 passed)
 
 ## Task 3 — the matrix, and the green checked the way the service sees it
 
@@ -189,7 +189,7 @@ passed identically. **Nintendo needs no new environment variable at all** — ru
 1, no credential, no browser — so nothing was added to `deploy/boty.service` or
 the env file, and that is a checked fact rather than an assumption.
 
-- Commit: `3a98a4e`
+- Commit: `672082c`
 
 ## Deviations from Plan
 
@@ -219,7 +219,7 @@ the env file, and that is a checked fact rather than an assumption.
   lower-case, since `get` lowercases the body once and a capital anywhere in that
   tuple is a phrase that can never fire.
 - **Files:** `boty/fetch.py`, `tests/test_fetch.py`
-- **Commits:** `60b9ac1` (RED), `a9ccda0` (GREEN)
+- **Commits:** `ac71c0b` (RED), `b5665e1` (GREEN)
 
 **2. [Rule 2 - Missing critical functionality] Nothing offline could stop the retailer count being padded**
 
@@ -239,7 +239,7 @@ the env file, and that is a checked fact rather than an assumption.
   `docs/retailer-evidence.md`, so the next person to hit it meets the reasoning
   rather than an obstacle.
 - **Files:** `tests/test_retailers.py`
-- **Commit:** `60b9ac1`
+- **Commit:** `ac71c0b`
 
 **3. [Rule 1 - Bug] The evidence doc claimed a fix that had not been made yet**
 
@@ -253,7 +253,7 @@ the env file, and that is a checked fact rather than an assumption.
 - **Fix:** Reworded to name what task 2 would do, then confirmed by task 3's
   append. Phrase corrected against the captured bytes.
 - **Files:** `docs/retailer-evidence.md`
-- **Commit:** `213f928`
+- **Commit:** `acca199`
 
 ### Deliberate scope choices
 
@@ -407,4 +407,4 @@ unsandboxed. A host fact, not a repo one. Nintendo needs none of it.
 - `tests/fixtures/nintendo/{goplusplus,hdmi-control}.{html,json}` — FOUND
 - `tests/fixtures/pokemoncenter/` — CORRECTLY ABSENT (rung 4; `capture-fixture`
   refused to write a challenge page)
-- Commits `213f928`, `60b9ac1`, `a9ccda0`, `3a98a4e` — FOUND in `git log`
+- Commits `acca199`, `ac71c0b`, `b5665e1`, `672082c` — FOUND in `git log`
