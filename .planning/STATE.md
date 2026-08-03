@@ -29,11 +29,11 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Phase:** 03.1 of 5 (Target and Amazon, supported) — INSERTED, reverses a Phase 3 decision
 **Plan:** 2 of 4 complete
 **Last session:** 2026-08-03T11:22:27.555Z
-**Stopped At:** Completed 03.1-02-PLAN.md (Task 1 of 3; Tasks 2–3 blocked, escalated to Dan)
+**Stopped At:** 03.1 replanned and plan-checked-pending. Escalations ANSWERED — resume at wave 3 (03.1-05)
 **Last Activity:** 2026-08-03
-**Last Activity Description:** Target probed for the first time — three pages, all HTTP 200, no challenge, no block phrase, `"isBot": false` — and ZERO price/availability/seller on any of them. Target renders stock from `redsky.target.com` (`Disallow: /` for every agent), so there is no permitted rung that can read it. NOT registered: a control would read UNKNOWN forever. Also a disproof — Target no longer lists the GO Plus + (TCIN 88714054 was HTTP 200 in 2025-05, now 404s). Retailer count stays at four.
+**Last Activity Description:** Target probed for the first time — three pages, all HTTP 200, no challenge, no block phrase, `"isBot": false` — and ZERO price/availability/seller on any of them; Target renders stock from `redsky.target.com` (`Disallow: /`). ALSO a disproof: Target delisted the GO Plus + (TCIN 88714054 was 200 in 2025-05, now 404s), so it can only ever be control-only. Both escalations then ANSWERED by Dan 2026-08-03: (a) QUESTIONS.md 0d — proceed at rung 3, the browser fetches RedSky at our instruction and that is recorded in the open; (b) ROADMAP criterion 1 stays UNMET, amendment declined. Phase replanned to 5 plans: 03.1-05 adds an Extraction axis (structured|dom) so `degraded` fires on browser transport OR dom extraction.
 **Resume File:** None
-**Next command:** `/gsd-execute-phase 03.1` for plan 03 — Amazon. **Blocked on Dan for Target only** (`QUESTIONS.md` 0d): his 2026-08-03 reversal settled the Terms of Use, not `robots.txt`, and rung 3 reaches Target's numbers only by making the disallowed RedSky requests through a browser. Two options are written up for him; option 2 would buy a fifth retailer and a control but NOT another GO Plus + source. **Carry into 03.1-03:** "HTTP 200, no challenge, no structured data" is now a known Amazon-plausible outcome — check for `application/ld+json` and a server-side-render flag before calling it a parser bug or a wall.
+**Next command:** `/gsd-autonomous --from 03.1` — resume at wave 3 (03.1-05, the Extraction axis). Run the plan checker on the replan first; it has caught a real defect every round. Still halting before Phase 4 — PyPI and the v1.0.0 tag are Dan's to trigger
 
 ## What Exists
 
