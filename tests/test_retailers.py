@@ -23,7 +23,7 @@ import json
 import os
 from pathlib import Path
 
-from boty import retailers
+from boty import parse, retailers
 from boty.cli import _make_checker
 from boty.config import Config
 from boty.fetch import Blocked, FetchError, Page
@@ -1086,6 +1086,238 @@ def test_no_retailer_is_configured_without_a_page_we_have_actually_read() -> Non
         f"read is a detector that cannot detect, and it inflates the retailer count "
         f"while doing it. See docs/retailer-evidence.md."
     )
+
+
+# --------------------------------------------------------------------------
+# Target: the verdict in the evidence log and the shipped tree must agree
+# --------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_EVIDENCE_PATH = _REPO_ROOT / "docs" / "retailer-evidence.md"
+_REFUSED = "**Verdict: REFUSED**"
+
+
+def _target_section(evidence_text: str) -> str:
+    """The body of the one `## Target…` section, or raise saying it is missing.
+
+    Prefix match on the heading, the same rule `scripts/evidence_check.py` uses,
+    because the heading carries a parenthetical of the domain probed.
+    """
+    bodies = [
+        body
+        for body in evidence_text.split("\n## ")[1:]
+        if body.startswith("Target")
+    ]
+    assert len(bodies) == 1, f"expected exactly one `## Target` section, found {len(bodies)}"
+    return bodies[0]
+
+
+def _target_disagreements(
+    *,
+    evidence_text: str,
+    configured: set[str],
+    controlled: set[str],
+    fixture_names: list[str],
+    allow_list: set[str],
+    fixture_sellers: list[str],
+) -> list[str]:
+    """Every way the Target verdict and the shipped tree could contradict each other.
+
+    Takes its inputs as plain values rather than reading the repo, so the tests
+    below can drive BOTH branches — the shipped REFUSED one and a hypothetical
+    REACHABLE one — and watch each guard go red. A guard only ever exercised on
+    the branch the repo happens to be on is a guard nobody has seen fail, which
+    is the species this phase exists to replace.
+    """
+    refused = _REFUSED in _target_section(evidence_text)
+    problems: list[str] = []
+
+    if refused:
+        if "target" in configured:
+            problems.append(
+                "docs/retailer-evidence.md records `**Verdict: REFUSED**` for Target while "
+                "config/products.yaml configures a target watch. Target's own Terms & "
+                "Conditions forbid collecting prices with data-gathering tools, so a watch "
+                "here is a request the evidence log says we must not make — not merely a "
+                "detector that would read nothing."
+            )
+        if fixture_names:
+            problems.append(
+                f"Target is REFUSED but tests/fixtures/target/ holds {sorted(fixture_names)}. "
+                "No target.com page was ever fetched, so any HTML under that directory came "
+                "from somewhere other than Target and must not be shipped as its capture."
+            )
+        return problems
+
+    # The REACHABLE branch. Vacuous against today's tree by construction — and
+    # exercised anyway, below, because these are the assertions that have to be
+    # right on the day somebody registers Target, which is the day nobody will
+    # be re-reading this reasoning.
+    if "target" not in configured:
+        problems.append("Target is REACHABLE but config/products.yaml configures no target watch")
+    if "target" not in controlled:
+        problems.append(
+            "Target is REACHABLE and configured but has no control watch — nothing could "
+            "ever verify the detector"
+        )
+    if not fixture_names:
+        problems.append("Target is REACHABLE but no page was frozen under tests/fixtures/target/")
+    elif not any(seller.strip().lower() in allow_list for seller in fixture_sellers):
+        problems.append(
+            f"FIRST_PARTY['target'] is {sorted(allow_list)}, and no offers.seller.name in "
+            f"the shipped Target fixture ({sorted(fixture_sellers)}) is a member of it. The "
+            "allow-list is OURS and the seller name is TARGET'S, so a value nobody read off "
+            "a live page is a guess — and the guess fails closed in the worst possible "
+            "direction: `target` is in MARKETPLACES, so `_pick` finds no named offer, the "
+            "unattributed fallback is disabled, and boty/retailers.py:177 returns a "
+            "CONFIDENT OUT_OF_STOCK on a page it read perfectly. Read the real "
+            "offers.seller.name off the capture and pin it."
+        )
+    return problems
+
+
+def test_the_target_verdict_and_the_shipped_tree_agree() -> None:
+    """Target is REFUSED, so nothing in the shipped tree may claim otherwise.
+
+    03-02 settled Target at rung 4 on its Terms & Conditions without fetching a
+    single product page, so there is no watch, no control, no fixture and no
+    observed seller string. This asserts that against the real tree, in both
+    directions, and it is not a tautology: adding a `retailer: target` watch to
+    config/products.yaml turns it red, and so does committing anything under
+    tests/fixtures/target/.
+    """
+    cfg = Config.load(_REPO_ROOT / "config" / "products.yaml")
+    fixture_dir = _REPO_ROOT / "tests" / "fixtures" / "target"
+    fixture_paths = sorted(fixture_dir.glob("*.html"))
+
+    # Read the seller names with the SAME extractors the checker uses, so this
+    # cannot pass against a fixture `_pick` would read differently. Empty today,
+    # because no Target page was ever fetched.
+    sellers: list[str] = []
+    for path in fixture_paths:
+        html = path.read_text(encoding="utf-8", errors="replace")
+        offers = parse.ldjson_offers(html) or parse.nextdata_offers(html) or []
+        sellers.extend(o.seller for o in offers if o.seller)
+
+    problems = _target_disagreements(
+        evidence_text=_EVIDENCE_PATH.read_text(encoding="utf-8"),
+        configured={w.retailer for w in cfg.watches},
+        controlled={w.retailer for w in cfg.watches if w.control},
+        fixture_names=[p.name for p in fixture_paths],
+        allow_list=retailers.FIRST_PARTY.get("target", set()),
+        fixture_sellers=sellers,
+    )
+
+    assert problems == [], "\n".join(problems)
+
+
+def test_the_dormant_target_allow_list_entry_is_documented_as_a_guess() -> None:
+    """`FIRST_PARTY["target"]` was never read off a live page, and that is the point.
+
+    boty/retailers.py has carried `"target": {"target"}` since before this
+    project probed Target, and 03-02 deliberately did not widen it: doing so
+    would have required fetching a product page, which is the one thing Target's
+    Terms forbid. So the entry stays a guess, and it stays UNREACHABLE — nothing
+    dispatches a target watch, so no code path passes "target" to `_pick`.
+
+    This pins the second half. If a future plan adds a Target watch without
+    replacing the guess, `test_the_target_verdict_and_the_shipped_tree_agree`
+    goes red; this one records why the entry is allowed to sit there meanwhile.
+    """
+    cfg = Config.load(_REPO_ROOT / "config" / "products.yaml")
+
+    assert "target" in retailers.FIRST_PARTY, (
+        "the entry is expected to be present but dormant — deleting it is a "
+        "deliberate change, not a tidy-up"
+    )
+    assert "target" not in {w.retailer for w in cfg.watches}, (
+        "a target watch makes the un-observed allow-list live, and boty/retailers.py:177 "
+        "then answers a readable page with a confident OUT_OF_STOCK"
+    )
+    assert "target" in retailers.MARKETPLACES, (
+        "Target Plus is a real third-party marketplace, so the unattributed-offer "
+        "fallback must stay disabled for it"
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs, expected",
+    [
+        pytest.param(
+            {"configured": {"gamestop", "target"}},
+            "configures a target watch",
+            id="a target watch added against a REFUSED verdict",
+        ),
+        pytest.param(
+            {"fixture_names": ["goplusplus.html"]},
+            "tests/fixtures/target/",
+            id="a target fixture committed against a REFUSED verdict",
+        ),
+    ],
+)
+def test_the_refused_branch_catches_a_tree_that_contradicts_it(
+    kwargs: dict[str, object], expected: str
+) -> None:
+    """Watch the shipped branch fail. Each case is a real edit somebody could make."""
+    base: dict[str, object] = {
+        "evidence_text": _EVIDENCE_PATH.read_text(encoding="utf-8"),
+        "configured": {"gamestop"},
+        "controlled": {"gamestop"},
+        "fixture_names": [],
+        "allow_list": {"target"},
+        "fixture_sellers": [],
+    }
+    problems = _target_disagreements(**{**base, **kwargs})  # type: ignore[arg-type]
+
+    assert len(problems) == 1
+    assert expected in problems[0]
+
+
+def test_a_reachable_target_registered_on_a_guessed_seller_string_is_caught() -> None:
+    """The drift guard, exercised on the branch this repo is not on.
+
+    This is the assertion 03-02 would have shipped against live bytes if Target
+    had been reachable, and it is the one that fails OFFLINE rather than waiting
+    for a control to redden. `"Target Corporation"` is used as the stand-in for
+    whatever Target actually sends: the point is only that the allow-list holds
+    `target` and the page holds something else, which is exactly the mismatch
+    that produces a confident OUT_OF_STOCK at boty/retailers.py:177.
+    """
+    problems = _target_disagreements(
+        evidence_text=_EVIDENCE_PATH.read_text(encoding="utf-8").replace(
+            _REFUSED, "**Verdict: REACHABLE (rung 1)**"
+        ),
+        configured={"target"},
+        controlled={"target"},
+        fixture_names=["up-and-up-control.html"],
+        allow_list={"target"},
+        fixture_sellers=["Target Corporation"],
+    )
+
+    assert len(problems) == 1
+    assert "is a guess" in problems[0]
+    assert "CONFIDENT OUT_OF_STOCK" in problems[0]
+
+
+def test_a_reachable_target_backed_by_the_observed_seller_string_passes() -> None:
+    """The other side of the drift guard: an evidence-backed allow-list is clean.
+
+    Without this the guard could be satisfied by never letting Target be
+    REACHABLE at all, which would make it a rule against a branch rather than a
+    rule about the branch.
+    """
+    problems = _target_disagreements(
+        evidence_text=_EVIDENCE_PATH.read_text(encoding="utf-8").replace(
+            _REFUSED, "**Verdict: REACHABLE (rung 1)**"
+        ),
+        configured={"target"},
+        controlled={"target"},
+        fixture_names=["up-and-up-control.html"],
+        allow_list={"target", "target corporation"},
+        fixture_sellers=["Target Corporation"],
+    )
+
+    assert problems == []
 
 
 # --------------------------------------------------------------------------
