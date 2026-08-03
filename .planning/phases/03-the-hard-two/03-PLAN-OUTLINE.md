@@ -20,6 +20,16 @@ Same-wave plans must have zero `files_modified` overlap, so putting 03-01 and
 to force-serialize anyway. `.planning/ROADMAP.md` records that Phase 2 learned
 this the hard way; `03-CONTEXT.md` restates it.
 
+## One conditional plan
+
+`03-04` does not exist yet and is created only on one branch: if Target lands at
+**rung 3**, `03-02` stops after the evidence and the fixtures and splits the
+registration work — `check_html_browser`, the `_make_checker` arm, a possible new
+extractor, fixtures, conftest entries, six behaviour cases, config, README — into
+`03-04-PLAN.md` at wave 3, moving `03-03` to wave 4. That branch is a plan's worth
+of work and running it inside one task ships rushed work at the end of a context
+window. Rung 1 or rung 2 registration is small and stays inside `03-02` task 3.
+
 ## Why Amazon is first
 
 `.planning/ROADMAP.md` Phase 3: "Establish reachability cheaply *before*
