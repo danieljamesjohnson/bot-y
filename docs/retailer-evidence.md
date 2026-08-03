@@ -11,11 +11,26 @@ whether the wall we hit was ever really the retailer's.
 
 So each section records the observation — the error code, the byte count, the
 URL form, the binary used — rather than the conclusion drawn from it. A verdict
-line is one of exactly two strings, because later work branches on it
-mechanically:
+line is one of exactly three forms, character for character, because later work
+branches on it mechanically:
 
-- `**Verdict: REACHABLE (rung 3)**`
+- `**Verdict: REACHABLE (rung N)**` for N in 1–3
 - `**Verdict: REFUSED**`
+- `**Verdict: UNPROBED (scoped YYYY-MM-DD)**`
+
+There is deliberately no rung-4 REACHABLE form: rung 4 **is** refused.
+
+The third form is the only temporary one, and it exists because the honest
+answer needed a spelling. `scripts/evidence_check.py` runs on every `make
+verify` and requires every retailer in scope to be shipped or refused in
+writing — so from the moment a retailer is added to scope until the day it is
+settled, the tree is red, and the one-line way to green it would be writing
+`**Verdict: REFUSED**` for a store nobody has touched. That is the same padding
+this file exists to prevent, in the opposite direction. `UNPROBED` says "in
+scope, nobody has looked yet", carries the date it entered scope, and **expires
+after 60 days**, after which the gate goes red again. `evidence_check --phase
+--strict` refuses it outright: a phase does not get to close on a retailer
+nobody read.
 
 Anything reached by browser is flagged DEGRADED in the support matrix and in
 `boty check` output, per the locked decision in `.planning/phases/02-five-retailers-green/02-CONTEXT.md`.

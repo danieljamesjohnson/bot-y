@@ -85,6 +85,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 # Run from a checkout without installing: make the repo root importable.
@@ -165,8 +166,55 @@ VERDICT_RE = re.compile(
     re.MULTILINE,
 )
 
-#: The one verdict that permits a roadmap retailer to be absent from the config.
+#: The one SETTLED verdict that permits a roadmap retailer to be absent from the
+#: config. See `UNPROBED_RE` for the other, temporary, way to be absent.
 REFUSED = "**Verdict: REFUSED**"
+
+#: The honest third state: in scope, and nobody has looked yet.
+#:
+#: WHY THIS EXISTS. Rule 2 admitted exactly two states for a roadmap retailer —
+#: configured, or carrying a written REFUSED — and 03-03 wired this gate into
+#: the `test` stage of `make verify` permanently. Together those make the honest
+#: answer to "we just widened the scope and have not probed it yet"
+#: UNEXPRESSIBLE. From the commit that adds a retailer to ROADMAP_RETAILERS
+#: until the day it is settled, `make verify` is red, and there are exactly two
+#: ways to make it green: ship a detector, or write `**Verdict: REFUSED**` for a
+#: store nobody has touched. The second is one line and takes a second.
+#:
+#: This phase hit that wall itself and routed around it — the tree was
+#: legitimately red between 03-01 and 03-02, and the fix was to keep the gate
+#: out of `make verify` for one plan. That escape no longer exists. A gate that
+#: makes the honest state unrepresentable pressures exactly the padding this
+#: file was written to prevent, in the opposite sign.
+#:
+#: WHY IT IS NOT A HOLE. It is not a quiet exemption; it is a fourth claim, and
+#: it costs more to write than the lie it replaces:
+#:
+#:   - it is written down in the evidence log, like every other verdict, so
+#:     "nobody has looked" is a statement somebody made rather than an absence;
+#:   - it carries the date the retailer entered scope, so it cannot be confused
+#:     with a retailer we stopped looking at years ago;
+#:   - it EXPIRES. After `UNPROBED_GRACE_DAYS` this gate goes red anyway. That
+#:     is the difference between a grace period and an escape hatch — an escape
+#:     hatch is the thing that rotted in Phase 2, and it rotted by persisting.
+#:   - `--strict` rejects it outright, which is the bar at phase close: a phase
+#:     does not get to close with a retailer nobody looked at.
+UNPROBED_RE = re.compile(
+    r"^\*\*Verdict: UNPROBED \(scoped (\d{4}-\d{2}-\d{2})\)\*\*$",
+    re.MULTILINE,
+)
+
+#: The literal form, for failure messages. A message that describes a grammar
+#: without showing it makes the reader guess at the spacing, and the spacing is
+#: load-bearing — every one of the MALFORMED cases in the tests is a near miss.
+UNPROBED_EXAMPLE = "**Verdict: UNPROBED (scoped YYYY-MM-DD)**"
+
+#: How long "nobody has looked yet" stays a true statement.
+#:
+#: Long enough to be useful across a phase boundary, short enough that leaving
+#: one in place is not a way of never answering. The clock runs from the scoped
+#: date in the verdict itself, so it cannot be reset by touching the file.
+UNPROBED_GRACE_DAYS = 60
 
 _HEADING_RE = re.compile(r"^## (.+)$", re.MULTILINE)
 
@@ -256,6 +304,48 @@ def verdict_lines(body: str) -> list[str]:
     return [match.group(0) for match in VERDICT_RE.finditer(body)]
 
 
+def unprobed_lines(body: str) -> list[str]:
+    """Every well-formed UNPROBED line in a section body, in order.
+
+    Kept separate from `verdict_lines` rather than folded into `VERDICT_RE`,
+    because the two answer different questions and rule 2 branches on which one
+    it got: a settled verdict is permanent and an UNPROBED one is on a clock.
+    Merging them would make "is this retailer settled?" a string comparison
+    somebody could get subtly wrong at each of the three call sites.
+    """
+    return [match.group(0) for match in UNPROBED_RE.finditer(body)]
+
+
+def unprobed_dates(body: str) -> list[date]:
+    """The scoped dates of every UNPROBED line, skipping any that is not a date.
+
+    `\\d{4}-\\d{2}-\\d{2}` matches `2026-13-45`, which is not a day. A line that
+    looks like an UNPROBED verdict and carries an impossible date is NOT one:
+    dropping it here means the caller sees a section with one UNPROBED line and
+    zero usable dates, which falls through to rule 2's ordinary failure. An
+    unparseable date must not be a way to buy silence forever.
+    """
+    dates: list[date] = []
+    for match in UNPROBED_RE.finditer(body):
+        try:
+            dates.append(date.fromisoformat(match.group(1)))
+        except ValueError:
+            continue
+    return dates
+
+
+def all_verdict_lines(body: str) -> list[str]:
+    """Every line of any accepted verdict form, in document order.
+
+    `check_retailer` asks "does this section carry exactly one verdict?", and
+    the answer has to count all three forms — otherwise a section carrying only
+    an UNPROBED line reads as having no verdict at all, and a section carrying
+    both an UNPROBED and a REFUSED reads as having one.
+    """
+    matches = [*VERDICT_RE.finditer(body), *UNPROBED_RE.finditer(body)]
+    return [match.group(0) for match in sorted(matches, key=lambda m: m.start())]
+
+
 def check_retailer(display_name: str, evidence_path: str | Path) -> list[str]:
     """Problems with one retailer's section. An empty list means it is sound.
 
@@ -278,13 +368,13 @@ def check_retailer(display_name: str, evidence_path: str | Path) -> list[str]:
             "Two records of one retailer means nothing here can tell which is current."
         ]
 
-    found = verdict_lines(bodies[0])
+    found = all_verdict_lines(bodies[0])
     if not found:
         problems.append(
             f"{path}: the {display_name!r} section carries no verdict line. It must carry exactly "
-            f"one of `{REFUSED}` or `**Verdict: REACHABLE (rung N)**` for N in 1-3, character for "
-            "character — later gates read it mechanically. There is deliberately no rung-4 "
-            "REACHABLE form: rung 4 IS refused."
+            f"one of `{REFUSED}`, `**Verdict: REACHABLE (rung N)**` for N in 1-3, or "
+            f"`{UNPROBED_EXAMPLE}` — character for character, because later gates read it "
+            "mechanically. There is deliberately no rung-4 REACHABLE form: rung 4 IS refused."
         )
     elif len(found) > 1:
         problems.append(
@@ -298,12 +388,21 @@ def check_phase(
     config_path: str | Path,
     evidence_path: str | Path,
     fixture_root: str | Path,
+    *,
+    strict: bool = False,
+    today: date | None = None,
 ) -> list[str]:
     """Is this tree telling the truth about its own retailer count?
 
     Four rules, applied in order, reporting EVERY violation rather than stopping
     at the first — being told about one gap, fixing it, and being told about the
     next is how a gate gets muted.
+
+    `strict` is the phase-close bar: it refuses an UNPROBED verdict outright.
+    `make verify` runs non-strict, so a newly-scoped retailer has a grace period
+    in which the honest answer is expressible; `--strict` is what says the phase
+    does not get to close on it. `today` is injectable so the expiry can be
+    tested without waiting sixty days or freezing a clock globally.
 
     `fixture_root` is REQUIRED rather than defaulted, deliberately. A default
     would be inherited silently by every synthetic-tree test in
@@ -316,6 +415,7 @@ def check_phase(
     config_path = Path(config_path)
     evidence_path = Path(evidence_path)
     fixture_root = Path(fixture_root)
+    today = date.today() if today is None else today
     problems: list[str] = []
 
     # Read the configured set through Config.load rather than parsing the YAML
@@ -338,19 +438,53 @@ def check_phase(
             "add it to ROADMAP_RETAILERS in this script and to the roadmap, deliberately."
         )
 
-    # RULE 2 — configured, or refused. There is no silent third state.
+    # RULE 2 — configured, refused, or unprobed-and-dated. No SILENT third state.
     for retailer, display in ROADMAP_RETAILERS.items():
         if retailer in configured:
             continue
         found = sections_for(display, sections)
-        if len(found) != 1 or verdict_lines(found[0]) != [REFUSED]:
-            problems.append(
-                f"rule 2 (configured or refused): {display} is not configured in {config_path} "
-                f"and {evidence_path} does not record exactly one section for it carrying "
-                f"`{REFUSED}`. A retailer that is neither shipped nor refused in writing is the "
-                "silent gap this phase exists to make impossible — nothing in the tree says "
-                "whether it was ever tried."
-            )
+        settled = verdict_lines(found[0]) if len(found) == 1 else []
+        pending = unprobed_lines(found[0]) if len(found) == 1 else []
+        scoped = unprobed_dates(found[0]) if len(found) == 1 else []
+
+        if settled == [REFUSED] and not pending:
+            continue
+
+        if not settled and len(pending) == 1 and len(scoped) == 1:
+            # In scope, written down, dated — and on a clock.
+            if strict:
+                problems.append(
+                    f"rule 2 (--strict): {display} is recorded `{pending[0]}` in {evidence_path}. "
+                    "UNPROBED is a state to pass through, not one to close a phase in: at phase "
+                    "close every retailer in scope is either shipped or refused in writing. "
+                    "Probe it and record the verdict, or take it out of ROADMAP_RETAILERS "
+                    "deliberately."
+                )
+                continue
+            age = (today - scoped[0]).days
+            if age > UNPROBED_GRACE_DAYS:
+                problems.append(
+                    f"rule 2 (an unprobed retailer expires): {display} is recorded "
+                    f"`{pending[0]}` in {evidence_path}, scoped {age} days ago, past the "
+                    f"{UNPROBED_GRACE_DAYS}-day grace. UNPROBED is how a newly-scoped retailer "
+                    "says 'nobody has looked yet' without inventing a refusal; it is not "
+                    "somewhere to leave one. Probe it and write the verdict, or drop it from "
+                    "ROADMAP_RETAILERS. Re-dating the line to buy another grace period is the "
+                    "one edit this gate cannot see, so it is the one to raise in review."
+                )
+            continue
+
+        problems.append(
+            f"rule 2 (configured or refused): {display} is not configured in {config_path} "
+            f"and {evidence_path} does not record exactly one section for it carrying "
+            f"`{REFUSED}`. A retailer that is neither shipped nor refused in writing is the "
+            "silent gap this phase exists to make impossible — nothing in the tree says "
+            "whether it was ever tried. IF NOBODY HAS LOOKED YET, SAY THAT rather than "
+            f"inventing a refusal: a section carrying `{UNPROBED_EXAMPLE}` is accepted for "
+            f"{UNPROBED_GRACE_DAYS} days from the scoped date, after which this gate goes red "
+            "again. A false REFUSED is one line and never expires, which is why the honest "
+            "answer needed a spelling."
+        )
 
     # RULE 3 — count consistency.
     if len(configured) < TARGET_RETAILER_COUNT:
@@ -413,6 +547,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("-c", "--config", default="config/products.yaml")
     ap.add_argument("-e", "--evidence", default="docs/retailer-evidence.md")
     ap.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "phase-close bar: refuse an UNPROBED verdict outright. `make verify` runs "
+            "without it, so a newly-scoped retailer can say 'nobody has looked yet' in "
+            f"writing for {UNPROBED_GRACE_DAYS} days; this is what says a phase does not "
+            "get to close on one"
+        ),
+    )
+    ap.add_argument(
         "-f",
         "--fixtures",
         default=None,
@@ -430,6 +574,7 @@ def main(argv: list[str] | None = None) -> int:
             args.config,
             args.evidence,
             FIXTURE_ROOT if args.fixtures is None else args.fixtures,
+            strict=args.strict,
         )
 
     for problem in problems:

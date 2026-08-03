@@ -37,6 +37,7 @@ something about a code path nobody runs.
 from __future__ import annotations
 
 import importlib.util
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -583,6 +584,243 @@ def test_every_violation_is_reported_not_just_the_first(tmp_path: Path) -> None:
     assert "microcenter" in joined
     assert "Pokémon Center" in joined
     assert "Target" in joined
+
+
+# --------------------------------------------------------------------------
+# --phase rule 2, the third state: in scope, nobody has looked, and it expires
+# --------------------------------------------------------------------------
+
+
+def _unprobed(scoped: date) -> str:
+    return f"Brought into scope. Nothing probed yet.\n\n**Verdict: UNPROBED (scoped {scoped})**\n"
+
+
+_TODAY = date(2026, 8, 3)
+
+
+def _scoped_tree(tmp_path: Path, body: str) -> tuple[Path, Path, Path]:
+    """A tree where every roadmap retailer is settled except Target."""
+    evidence = _write_evidence(
+        tmp_path,
+        [
+            ("Pokémon Center (pokemoncenter.com)", _REFUSED),
+            ("Amazon (amazon.com)", _REFUSED),
+            ("Target (target.com)", body),
+        ],
+    )
+    return _write_config(tmp_path, _SHIPPED), evidence, _write_fixtures(tmp_path, [])
+
+
+def test_a_dated_unprobed_verdict_inside_the_grace_period_passes(tmp_path: Path) -> None:
+    """The honest state this grammar could not express, and the reason it needed to.
+
+    Rule 2 admitted two states — configured, or refused in writing — and 03-03
+    wired this gate into `make verify` permanently. From the commit that widens
+    ROADMAP_RETAILERS until the retailer is settled, the tree is red, and there
+    were exactly two ways to green it: ship a detector, or write
+    `**Verdict: REFUSED**` for a store nobody had touched. The second is one
+    line. A gate that makes the honest answer unrepresentable pressures exactly
+    the padding this file exists to prevent, in the opposite sign.
+
+    This phase hit that wall itself: `test_the_repo_as_it_stands_after_this_plan_names_target_as_the_only_gap`
+    records that the tree was legitimately red between 03-01 and 03-02, and the
+    fix was to keep the gate out of `make verify` for one plan. That escape is
+    gone, so the state needed a spelling instead.
+    """
+    config, evidence, fixtures = _scoped_tree(tmp_path, _unprobed(date(2026, 7, 20)))
+
+    assert evidence_check.check_phase(config, evidence, fixtures, today=_TODAY) == []
+
+
+def test_an_unprobed_verdict_past_the_grace_period_fails(tmp_path: Path) -> None:
+    """The difference between a grace period and an escape hatch is the expiry.
+
+    The Phase 2 clause rotted by PERSISTING — it was correct the day it was
+    written and permanently satisfied thereafter. An UNPROBED verdict that never
+    expired would be the same shape: a one-line way to be silent forever, with a
+    date on it for reassurance. So the clock runs from the scoped date in the
+    line itself, which means touching the file does not reset it.
+    """
+    stale = _TODAY - timedelta(days=evidence_check.UNPROBED_GRACE_DAYS + 1)
+    config, evidence, fixtures = _scoped_tree(tmp_path, _unprobed(stale))
+
+    problems = evidence_check.check_phase(config, evidence, fixtures, today=_TODAY)
+
+    assert len(problems) == 1, problems
+    assert "Target" in problems[0]
+    assert "expires" in problems[0]
+    assert str(evidence_check.UNPROBED_GRACE_DAYS) in problems[0]
+
+
+def test_the_grace_period_boundary_is_inclusive(tmp_path: Path) -> None:
+    """Exactly `UNPROBED_GRACE_DAYS` old still passes; one day more does not.
+
+    Pinned because an off-by-one here is invisible: both sides of it look like a
+    working gate, and the failing side only appears on one particular day.
+    """
+    for offset, expected in ((evidence_check.UNPROBED_GRACE_DAYS, 0),
+                             (evidence_check.UNPROBED_GRACE_DAYS + 1, 1)):
+        scoped = _TODAY - timedelta(days=offset)
+        config, evidence, fixtures = _scoped_tree(tmp_path / f"d{offset}", _unprobed(scoped))
+
+        problems = evidence_check.check_phase(config, evidence, fixtures, today=_TODAY)
+
+        assert len(problems) == expected, (offset, problems)
+
+
+def test_strict_mode_rejects_an_unprobed_verdict_however_fresh(tmp_path: Path) -> None:
+    """The phase-close bar. A phase does not get to close on a store nobody read.
+
+    `make verify` runs non-strict so the honest state is expressible while the
+    work is in flight. `--strict` is the other end of that bargain, and without
+    it "not yet" would be a way of never answering that no gate ever asks about.
+    """
+    config, evidence, fixtures = _scoped_tree(tmp_path, _unprobed(_TODAY))
+
+    assert evidence_check.check_phase(config, evidence, fixtures, today=_TODAY) == []
+
+    problems = evidence_check.check_phase(
+        config, evidence, fixtures, strict=True, today=_TODAY
+    )
+    assert len(problems) == 1
+    assert "--strict" in problems[0]
+    assert "Target" in problems[0]
+
+
+def test_the_strict_flag_reaches_check_phase_from_the_command_line(tmp_path: Path) -> None:
+    """A mode reachable only from Python is a mode nobody runs at phase close."""
+    config, evidence, fixtures = _scoped_tree(tmp_path, _unprobed(_TODAY))
+    argv = [
+        "--phase",
+        "--config", str(config),
+        "--evidence", str(evidence),
+        "--fixtures", str(fixtures),
+    ]
+
+    assert evidence_check.main(argv) == 0
+    assert evidence_check.main([*argv, "--strict"]) == 1
+
+
+MALFORMED_UNPROBED = [
+    # No date at all: "nobody has looked" with no clock is the escape hatch.
+    "**Verdict: UNPROBED**",
+    # A date shape the grammar does not accept.
+    "**Verdict: UNPROBED (scoped 2026-8-3)**",
+    # `\\d{4}-\\d{2}-\\d{2}` matches this and it is not a day. An impossible date
+    # must not be a way to buy silence forever.
+    "**Verdict: UNPROBED (scoped 2026-13-45)**",
+    # The word `scoped` is what makes the date a scoping date.
+    "**Verdict: UNPROBED (2026-08-03)**",
+    # Prose after the line means it is a sentence, not a machine-readable claim.
+    "**Verdict: UNPROBED (scoped 2026-08-03)** — will look next week",
+]
+
+
+def test_malformed_unprobed_verdicts_are_rejected(tmp_path: Path) -> None:
+    """Each looks like the new verdict to a human and is not one to a grep.
+
+    Same role as `test_malformed_verdict_strings_are_rejected` one form along.
+    The impossible-date case is the one worth naming: the regex matches it, so
+    without `date.fromisoformat` rejecting it, `2026-13-45` would have been an
+    UNPROBED verdict whose age could never be computed.
+    """
+    for i, bad in enumerate(MALFORMED_UNPROBED):
+        config, evidence, fixtures = _scoped_tree(tmp_path / f"u{i}", bad + "\n")
+
+        problems = evidence_check.check_phase(config, evidence, fixtures, today=_TODAY)
+
+        assert len(problems) == 1, (bad, problems)
+        assert "rule 2 (configured or refused)" in problems[0], bad
+
+
+def test_a_section_carrying_both_a_refusal_and_an_unprobed_verdict_fails(
+    tmp_path: Path,
+) -> None:
+    """Two verdicts is two verdicts, whichever forms they take.
+
+    A retailer cannot be both settled and unlooked-at, and the count check has
+    to see all three forms or a REFUSED beside an UNPROBED would read as one.
+    """
+    body = f"{_REFUSED}\n**Verdict: UNPROBED (scoped {_TODAY})**\n"
+    config, evidence, fixtures = _scoped_tree(tmp_path, body)
+
+    problems = evidence_check.check_phase(config, evidence, fixtures, today=_TODAY)
+    assert len(problems) == 1
+    assert "rule 2 (configured or refused)" in problems[0]
+
+    per_retailer = evidence_check.check_retailer("Target", evidence)
+    assert len(per_retailer) == 1
+    assert "2 verdict lines" in per_retailer[0]
+
+
+def test_an_unprobed_only_section_is_a_verdict_to_the_per_retailer_mode(
+    tmp_path: Path,
+) -> None:
+    """`--retailer` and `--phase` must agree about what counts as a verdict.
+
+    Without `all_verdict_lines`, a section carrying only an UNPROBED line reads
+    as carrying NO verdict to `--retailer` while `--phase` accepts it — the two
+    modes disagreeing about the same document, which is how a reader learns to
+    trust neither.
+    """
+    evidence = _write_evidence(
+        tmp_path, [("Target (target.com)", _unprobed(_TODAY))]
+    )
+
+    assert evidence_check.main(["--retailer", "Target", "--evidence", str(evidence)]) == 0
+
+
+def test_the_rule_two_failure_names_the_honest_path(tmp_path: Path) -> None:
+    """The fastest green has to be an honest one, and it has to be findable.
+
+    Somebody widens the scope, `make verify` goes red, and they read exactly one
+    message. If that message only says "configured or refused", the one-line fix
+    it suggests is a false REFUSED for a store nobody probed — and a false
+    REFUSED never expires. So the message names the third form, spells it, and
+    says it runs out.
+    """
+    config = _write_config(tmp_path, _SHIPPED)
+    evidence = _write_evidence(
+        tmp_path,
+        [
+            ("Pokémon Center (pokemoncenter.com)", _REFUSED),
+            ("Amazon (amazon.com)", _REFUSED),
+        ],
+    )
+
+    problems = evidence_check.check_phase(
+        config, evidence, _write_fixtures(tmp_path, []), today=_TODAY
+    )
+
+    assert len(problems) == 1
+    assert evidence_check.UNPROBED_EXAMPLE in problems[0]
+    assert str(evidence_check.UNPROBED_GRACE_DAYS) in problems[0]
+    assert "never expires" in problems[0]
+
+
+def test_the_shipped_tree_carries_no_unprobed_verdict() -> None:
+    """UNPROBED is temporary, and this is where its existence stays visible.
+
+    Nothing in scope is unprobed today: three retailers are refused in writing
+    and four are shipped. If a future scope expansion adds one, this test goes
+    red — and the edit that greens it is a deliberate, reviewable line naming
+    which retailer is waiting, at which point the grace clock is already running
+    in the evidence log. That is the difference between an escape hatch and a
+    hole: taking it costs a red test exactly once, and it un-takes itself.
+
+    `make verify` deliberately runs the gate WITHOUT `--strict`, so this test is
+    the only place the tree's unprobed set is stated. Do not delete it to make a
+    scope expansion quiet.
+    """
+    text = (REPO_ROOT / "docs" / "retailer-evidence.md").read_text(encoding="utf-8")
+
+    unprobed = {
+        heading: evidence_check.unprobed_lines(body)
+        for heading, body in evidence_check.split_sections(text)
+        if evidence_check.unprobed_lines(body)
+    }
+
+    assert unprobed == {}, unprobed
 
 
 # --------------------------------------------------------------------------

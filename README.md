@@ -122,6 +122,15 @@ has to say `degraded` in its own row, and **no row may claim a working rung
 (1–3) for a retailer nothing watches**. Rung 4 — dropped, with the evidence
 written down — is the only honest rung for a retailer the monitor does not read.
 
+There is one temporary third state, for the same reason: a gate that makes the
+honest answer unrepresentable pressures the padding it was built to stop. A
+retailer newly brought into scope and not yet probed records
+`**Verdict: UNPROBED (scoped YYYY-MM-DD)**` in the evidence log and `—` in the
+rung column — a written, dated claim that **expires after 60 days**, after which
+the gate goes red again. `.venv/bin/python scripts/evidence_check.py --phase
+--strict` refuses it outright; that is the bar at the close of a phase, and it
+is why "not yet" cannot become a way of never answering.
+
 **A browser is not a strict upgrade.** The same headless Chrome that reads Best
 Buy is served a Cloudflare wall by gamestop.com, which rung 1 reads on every
 `make verify`. Rung 3 fixes the JavaScript fingerprint and leaves the TLS one

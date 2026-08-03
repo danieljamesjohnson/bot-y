@@ -90,7 +90,34 @@ def _load_evidence_check() -> Any:
     return module
 
 
-ROADMAP_RETAILERS: dict[str, str] = _load_evidence_check().ROADMAP_RETAILERS
+EVIDENCE_CHECK: Any = _load_evidence_check()
+ROADMAP_RETAILERS: dict[str, str] = EVIDENCE_CHECK.ROADMAP_RETAILERS
+EVIDENCE = REPO_ROOT / "docs" / "retailer-evidence.md"
+
+#: The rung cell of a retailer in scope that nobody has probed yet.
+#:
+#: There is no rung to report — that is the whole content of an UNPROBED verdict
+#: — so the cell says so rather than guessing a number. Accepted ONLY for a
+#: retailer whose evidence-log section carries the matching verdict, because a
+#: bare `—` accepted unconditionally is exactly the "Planned" evasion
+#: `test_a_planned_rung_cell_fails_too` exists to catch.
+UNPROBED_RUNG = "—"
+
+
+def _unprobed_retailers(evidence_text: str | None = None) -> set[str]:
+    """Display names carrying a well-formed UNPROBED verdict in the evidence log.
+
+    Read through `evidence_check` rather than re-derived, for the reason WR-04
+    gave: two readers of one document drift, and these two already had.
+    """
+    text = EVIDENCE.read_text(encoding="utf-8") if evidence_text is None else evidence_text
+    sections = EVIDENCE_CHECK.split_sections(text)
+    return {
+        name
+        for name in ROADMAP_RETAILERS.values()
+        for body in EVIDENCE_CHECK.sections_for(name, sections)
+        if EVIDENCE_CHECK.unprobed_lines(body)
+    }
 
 
 # --------------------------------------------------------------------------
@@ -139,11 +166,23 @@ def _missing(rows: dict[str, list[str]]) -> list[str]:
     return [name for name in ROADMAP_RETAILERS.values() if name not in rows]
 
 
-def _rungless(rows: dict[str, list[str]]) -> dict[str, str]:
+def _rungless(
+    rows: dict[str, list[str]], unprobed: set[str] | None = None
+) -> dict[str, str]:
+    """Retailers in scope whose rung cell does not answer the question.
+
+    `unprobed` is the set carrying an UNPROBED verdict in the evidence log, and
+    only those may use `—`. Defaulting it to empty keeps the corruption tests
+    below honest: they assert that a blank or `Planned` cell fails, and they must
+    go on doing so for a retailer that has no unprobed verdict backing it.
+    """
+    unprobed = set() if unprobed is None else unprobed
     return {
         name: rows[name][RUNG]
         for name in ROADMAP_RETAILERS.values()
-        if name in rows and rows[name][RUNG][:1] not in RUNGS
+        if name in rows
+        and rows[name][RUNG][:1] not in RUNGS
+        and not (name in unprobed and rows[name][RUNG].startswith(UNPROBED_RUNG))
     }
 
 
@@ -209,9 +248,12 @@ def test_every_roadmap_retailer_carries_a_rung_of_one_to_four() -> None:
     this assertion.
     """
     rows = _matrix()
+    unprobed = _unprobed_retailers()
 
-    assert not _rungless(rows), (
-        f"no rung recorded in the README support matrix for: {_rungless(rows)}"
+    assert not _rungless(rows, unprobed), (
+        f"no rung recorded in the README support matrix for: {_rungless(rows, unprobed)}. "
+        f"A retailer nobody has probed yet may use {UNPROBED_RUNG!r} here, but only while "
+        "docs/retailer-evidence.md carries its UNPROBED verdict — which expires."
     )
 
 
@@ -304,6 +346,36 @@ def test_a_planned_rung_cell_fails_too() -> None:
     rows = _matrix(_corrupt("Target", RUNG, "Planned"))
 
     assert _rungless(rows) == {"Target": "Planned"}
+
+
+def test_an_unprobed_rung_cell_needs_an_unprobed_verdict_behind_it() -> None:
+    """The `—` cell is not a free pass; it is the second half of a written claim.
+
+    A retailer in scope that nobody has probed has no rung to report, so the
+    table has to be able to say so — otherwise the README rung rule joins rule 2
+    in making the honest state unrepresentable, and the fastest green for a
+    scope expansion is inventing a number as well as a refusal.
+
+    But `—` accepted unconditionally is exactly the `Planned` evasion the rule
+    above exists to catch. So it is accepted ONLY alongside the evidence log's
+    UNPROBED verdict, which carries a date and expires. Both directions here.
+    """
+    rows = _matrix(_corrupt("Target", RUNG, UNPROBED_RUNG))
+
+    assert _rungless(rows, unprobed=set()) == {"Target": UNPROBED_RUNG}
+    assert _rungless(rows, unprobed={"Target"}) == {}
+
+
+def test_a_planned_rung_cell_fails_even_for_an_unprobed_retailer() -> None:
+    """The exemption is for one cell value, not for the retailer.
+
+    Without this, "unprobed" would become a licence to write anything in the
+    rung column — and `Planned` is the specific word the rung rule was written
+    against.
+    """
+    rows = _matrix(_corrupt("Target", RUNG, "Planned"))
+
+    assert _rungless(rows, unprobed={"Target"}) == {"Target": "Planned"}
 
 
 def test_a_rung_three_row_stripped_of_degraded_fails_the_degraded_rule() -> None:
