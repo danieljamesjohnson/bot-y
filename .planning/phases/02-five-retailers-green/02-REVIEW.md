@@ -171,10 +171,14 @@ is gone and `proc.wait()` was awaited — the existing
 **Issue:** Best Buy's rendered search page echoes the request headers into its
 hydration payload. The frozen fixture therefore contains, verbatim:
 
-- `"true-client-ip":"192.0.2.1"` and
-  `"x-forwarded-for":"192.0.2.1, 192.0.2.1, 192.0.2.1"` — **8
+- `"true-client-ip":"<this host's public IP>"` and
+  `"x-forwarded-for":"<this host's public IP>, <akamai hop>, <akamai hop>"` — **8
   occurrences** of the capturing host's public IP;
-- `"x-akamai-edgescape":"georegion=285,country_code=US,region_code=XX,city=REDACTED,dma=REDACTED,...,areacode=REDACTED,county=REDACTED,fips=REDACTED,lat=0.0000,long=0.0000"`
+  *(Values redacted from this record 2026-08-03. They were verbatim here until
+  then, in a file pushed to the public repo — see `QUESTIONS.md` § 0e. The
+  header structure is preserved because the shape is the finding; the address
+  is not needed to understand it.)*
+- `"x-akamai-edgescape":"georegion=<n>,country_code=US,region_code=<ST>,city=<CITY>,dma=REDACTED,...,areacode=REDACTED,county=REDACTED,fips=REDACTED,lat=0.0000,long=0.0000"`
   — **3 occurrences** of city-level geolocation of that IP;
 - the capture user-agent, including `HeadlessChrome/149.0...` and Akamai's own
   `"akamai-bot":"unknown bot (headlesschro_...)"` classification.
@@ -188,14 +192,18 @@ unnoticed because nothing checks for it. It is also the same class of leak
 business publishing somebody's home directory layout").
 
 **Concrete failure scenario:** REQ-11 pushes this repo to GitHub and PyPI. The
-IP, the ISP (`network_type=REDACTED`), and the town of the machine that runs the
+IP, the ISP (`network_type=<isp>`), and the town of the machine that runs the
 monitor are then public, permanently, in git history — and the sdist ships the
 fixture too.
 
 **Fix:** three parts, in order:
 
-1. Scrub the fixture now: replace `192.0.2.1` with `192.0.2.1`
+1. Scrub the fixture now: replace the real IP with `192.0.2.1`
    (RFC 5737 documentation range) and the edgescape blob with a neutral value,
+   *(2026-08-03: the 03.1 redaction pass briefly rewrote this instruction into
+   "replace `192.0.2.1` with `192.0.2.1`" — a blanket regex hitting the
+   sentence that names the remedy. Restored. The instruction below is the one
+   that has still not been carried out.)*
    then re-run the suite — the assertions are about ld+json markup, so nothing
    depends on these bytes. Rewrite the blob out of history before Phase 4
    publishes (it is one commit, `e5e4b90`).

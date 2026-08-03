@@ -177,12 +177,61 @@ All fixtures still parse byte-identically: `IN_STOCK $229.99 Clove Brothers
 LLC`, `IN_STOCK $2.42 Walmart.com`, `IN_STOCK $59.99 Best Buy`. `make verify`
 bare `VERIFY: PASS`, 382 tests, 6/6 live controls, 8/8 mutations.
 
-**The honest summary of three rounds:** a guard found the first leak; my fix
+**FOURTH CORRECTION, and this is the last status claim I will make loosely.**
+The paragraph above said the fixtures were clean of "the city, the ZIP, the
+store name, the store id and the state." **The state was not clean** —
+`region_code=<ST>` was live ×3 in `bestbuy/unresolved-sku.html`, in Akamai's
+*query* form. The rule set asserted a state is a leak class and simultaneously
+shipped one, because the rules were keyed to the JSON spelling and the EdgeScape
+marker tuple had never been given `region_code`. Four rounds, four wrong status
+claims from me, all on the same axis.
+
+The fourth pass also found the deeper thing, and it is a consequence of the
+third fix: **making the synthetic test values invented meant no test tied any
+rule to the shape of a real value.** Six regex-weakening mutations passed —
+requiring an 8-character city name, or a ZIP beginning with 9 — because the
+invented values happened to satisfy the narrowed pattern while a real one would
+not. Also unwatched: the whole ZIP+4 rule, eight of the EdgeScape markers, and
+both `x-forwarded-for` and `client-ip` — the spelling that carried the IP three
+times in the actual incident.
+
+Closed now, and this time by mechanism rather than by inspection:
+
+- `region_code`, `georegion`, `network_type`, `pmsa`, `msa`, `asnum`,
+  `timezone`, `continent` added to the marker loop; `shippingZipcode`,
+  `store_id`, and an uppercase-only `?state=TX` rule added. (Uppercase-only
+  because a lowercase `&state=ca` is GameStop's own California-law consent
+  config, not a fact about this host — the case distinction *is* the rule.)
+- **A shape test**: every rule must also fire on a value shaped like the real
+  one and different from the synthetic — a short city, a ZIP not starting with
+  9, a two-letter state, a one-digit store number. It caught a live miss
+  immediately: the store-number rule required two digits and Best Buy's
+  fixtures carry `"storeId":"7"`.
+- **An ordering test**: both Walmart fixtures contain the redacted placeholder
+  *before* the real value, so a rule that stops at the first allowed match is
+  disabled for precisely the pages it exists for. That mutation was silent.
+- **24 mutations run, zero silent** — every rule, both loop bodies, the scope
+  (now pinned per *file*; one-page-per-directory used to pass), and the
+  allow-list.
+- `02-REVIEW.md`'s remediation instruction had been garbled by my own blanket
+  regex into *"replace `192.0.2.1` with `192.0.2.1`"* — the one instruction
+  whose non-execution is the whole of this section. Restored, with the values
+  replaced by their descriptions.
+
+**The honest summary of four rounds:** a guard found the first leak; my fix
 missed; the verifier caught it; my second fix missed less; the verifier caught
 that; my third fix turned out to be redaction wearing a gate's clothes; the
-verifier caught that too and named why. Each round I was fixing the instances I
-had been shown. The gate only became real when deleting any single rule started
-turning the suite red.
+verifier caught that and named why; my fourth fix left the state shipping and
+every rule weakenable. Each round I fixed the instances I had been shown, and
+each round the class was wider than the instances. It only stopped being true
+when deleting *any* rule, weakening *any* pattern, or narrowing the scope
+started turning the suite red — which is where it is now.
+
+**What this means for your decision.** Everything above is in **unpushed**
+commits, so all of it is fixable at zero history cost. What is live and public
+right now is unchanged by any of it: the IP and full EdgeScape record in
+`02-REVIEW.md`, the ZIP in both Walmart fixtures, the store id and state in the
+Best Buy fixtures.
 
 **None of that changes the decision below.** The blobs are still in pushed
 history exactly as described. What changed is that the working tree really is

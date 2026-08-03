@@ -442,11 +442,28 @@ def _identity_leaks(name: str, body: str) -> list[str]:
                 leaks.append(f"{name}: {header} = {match.group(1)}")
 
     # Akamai EdgeScape geolocation of the *requesting* host.
-    for marker in ("city", "zip", "lat", "long", "county", "areacode", "fips", "dma"):
+    # `region_code` and `georegion` were missing until 2026-08-03 and were LIVE
+    # in `bestbuy/unresolved-sku.html` — the repo asserted "a state is a leak
+    # class" in the JSON rule below while shipping the state in the query form
+    # three times. `network_type` names the ISP. Each marker gets its own case
+    # in the leak-class test; they used to shadow each other two-at-a-time
+    # behind a single `?city=…&zip=…` probe.
+    for marker in ("city", "zip", "lat", "long", "county", "areacode", "fips",
+                   "dma", "region_code", "georegion", "network_type",
+                   "pmsa", "msa", "asnum", "timezone", "continent"):
         for value in re.findall(rf"\b{marker}=([A-Za-z0-9._+-]+)", body):
             if value.upper() not in {a.upper() for a in allowed}:
                 leaks.append(f"{name}: geolocation {marker}={value}")
                 break
+
+    # `?state=TX` — a query-form state, uppercase. NOT folded into the marker
+    # loop above: `state` is not an EdgeScape key, and adding it there fired on
+    # GameStop's own TrustArc CCPA config (`&state=ca`, lowercase, about
+    # California law rather than about us). The case distinction is the rule.
+    for value in re.findall(r"[?&;,]state=([A-Z]{2})\b", body):
+        if value.upper() not in {a.upper() for a in allowed}:
+            leaks.append(f"{name}: geolocation state={value}")
+            break
 
     # The same geolocation written as JSON, which is how Target's renderer
     # emits it. Anchored on the semantics (a coordinate, a postal code, a
@@ -454,7 +471,7 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     # spelling.
     json_markers = (
         (r'"(?:latitude|longitude)"\s*:\s*"?(-?\d+\.\d+)', "coordinate"),
-        (r'"(?:zip|zipCode|postal_code|postalCode)"\s*:\s*"?(\d{4,})', "postal code"),
+        (r'"(?:zip|zipCode|postal_code|postalCode|shippingZipcode|shipping_zip)"\s*:\s*"?(\d{4,})', "postal code"),
         (r'"(?:refreshToken|accessToken|sessionId|session_id|deviceId)"\s*:\s*"([^"]{8,})"', "session token"),
         (r'"(?:visitor_id|visitorId|guest_id|guestId)"\s*:\s*"([^"]{8,})"', "visitor id"),
     )
@@ -498,8 +515,8 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     # is 1-in-50. Neither is a coordinate, and that is exactly why neither was
     # caught by rules written against coordinates.
     keyed = (
-        (r'"(?:pickup|delivery|preferred|nearest|selected|home|fulfillment)?[Ss]tore(?:Id|Number|No|Code)?"\s*:\s*"?(\d{2,})', "store number"),
-        (r'\bstore(?:Id|Number)\s*(?:=|%3D)\s*(\d{2,})', "store number in a URL"),
+        (r'"(?:pickup|delivery|preferred|nearest|selected|home|fulfillment)?[Ss]tore(?:_?[Ii]d|Number|No|Code)?"\s*:\s*"?(\d+)', "store number"),
+        (r'\bstore(?:_?[Ii]d|Number)\s*(?:=|%3D)\s*(\d+)', "store number in a URL"),
         (r'"(?:state|region|province)(?:Code|OrProvinceCode|_code)?"\s*:\s*"([A-Z]{2})"', "state or region"),
         (r'"(?:city|cityName|locality|town)"\s*:\s*"([A-Za-z][A-Za-z .\'-]{2,})"', "city"),
         (r'"(?:destinationZipCode|postCode|post_code|zip5|zipcode)"\s*:\s*"?(\d{4,})', "postal code"),
@@ -511,6 +528,10 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     for pattern, what in keyed:
         for match in re.finditer(pattern, body):
             value = match.group(1)
+            # Only `break` on a REPORTED leak. Falling through on an allowed
+            # value is deliberate: the redacted placeholder appears before the
+            # real value in both Walmart fixtures, so stopping at the first
+            # match would disable the rule for the pages it exists for.
             if value.strip("0.- ") and value.upper() not in {a.upper() for a in allowed}:
                 leaks.append(f"{name}: {what} {value[:40]}")
                 break
@@ -543,6 +564,9 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     for match in re.finditer(r"\b([A-Z][a-z]{2,}(?: [A-Z][a-z]+){0,2}), (\d{5})\b", body):
         place, code = match.group(1), match.group(2)
         if place.upper() in {a.upper() for a in allowed} or code in allowed:
+            # `continue`, NOT `break`. A redacted `Redacted, 00000` appears
+            # BEFORE the real value in both Walmart fixtures, so breaking here
+            # would disable this rule for exactly the pages it was written for.
             continue
         leaks.append(f"{name}: rendered destination {place}, {code}")
         break
@@ -590,8 +614,43 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
         '{"countyName":"Exampleshire"}': "metro or county code",
         '{"addressLineOne":"1 Example Way"}': "street address",
         '{"address_line2":"Suite 4"}': "street address",
+        # Every EdgeScape marker gets its own case. They used to shadow each
+        # other: one `?city=…&zip=…` probe covered two of eight, so deleting
+        # any of the other six was silent — in the block that handles the exact
+        # artefact `02-REVIEW.md` leaked.
+        "?georegion=999&country_code=US": "geolocation georegion",
+        "?region_code=XX": "geolocation region_code",
+        "?network_type=REDACTED": "geolocation network_type",
+        "?lat=12.345": "geolocation lat",
+        "?long=-98.765": "geolocation long",
+        "?county=EXAMPLESHIRE": "geolocation county",
+        "?areacode=555": "geolocation areacode",
+        "?fips=99999": "geolocation fips",
+        "?dma=999": "geolocation dma",
+        "?pmsa=9999": "geolocation pmsa",
+        "?msa=9998": "geolocation msa",
+        "?asnum=99999": "geolocation asnum",
+        "?timezone=CST": "geolocation timezone",
+        "?continent=NA": "geolocation continent",
+        "&state=TX": "geolocation state",
+        # The two header spellings that had no case. `x-forwarded-for` is the
+        # one that actually carried the IP three times in the real incident.
+        'x-forwarded-for: 198.51.100.7, 192.0.2.1': "x-forwarded-for",
+        'client-ip: 198.51.100.7': "client-ip",
+        # ZIP+4 — the whole rule was unwatched, and it is the one carrying a
+        # comment asking maintainers not to delete it.
+        "Ships to 99999-1234": "ZIP+4",
+        '{"shippingZipcode":"99999"}': "postal code",
+        '{"store_id":"202"}': "store number",
         '{"deliveryWICAgencies":["TX"]}': "state via WIC agency",
         "Exampleville, TX 99999": "rendered address",
+        # ORDERING. Both Walmart fixtures contain the redacted placeholder
+        # BEFORE the real value, so a rule that stops at the first allowed
+        # match is disabled for exactly the pages it was written for. Turning
+        # the free-text rule's `continue` into a `break` was silent until this
+        # case existed.
+        'Redacted, 00000 ... later ... Exampleville, 99999': "rendered destination",
+        '{"city":"Redacted"} ... {"city":"Exampleville"}': "city",
         "Call (555) 555-0134": "phone number",
         "Call 555.555.0134": "phone number",
         '<a href="tel:+15555550134">': "phone number",
@@ -634,6 +693,54 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
             f"the guard cries wolf on {benign!r} — a guard that fires on redacted "
             f"output or on ordinary retailer content is one nobody keeps: "
             f"{_identity_leaks('synthetic.html', benign)}"
+        )
+
+
+def test_each_rule_fires_on_a_value_of_the_REAL_shape_not_just_the_synthetic_one() -> None:
+    """The hole left by inventing the synthetic values, closed.
+
+    Round 3 correctly stopped this file seeding its cases with the host's real
+    city and ZIP. The side effect, which round 4 found: **no test tied any rule
+    to the shape of the value it exists to catch.** Six regex-weakening
+    mutations passed — requiring an 8-character city name, or a leading `9` on
+    a ZIP — because every synthetic happened to satisfy the narrowed pattern
+    while the real value did not.
+
+    The fix is not to put real values back. It is to assert each rule against
+    values that are *shaped* like the real one and differ from the synthetic:
+    a short city, a ZIP that does not start with 9, a two-letter state, a
+    three-digit store number. If a maintainer narrows a pattern to fit the
+    synthetic, one of these goes red.
+    """
+    real_shaped = [
+        # short city name — the synthetic `Exampleville` is 12 chars
+        ('{"city":"Plano"}', "city"),
+        ('aria-label="Plano, 75024, Change shipping address"', "rendered destination"),
+        ("Plano, TX 75024", "rendered address"),
+        # ZIPs that do not begin with 9, unlike the synthetic 99999
+        ('{"zipCode":"02134"}', "postal code"),
+        ('{"destinationZipCode":"10001"}', "postal code"),
+        ("?zip=60614", "geolocation zip"),
+        # a three-digit store number, and a two-digit one
+        ('{"pickupStore":"202"}', "store number"),
+        ('{"storeId":"07"}', "store number"),
+        ("?storeId=1", "store number in a URL"),
+        # states other than the synthetic
+        ('{"stateCode":"MN"}', "state or region"),
+        ("?region_code=CA", "geolocation region_code"),
+        # coordinates with different precision
+        ('{"latitude":"33.1"}', "coordinate"),
+        ('{"lat":"-96.780012"}', "coordinate"),
+        # a real-shaped area code and a 10-digit phone
+        ("Store: 469-555-0100", "phone number"),
+    ]
+    for body, expected in real_shaped:
+        found = _identity_leaks("synthetic.html", body)
+        assert found, (
+            f"the guard misses {body!r} — a value of the REAL shape. It passes "
+            f"the synthetic case for {expected!r} and fails this one, which "
+            f"means the pattern has been narrowed to fit the test rather than "
+            f"the leak."
         )
 
 
@@ -680,12 +787,15 @@ def test_the_guard_scans_every_fixture_directory_not_just_some() -> None:
     scope it happens to have, not the scope somebody chose.
     """
     root = Path(__file__).parent / "fixtures"
-    scanned = {p.parent.name for p in _fixture_files(root)}
-    on_disk = {d.name for d in root.iterdir() if d.is_dir() and any(d.iterdir())}
-    assert on_disk <= scanned, (
-        f"the identity guard does not scan every retailer's fixtures — missing "
-        f"{sorted(on_disk - scanned)}. Every retailer this repo captures from "
-        f"can leak; the scan must cover all of them."
+    scanned = set(_fixture_files(root))
+    on_disk = {p for p in root.glob("*/*") if p.suffix in {".html", ".json"}}
+    missing = on_disk - scanned
+    assert not missing, (
+        f"the identity guard does not scan every fixture — missing "
+        f"{sorted(str(p.relative_to(root)) for p in missing)}. Pinned per FILE, "
+        f"not per directory: returning one page per directory dropped half the "
+        f"fixtures (including one of the two this whole thread is about) and "
+        f"left the suite green."
     )
 
 
