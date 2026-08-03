@@ -2895,3 +2895,103 @@ measurement twelve minutes earlier, which settles what the difference was: a
 transient retailer timeout, not a cost this phase added. The budget figure to
 carry forward is therefore roughly **35–61 s at 10 watches and 4 retailers**,
 where the upper end already includes one retailer failing to answer.
+
+#### Amended 2026-08-03 (03.1-04) — re-measured at six retailers, with two browser rungs
+
+The Phase 3 measurement above is **not replaced**. It was taken at four
+retailers; this phase shipped six, and the comparison between the two is the
+useful part. Both figures below were **read off `served/boty/status.json`'s
+`duration_seconds`**, not re-timed by hand — that key exists precisely so the
+budget can be read after any pass instead of estimated.
+
+**Environment.** Everything below ran under the service's own `EnvironmentFile`,
+via
+`sudo systemd-run --pipe --quiet --uid=dan --property=EnvironmentFile=/home/dan/.config/boty/env --property=WorkingDirectory=/home/dan/CodeProjects/pokemongoplusplus …`.
+A bare shell strips `BOTY_BROWSER_PATH` / `BOTY_BROWSER_NO_SANDBOX` and yields
+`VERIFY: PASS (INCOMPLETE — …)` at exit 0, with both browser-rung controls never
+run — which is blind to exactly the retailers this phase added.
+
+| Measurement | Watches | Retailers | Browser rungs | `duration_seconds` | `healthy` |
+|---|---|---|---|---|---|
+| 03-03 (Phase 3, manual) | 10 | 4 | 1 | 61.4 s | true |
+| 03-03 (Phase 3, service cycle) | 10 | 4 | 1 | 35.0 s | true |
+| **03.1-04 (manual, `updated` 2026-08-03T14:19:15Z)** | **13** | **6** | **2** | **45.98 s** | **true** |
+| **03.1-04 (service cycle, `updated` 2026-08-03T14:20:49Z)** | **13** | **6** | **2** | **44.81 s** | **true** |
+
+Against REQ-08's 120 s budget both figures sit at roughly **37 %**. `boty check`
+printed `13 watches across 6 retailers in 46.0s` as its last line, which is the
+same `elapsed` the published key carries. This plan's own gate re-ran the whole
+thing a third time a few minutes later and published **45.09 s**, `healthy:
+true`, 13 watches — recorded because it was run, not because it was the number
+wanted.
+
+**`healthy` was read at the same moment as the duration, deliberately.** It is
+the half of the count criterion a count cannot see: a retailer stuck on permanent
+UNKNOWN satisfies a total while raising a health warning. All **six** retailer
+health entries read `ok: true` with an empty `reason` and no `failing_controls` —
+`amazon`, `bestbuy`, `gamestop`, `nintendo`, `target`, `walmart`. Zero health
+warnings.
+
+**The rung mix, which is what would have moved the figure.** Of 13 watches, **2
+are rendered** (the Best Buy control and the Target control) against Phase 3's
+one, and **3 read `dom`** (Target's control and both Amazon watches). Four of the
+thirteen are `degraded`.
+
+| Retailer | `rung` | `extraction` | `degraded` | Watches |
+|---|---|---|---|---|
+| gamestop | `tls` | `structured` | `false` | 6 |
+| walmart | `tls` | `structured` | `false` | 2 |
+| nintendo | `tls` | `structured` | `false` | 2 |
+| bestbuy | `browser` | `structured` | `true` | 1 |
+| target | `browser` | `dom` | `true` | 1 |
+| amazon | `tls` | `dom` | `true` | 2 |
+
+Every one of those six triples was compared cell-by-cell against its row in the
+README support matrix and **all six agree**. That comparison is the one thing no
+test performs: `tests/test_support_matrix.py` reads the table and
+`tests/test_status.py` reads the payload, and nothing puts the two side by side
+against a live run.
+
+**Amazon is the row that makes the two axes worth having.** It is rung 1 —
+`tls`, the cheapest transport here — and it is `degraded: true` anyway, on the
+extraction disjunct alone. Under the pre-03.1-05 definition, where `degraded`
+was derived from the rung, Amazon would have shipped looking as trustworthy as
+GameStop.
+
+**Why the duration barely moved, when the retailer count went up by half.**
+Six retailers and 13 watches take *less* time than Phase 3's four retailers and
+10 watches. The second browser render costs about 20 s — the two
+`BOTY_BROWSER_NO_SANDBOX` warnings in the manual run are 23 s apart, which brackets
+the Best Buy render and the Target render — but Phase 3's 61.4 s included a
+`curl: (28)` timeout and its retry-and-backoff on a single GameStop watch. Read
+against the *service* figures instead, which is the like-for-like comparison,
+this phase cost **35.0 s → 44.81 s**: roughly **+10 s for the second browser
+render plus two extra rung-1 fetches**, and Amazon adds no render at all.
+No figure was averaged and no run was repeated to find a faster one.
+
+**The deployment was observed, and observing it found something an exit code
+could not.** `boty.service` was still running the process started at
+2026-08-03T05:13Z — *before* any of this phase's three feature commits
+(`44ec45c` 12:28Z, `a4f2847` 13:14Z, `7caeaf2` 14:00Z). It was publishing **10
+watches across 4 retailers with no `extraction` key at all**. The tree shipped
+six retailers; the deployed monitor was watching four, and nothing in
+`make verify` looks at the deployed monitor. Restarted at 2026-08-03T14:20:05Z;
+its first cycle on the shipped code is the 44.81 s row above.
+
+**Zombie-process observation, before and after.** The browser transport leaked
+`<defunct>` children on this deployment once, and this phase **doubled** the
+render count per pass. Counted immediately before the work (14:16:47Z) and after
+a manual `boty check` plus a full service cycle on the new code (14:22:44Z):
+
+| | Before | After |
+|---|---|---|
+| `chromium` processes owned by `dan` | 4, all `<defunct>` | **4, all `<defunct>` — the same four PIDs** |
+| …parented to `boty.service` | **0** | **0** |
+| children of `boty.service`'s MainPID | **0** | **0** |
+| `/tmp/uc_*` browser profiles | 23 | **23** |
+
+The four zombies are PIDs 976451, 976548, 980375 and 980378, every one of them
+parented to Mission Control's `python3 ./server.py` (PID 3741873) and every one
+of them older than this plan. `boty.service`'s MainPID has no children at all,
+and the unit runs `PrivateTmp=true`, so the 23 stale profiles are not its either.
+**Two renders per pass leaked nothing.**
