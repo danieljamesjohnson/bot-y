@@ -193,7 +193,7 @@ exists to be crawled. That is the path this phase takes.
 
   1. Target reports stock for the GO Plus + from a `www.target.com/p/` product page, with a control watch green
   2. Amazon reports stock for the GO Plus + if it carries it, with a control watch green; or the *technical* outcome is recorded with evidence, having actually been attempted
-  3. `boty check` reports six or more retailers with no health warnings
+  3. `boty check` reports **five** or more retailers with no health warnings — six if Amazon lands. Five is the honest ceiling when Amazon is technically unreachable, and criterion 2 explicitly permits that. Do not raise the target to six: a gate that fires on the honest outcome is the Phase 2 rot in the opposite sign. The real number is recorded either way
   4. Every retailer's row in the support matrix states its rung, its robots.txt position and its terms position — a reader can see the disagreement rather than only the verdict
   5. No regression: the four Phase 2 retailers still green, `make verify` exits 0
   6. A single `boty check` still completes in under 2 minutes
