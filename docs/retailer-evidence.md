@@ -454,6 +454,63 @@ Nintendo turned out to be.
 
 ---
 
+## What was built on both of these (2026-08-02, 02-04 tasks 2 and 3)
+
+### Nintendo — shipped, and the diff is the finding
+
+One line in `FIRST_PARTY` and two watches in `config/products.yaml`. That is the
+whole of it: no extractor, no `_make_checker` branch, no `MARKETPLACES` entry,
+no change to `boty/parse.py` at all. `nextdata_offers` was not generalised and
+`_WALMART_PRODUCT_PATH` was not touched.
+
+Confirmed live, with `boty.service` stopped:
+
+```
+○ nintendo  Pokémon GO Plus +             $   54.99  ld+json: OutOfStock from Nintendo of America Inc.
+● nintendo  CONTROL — Nintendo HDMI cable $    7.99  ld+json: InStock from Nintendo of America Inc. [control]
+```
+
+`served/boty/status.json` records `"rung": "tls"` and `"degraded": false` on both
+rows — rung 1, no credentials, no browser, nothing added to the systemd unit's
+`EnvironmentFile`. That last point is deliberate: 02-03 shipped a green that
+depended on `BOTY_BROWSER_PATH` being exported in an interactive shell, and the
+service, which starts with almost no environment, paged half an hour later.
+Nintendo needs no environment at all, and `make verify` was re-run under
+`systemd-run --property=EnvironmentFile=…` to confirm that rather than assume it.
+
+### Pokémon Center — not shipped, and not padded
+
+No watch, no fixture, no `FIRST_PARTY` entry. The count is four.
+
+Three separate mechanisms now make that shortfall hard to paper over later, and
+they are worth naming because "we would notice" is not a control:
+
+1. `scripts/control_check.py` computes `configured - verified` before any
+   request, so a Pokémon Center watch with no control fails `make verify`
+   offline.
+2. `boty.monitor.assess_health` fails a retailer whose control cannot be read,
+   so a watch *with* a control fails `healthy` instead.
+3. `test_no_retailer_is_configured_without_a_page_we_have_actually_read` asserts
+   that every configured retailer has a captured page under `tests/fixtures/`.
+   `boty.fixtures.capture` only writes one after a live fetch that was not
+   blocked — it refused outright here — so this is an offline, unfakeable claim
+   that the site has been read at least once, and it is the one that fires
+   fastest.
+
+### The block-phrase fix this cost us, and what it is worth
+
+`pardon our interruption` and `_incapsula_resource` are now in
+`boty.fetch.BLOCK_PHRASES`, pinned by `tests/test_fetch.py` — including a
+parameterised test that runs the shipped 380–420 KB product fixtures back
+through `get()`, because a phrase broad enough to match a real page would report
+a working retailer as blocked forever, which is a worse failure than the one the
+list prevents.
+
+Imperva sits in front of a great many retailers. Phase 3's two are prime
+candidates, and when one of them refuses us it will now say so.
+
+---
+
 ## Cross-cutting observation: a browser is not a strict upgrade
 
 Not a verdict — GameStop is green on rung 1 and stays there — but it was

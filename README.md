@@ -3,10 +3,18 @@
 A self-hosted restock monitor for big US retailers that **tells you when it breaks.**
 
 ```
-● gamestop  CONTROL — PS5 console       $  549.99  ld+json: InStock from GameStop      [control]
-○ gamestop  Pokémon GO Plus +           $   54.99  ld+json: OutOfStock from GameStop
-○ walmart   Pokémon GO Plus +                      1 offer(s), none first-party
+○ gamestop  Pokémon GO Plus +             $   54.99  ld+json: OutOfStock from GameStop
+○ walmart   Pokémon GO Plus +                        1 offer(s) via __NEXT_DATA__, none first-party
+○ nintendo  Pokémon GO Plus +             $   54.99  ld+json: OutOfStock from Nintendo of America Inc.
+● gamestop  CONTROL — PS5 console         $  549.99  ld+json: InStock from GameStop [control]
+● walmart   CONTROL — Great Value whole mi$    2.42  __NEXT_DATA__: IN_STOCK from Walmart.com [control]
+● bestbuy   CONTROL — Pokémon Let's Go, Pi$   59.99  ld+json: InStock from Best Buy [control] [degraded]
+● nintendo  CONTROL — Nintendo HDMI cable $    7.99  ld+json: InStock from Nintendo of America Inc. [control]
 ```
+
+Read that top-to-bottom: the product is out of stock everywhere, and the four
+green lines below it are why you can believe that. `[degraded]` says Best Buy's
+reading came from a page we rendered rather than an answer the retailer gave us.
 
 ## Why another one
 
@@ -70,9 +78,17 @@ actually tried against each one, and what came back, is in
 |---|---|---|---|
 | GameStop | 1 | `curl_cffi` + schema.org JSON-LD | ✅ Working |
 | Walmart | 1 | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ✅ Working |
+| Nintendo | 1 | `curl_cffi` + schema.org JSON-LD | ✅ Working — first-party for the hardware, and the only place in this config that lists the GO Plus + at its $54.99 MSRP with no marketplace attached |
 | Best Buy | 3 (2 with a key) | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
+| Pokémon Center | 4 | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 (headless Chrome, twice); its `robots.txt` forbids the API endpoints that would answer the stock question | ❌ Dropped, with the evidence written down. Not configured, and deliberately not padded into the count — it stocks the product, so a watch here would have looked plausible and read nothing forever |
 | Target | — | RedSky API | 🚧 Planned |
-| Pokémon Center | — | — | 🚧 Planned |
+
+**Four working retailers, not five.** The roadmap's MVP bar was five, and this is
+what the bar actually bought: a retailer that cannot be read is dropped and
+documented rather than shipped as a detector with nothing behind it. Pokémon
+Center is the one that fell out; it is worth retrying, and
+[`docs/retailer-evidence.md`](docs/retailer-evidence.md) says exactly which two
+probes would establish whether anything has changed.
 
 **A browser is not a strict upgrade.** The same headless Chrome that reads Best
 Buy is served a Cloudflare wall by gamestop.com, which rung 1 reads on every
