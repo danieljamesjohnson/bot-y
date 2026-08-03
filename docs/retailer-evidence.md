@@ -22,6 +22,199 @@ Anything reached by browser is flagged DEGRADED in the support matrix and in
 
 ---
 
+## Amazon (amazon.com)
+
+**Probed:** 2026-08-03, from danserver over a residential connection.
+**Transport:** `curl` — a one-off, human-shaped read of public policy documents.
+**`boty.fetch.get` was never pointed at amazon.com and no product page was
+requested at any point in this phase.** That ordering is the finding rather than
+a courtesy: the question "may we request this at all" was settled *before* any
+request whose legitimacy would have depended on the answer, so this section can
+make a claim the Pokémon Center one could only make retroactively.
+
+**Verdict: REFUSED**
+
+Rung 4, and the decisive reason is written rather than technical. Amazon's
+Conditions of Use prohibit exactly what this monitor does, twice over — once by
+naming the *data* and once by naming the *method*. No wall was ever reached
+because none needed to be, and no transport work was spent on a retailer that
+should not ship regardless of which transport won.
+
+### What was retrieved
+
+| Target | Result |
+|---|---|
+| `https://www.amazon.com/gp/help/customer/display.html?nodeId=508088` | **HTTP 200**, 344,140 B, `text/html;charset=UTF-8`, after a redirect to the current canonical URL `https://www.amazon.com/gp/help/customer/display.html?nodeId=GLSBYFE9MGKKQXXM`. Document header reads `Last updated: May 30, 2025` |
+| `https://www.amazon.com/robots.txt` | **HTTP 200**, 7,887 B, `text/plain`, 436 lines, 100 `User-agent` blocks |
+| `https://webservices.amazon.com/paapi5/documentation/register-for-pa-api.html` | **HTTP 200**, 52,744 B, after a redirect to `affiliate-program.amazon.com/creatorsapi/docs/en-us/paapiv5-deprecation` — the rung-2 API this repo would have reached for no longer exists |
+| `https://affiliate-program.amazon.com/creatorsapi/docs/en-us/onboarding-request-access` | **HTTP 404**, 48,137 B — a guessed slug. Recorded rather than hidden; the correct URL was then read out of the previous page's own links instead of being guessed a second time |
+| `https://affiliate-program.amazon.com/creatorsapi/docs/en-us/onboarding` | **HTTP 200**, 52,996 B |
+| `https://affiliate-program.amazon.com/creatorsapi/docs/en-us/frequently-asked-questions` | **HTTP 200**, 52,829 B |
+
+**Six requests in total, spaced 22–24 s apart, no retries, no refusals.** Two to
+`www.amazon.com` — a public policy page, and the one file on the internet whose
+entire purpose is to be fetched by an automated agent. Four to Amazon's developer
+documentation hosts. **Zero to a product page. Zero from bot-y.**
+
+### The operative clause, quoted in full
+
+From the `LICENSE AND ACCESS` section of the Conditions of Use, retrieved
+2026-08-03 from the URL in the table above. The whole sentence is reproduced so a
+future reader can judge its scope for themselves rather than trusting this
+document's reading of it:
+
+> Subject to your compliance with these Conditions of Use and any Service Terms,
+> and your payment of any applicable fees, Amazon or its content providers grant
+> you a limited, non-exclusive, non-transferable, non-sublicensable license to
+> access and make personal and non-commercial use of the Amazon Services. **This
+> license does not include any resale or commercial use of any Amazon Service, or
+> its contents; any collection and use of any product listings, descriptions, or
+> prices; any derivative use of any Amazon Service or its contents; any
+> downloading, copying, or other use of account information for the benefit of
+> any third party; or any use of data mining, robots, or similar data gathering
+> and extraction tools.**
+
+And, two sentences later in the same paragraph:
+
+> No Amazon Service, nor any part of any Amazon Service or its contents, may be
+> reproduced, duplicated, copied, sold, resold, visited, or otherwise exploited
+> for any commercial purpose without express written consent of Amazon.
+
+> You may not misuse the Amazon Services. You may use the Amazon Services only as
+> permitted by law.
+
+**This is stronger than the Pokémon Center clause, and it is worth being precise
+about why.** Pokémon Center's Terms forbid "data gathering or extraction methods
+designed to scrape or extract data" — a prohibition on the *method*, which leaves
+a reader room to argue about what counts as one. Amazon's clause forbids the
+method *and independently* forbids "any collection and use of any product
+listings, descriptions, or **prices**". Availability and price are the only two
+fields bot-y reads. There is no reading of that sentence under which a stock
+monitor is collecting something else, and no transport — impersonated HTTP, a
+real browser, a residential proxy — changes which side of it we are on.
+
+The licence Amazon grants is to "access and make personal and non-commercial use"
+of the service. bot-y's use is personal and non-commercial, and that is not the
+question: the carve-out for product listings and prices is written as an
+exclusion *from* that same personal licence, not as a restriction on commercial
+users only.
+
+### robots.txt — narrower than the Conditions of Use, and the disagreement is the finding
+
+The same shape as Pokémon Center, and worth stating explicitly because reading
+robots.txt alone would have produced the opposite answer.
+
+`https://www.amazon.com/robots.txt` is 436 lines and defines **100** `User-agent`
+groups: one `*` group and 99 named ones. Almost every named group is the same two
+lines —
+
+```
+User-agent: Scrapy
+Disallow: /
+
+User-agent: Crawl4AI
+Disallow: /
+```
+
+— covering AI crawlers (`GPTBot`, `ClaudeBot`, `CCBot`, `Bytespider`,
+`PerplexityBot`…) and, notably, **general-purpose scraping frameworks by name**:
+`Scrapy` and `Crawl4AI` are each shut out of the entire site. That is not a
+prohibition bot-y's user-agent string trips, but it is a clear statement of
+intent from the same file.
+
+The `*` group is a long, specific deny-list rather than a blanket refusal. What
+matters for a stock read:
+
+```
+Disallow: /gp/product/product-availability
+Disallow: /dp/product-availability/
+Disallow: /gp/offer-listing/
+Allow: /gp/offer-listing/B000
+Allow: /gp/offer-listing/9000
+```
+
+The bare product page path — `/dp/<ASIN>` — carries **no** `Disallow`, and there
+is no rule matching `/dp/` or `/dp/$` anywhere in the `*` group. So a naïve
+robots.txt reading says the product page is fair game. But the two paths that most
+directly answer *"is this in stock, and from whom"* — `product-availability` and
+the buy-box `offer-listing` — are explicitly closed, with a narrow legacy
+exception for two ASIN prefixes.
+
+**So robots.txt is narrower than the Conditions of Use, and the two disagree.**
+robots.txt would permit fetching `/dp/<ASIN>` and reading whatever it contains;
+the Conditions of Use forbid collecting product listings and prices by any means.
+Where they disagree, the Conditions of Use are the document Amazon asks you to
+agree to by using the site, and the narrower technical file does not license what
+the broader written one refuses. Reading `/dp/` because robots.txt forgot to
+mention it, while the ToU names prices explicitly, is precisely the "respects
+robots.txt while working around the ToU" posture that
+`.planning/phases/03-the-hard-two/03-CONTEXT.md` locks this project out of.
+
+There is no `Sitemap:` directive in the file, so there is not even a sanctioned
+discovery path of the kind Nintendo publishes.
+
+### Rung 2 evaluated against the fresh-clone rule — and it has moved since anyone last looked
+
+`.planning/REQUIREMENTS.md`'s non-functional requirement is that a retailer's
+PRIMARY path must work for someone who clones this repo and adds no credentials;
+a credential needing manual approval, a paid domain or a commercial agreement is
+a footnote, not support. Best Buy's row is the precedent — its API is real, works
+well, and is documented as an *optional* upgrade for exactly this reason.
+
+Amazon fails that test harder than Best Buy does, and the first thing to record
+is that **the API this repo would have reached for no longer exists**:
+
+> The Amazon Product Advertising API 5.0 (PA-API 5) has been deprecated and is
+> being replaced by the Creators API. […] Applications that continue to call
+> PA-API 5 receive an HTTP 403 Forbidden response with an
+> `AccessDeniedException`.
+
+The successor, the Creators API, states its onboarding in two steps:
+
+> **1. Sign up as an Amazon Associate.** First, you need to become an Amazon
+> Associate. The Associates Program is free to join and enables you to monetize
+> your traffic through affiliate commissions.
+>
+> **2. Register for Creators API.** Once you have an Amazon Associates account,
+> you can register for the Creators API to get your API credentials (Access Key
+> and Secret Key).
+
+And access is regional and approved rather than issued:
+
+> You will need a valid Partner Tag for the target marketplace and **Creators API
+> access approved** in that region.
+
+The FAQ's own account-verification advice names what an Associates account
+entails — "if you can access payment method update and **tax interview** pages
+for selected store then you are primary owner of the store".
+
+So the rung-2 credential requires: an affiliate account governed by the
+Associates Operating Agreement (a commercial agreement), a completed tax
+interview, a payment method, a Partner Tag, and a per-region approval. A person
+cloning this repo to watch one $54.99 accessory cannot obtain that, and should
+not have to enter a commercial relationship with a retailer to check whether it
+has something in stock. **Rung 2 is closed against the fresh-clone rule** — and
+it would be closed even for someone who had all of it, because the Conditions of
+Use above are not suspended by holding an Associates account. The Creators API is
+a sanctioned path for affiliate publishers to *promote* products, not a
+back-channel around the clause that forbids collecting prices.
+
+### Why this is the plan succeeding
+
+The roadmap's criterion for this retailer is "Amazon reports stock, **or** the
+support matrix records what was tried and why it failed." This is the second
+branch, and it is the better one to land on: a written prohibition is a more
+durable finding than a wall, because a wall can fall and this cannot. Nobody has
+to re-derive it in six months, and nobody has to wonder whether a different TLS
+fingerprint would have worked. It would have.
+
+It costs the phase its fifth retailer unless Target lands — see `QUESTIONS.md`.
+That is recorded rather than papered over: no Amazon watch, and no substitute
+retailer added to move the count. `scripts/evidence_check.py`, added by this same
+plan, is what makes that shortfall mechanically impossible to hide later.
+
+---
+
 ## Best Buy
 
 **Probed:** 2026-08-02, from danserver over a residential connection.
