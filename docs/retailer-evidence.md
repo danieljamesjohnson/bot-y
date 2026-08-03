@@ -32,6 +32,43 @@ after 60 days**, after which the gate goes red again. `evidence_check --phase
 --strict` refuses it outright: a phase does not get to close on a retailer
 nobody read.
 
+There is a fourth anchored line form, and unlike the three above it is not a
+verdict — it is the evidence a verdict of REFUSED has to rest on:
+
+```
+**Refusal observed (rung N):** <what came back>
+```
+
+for N in 1–3, one whole line, and **the body must carry a measurement**: an HTTP
+status code, a byte count, or one of `boty.fetch.BLOCK_PHRASES` quoted. A body
+that is only prose is rejected with its own message, because the point of the
+line is the part that could only have come from an attempt. `scripts/evidence_check.py`
+rule 6 requires **at least one** wherever a `**Verdict: REFUSED**` stands, and
+**at least two including one at rung 3** for the two retailers in `HARD_TWO`
+(`target` and `amazon`) — those are the two whose landing takes the count to
+five, so dropping one takes a walked ladder rather than one failed request.
+
+That rule exists because REQ-07a — *a retailer is dropped only when it is
+technically unreachable, and the reason recorded is the observation, not a
+policy reading* — was a sentence in a requirements document and nothing read it.
+Phase 3 dropped **two** retailers on a desk review of their written terms, made
+zero product-page requests to either, and every gate in this tree stayed green.
+
+Two things rule 6 deliberately does **not** do. It says nothing about REACHABLE
+sections, which may legitimately carry refusal observations from a rung that
+failed on the way to one that worked — § Target carries two and § Amazon one,
+and all three are historical. And it says nothing about UNPROBED sections, which
+are *already* saying nobody has looked; demanding an observation from one would
+make the honest state unrepresentable, which is the failure this file's third
+verdict form exists to prevent.
+
+Note that a refusal observation is evidence about a request, not a verdict about
+a retailer: § Target's rung-1 line reads *"not a block — **HTTP 200**"* and
+records that Target did **not** refuse us. The body predicate cannot catch that
+— it has a status code and two byte counts — and nothing except rule 6's
+REFUSED-only scope keeps it harmless. Widen that scope and it becomes a shipped
+falsehood; a test in `tests/test_evidence_check.py` pins exactly this.
+
 Anything reached by browser is flagged DEGRADED in the support matrix and in
 `boty check` output, per the locked decision in `.planning/phases/02-five-retailers-green/02-CONTEXT.md`.
 
@@ -332,11 +369,10 @@ Two `boty capture-fixture` calls were made **12 s apart** rather than the ≥ 20
 the budget above requires. The second came back like this, from the same URL
 that had served 1.89 MB of product page eight minutes earlier:
 
-**Refusal observed (rung 1):** `https://www.amazon.com/dp/B0BX2P43PX` — **HTTP
-200**, **3,781 B**, `<title>Amazon.com</title>`, body reading *"Click the button
-below to continue shopping"* over a form posting to
-`/errors_page/validateCaptcha`, plus Amazon's own notice *"To discuss automated
-access to Amazon data please contact api-services-support@amazon.com."*
+**Refusal observed (rung 1):** `https://www.amazon.com/dp/B0BX2P43PX` — **HTTP 200**, **3,781 B**, `<title>Amazon.com</title>`, body reading "Click the button below to continue shopping" over a form posting to `/errors_page/validateCaptcha`, plus Amazon's own notice "To discuss automated access to Amazon data please contact api-services-support@amazon.com."
+
+(One line, for the reason § Pokémon Center records below: rule 6's regex is
+line-anchored, so a measurement that wraps is a measurement it cannot read.)
 
 **That line is historical, and it records a cadence throttle rather than a
 policy wall.** It is kept because it is a measurement and because it is the only
@@ -1044,6 +1080,32 @@ Four separate refusals across two products, two URL forms, two transports and
 two different WAF vendors. This is not rate limiting and not a one-off: the
 homepage passed rung 1 **twice**, before and between the refusals, so this host
 is not IP-banned. The wall is on `/product/*` and it is deliberate.
+
+#### The same four refusals, in the anchored form rule 6 reads
+
+Added 2026-08-03 by 03.1-03. **Nothing new is recorded here** — every status
+code, byte count and matched phrase below is lifted from the table directly
+above, which has been in this document since 2026-08-02. What changed is that
+`scripts/evidence_check.py` rule 6 now requires a retailer recorded `REFUSED` to
+carry at least one machine-readable observation, and Pokémon Center's were
+prose. A finding a gate cannot read is a finding the next gate will not check.
+
+Each is a single line, deliberately: rule 6's regex is line-anchored, so a
+measurement that wraps onto the next line is a measurement the gate cannot see.
+
+**Refusal observed (rung 1):** `/product/716E11935/detective-pikachu-returns` cold — **HTTP 403**, 858 B, `server: CloudFront`, a DataDome JS challenge (`var dd={'rt':'i','cid':…}`).
+
+**Refusal observed (rung 1):** `/product/715e10557/pokemon-go-plus` cold — **HTTP 200**, 6,183 B, matched the `pardon our interruption` block phrase. Imperva. Byte-identical to the warmed attempt on a different product, which is what makes it a wall rather than a hiccup.
+
+**Refusal observed (rung 3):** `/product/715e10557/pokemon-go-plus` rendered under headless Chrome — matched the `request unsuccessful` block phrase, and `boty capture-fixture` refused to write it to disk.
+
+**Refusal observed (rung 3):** the same URL after a 120 s backoff — refused again, 1,085 B, an `_Incapsula_Resource` iframe, no title, zero `ld+json`, no `__NEXT_DATA__`.
+
+Pokémon Center is **not** one of the `HARD_TWO`, so rule 6 asks it only for one
+observation. It clears the higher bar those two are held to anyway — four
+observations across both rungs, two of them at rung 3 — which is worth saying
+out loud, because it is the standard the hard two's refusal branches were
+written to and the only retailer in this file that has ever actually met it.
 
 ### The decisive reason is the Terms of Use, not the wall
 

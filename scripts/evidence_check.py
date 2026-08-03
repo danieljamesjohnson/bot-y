@@ -123,6 +123,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from boty.config import Config  # noqa: E402
+from boty.fetch import BLOCK_PHRASES  # noqa: E402
 
 #: Every retailer in the Retailer Scope table of `.planning/ROADMAP.md`, mapping
 #: the `Watch.retailer` key to its display name.
@@ -247,6 +248,56 @@ UNPROBED_EXAMPLE = "**Verdict: UNPROBED (scoped YYYY-MM-DD)**"
 #: date in the verdict itself, so it cannot be reset by touching the file.
 UNPROBED_GRACE_DAYS = 60
 
+#: A refusal observation, anchored to a whole line — rule 6's grammar.
+#:
+#: Anchored for the same reason `VERDICT_RE` is, and it is not a theoretical
+#: reason here: this file documents its own vocabulary, so the paragraph in the
+#: evidence log's preamble *describing* this line form would satisfy a substring
+#: rule. `strip_fences` removes the worked example; the anchor removes the
+#: prose.
+#:
+#: Capturing group 1 is the BODY, which is where the reason actually lives —
+#: see `_MEASURED`.
+REFUSAL_RE = re.compile(r"^\*\*Refusal observed \(rung ([1-3])\):\*\* (.+)$", re.MULTILINE)
+
+#: The literal form, for failure messages, on the same principle as
+#: `UNPROBED_EXAMPLE`: a message describing a grammar without showing it makes
+#: the reader guess at the spacing, and the spacing is load-bearing.
+REFUSAL_EXAMPLE = "**Refusal observed (rung N):** …"
+
+#: A measurement in a refusal observation's body: a status code, a byte count,
+#: or a matched `BLOCK_PHRASES` entry.
+#:
+#: THIS PREDICATE IS THE WHOLE OF RULE 6, AND THE ANCHOR ALONE IS NOT.
+#: `^\*\*Refusal observed \(rung [1-3]\):\*\* .+$` was the obvious line form and
+#: it is the wrong one: `.+` accepts anything, so a gate written to make REQ-07a
+#: mechanical would be satisfiable by typing the sentence. That is the same
+#: failure this whole file exists to close, one rule further along — 02-04's
+#: retailer-count clause was also satisfiable by a document that recorded
+#: nothing.
+#:
+#: So the body has to carry something that could only come from an attempt. Not
+#: proof — a determined author can type `HTTP 503` as easily as a sentence — but
+#: a claim specific enough to be checkable against a retailer, and specific
+#: enough that writing it is a decision rather than a phrasing.
+#:
+#: AND IT IS NOT SUFFICIENT ON ITS OWN EITHER, which is worth stating here
+#: because the counterexample is in this repository. § Target carries
+#:
+#:     **Refusal observed (rung 1):** not a block — **HTTP 200**, 314,757 B …
+#:
+#: — an anchored refusal observation whose body records that Target was *not*
+#: refused. It has a status code AND two byte counts and clears this predicate
+#: comfortably. What keeps it harmless is the other half of rule 6: the rule
+#: reads only REFUSED sections, and Target is REACHABLE.
+#: `test_the_shipped_target_non_refusal_line_is_only_harmless_because_of_the_section_scope`
+#: pins exactly that, so whoever widens rule 6's scope finds out from a red test
+#: rather than from a shipped falsehood.
+_MEASURED = (
+    re.compile(r"HTTP\s*\d{3}"),
+    re.compile(r"\b\d[\d,]*\s*(?:B|bytes)\b"),
+)
+
 _HEADING_RE = re.compile(r"^## (.+)$", re.MULTILINE)
 
 #: A fenced code block, opened and closed by the SAME fence marker.
@@ -363,6 +414,63 @@ def unprobed_dates(body: str) -> list[date]:
         except ValueError:
             continue
     return dates
+
+
+def _cites_a_measurement(refusal_body: str) -> bool:
+    """Does this refusal observation's body carry something that was measured?
+
+    A status code, a byte count, or one of the challenge phrases
+    `boty.fetch.get` actually matches on. The block phrases are imported from
+    the transport rather than retyped here for the reason `check_phase` reads
+    the config through `Config.load`: a gate that knows a different list from
+    the code would enforce a rule about strings nobody matches on, and the two
+    would drift the first time a phrase was added — which happened twice in
+    Phase 2 and again in 03.1-03.
+    """
+    if any(pattern.search(refusal_body) for pattern in _MEASURED):
+        return True
+    lowered = refusal_body.lower()
+    return any(phrase in lowered for phrase in BLOCK_PHRASES)
+
+
+def refusal_observations(body: str) -> list[str]:
+    """Every well-formed, MEASURED refusal observation in a section body.
+
+    Both halves are required — see `REFUSAL_RE` for the anchor's reason and
+    `_MEASURED` for the predicate's. A line clearing the anchor and failing the
+    predicate is deliberately NOT returned here and is reported separately by
+    `unmeasured_refusal_lines`, because the two need different fixes: one says
+    "record what came back", the other says "you did record something, but it is
+    a sentence rather than an observation".
+    """
+    return [
+        match.group(0)
+        for match in REFUSAL_RE.finditer(body)
+        if _cites_a_measurement(match.group(2))
+    ]
+
+
+def unmeasured_refusal_lines(body: str) -> list[str]:
+    """Refusal observations that are prose: right shape, nothing measured.
+
+    Its own function and its own failure message rather than silence, because a
+    line that looks exactly like the thing the gate asked for and is ignored by
+    it is worse than no line — the author believes they satisfied the rule.
+    """
+    return [
+        match.group(0)
+        for match in REFUSAL_RE.finditer(body)
+        if not _cites_a_measurement(match.group(2))
+    ]
+
+
+def refusal_rungs(body: str) -> set[str]:
+    """Which rungs the MEASURED refusal observations name."""
+    return {
+        match.group(1)
+        for match in REFUSAL_RE.finditer(body)
+        if _cites_a_measurement(match.group(2))
+    }
 
 
 def all_verdict_lines(body: str) -> list[str]:
@@ -609,6 +717,80 @@ def check_phase(
                 "UNPROBED means nobody has looked yet, and a shipped detector is somebody having "
                 "looked — one of the two is stale. Record what the probe found and give the "
                 "section a settled verdict, or drop the watch."
+            )
+
+    # RULE 6 — a refusal must cite an observation. REQ-07a, made mechanical.
+    #
+    # Rules 1-5 are all about the retailer COUNT: whether it drifts up, whether
+    # it drifts down, whether two places in the tree disagree about it. None of
+    # them looks at *why* a retailer is absent, and Phase 3 is the proof that
+    # this mattered: it dropped two retailers on a desk review of their written
+    # terms, made zero product-page requests to either, and every gate in this
+    # tree stayed green. REQ-07a already said a retailer is dropped only when it
+    # is technically unreachable — it was a sentence in a requirements document
+    # and nothing read it.
+    #
+    # WHAT THIS RULE DOES NOT ASK ABOUT, and each omission is deliberate:
+    #
+    #   1. REACHABLE sections. A section may legitimately carry refusal
+    #      observations from a rung that failed on the way to one that worked —
+    #      § Target carries two, § Amazon carries one — and reading them here
+    #      would punish the most thorough records in the file. Worse, Target's
+    #      rung-1 line says "not a block — HTTP 200": it is an anchored refusal
+    #      observation recording a NON-refusal, and it is harmless only because
+    #      of this scope. See `_MEASURED`.
+    #   2. UNPROBED sections. An UNPROBED verdict is *saying* nobody has looked,
+    #      and it already carries a dated, expiring claim. Demanding an
+    #      observation from it would make the honest state unrepresentable,
+    #      which is the exact failure mode `UNPROBED_RE` was added against.
+    #   3. Retailers with no section, or with more than one. Rule 2 and
+    #      `check_retailer` respectively already word those, and reporting the
+    #      same defect twice trains a reader to skim.
+    for retailer, display in sorted(ROADMAP_RETAILERS.items()):
+        found = sections_for(display, sections)
+        if len(found) != 1 or verdict_lines(found[0]) != [REFUSED]:
+            continue
+
+        prose_only = unmeasured_refusal_lines(found[0])
+        observed = refusal_observations(found[0])
+
+        if prose_only:
+            problems.append(
+                f"rule 6 (a refusal must cite an observation): {evidence_path} records "
+                f"{len(prose_only)} refusal observation(s) for {display} whose body cites no "
+                f"status code, byte count or matched block phrase — e.g. `{prose_only[0]}`. "
+                "The anchor is the easy half; the measurement is the half that could only come "
+                "from an attempt. A gate that can be satisfied by typing the sentence is not a "
+                "gate, which is the defect this whole file was written after. Quote what came "
+                "back: `HTTP 503`, `6,183 B`, or the `BLOCK_PHRASES` entry that matched."
+            )
+
+        if not observed:
+            problems.append(
+                f"rule 6 (a refusal must cite an observation): {evidence_path} records "
+                f"`{REFUSED}` for {display} and carries no `{REFUSAL_EXAMPLE}` line. REQ-07a: a "
+                "retailer is dropped only when it is technically unreachable, and the reason "
+                "recorded is the observation, not a policy reading. Phase 3 dropped two "
+                "retailers without making a single product-page request and every gate in this "
+                "tree stayed green. Either record what came back when it was tried, or stop "
+                "recording a refusal."
+            )
+        elif retailer in HARD_TWO and (len(observed) < 2 or "3" not in refusal_rungs(found[0])):
+            # The higher bar, and the reason it exists rather than being left to
+            # the plans that write these branches: both retailer plans in 03.1
+            # specify the same refusal branch — two spaced rung-1 attempts plus
+            # one rung-3 attempt — and without this the branch is bounded by a
+            # promise. A single `**Refusal observed (rung 1):** 503` would
+            # otherwise satisfy a rule whose branch demanded a walked ladder.
+            rungs = ", ".join(sorted(refusal_rungs(found[0]))) or "none"
+            problems.append(
+                f"rule 6 (a refusal must cite an observation): {display} is one of the hard two "
+                f"({', '.join(HARD_TWO)}) and is recorded `{REFUSED}`, but {evidence_path} "
+                f"carries {len(observed)} refusal observation(s), at rung(s) {rungs}. A hard-two "
+                "refusal needs at least 2, including at least one at rung 3. These are the two "
+                "retailers whose landing takes the count to five, so dropping one is the most "
+                "consequential thing this document can say — it takes a walked ladder, not one "
+                "failed request. If a rung was not walked, the honest verdict is not a refusal."
             )
 
     return problems
