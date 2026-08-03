@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: Phase complete — ready for verification
+status: Ready to plan
 stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-08-03T05:18:41.424Z"
+last_updated: "2026-08-03T06:05:23.078Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 4
@@ -26,12 +26,12 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 ## Status
 
 **Milestone:** v1.0
-**Phase:** 3 of 4 (the hard two)
-**Plan:** 3 of 3
+**Phase:** 4 of 4 (open source ready)
+**Plan:** Not started
 **Last session:** 2026-08-03T05:18:41.420Z
 **Stopped At:** Completed 03-03-PLAN.md
 **Last Activity:** 2026-08-03
-**Last Activity Description:** 03-03 complete — Phase 3 closed. REQ-08 measured rather than assumed (`duration_seconds` published by every pass: 61.4 s manual, 35.0 s from the service, against a 120 s budget at 10 watches / 4 retailers); `evidence_check.py --phase` and a new `tests/test_support_matrix.py` now run inside `make verify`; `VERIFY: PASS` unqualified under the service's own `EnvironmentFile`; criterion 5 recorded UNMET at four with nothing padded; and CR-01 durability closed — 0 zombies and 0 leaked browser profiles, flat across 41 min and 7 cycles
+**Last Activity Description:** Phase 03 complete, transitioned to Phase 4
 **Resume File:** None
 **Next command:** `/gsd-verify-phase 3` — every Phase 3 criterion now has an answer (5 is honestly unmet, the rest are met) and `02-VERIFICATION.md`'s open CR-01 human item can be marked answered. Then **halt before Phase 4**: the PyPI publish and the v1.0.0 tag are outward-facing and Dan's to trigger
 
