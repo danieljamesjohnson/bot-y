@@ -71,6 +71,20 @@ BROWSER_PATH_ENV = "BOTY_BROWSER_PATH"
 #: is the escape hatch for when none of those is available.
 NO_SANDBOX_ENV = "BOTY_BROWSER_NO_SANDBOX"
 
+#: Substrings that mark a failure as "this HOST cannot run rung 3", as opposed
+#: to "the retailer refused us" or "our extractor broke".
+#:
+#: They live here, next to the messages they match, and are imported by
+#: `scripts/control_check.py` rather than retyped there. The distinction is
+#: load-bearing for the gate: a missing optional dependency reported as a
+#: detector failure sends a contributor to re-capture a fixture for a page that
+#: is fine. Duplicating the strings would let the two drift apart, and the
+#: symptom of that drift is the wrong diagnosis coming back — silently, because
+#: a classifier that stops matching just returns False.
+MISSING_EXTRA = "the browser transport needs the optional extra"
+MISSING_BINARY = "no Chrome/Chromium binary found"
+HOST_GAPS = (MISSING_EXTRA, MISSING_BINARY)
+
 #: Tried in order when the env var is unset. Covers the usual Debian/Ubuntu,
 #: Fedora and upstream-Google package names.
 _CANDIDATES = (
@@ -334,12 +348,12 @@ def fetch_rendered(url: str, *, timeout: float = 45.0, settle_seconds: float = 3
         html = _render(url, executable, timeout, settle_seconds)
     except ImportError as exc:
         raise FetchError(
-            f"the browser transport needs the optional extra: "
+            f"{MISSING_EXTRA}: "
             f"pip install 'bot-y[browser]'  ({type(exc).__name__}: {exc})"
         ) from exc
     except FileNotFoundError as exc:
         raise FetchError(
-            f"no Chrome/Chromium binary found — set {BROWSER_PATH_ENV} to one "
+            f"{MISSING_BINARY} — set {BROWSER_PATH_ENV} to one "
             f"({type(exc).__name__}: {exc})"
         ) from exc
     except asyncio.TimeoutError as exc:

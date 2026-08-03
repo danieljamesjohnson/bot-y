@@ -189,6 +189,147 @@ def test_a_control_not_reading_in_stock_fails(
 
 
 # --------------------------------------------------------------------------
+# "This host cannot run that control" is not "that detector is broken"
+# --------------------------------------------------------------------------
+
+
+def _stub_failing_checker(monkeypatch: pytest.MonkeyPatch, detail: str) -> None:
+    """A checker whose control comes back UNKNOWN with a given detail."""
+
+    def _make(cfg: object) -> Callable[[Watch], Result]:
+        def _check(watch: Watch) -> Result:
+            return Result(watch, Availability.UNKNOWN, detail=detail)
+
+        return _check
+
+    monkeypatch.setattr(control_check, "_make_checker", _make)
+
+
+@pytest.mark.parametrize("gap", control_check.HOST_GAPS)
+def test_a_control_that_cannot_run_on_this_host_is_not_a_detector_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gap: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A fresh clone that follows the README failed the gate, and was told the
+    extractor had broken.
+
+    The shipped config carries a mandatory Best Buy control whose only
+    credential-free path is rung 3. Rung 3 needs the `browser` extra *and* a
+    Chrome binary, and neither comes with `dev` — deliberately: nodriver is
+    AGPL-3.0 to this project's MIT and a contributor working on the HTTP
+    retailers must never be made to pull a browser stack (recorded in STATE.md).
+    So a contributor runs `pip install -e '.[dev]'`, runs `make verify`, and is
+    told "This is a statement about the DETECTOR... the extractor has stopped
+    matching", with instructions to re-capture a fixture.
+
+    That diagnosis is wrong in exactly the way this phase already fixed twice,
+    for the Imperva and the Akamai walls: a refusal that has nothing to do with
+    our parser, reported as our parser. Here it is not even a refusal — it is a
+    missing optional dependency on the machine doing the asking.
+    """
+    _stub_failing_checker(monkeypatch, f"fetch failed: {gap} (ImportError: no module)")
+    config = _write_config(tmp_path, [("pikachu", "bestbuy", True)])
+
+    rc = control_check.check_controls(config, retries=0)
+    out = capsys.readouterr()
+
+    assert rc == control_check.INCOMPLETE, (
+        f"exit {rc}: a control that could not run on this host was reported as "
+        "a detector failure"
+    )
+    assert "statement about the DETECTOR" not in out.err, (
+        "the gate still blames the extractor for a missing optional dependency"
+    )
+    assert "extractor has stopped matching" not in out.err
+    assert "capture-fixture" not in out.err, (
+        "still telling the reader to re-capture a fixture for a page it never fetched"
+    )
+    assert "THIS HOST" in out.out + out.err, "the real cause is not named"
+    assert "[browser]" in out.err, "the actionable next step is not given"
+
+
+def test_a_real_detector_failure_still_fails_even_beside_a_host_gap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The direction that must not regress while fixing the other one.
+
+    If a host gap downgraded the whole run, one missing Chrome would mask a
+    genuinely broken GameStop detector — turning a fix for a false red into a
+    machine for false greens, which is far worse than what it replaced.
+    """
+
+    def _make(cfg: object) -> Callable[[Watch], Result]:
+        def _check(watch: Watch) -> Result:
+            if watch.retailer == "bestbuy":
+                return Result(
+                    watch,
+                    Availability.UNKNOWN,
+                    detail=f"fetch failed: {control_check.HOST_GAPS[0]} (ImportError)",
+                )
+            return Result(watch, Availability.OUT_OF_STOCK, detail="ld+json: OutOfStock")
+
+        return _check
+
+    monkeypatch.setattr(control_check, "_make_checker", _make)
+    config = _write_config(
+        tmp_path, [("pikachu", "bestbuy", True), ("ps5", "gamestop", True)]
+    )
+
+    assert control_check.check_controls(config, retries=0) == 1
+
+
+def test_a_blocked_retailer_is_still_a_failure_not_a_host_gap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Being turned away by a retailer is the monitor not working.
+
+    The script's own docstring draws this line: "Connectivity present, but a
+    control does not read IN_STOCK — including a fetch failure or a bot wall
+    from the retailer: FAIL. Being blocked by Walmart is not an infrastructure
+    hiccup." A host-gap carve-out that swallowed bot walls would hide the exact
+    failure this gate exists to catch.
+    """
+    _stub_failing_checker(monkeypatch, "blocked: challenge page matched 'robot or human' (HTTP 200)")
+    config = _write_config(tmp_path, [("milk", "walmart", True)])
+
+    assert control_check.check_controls(config, retries=0) == 1
+
+
+def test_the_host_gap_markers_are_the_strings_the_browser_actually_produces(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Otherwise this is a carve-out that can only ever fail silently.
+
+    Classifying on prose is a bet that the prose does not drift. This closes
+    that: it drives the real `fetch_rendered` failure paths and asserts each
+    produced detail is recognised, so rewording a message in `boty.browser`
+    fails here rather than quietly restoring the wrong diagnosis.
+    """
+    from boty import browser, retailers
+    from boty.models import Watch as W
+
+    watch = W(name="c", retailer="bestbuy", target="6216393", control=True)
+
+    for exc in (
+        ImportError("No module named 'nodriver'"),
+        FileNotFoundError("could not find a valid chrome browser binary"),
+    ):
+        monkeypatch.setattr(browser, "_render", _raiser(exc))
+        result = retailers.check_bestbuy_browser(watch)
+
+        assert control_check._is_host_gap(result), (
+            f"{result.detail!r} is not recognised as a host gap — the markers in "
+            "control_check have drifted from the messages boty.browser emits"
+        )
+
+
+def _raiser(exc: BaseException) -> Callable[..., str]:
+    def _fake(*args: object, **kwargs: object) -> str:
+        raise exc
+
+    return _fake
+
+
+# --------------------------------------------------------------------------
 # A skip is not a pass
 # --------------------------------------------------------------------------
 

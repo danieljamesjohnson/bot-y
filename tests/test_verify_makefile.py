@@ -85,6 +85,24 @@ def test_a_skipped_live_check_does_not_produce_an_unqualified_pass(tmp_path: Pat
     assert "live controls were NOT run" in proc.stdout
 
 
+def test_controls_that_could_not_run_here_pass_but_say_so(tmp_path: Path) -> None:
+    """Exit 4: some controls ran and passed, others could not run on this host.
+
+    The fresh-clone case. Exiting non-zero there told contributors their
+    extractor was broken when the machine simply had no Chrome; exiting 0 with
+    no caveat would claim a detector was verified that was never reached. It
+    needs its own verdict for the same reason the offline skip does, and it must
+    not borrow the offline wording — "live controls were NOT run" is false when
+    three of four ran and passed.
+    """
+    proc = _run(tmp_path, "verify", control_rc=4)
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "INCOMPLETE" in proc.stdout
+    assert "VERIFY: FAIL" not in proc.stdout
+    assert "OFFLINE" not in proc.stdout, "an incomplete run is not an offline run"
+
+
 def test_a_failing_live_check_fails_verify(tmp_path: Path) -> None:
     """A skip must not be confused with a failure in the other direction."""
     proc = _run(tmp_path, "verify", control_rc=1)

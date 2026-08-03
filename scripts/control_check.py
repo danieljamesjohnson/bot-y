@@ -61,6 +61,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from boty import fixtures  # noqa: E402
+from boty.browser import HOST_GAPS  # noqa: E402
 from boty.cli import _make_checker  # noqa: E402
 from boty.config import Config  # noqa: E402
 from boty.models import Availability, Result, Watch  # noqa: E402
@@ -74,6 +75,25 @@ STALE_AFTER_DAYS = 90
 #: report a green it has not earned. Not 1 or 2 either — those mean a control
 #: failed and the config is wrong respectively, and both are real findings.
 SKIPPED = 3
+
+#: Exit code for "some controls ran and passed; others could not run on THIS
+#: HOST". Its own code for the same reason SKIPPED has one.
+#:
+#: The case is a fresh clone. `config/products.yaml` ships a mandatory Best Buy
+#: control whose only credential-free path is rung 3, and rung 3 needs the
+#: `browser` extra plus a Chrome binary — neither of which comes with `dev`,
+#: deliberately, because nodriver is AGPL-3.0 to this project's MIT and a
+#: contributor working on the HTTP retailers must not be made to pull a browser
+#: stack. So `pip install -e '.[dev]' && make verify` on a networked machine
+#: used to exit 1 and blame the extractor.
+#:
+#: Not 1, because nothing is broken and failing here contradicts both the
+#: "`make verify` exits 0 on a healthy tree" criterion and the works-from-a-
+#: fresh-clone NFR. Not 0, because the detectors that could not run were not
+#: verified, and this project's whole argument is that "I could not tell" must
+#: never be reported as "fine". Not 3, because that says *nothing* ran and this
+#: says *some* did — the Makefile prints a different verdict for each.
+INCOMPLETE = 4
 
 #: Neutral hosts for the connectivity pre-flight. Raw IPs so a broken resolver
 #: is caught too, and two providers so one being down is not read as "offline".
@@ -103,6 +123,22 @@ def have_connectivity(timeout: float = 3.0) -> bool:
 
 def _is_transport_failure(result: Result) -> bool:
     return result.detail.lower().startswith(_TRANSPORT_PREFIXES)
+
+
+def _is_host_gap(result: Result) -> bool:
+    """True if this control could not run *here*, whatever the retailer is doing.
+
+    Narrow on purpose. It matches only the two failures that are facts about the
+    machine running the check — no `browser` extra installed, no Chrome binary
+    on the box — and the markers come from `boty.browser` itself rather than
+    being retyped, so a reworded message cannot silently stop matching.
+
+    Everything else stays a failure, including a bot wall. The script's own
+    policy is that "being blocked by Walmart is not an infrastructure hiccup, it
+    is the monitor not working", and a carve-out broad enough to swallow a
+    refusal would hide the exact thing this gate exists to catch.
+    """
+    return any(gap in result.detail for gap in HOST_GAPS)
 
 
 def _format(result: Result) -> str:
@@ -158,8 +194,17 @@ def check_controls(config_path: str, retries: int = 1) -> int:
         # One retry, and only for transport failures. A control that parsed
         # cleanly and said OUT_OF_STOCK will say it again; retrying that would
         # just be a slower way to get the same true answer.
+        # `not _is_host_gap`: a missing extra or a missing Chrome binary will
+        # not have appeared three seconds later. Retrying it just adds a
+        # confusing "retrying..." line and a sleep to every run on a host that
+        # is never going to have the browser rung.
         attempts = retries
-        while result.availability is Availability.UNKNOWN and _is_transport_failure(result) and attempts > 0:
+        while (
+            result.availability is Availability.UNKNOWN
+            and _is_transport_failure(result)
+            and not _is_host_gap(result)
+            and attempts > 0
+        ):
             attempts -= 1
             print(f"    retrying {watch.retailer}/{watch.name}: {result.detail[:60]}")
             time.sleep(3)
@@ -171,6 +216,46 @@ def check_controls(config_path: str, retries: int = 1) -> int:
     if not failing:
         print(f"control check: PASS — {len(results)}/{len(results)} controls in stock")
         return 0
+
+    # Split before judging. A control that could not run on this host says
+    # nothing at all about the detector it was supposed to verify, and the
+    # message below — "the extractor has stopped matching", go re-capture a
+    # fixture — would send a contributor to debug a page that is fine. That is
+    # the same misattribution this phase already fixed twice for bot walls, one
+    # layer further out: the refusal is not even a retailer's, it is this
+    # machine's missing optional dependency.
+    gaps = [r for r in failing if _is_host_gap(r)]
+    real = [r for r in failing if r not in gaps]
+
+    if gaps:
+        sys.stdout.flush()
+        print("", file=sys.stderr)
+        print(
+            f"control check: {len(gaps)}/{len(results)} control(s) could not run on THIS HOST",
+            file=sys.stderr,
+        )
+        for r in gaps:
+            print(f"    {r.watch.retailer}/{r.watch.name}: {r.detail}", file=sys.stderr)
+        print(
+            "\n  This says nothing about the DETECTOR. The browser rung (rung 3) needs\n"
+            "  the optional `browser` extra and a Chrome/Chromium binary, and neither\n"
+            "  ships with `dev` — nodriver is AGPL-3.0 while this project is MIT, so\n"
+            "  it is never installed on your behalf. See the README, 'The browser rung'.\n"
+            "\n    .venv/bin/pip install -e '.[browser]'\n"
+            "    export BOTY_BROWSER_PATH=/path/to/chrome   # only if none is on PATH\n",
+            file=sys.stderr,
+        )
+
+    if not real:
+        ran = len(results) - len(gaps)
+        print(
+            f"control check: INCOMPLETE — {ran}/{len(results)} control(s) ran, all in stock; "
+            f"{len(gaps)} could not run here",
+            file=sys.stderr,
+        )
+        return INCOMPLETE
+
+    failing = real
 
     # Order matters when make pipes this: stdout is block-buffered to a pipe
     # while stderr is not, so without this flush the explanation below appears

@@ -83,6 +83,15 @@ mutation: check-venv
 # exits 0". So the last three stages share one shell: `skipped` has to survive
 # from the control check down to the verdict, and make gives every recipe LINE
 # its own shell. Every failure path still exits non-zero explicitly.
+#
+# Exit 4 is a fourth outcome, added for the same reason 3 was: it is neither a
+# pass nor a failure, and flattening it into either loses the thing worth
+# knowing. It means some controls ran and passed while others could not run on
+# THIS host — the fresh-clone case, where the Best Buy control needs the
+# optional `browser` extra and a Chrome binary that `dev` deliberately does not
+# install. Reporting that as FAIL told contributors their extractor was broken;
+# reporting it as an unqualified PASS would claim a detector was verified when
+# it was never reached. It gets its own verdict line.
 verify:
 	@echo "=== verify: tests, types, fixtures, controls, mutation ==="
 	@$(MAKE_Q) test     || { echo "VERIFY: FAIL (tests)"; exit 1; }
@@ -90,13 +99,16 @@ verify:
 	@$(MAKE_Q) fixtures || { echo "VERIFY: FAIL (fixtures)"; exit 1; }
 	@$(CONTROL_CMD); rc=$$?; \
 	 case $$rc in \
-	   0) skipped= ;; \
-	   3) skipped=yes ;; \
+	   0) verdict= ;; \
+	   3) verdict=offline ;; \
+	   4) verdict=incomplete ;; \
 	   *) echo "VERIFY: FAIL (live controls)"; exit 1 ;; \
 	 esac; \
 	 $(MAKE_Q) mutation || { echo "VERIFY: FAIL (mutation check)"; exit 1; }; \
-	 if [ -n "$$skipped" ]; then \
+	 if [ "$$verdict" = offline ]; then \
 	   echo "VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)"; \
+	 elif [ "$$verdict" = incomplete ]; then \
+	   echo "VERIFY: PASS (INCOMPLETE — some controls could not run on this host; the detectors they cover are unverified here)"; \
 	 else \
 	   echo "VERIFY: PASS"; \
 	 fi

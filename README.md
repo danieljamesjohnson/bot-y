@@ -200,6 +200,24 @@ That is how you answer "is bot-y still working" without reading any code. It
 exits **0** only if every check below passed, and prints `VERIFY: PASS` or
 `VERIFY: FAIL (<stage>)`.
 
+A green run comes in three flavours, because "everything passed" and "we could
+not check some of it" must not look the same:
+
+| Verdict | Exit | Means |
+|---|---|---|
+| `VERIFY: PASS` | 0 | Every check ran and passed |
+| `VERIFY: PASS (INCOMPLETE — ...)` | 0 | Some live controls could not run **on this host** — no `browser` extra, or no Chrome. The detectors they cover are unverified here; nothing is known to be broken |
+| `VERIFY: PASS (OFFLINE — ...)` | 0 | No outbound connectivity, so *no* live control ran. Nothing here says the retailers still work |
+| `VERIFY: FAIL (<stage>)` | non-zero | Something is actually wrong |
+
+**INCOMPLETE is the ordinary result of a fresh clone.** `config/products.yaml`
+ships a mandatory Best Buy control, and Best Buy's only credential-free path is
+rung 3 — which needs the optional `browser` extra and a Chrome binary that
+`pip install -e '.[dev]'` deliberately does not bring (nodriver is AGPL-3.0;
+see "The browser rung" above). That is a gap in *your machine*, not in the
+detector, and the gate says so instead of telling you the extractor broke.
+Install the extra if you want Best Buy covered; ignore it if you do not.
+
 | Stage | Proves |
 |---|---|
 | `test` | The offline suite still passes — no network touched, no browser started |

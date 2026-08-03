@@ -68,8 +68,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: indistinguishable from a mutation being caught, and the baseline check
 #: turns that into "nothing was proved either way". `config` is here because
 #: tests/test_config.py asserts the shipped products.yaml still loads — a
-#: guard against validation that rejects the repo's own config.
-SANDBOX_CONTENTS = ("boty", "tests", "scripts", "config", "pyproject.toml", "Makefile")
+#: guard against validation that rejects the repo's own config. `served` is here
+#: because tests/test_dashboard.py reads served/boty/index.html: the status page
+#: is the consuming half of `status.write`'s published contract, and asserting
+#: that contract at only one end is what let the page quietly stop rendering
+#: `degraded` at all.
+SANDBOX_CONTENTS = (
+    "boty", "tests", "scripts", "config", "served", "pyproject.toml", "Makefile",
+)
 
 _IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "*.egg-info")
 
