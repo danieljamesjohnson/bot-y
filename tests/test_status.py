@@ -42,9 +42,19 @@ def _result(
     return Result(watch, availability, price=54.99, detail="synthetic", rung=rung)
 
 
-def _payload(tmp_path: Path, results: list[Result]) -> dict:
+#: "this argument was not passed at all", which is a different thing from
+#: passing None. The unmeasured path has to be reachable through the helper
+#: exactly as every pre-existing caller reaches it — by omission.
+_OMITTED = object()
+
+
+def _payload(tmp_path: Path, results: list[Result], duration_seconds: object = _OMITTED) -> dict:
     path = tmp_path / "status.json"
-    write(path, results, [Health("bestbuy", ok=True)])
+    health = [Health("bestbuy", ok=True)]
+    if duration_seconds is _OMITTED:
+        write(path, results, health)
+    else:
+        write(path, results, health, duration_seconds=duration_seconds)  # type: ignore[arg-type]
     return json.loads(path.read_text())
 
 
@@ -86,6 +96,69 @@ def test_an_api_reading_serialises_as_api_and_not_degraded(tmp_path: Path) -> No
 
     assert entry["rung"] == "api"
     assert entry["degraded"] is False
+
+
+# --------------------------------------------------------------------------
+# REQ-08: how long the pass took
+# --------------------------------------------------------------------------
+
+
+def test_a_measured_pass_publishes_its_duration(tmp_path: Path) -> None:
+    """REQ-08 gives a two-minute budget, so the number has to be readable.
+
+    Before this key existed the only figure anybody had was a hand-timed 40 s
+    in a plan summary. A budget nobody can read after the fact is a budget
+    asserted rather than measured.
+    """
+    payload = _payload(tmp_path, [_result()], duration_seconds=41.7)
+
+    assert payload["duration_seconds"] == 41.7
+
+
+def test_an_unmeasured_pass_publishes_null_rather_than_zero(tmp_path: Path) -> None:
+    """`None` means "nobody timed this pass", which is not "it took no time".
+
+    The same three-valued honesty `Availability` is built on, applied to a
+    number: a missing measurement that serialised as `0` would read off the
+    dashboard as the fastest check ever recorded.
+    """
+    payload = _payload(tmp_path, [_result()])
+
+    assert "duration_seconds" in payload, "the key must always be present, even unmeasured"
+    assert payload["duration_seconds"] is None
+
+
+def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path) -> None:
+    """This file is a contract with the dashboard. Adding to it is additive.
+
+    `served/boty/index.html` reads these keys verbatim and `tests/test_dashboard.py`
+    pins the consuming end, so a reordered or renamed key here is a page that
+    silently stops saying anything.
+    """
+    measured = _payload(tmp_path, [_result(rung=Rung.BROWSER)], duration_seconds=1.5)
+    unmeasured = _payload(tmp_path, [_result(rung=Rung.BROWSER)])
+
+    for payload in (measured, unmeasured):
+        assert set(payload) == {"updated", "healthy", "retailers", "watches", "duration_seconds"}
+        (entry,) = payload["watches"]
+        assert set(entry) == {
+            "name",
+            "retailer",
+            "availability",
+            "price",
+            "detail",
+            "url",
+            "control",
+            "alertable",
+            "rung",
+            "degraded",
+        }
+        assert entry["rung"] == "browser"
+        assert entry["degraded"] is True
+        assert payload["healthy"] is True
+        assert payload["retailers"] == [
+            {"retailer": "bestbuy", "ok": True, "reason": "", "failing_controls": []}
+        ]
 
 
 # --------------------------------------------------------------------------

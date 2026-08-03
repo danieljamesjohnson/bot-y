@@ -19,6 +19,8 @@ cycle *after* something went wrong.
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -293,6 +295,84 @@ def test_a_failing_notifier_cannot_stop_the_loop_giving_up(
     )
 
     assert rc == 1
+
+
+# --------------------------------------------------------------------------
+# REQ-08: every pass says how long it took
+# --------------------------------------------------------------------------
+
+
+def _check_config(tmp_path: Path) -> Path:
+    """A one-watch config whose state and status land in `tmp_path`.
+
+    `status_path` matters: without it `boty check` would write over the real
+    `served/boty/status.json` that the deployed dashboard serves, so running
+    the test suite would clobber the live monitor's published state.
+    """
+    config = tmp_path / "products.yaml"
+    config.write_text(
+        "settings:\n"
+        f"  state_path: {tmp_path / 'state.json'}\n"
+        f"  status_path: {tmp_path / 'status.json'}\n"
+        "watches:\n"
+        "  - name: goplusplus\n"
+        "    retailer: gamestop\n"
+        "    target: https://x/1\n",
+        encoding="utf-8",
+    )
+    return config
+
+
+def _offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Route every watch to a synthetic result, so nothing touches the network."""
+    monkeypatch.setattr(cli, "_make_checker", lambda cfg: _checker(Availability.OUT_OF_STOCK))
+
+
+def test_check_prints_how_long_the_pass_took(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`boty check` is the human surface for REQ-08's two-minute budget.
+
+    The JSON key below is the machine one. Both are cheap, and a budget whose
+    only reading lives in a served file is one nobody checks while watching a
+    pass run.
+    """
+    _offline(monkeypatch)
+
+    assert cli.main(["check", "-c", str(_check_config(tmp_path))]) == 0
+
+    out = capsys.readouterr().out
+    assert "1 watch" in out
+    assert "1 retailer" in out
+    assert re.search(r"\d+\.\d\s*s", out), f"no elapsed time printed:\n{out}"
+
+
+def test_check_publishes_the_time_it_measured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real pass publishes a real number, not the null of an untimed one."""
+    _offline(monkeypatch)
+
+    cli.main(["check", "-c", str(_check_config(tmp_path))])
+
+    published = json.loads((tmp_path / "status.json").read_text())["duration_seconds"]
+    assert isinstance(published, float), f"nothing measured: {published!r}"
+    assert published > 0
+
+
+def test_a_watch_cycle_publishes_a_duration_too(cfg: Config, sent: dict[str, list]) -> None:
+    """The dashboard's number must stay current between manual checks.
+
+    `watch` is what actually runs in production; if only `boty check`
+    published a duration, the served figure would be whatever a human last
+    measured by hand rather than what the service is doing now.
+    """
+    state = State.load(cfg.state_path)
+
+    cli.watch_loop(cfg, _checker(Availability.OUT_OF_STOCK), state, cycles=1, sleep=lambda s: None)
+
+    published = json.loads(cfg.status_path.read_text())["duration_seconds"]
+    assert isinstance(published, float) and published > 0, f"cycle published {published!r}"
 
 
 def test_watch_refuses_to_start_with_nothing_to_notify(
