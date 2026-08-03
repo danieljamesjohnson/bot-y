@@ -1093,23 +1093,60 @@ def test_no_retailer_is_configured_without_a_page_we_have_actually_read() -> Non
 # --------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_EVIDENCE_PATH = _REPO_ROOT / "docs" / "retailer-evidence.md"
-_REFUSED = "**Verdict: REFUSED**"
 
 
-def _target_section(evidence_text: str) -> str:
-    """The body of the one `## Target…` section, or raise saying it is missing.
+def _load_evidence_check() -> object:
+    """Import `scripts/evidence_check.py` by path — `scripts/` is not a package.
 
-    Prefix match on the heading, the same rule `scripts/evidence_check.py` uses,
-    because the heading carries a parenthetical of the domain probed.
+    The same `spec_from_file_location` idiom `tests/test_evidence_check.py` and
+    `tests/test_support_matrix.py` use. This file used to carry its own splitter
+    and its own verdict test instead, and the two implementations had already
+    drifted apart in both dimensions at once — see WR-04 in `03-REVIEW.md`.
     """
-    bodies = [
-        body
-        for body in evidence_text.split("\n## ")[1:]
-        if body.startswith("Target")
-    ]
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "evidence_check_for_target_guard", _REPO_ROOT / "scripts" / "evidence_check.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_EVIDENCE = _load_evidence_check()
+_EVIDENCE_PATH = _REPO_ROOT / "docs" / "retailer-evidence.md"
+_REFUSED: str = _EVIDENCE.REFUSED  # type: ignore[attr-defined]
+
+
+def _target_verdict(evidence_text: str) -> str:
+    """The one ANCHORED verdict line of the one `## Target…` section.
+
+    WHY THIS IS NOT `_REFUSED in _target_section(text)`, WHICH IS WHAT IT WAS.
+
+    The shipped Target section contains the exact string `**Verdict: REFUSED**`
+    three times: once as the machine-readable verdict line, and twice inside
+    prose explaining the grammar ("So the verdict is `**Verdict: REFUSED**`, the
+    primary reason is…", and the paragraph describing rule 2). Only the first is
+    a verdict. A bare `in` test therefore reports REFUSED for a document that no
+    longer says it — the REACHABLE branch below, which holds the entire
+    allow-list drift check, could never execute. That is the identical defect
+    this phase was created to remove, one file over.
+
+    Measured against the shipped tree before the fix:
+
+        anchored verdict lines in Target section: 1
+        raw substring occurrences in Target section: 3
+
+    `evidence_check` already exported the anchored, section-scoped primitives.
+    This uses them rather than re-deriving a weaker pair.
+    """
+    sections = _EVIDENCE.split_sections(evidence_text)  # type: ignore[attr-defined]
+    bodies = _EVIDENCE.sections_for("Target", sections)  # type: ignore[attr-defined]
     assert len(bodies) == 1, f"expected exactly one `## Target` section, found {len(bodies)}"
-    return bodies[0]
+    lines = _EVIDENCE.verdict_lines(bodies[0])  # type: ignore[attr-defined]
+    assert len(lines) == 1, f"expected exactly one Target verdict line, found {lines}"
+    return str(lines[0])
 
 
 def _target_disagreements(
@@ -1129,7 +1166,7 @@ def _target_disagreements(
     the branch the repo happens to be on is a guard nobody has seen fail, which
     is the species this phase exists to replace.
     """
-    refused = _REFUSED in _target_section(evidence_text)
+    refused = _target_verdict(evidence_text) == _REFUSED
     problems: list[str] = []
 
     if refused:
@@ -1297,6 +1334,82 @@ def test_a_reachable_target_registered_on_a_guessed_seller_string_is_caught() ->
     assert len(problems) == 1
     assert "is a guess" in problems[0]
     assert "CONFIDENT OUT_OF_STOCK" in problems[0]
+
+
+def _flip_only_the_anchored_target_verdict(evidence_text: str) -> str:
+    """The Target section's real verdict LINE flipped to REACHABLE, prose untouched.
+
+    The other tests here flip the verdict with a whole-document `.replace`, which
+    changes all three occurrences at once and so cannot tell an anchored reader
+    from a substring one. This changes exactly the one line a person editing the
+    log would change, and asserts the two prose mentions survive.
+    """
+    start = evidence_text.index("\n## Target")
+    end = evidence_text.index("\n## ", start + 1)
+    section = evidence_text[start:end]
+
+    flipped = section.replace(f"\n{_REFUSED}\n", "\n**Verdict: REACHABLE (rung 1)**\n", 1)
+    assert flipped != section, "no anchored verdict line found to flip"
+    assert flipped.count(_REFUSED) == 2, (
+        "the point of this helper is that the prose mentions survive the flip; "
+        f"found {flipped.count(_REFUSED)} rather than 2"
+    )
+    return evidence_text[:start] + flipped + evidence_text[end:]
+
+
+def test_flipping_only_the_real_verdict_line_switches_the_guard_to_the_reachable_branch() -> None:
+    """The hole CR-01 found, pinned. This test failed against the shipped guard.
+
+    Someone registers Target — the terms change, or a sanctioned feed appears —
+    and edits the verdict line to REACHABLE. Under `_REFUSED in section` the
+    guard stayed on the REFUSED branch, because the section's own prose still
+    quotes the string twice, and reported NOTHING about a tree claiming Target
+    is reachable while shipping no watch, no control, no fixture and an
+    allow-list nobody ever read off a live page. Measured before the fix:
+
+        guard sees refused? -> True
+        problems reported on a flipped-to-REACHABLE tree: []
+
+    Worse than silence: the REFUSED branch's message would have asserted that
+    the evidence log records REFUSED, about a file that now says the opposite —
+    and the natural reading of a red test whose message contradicts the file it
+    names is "this assertion is stale". Editing it away puts the guessed
+    `FIRST_PARTY["target"]` live, and `target` is in MARKETPLACES, so a
+    perfectly readable Target page answers with a confident OUT_OF_STOCK.
+    """
+    flipped = _flip_only_the_anchored_target_verdict(
+        _EVIDENCE_PATH.read_text(encoding="utf-8")
+    )
+
+    problems = _target_disagreements(
+        evidence_text=flipped,
+        configured=set(),
+        controlled=set(),
+        fixture_names=[],
+        allow_list={"target"},
+        fixture_sellers=[],
+    )
+
+    assert problems, "the REACHABLE branch did not run: the selector is still a substring test"
+    assert len(problems) == 3
+    assert "configures no target watch" in problems[0]
+    assert "no control watch" in problems[1]
+    assert "no page was frozen" in problems[2]
+
+
+def test_the_prose_mentions_alone_do_not_hold_the_guard_on_the_refused_branch() -> None:
+    """The same document, verdict intact: the guard must still read REFUSED.
+
+    The complement of the test above, so the fix cannot be "always take the
+    REACHABLE branch". Three occurrences of the string, one of them a verdict —
+    the anchored reader picks that one.
+    """
+    text = _EVIDENCE_PATH.read_text(encoding="utf-8")
+
+    assert _target_verdict(text) == _REFUSED
+    assert text.count(_REFUSED) > 1, (
+        "this test is only meaningful while the document quotes the string in prose too"
+    )
 
 
 def test_a_reachable_target_backed_by_the_observed_seller_string_passes() -> None:
