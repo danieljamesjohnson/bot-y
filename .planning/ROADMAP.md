@@ -191,7 +191,7 @@ exists to be crawled. That is the path this phase takes.
 
 **Success Criteria** (what must be TRUE):
 
-  1. Target reports stock for the GO Plus + from a `www.target.com/p/` product page, with a control watch green
+  1. Target reports trustworthy stock from a `www.target.com/p/` product page, with a control watch green. **Amended 2026-08-03 after 03.1-02's probe:** the original wording said *for the GO Plus +*, and that is no longer obtainable — Target **delisted** the product (TCIN `88714054` served HTTP 200 as late as 2025-05 and now 404s). Target is therefore control-only, the Best Buy shape. The criterion is amended rather than recorded unmet, because it was made unmeetable by a retailer's catalogue decision rather than by anything this project did or failed to do. Target also ships **no structured data at all** (zero `ld+json`, zero price, zero availability, zero seller — `isProductDetailServerSideRenderPriceEnabled: false`), so the reading comes from the rendered add-to-cart control: rung 3, DOM extraction, and degraded on both counts
   2. Amazon reports stock for the GO Plus + if it carries it, with a control watch green; or the *technical* outcome is recorded with evidence, having actually been attempted
   3. `boty check` reports **five** or more retailers with no health warnings — six if Amazon lands. Five is the honest ceiling when Amazon is technically unreachable, and criterion 2 explicitly permits that. Do not raise the target to six: a gate that fires on the honest outcome is the Phase 2 rot in the opposite sign. The real number is recorded either way
   4. Every retailer's row in the support matrix states its rung, its robots.txt position and its terms position — a reader can see the disagreement rather than only the verdict
@@ -203,18 +203,28 @@ as self-interest and basic decency. A blocked IP costs a working monitor, and ha
 someone's origin is how a hobby project becomes a nuisance. 5-minute cadence with jitter,
 unchanged. Probing budgets during development stay capped as in Phase 3.
 
-**Plans**: 4 plans. Target first — it has a robots-clean path and a published
-sitemap that solves the TCIN discovery problem Phase 2 gave up on. The two
-retailer plans both touch `boty/retailers.py`, `config/products.yaml` and
-`tests/test_retailers.py`, so every plan runs in its own wave: they serialize
-whatever the numbers say.
+**Plans**: 5 plans, replanned 2026-08-03 after 03.1-02's probe. Every plan runs
+in its own wave — the two retailer plans both touch `boty/retailers.py`,
+`config/products.yaml` and `tests/test_retailers.py`, so they serialize whatever
+the numbers say. **Plan numbers are creation order, waves are execution order**:
+03.1-05 was added after 03.1-02 had already run, and runs before its rewrite.
+
+**What the replan responds to.** 03.1-02 probed Target and found it neither
+refuses us nor gives us anything: HTTP 200, ~315 KB, no challenge, `"isBot":
+false`, and zero structured data of any kind. Stock renders client-side. Dan's
+answer is a new extraction axis — his original pre-bot-y script decided stock
+from the **Add to Cart button**, and that method is what Target needs. It is
+represented as a **second axis, not a new rung**: `Rung` keeps meaning transport,
+`Extraction` is `structured` or `dom`, and `Result.degraded` widens to fire on
+either a browser transport or a dom extraction. Nothing is renumbered.
 
 Plans:
 
-- [x] 03.1-01-PLAN.md — Both gates before either retailer moves: `evidence_check` rule 5 closes W-02, and REQ-13 becomes six machine-checked matrix columns
-- [x] 03.1-02-PLAN.md — Target on the robots-clean path: sitemap → TCIN → `/p/`, the real seller string read off a live page, registered with a green control
-- [ ] 03.1-03-PLAN.md — Amazon, actually attempted: one live `/dp/<ASIN>` read, then registration or a refusal that cites an observation — plus rule 6, which makes REQ-07a mechanical
-- [ ] 03.1-04-PLAN.md — Close: no regression, a measured pass under two minutes, and the real count on the record
+- [x] 03.1-01-PLAN.md — Both gates before either retailer moves: `evidence_check` rule 5 closes W-02, and REQ-13 becomes machine-checked matrix columns
+- [ ] 03.1-05-PLAN.md — The Extraction axis (wave 3): `structured` vs `dom`, `degraded` widened to fire on either, M6 re-anchored and M7 proving the new disjunct, and a matrix column with two-directional rules
+- [ ] 03.1-02-PLAN.md — Target at rung 3 + dom (wave 4), **control-only** because Target delisted the GO Plus +: the robots.txt decision written down first, a DOM add-to-cart reader with its own mutation, a green control, and the verdict revised. *Its first execution (`c79e8ce`) probed Target at rung 1 and escalated rather than registering; that probe is what this rewrite is built on*
+- [ ] 03.1-03-PLAN.md — Amazon, actually attempted (wave 5): one live `/dp/<ASIN>` read classified against four defined shapes — including the rung-1-plus-dom case Target made real — then registration or a refusal that cites an observation, plus rule 6, which makes REQ-07a mechanical
+- [ ] 03.1-04-PLAN.md — Close (wave 6): no regression, a measured pass under two minutes with two browser-rung retailers, both axes verified against the live payload, and the real count on the record
 
 ### Phase 4: Open Source Ready
 
