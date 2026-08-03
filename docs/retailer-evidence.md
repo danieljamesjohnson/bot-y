@@ -1451,6 +1451,204 @@ Target on the strength of a page that carries no stock data would be exactly the
 "detector with nothing behind it" the matrix exists to prevent. **The retailer
 count stays at four.**
 
+### 2026-08-03 — rung 3 walked: what the render contacted, and what its DOM says
+
+**Nothing above is retracted.** Every byte count, every quoted clause, the
+`Disallow: /` on RedSky, the zero-structured-data measurement and the delisting
+disproof all stand exactly as written. What this subsection adds is the one thing
+the probe above deliberately did not collect: **observations from rung 3**, taken
+after Dan answered `QUESTIONS.md` 0d.
+
+The decision was recorded **before** anything was rendered, and it was already in
+the tree when this work began — `QUESTIONS.md` § 0d, `ANSWERED 2026-08-03 (Dan)`,
+commit `3558806`. So this was a re-read rather than an interlock, and it is worth
+saying so plainly rather than presenting a settled question as a gate that could
+have fired. Dan took **option 2**: a browser rendering a page a human would render
+is not a crawler, so rung 3 is allowed even though the page's own XHRs land on a
+disallowed host. What it does **not** license is `boty.fetch.get` or `curl`
+against those hosts.
+
+#### The hosts the rendered page contacted — measured, not inferred
+
+**Method, stated because a robots.txt claim is worth exactly what its evidence is
+worth:** one rendered load of the control candidate, then
+`performance.getEntriesByType('resource')` evaluated **inside the page** and each
+entry's URL mapped to a hostname. This is the browser's own record of the requests
+it actually issued. It is the strong form of the measurement — *not* the fallback
+of grepping the rendered HTML for hostnames it happens to mention, which would
+have recorded intentions rather than requests.
+
+**31 hosts, from one product page.** In full, because a list that summarises away
+its own tail is not evidence:
+
+```
+www.target.com              api.target.com             carts.target.com
+redsky.target.com           sapphire-api.target.com    assets.targetimg1.com
+target.scene7.com           assets.adobedtm.com        cdn.attn.tv
+target-us.attn.tv           events.attentivemobile.com cdn.speedcurve.com
+client.px-cloud.net         ift.px-cloud.net           collector-pxgwpp4wus.px-cloud.net
+dpm.demdex.net              target.demdex.net          cm.everesttech.net
+edge.fullstory.com          rs.fullstory.com           edge.curalate.com
+pub.doubleverify.com        vtrk.dv.tech               securepubads.g.doubleclick.net
+cm.g.doubleclick.net        ep1.adtrafficquality.google ep2.adtrafficquality.google
+www.google.com              22392fba1859b607494a8e560a71ac91.safeframe.googlesyndication.com
+ponos.zeronaught.com        resources.digital-cloud.medallia.com
+```
+
+**Which of them publish `Disallow: /`** — checked directly, one `robots.txt` read
+each:
+
+| Host | `robots.txt` | How the page reached it |
+|---|---|---|
+| `redsky.target.com` | **`User-agent: * / Crawl-delay: 1 / Disallow: /`**, 41 B | `fetch`, `iframe` |
+| `api.target.com` | **`User-agent: * / Disallow: /`**, 25 B | `fetch` |
+| `sapphire-api.target.com` | **`User-agent: * / Disallow: /`**, 25 B | `fetch` |
+| `carts.target.com` | HTTP **401**, no retrievable policy | `fetch` |
+| `www.target.com` | permits `/p/`; only `/p/` rule is `/p/premium-registry` | the navigation itself |
+
+**The measurement changed the answer's scope, which is the whole reason for taking
+it.** 0d was answered naming `redsky.target.com` alone. Rendering one product page
+in fact contacts **three** Target-owned hosts that publish `Disallow: /` for every
+agent. The reasoning is unaffected — the distinction between *requesting an API*
+and *rendering a page that requests it* applies identically to all three — but the
+ruling is now on record as covering what it actually covers, and 0d has been
+amended with this table.
+
+**Stated plainly, because it is the sentence that matters:** `redsky.target.com`,
+`api.target.com` and `sapphire-api.target.com` were contacted **by the browser
+while rendering the page**, at our instruction, and by **no code in this
+repository**. `boty.fetch.get` was never pointed at any of them and neither was
+`curl`, except at their `robots.txt` files — which are the one resource on the
+internet whose entire purpose is to be read by an automated agent.
+
+The remaining 26 are third-party advertising, analytics and bot-detection vendors
+Target chose. They are the same set a human visitor's browser loads, and bot-y
+neither reads nor stores anything from them.
+
+#### The add to cart control, verbatim
+
+The extractor this plan builds keys on this element, so its exact markup is
+recorded rather than described. From the control candidate, in stock:
+
+```html
+<button class="styles_btn__1hjpW styles_ndsButton__XOOOH styles_md__Yc3tr styles_filled___MOAP styles_fullWidth__8m0Wc"
+        type="button"
+        aria-label="Add to cart for Microfiber Dust Cloths - 6pk - up&amp;up™: Reusable, Hanging Loop"
+        data-test="orderPickupButton"
+        id="addToCartButtonOrTextIdFor90377926">Add to cart</button>
+```
+
+- **Tag:** `button`. **Visible text:** `Add to cart`. **Not disabled.**
+- **The stable anchor is the `id`**, which is `addToCartButtonOrTextIdFor` + the
+  TCIN.
+- **`data-test` is NOT stable and must not be keyed on.** Three pages, three
+  values: `orderPickupButton` on the control, `shippingButton` on a
+  ship-only item, and **no `data-test` attribute at all** on the out-of-stock
+  page. An extractor anchored on `data-test` would have read the out-of-stock
+  page as "no control found".
+- The id name is Target's own and it is a warning label: `addToCartButtonOrText`.
+  Target considers this slot capable of rendering **text** instead of a button.
+
+#### What an unavailable item renders — the question the extractor's honesty depends on
+
+**Target keeps the button and disables it.** Observed live, on
+`/p/200-pcs-2-3-easter-printed-plastic-eggs-…/-/A-90984792`, an item Target's own
+variation chip labels `Count, 200  - Out of Stock`:
+
+```html
+<button class="styles_btn__1hjpW styles_ndsButton__XOOOH styles_md__Yc3tr styles_filled___MOAP styles_fullWidth__8m0Wc"
+        type="button"
+        aria-label="Add to cart for Joyfy 200 Pcs Easter Eggs, 2.4'' Plastic Printed Easter Eggs for Easter Hunt, Basket Easter Stuffers Fillable, Basket Easter Stuffer Toy"
+        disabled=""
+        id="addToCartButtonOrTextIdFor90984792">Add to cart</button>
+```
+
+Same tag, same id prefix, **same visible text** — and `disabled=""`. The text does
+**not** change to "Out of stock" or "Sold out"; neither phrase appears anywhere on
+the page. So the availability signal is the `disabled` attribute and nothing else,
+and matching on button text alone would report an out-of-stock item as buyable.
+
+**This is the branch that lets the extractor be honest.** Because the control is
+*present-and-disabled* when unavailable, its **absence means the render failed**,
+not that the item is out of stock. The reader therefore returns `None` — UNKNOWN —
+when it finds no control, and there is no ambiguity to trade off. Had Target
+removed the button instead, absence would have been indistinguishable from a
+broken render and the reader would have needed a separate positive out-of-stock
+marker to say anything at all.
+
+The out-of-stock page also carries a price (`$25.99`), so price and availability
+are independent signals and an unreadable one does not block the other.
+
+#### Price, and the Target Plus partner block
+
+**Price** is `data-test="product-price"`, inside `data-test="@web/Price/PriceFull"`:
+
+```html
+<span class="styles_currentPriceFontSize__Xps20  " data-test="product-price">$12.59</span>
+```
+
+It appears twice on an in-stock page — the main module and the sticky
+add-to-cart bar — with the same value.
+
+**The partner block exists, it is unambiguous, and this is what keeps a Target
+Plus reseller from reading as first-party.** On a partner-sold item:
+
+```html
+<a aria-label="Sold &amp; shipped by Joyin. View partner details"
+   data-test="targetPlusExtraInfoSection"
+   href="/sp/joyin/-/N-10006960">
+  …
+  <span class="…PrimaryText…">Sold &amp; shipped by </span>
+  <span class="…Subtext…">Joyin</span>
+</a>
+```
+
+Note the exact wording: **"Sold & shipped by"**, with an ampersand, not "Sold and
+shipped by". The partner name is available three ways — the `aria-label`, the
+`Subtext` span, and the `/sp/<partner>/-/N-…` href — which is useful redundancy
+for an extractor that has to survive a reskin.
+
+**On the first-party control page, `targetPlusExtraInfoSection` occurs zero
+times**, as do the strings `Sold & shipped by`, `Sold by`, `shipped by` and
+`Target Plus`. So **absence of the partner block is what a Target-sold item looks
+like**, and that absence is what the reader treats as first-party. That claim is
+now an observation rather than an assumption, and it is what
+`FIRST_PARTY['target']` means from here on.
+
+#### Requests spent
+
+**Rendered loads of `www.target.com/p/…`: 3 of the 4 budgeted**, all ≥ 30 s apart,
+no retries — the control candidate (`A-90377926`), a ship-only partner item
+(`A-1001649986`, which Target redirected to `A-90984669`), and the out-of-stock
+sibling (`A-90984792`). The fourth is reserved for the fixture capture. One
+further rendered load went to a `/b/` brand page rather than a `/p/` PDP; its grid
+did not hydrate and it yielded nothing, and it is recorded rather than dropped.
+
+**Rung-1 requests: 1 of the 4 budgeted** — `sitemap_20-0001.xml.gz` (HTTP 200,
+8,550,438 B, 22,806 URLs), fetched to find candidate slugs without touching the
+`/s?` search paths `robots.txt` disallows. Two `web.archive.org` CDX prefix queries
+were attempted first and returned nothing; they cost Target nothing.
+
+Four `robots.txt` reads, counted separately and listed in the table above. **Zero
+requests from this repo to `redsky.target.com`, `api.target.com` or
+`sapphire-api.target.com` other than their `robots.txt`.**
+
+**Controls, before:**
+
+```
+control check: PASS — 4/4 controls in stock
+  in_stock  gamestop  CONTROL — PS5 console               $549.99  ld+json: InStock from GameStop
+  in_stock  walmart   CONTROL — Great Value whole milk      $2.42  __NEXT_DATA__: IN_STOCK from Walmart.com
+  in_stock  bestbuy   CONTROL — Pokémon Let's Go, Pikach   $59.99  ld+json: InStock from Best Buy
+  in_stock  nintendo  CONTROL — Nintendo HDMI cable         $7.99  ld+json: InStock from Nintendo of America Inc.
+```
+
+run under the service's own `EnvironmentFile`, exit 0, before the first render.
+The after-run is recorded at the close of this plan's registration subsection.
+
+**No `BLOCK_PHRASES` entry matched on any of the three rendered pages.** Target
+served an ordinary page to a headless browser exactly as it served one to rung 1.
+
 ---
 
 ## What was built on both of these (2026-08-02, 02-04 tasks 2 and 3)

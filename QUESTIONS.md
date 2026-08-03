@@ -28,6 +28,44 @@ assuming.
 Two things it does **not** license: calling RedSky directly (declined in favour of reading
 the rendered page), and extending this ruling to any other retailer. Each is its own call.
 
+### Appended 2026-08-03 by 03.1-02: the decision above was taken on a prediction, and here is the measurement
+
+The answer above was written before anything had been rendered, so the host it names —
+`redsky.target.com` — was a *forecast* of what Target's JavaScript would do. It has now been
+observed, and the forecast was **right but incomplete**. Recorded here so the ruling cites a
+measurement rather than resting on the prediction it was answered on.
+
+**Method:** one rendered load of
+`https://www.target.com/p/microfiber-dust-cloths-6pk-up-38-up-8482/-/A-90377926`, then
+`performance.getEntriesByType('resource')` evaluated **in the page** and each entry's URL
+mapped to its hostname. This is the strong form of the measurement — the browser's own
+record of what it actually fetched — not a grep of the markup for hostnames it mentions.
+
+**31 hosts were contacted.** The full list is in `docs/retailer-evidence.md` § Target. The
+part that bears on this decision:
+
+| Host | `robots.txt` | Contacted as |
+|---|---|---|
+| `redsky.target.com` | **`Disallow: /`** (41 B, every agent) | `fetch`, `iframe` |
+| `api.target.com` | **`Disallow: /`** (25 B, every agent) | `fetch` |
+| `sapphire-api.target.com` | **`Disallow: /`** (25 B, every agent) | `fetch` |
+| `carts.target.com` | HTTP 401 — no retrievable policy | `fetch` |
+| `www.target.com` | permits `/p/` | the page itself |
+
+**So the ruling covers more than it named.** Rendering one Target product page causes the
+browser to fetch **three** Target-owned hosts that publish `Disallow: /` for every agent, not
+one. Nothing about the reasoning changes — the same distinction between *requesting an API*
+and *rendering a page that requests it* applies identically to all three — but the decision
+should be on record as covering what it actually covers. The prohibition it does **not**
+license is correspondingly wider too: no code in this repo may address `redsky.target.com`,
+`api.target.com` or `sapphire-api.target.com` directly, by `boty.fetch.get`, by `curl`, or by
+any other means. Only the browser reaches them, and only while rendering a page.
+
+The remaining 26 hosts are third-party advertising, analytics and bot-detection endpoints
+(`doubleclick`, `demdex`, `fullstory`, `px-cloud`, `attn.tv`, `medallia`, `doubleverify`).
+They are Target's choice of vendors, not ours, and they are the same set any human visitor's
+browser loads. They are listed in full in the evidence log rather than summarised away.
+
 ## 0b. Target is rung 4 too — so the five-retailer bar is UNMET, at four
 
 > **SUPERSEDED 2026-08-03 — see 0d above.** The Terms-of-Use reasoning below was
