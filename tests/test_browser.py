@@ -276,3 +276,53 @@ def test_failed_capture_writes_no_file(monkeypatch: pytest.MonkeyPatch, tmp_path
         fixtures.capture("bestbuy", "failed", URL, note="should never be written", browser=True)
 
     assert list(tmp_path.rglob("*")) == [], "a failed capture left files behind"
+
+
+# --------------------------------------------------------------------------
+# The CLI flag that reaches all of the above
+# --------------------------------------------------------------------------
+
+
+def _record_capture(monkeypatch: pytest.MonkeyPatch, seen: dict, tmp_path: Path) -> None:
+    """Stand in for `fixtures.capture` and record the keywords it was handed."""
+    written = tmp_path / "captured.html"
+    written.write_text("<html>ok</html>", encoding="utf-8")
+
+    def _fake(retailer: str, name: str, url: str, note: str = "", browser: bool = False) -> Path:
+        seen.update(retailer=retailer, name=name, url=url, note=note, browser=browser)
+        return written
+
+    monkeypatch.setattr(fixtures, "capture", _fake)
+
+
+@pytest.mark.parametrize(
+    ("argv_extra", "expected"),
+    [
+        ([], False),
+        (["--browser"], True),
+    ],
+)
+def test_capture_fixture_routes_the_browser_flag_through(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, argv_extra: list[str], expected: bool
+) -> None:
+    """`--browser` is what makes a rung-3 retailer fixturable at all.
+
+    Not Best Buy's flag alone: the escalation ladder needs it for every retailer
+    that refuses impersonated HTTP, so it is wired independently of whether any
+    particular retailer turned out to be reachable. Asserting the default is
+    False matters as much as asserting the flag arrives — a capture that started
+    launching Chrome for GameStop would be slower, more detectable, and would
+    silently change what every existing fixture is a snapshot *of*.
+    """
+    from boty import cli
+
+    seen: dict = {}
+    _record_capture(monkeypatch, seen, tmp_path)
+
+    rc = cli.main(
+        ["capture-fixture", "bestbuy", "probe", URL, "--note", "in stock", *argv_extra]
+    )
+
+    assert rc == 0
+    assert seen["browser"] is expected
+    assert seen["note"] == "in stock"

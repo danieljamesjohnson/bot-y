@@ -68,7 +68,7 @@ def _capture_fixture(args: argparse.Namespace) -> int:
     from .fixtures import capture, meta_path
 
     try:
-        path = capture(args.retailer, args.name, args.url, note=args.note)
+        path = capture(args.retailer, args.name, args.url, note=args.note, browser=args.browser)
     except Blocked as exc:
         print(f"blocked: {exc}", file=sys.stderr)
         print("refusing to save a challenge page as a fixture", file=sys.stderr)
@@ -252,6 +252,17 @@ def main(argv: list[str] | None = None) -> int:
         "--note",
         default="",
         help="what stock state this page represented at capture time",
+    )
+    cap.add_argument(
+        "--browser",
+        action="store_true",
+        help=(
+            "capture through a real browser (rung 3) instead of impersonated HTTP. "
+            "For retailers that refuse rung 1 outright — without this they could "
+            "never be frozen as fixtures at all, so the retailers most in need of "
+            "offline regression tests would be the only ones without them. "
+            "Needs the optional extra: pip install -e '.[browser]'"
+        ),
     )
     cap.add_argument("-v", "--verbose", action="store_true")
 
