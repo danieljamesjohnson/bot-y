@@ -81,6 +81,7 @@ def _verdict_from_html(
     url: str,
     first_party_only: bool,
     rung: Rung,
+    sku: str | None = None,
 ) -> Result:
     """Turn one page's markup into a verdict. Does no I/O whatsoever.
 
@@ -97,14 +98,38 @@ def _verdict_from_html(
     knows them: `watch.target` is a URL for some retailers and a SKU for
     others, and how a page was obtained is a fact about the transport that no
     amount of reading the markup can recover.
+
+    `sku` is the same idea one step further. Where a retailer is addressed by
+    URL, the page that came back *is* the product that was asked for and there
+    is nothing to check. Where it is reached through a search redirect — Best
+    Buy, which has no SKU-shaped product URL — those are two different claims,
+    and passing the SKU here is what makes the second one checkable. See
+    `parse.ldjson_offers`.
     """
-    offers = parse.ldjson_offers(html)
+    offers = parse.ldjson_offers(html, sku=sku)
     source = "ld+json"
     if not offers:
         offers = parse.nextdata_offers(html)
         source = "__NEXT_DATA__"
 
     if not offers:
+        if sku is not None:
+            # A distinct diagnosis, because it is a distinct and *evidenced*
+            # branch: Best Buy's answer to a SKU that matches nothing is a
+            # search page (docs/retailer-evidence.md). Reporting that as "page
+            # shape changed?" sends the reader to debug an extractor that is
+            # working perfectly — the same misattribution this phase already
+            # fixed twice, for the Imperva and Akamai walls, one layer up.
+            return Result(
+                watch,
+                Availability.UNKNOWN,
+                detail=(
+                    f"sku {sku} did not resolve to a product page — no "
+                    f"schema.org Product on it carries that sku"
+                ),
+                url=url,
+                rung=rung,
+            )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way
         # we do not know — say so loudly rather than implying out-of-stock.
@@ -213,6 +238,16 @@ def bestbuy_product_url(sku: str) -> str:
     than reading somebody's accessory as your restock. Both branches of this
     are evidence, not assumption; see `docs/retailer-evidence.md`.
 
+    That evidence is about Best Buy's search-results *template*, though, and a
+    template is a third party's SEO decision rather than a property of this
+    code. Adding Product markup to result cards is one of the most common
+    changes a retailer makes, and the day Best Buy does it this function starts
+    handing back pages full of offers for products nobody asked about. So the
+    caller does not rely on it: `check_bestbuy_browser` passes the SKU down to
+    `_verdict_from_html`, which reads offers only from the Product node carrying
+    that SKU. The template staying as it is became a convenience rather than the
+    safety property.
+
     `watch.target` therefore stays the SKU for `bestbuy` on both rungs, which
     is what lets one YAML entry serve the browser path and the API path
     without the reader having to know which one is running.
@@ -293,6 +328,15 @@ def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Res
         url=product_url,
         first_party_only=first_party_only,
         rung=Rung.BROWSER,
+        # Bind the answer to the question. This adapter asks Best Buy's *search*
+        # for a SKU and trusts the redirect, so the page that comes back is not
+        # self-evidently the product that was requested. Without this the
+        # verdict is whatever `_pick` finds cheapest on whatever page arrived —
+        # and a confident reading of an unrelated product is the worst outcome
+        # this project can produce. Safe today only because Best Buy's
+        # search-results template happens to carry no Product markup, which is
+        # a third party's SEO decision and not a property of this code.
+        sku=watch.target,
     )
 
 

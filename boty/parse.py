@@ -57,10 +57,38 @@ def _iter_nodes(doc: Any) -> Iterator[dict[str, Any]]:
                 stack.append(node["@graph"])
 
 
-def ldjson_offers(html: str) -> list[Offer] | None:
-    """Offers from schema.org Product markup, or None if there is none."""
+def ldjson_offers(html: str, *, sku: str | None = None) -> list[Offer] | None:
+    """Offers from schema.org Product markup, or None if there is none.
+
+    `sku` binds the answer to the question. Without it this walks every Product
+    node on the page and pools their offers, which is right for a retailer whose
+    product URL *is* the identity — GameStop and Nintendo are addressed by URL,
+    so whatever product page came back is the one that was asked for.
+
+    It is wrong for Best Buy, which has no SKU-shaped product URL and is reached
+    through a search redirect. There, "the page that came back" and "the product
+    that was requested" are different claims, and the gap between them is the
+    worst failure this project can produce: `_pick` returns the cheapest
+    available first-party offer on the page, so a search-results page carrying
+    Product markup yields a $9.99 cable reported as the watched item's stock
+    state, with the watch's own name attached.
+
+    A page-level check ("does this SKU appear in the HTML") does not close that.
+    The requested SKU appears 71 times in the shipped Best Buy control fixture —
+    recommendation rails, breadcrumbs, "customers also viewed" — so a results
+    page listing the requested product among eleven others contains it too, and
+    the cheapest offer still wins. The binding therefore has to be at the node:
+    only the Product whose `sku` *is* the requested one contributes offers.
+
+    This is the same reasoning `_WALMART_PRODUCT_PATH` records below, reached
+    the same way. When `sku` is given and no such Product is on the page, the
+    return is None — UNKNOWN — including the case where the markup is there but
+    carries no `sku` field at all. That costs coverage rather than correctness,
+    and Best Buy's control watch turns it into a loud failure within a cycle.
+    """
     found: list[Offer] = []
     saw_product = False
+    wanted = sku.strip() if sku else None
 
     for block in _LDJSON_RE.findall(html):
         try:
@@ -84,6 +112,11 @@ def ldjson_offers(html: str) -> list[Offer] | None:
             types = types if isinstance(types, list) else [types]
             if "Product" not in types:
                 continue
+            if wanted is not None:
+                # `str()` because retailers publish SKUs as both `"6216393"` and
+                # `6216393`, and the config supplies a string either way.
+                if str(node.get("sku") or "").strip() != wanted:
+                    continue
             saw_product = True
             offers = node.get("offers") or []
             for offer in offers if isinstance(offers, list) else [offers]:

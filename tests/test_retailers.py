@@ -554,6 +554,159 @@ def test_bestbuy_page_with_no_product_markup_is_unknown_not_out_of_stock(
     assert result.detail
 
 
+# --------------------------------------------------------------------------
+# Binding the answer to the question: WR-03
+# --------------------------------------------------------------------------
+
+
+def _search_page(*products: tuple[str, str, str, float]) -> str:
+    """A Best Buy search-results page carrying `Product` markup per result.
+
+    The page Best Buy does not serve *today*, which is the entire point. The
+    adapter's safety currently rests on a search-results template carrying no
+    schema.org Product markup at all — a third party's SEO decision, reversible
+    without notice, and adding Product+Offer markup to result cards is one of
+    the most common changes a retailer makes. Neither shipped fixture can
+    represent that page, so it is synthesised here.
+    """
+    blocks = "".join(
+        f"""<script type="application/ld+json">{{
+          "@context": "https://schema.org", "@type": "Product",
+          "sku": "{sku}", "name": "{name}",
+          "url": "https://www.bestbuy.com/product/{slug}/ABC123/sku/{sku}",
+          "offers": {{"@type": "Offer", "price": {price},
+                     "availability": "https://schema.org/InStock",
+                     "seller": {{"@type": "Organization", "name": "Best Buy"}}}}
+        }}</script>"""
+        for sku, name, slug, price in products
+    )
+    return f"<html><head>{blocks}</head><body>search results</body></html>"
+
+
+def test_a_search_page_of_other_products_is_unknown_not_somebody_elses_stock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The worst outcome this project can produce: confident, wrong, plausible.
+
+    `bestbuy_product_url` feeds a bare SKU to Best Buy's search and trusts the
+    redirect. Nothing bound the page that came back to the SKU that was asked
+    for. If Best Buy adds Product markup to its result cards, `_pick` returns
+    the cheapest available first-party offer on the page — a $9.99 HDMI cable
+    among the results — and the monitor reports it as the stock state of the
+    watched product, under the watch's own name.
+
+    Nothing else would catch it: Best Buy's only configured watch is a control,
+    the control's own SKU still resolves, so health stays green and the
+    dashboard stays green while a product watch reads somebody else's inventory.
+    """
+    _serve_rendered(
+        monkeypatch,
+        _search_page(
+            ("6665817", "Best Buy essentials HDMI cable", "bbe-hdmi", 9.99),
+            ("6554912", "Insignia screen protector", "insignia-sp", 12.99),
+        ),
+    )
+    watch = Watch(name="Pokémon GO Plus +", retailer="bestbuy", target="6577129", max_price=80)
+
+    result = retailers.check_bestbuy_browser(watch)
+
+    assert result.availability is Availability.UNKNOWN, (
+        f"read {result.availability.value} at ${result.price} from a page that "
+        "does not contain the requested SKU at all"
+    )
+    assert result.price is None, "a price was carried over from an unrelated product"
+    assert result.alertable is False
+    assert "6577129" in result.detail, "the detail must name the SKU that did not resolve"
+
+
+def test_the_requested_sku_is_read_and_the_cheaper_neighbours_are_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The case a whole-page substring check passes while still being wrong.
+
+    "Does the requested SKU appear in this HTML" is not the question. It appears
+    71 times in the *control* fixture — recommendation rails, "customers also
+    viewed", breadcrumbs. So a search page listing the requested product
+    alongside eleven others contains it too, and a page-level check would wave
+    the page through and let `_pick` return the cheapest offer on it regardless.
+
+    The binding has to be at the node, not at the page: the offers read must
+    come from the `Product` whose `sku` *is* the one asked for. `boty.parse`
+    already reasoned exactly this way for Walmart — `_WALMART_PRODUCT_PATH`
+    addresses the buy box explicitly because "a generic walk happily reports a
+    $12 screen protector as your restock". Best Buy went through the generic
+    walk.
+    """
+    _serve_rendered(
+        monkeypatch,
+        _search_page(
+            ("6665817", "Best Buy essentials HDMI cable", "bbe-hdmi", 9.99),
+            ("6216393", "Pokémon: Let's Go, Pikachu!", "pikachu", 59.99),
+            ("6554912", "Insignia screen protector", "insignia-sp", 12.99),
+        ),
+    )
+    watch = Watch(name="Let's Go, Pikachu!", retailer="bestbuy", target="6216393")
+
+    result = retailers.check_bestbuy_browser(watch)
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.price == 59.99, (
+        f"read ${result.price} — the cheapest offer on the page, not the "
+        "requested product's"
+    )
+
+
+def test_the_real_control_fixture_still_binds_to_its_own_sku(
+    monkeypatch: pytest.MonkeyPatch, bestbuy_pikachu: str
+) -> None:
+    """The identity check must not cost the control its green.
+
+    A real Best Buy product page carries dozens of other SKUs in its
+    recommendation rails. If the binding were implemented as "this page mentions
+    exactly one SKU" it would fail here, and a fail-safe UNKNOWN on the one
+    control that proves this retailer's detector works is a broken gate, not a
+    safe one.
+    """
+    _serve_rendered(monkeypatch, bestbuy_pikachu)
+    right = retailers.check_bestbuy_browser(
+        Watch(name="Let's Go, Pikachu!", retailer="bestbuy", target="6216393")
+    )
+    # Same bytes, different question. The page mentions 6665817 in its rails.
+    wrong = retailers.check_bestbuy_browser(
+        Watch(name="something else", retailer="bestbuy", target="6665817")
+    )
+
+    assert right.availability is Availability.IN_STOCK
+    assert right.price == 59.99
+    assert wrong.availability is Availability.UNKNOWN, (
+        "a SKU that merely appears in this page's recommendation rails was read "
+        "as the page's own product"
+    )
+
+
+def test_an_unresolved_sku_is_diagnosed_as_unresolved_not_as_our_parser(
+    monkeypatch: pytest.MonkeyPatch, bestbuy_unresolved_sku: str
+) -> None:
+    """IN-03: "page shape changed?" points the reader at a working extractor.
+
+    Best Buy's search-miss is a known, evidenced branch
+    (`docs/retailer-evidence.md`), not an unknown one. Blaming our own parser
+    for it is the same misattribution the phase fixed twice for Imperva and
+    Akamai walls, one layer up.
+    """
+    _serve_rendered(monkeypatch, bestbuy_unresolved_sku)
+
+    result = retailers.check_bestbuy_browser(
+        Watch(name="not a real sku", retailer="bestbuy", target="6577129")
+    )
+
+    assert result.availability is Availability.UNKNOWN
+    assert "6577129" in result.detail
+    assert "page shape changed" not in result.detail, (
+        "a known search-miss was reported as an unknown parser failure"
+    )
+
+
 def test_blocked_browser_render_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bot wall that renders is still a bot wall, not an out-of-stock reading."""
     _raise_rendered(monkeypatch, Blocked("rendered challenge page matched 'robot or human'"))
