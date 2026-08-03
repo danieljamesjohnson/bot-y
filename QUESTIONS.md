@@ -5,6 +5,14 @@ was answered 2026-08-03 and is kept below as the record. **One new open decision
 0e, below — the working tree is clean but the pushed public history is not.**
 Everything else in the MVP is proceeding without them.
 
+**§ 0b is closed as of 2026-08-03 and needs nothing from you.** It asked what
+the retailer count landed on. It landed on **six** — gamestop, walmart, bestbuy,
+nintendo, target, amazon — all healthy, all control-verified. §§ 0, 0a and 0b
+each carry a dated correction rather than a deletion, because what moved the
+number was your reversal of a written-terms reading, not a new technical
+finding, and a record that quietly agrees with itself afterwards is worth less
+than one that shows the turn.
+
 ## 0e. Four already-public fixtures carry host geolocation — history rewrite? — OPEN 2026-08-03
 
 **Not blocking phase 3.1; it is proceeding.** But it is the same class of problem
@@ -133,12 +141,49 @@ The remaining 26 hosts are third-party advertising, analytics and bot-detection 
 They are Target's choice of vendors, not ours, and they are the same set any human visitor's
 browser loads. They are listed in full in the evidence log rather than summarised away.
 
-## 0b. Target is rung 4 too — so the five-retailer bar is UNMET, at four
+## 0b. Target is rung 4 too — so the five-retailer bar is UNMET, at four — ANSWERED 2026-08-03, and the answer is SIX
 
-> **SUPERSEDED 2026-08-03 — see 0d above.** The Terms-of-Use reasoning below was
-> reversed by Dan. Target is still rung 4, but for a measured technical reason
-> rather than a written one, and the reversal was not the thing that stopped it.
-> Nothing recorded below is retracted.
+> **ANSWERED AND CLOSED 2026-08-03 by Phase 3.1.** The bar was five. It lands on
+> **six**. There is nothing here for you to decide — this section asked a
+> question that now has a measured answer, and escalating a settled outcome
+> would be manufacturing a question. Everything below is retained: none of it is
+> retracted, and the two supersession notes explain which conclusion moved and
+> why.
+>
+> **The count, live and verified:** `boty check` reports **six** retailers —
+> gamestop, walmart, bestbuy, nintendo, **target**, **amazon** — with
+> `healthy: true`, zero health warnings, 6/6 live controls in stock, and 13
+> watches in **45–46 s** against REQ-08's 120 s budget. `make verify` prints a
+> bare `VERIFY: PASS` under the service's own `EnvironmentFile`.
+>
+> **What moved it was a decision, not a discovery — and that is the honest
+> framing.** Both retailers were dropped in Phase 3 on a reading of their written
+> terms, with **zero** product-page requests made to either. You reversed which
+> document decides, on 2026-08-03: *"bot-y is a bot for humans. To take the
+> power back from other bots."* That reversal is recorded in
+> `.planning/phases/03.1-target-and-amazon-supported/03.1-CONTEXT.md`. Nothing
+> in the old record was retracted to get here; the clauses, the byte counts and
+> the whole `robots.txt` analysis all still stand in
+> `docs/retailer-evidence.md`.
+>
+> **What each one cost, and they cost very different things:**
+>
+> | | Target | Amazon |
+> |---|---|---|
+> | Rung | **3** — a headless browser | **1** — plain impersonated HTTP |
+> | Extraction | `dom` | `dom` |
+> | Refused us? | **No.** HTTP 200, ~315 KB, no challenge, `"isBot": false` | **No.** Three `/dp/` requests, three HTTP 200s, no block phrase |
+> | What it gave us | **Nothing structured at all** — zero `ld+json`, zero `"price"`, an empty price module by its own flag | Nothing structured either — but the add-to-cart control, `#availability` and a named buy-box seller are all server-rendered |
+> | Can it watch the GO Plus +? | **No — Target delisted it** (TCIN `88714054`, HTTP 200 as late as 2025-05, now 404). Control-only | **Yes.** It is the only one of the two that lists it |
+> | The awkward part | Rendering its page makes Target's own JavaScript fetch three Target hosts that publish `Disallow: /`. Asked and answered separately in § 0d, then **measured** rather than assumed | Its sole offer on the product is a **used** unit at **$219** from a reseller against a $54.99 MSRP — verbatim the alert this project exists not to send. Both flipper defences suppress it |
+>
+> **Two things this does not fix, stated so the number is not read as more than
+> it is.** Of the six, only **four** could ever alert on the Pokémon GO Plus + —
+> Best Buy and Target are control-only, each by a disproof rather than an
+> omission. And **ROADMAP criterion 1 stands UNMET**: it asks for Target to
+> report stock for the GO Plus +, and Target no longer sells it. You were offered
+> a rewrite that would have made that criterion meetable and you declined it.
+> That refusal is why the record is worth anything.
 
 
 **Not blocking, and there is nothing for you to do.** This is the note the two
@@ -227,6 +272,15 @@ and 7 completed cycles** — which closes the CR-01 durability item
 
 ## 0a. Amazon is rung 4 — settled by its Conditions of Use, without a single probe
 
+> **SUPERSEDED 2026-08-03 — Amazon is rung 1 and shipped. See § 0b above.** The
+> reversal is yours (*"bot-y is a bot for humans"*), and what it produced was a
+> measurement rather than an argument: three `/dp/<ASIN>` requests, three HTTP
+> 200s, no challenge, with the add-to-cart control sitting in the plain response.
+> The clause quoted below still says what it says and none of it is retracted —
+> what changed is which document decides. **The italicised sentence below is now
+> the wrong way round:** Amazon landed, so it is Amazon that made the count, and
+> it is the only one of the hard two that lists the GO Plus +.
+
 **Not blocking, and there is nothing for you to do.** Same shape as the Pokémon
 Center note below: a number that will not match the roadmap, written down before
 you have to ask about it.
@@ -314,6 +368,17 @@ there.
 **Update, 2026-08-03: neither landed.** Both are rung 4, both by a written
 prohibition in the retailer's own terms rather than by a wall. The count stays
 at four and criterion 5 is recorded unmet — see `0b` and `0a` above.
+
+**Corrected the same day, after you reversed which document decides: both
+landed.** Target is rung 3 + `dom` and Amazon is rung 1 + `dom`, and **the count
+is six.** The paragraph above is left standing because it was true when written
+and because the correction is the point — neither retailer had ever been sent a
+product-page request when it was written, and asking took three requests to
+answer at Amazon and none at all to answer at Target, which had already served
+us HTTP 200. **Pokémon Center is unaffected and is still rung 4**: it is the one
+retailer in scope refused by an actual wall rather than by a reading, Imperva
+turns away `/product/*` at rung 1 and at rung 3, and it remains the only
+retailer in scope not shipped. It has not been padded into the six.
 
 ## 1. Telegram bot token — REGENERATE FIRST
 

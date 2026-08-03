@@ -144,6 +144,18 @@ Target listed it (TCIN `88714054`, HTTP 200 as late as 2025-05) and delisted it.
 So the fifth retailer does not move the thing the count was a proxy for — the
 same disproof already recorded for Best Buy.
 
+**So read the six as a four and a two.** Two of the six rows — Best Buy and
+Target — are **control-only**: they are real, live, control-verified retailers
+whose detectors are checked every pass, and neither one can ever alert on the
+Pokémon GO Plus +, because neither one lists it. That is a disproof in both
+cases rather than an omission, and it is stated here rather than left to be
+worked out from the table, because a reader counting rows should not have to
+reconstruct which of them could actually page you. **Four retailers can:**
+GameStop, Walmart, Nintendo and Amazon. Target is additionally the most fragile
+row here — rung 3 **and** `dom`, degraded on both axes, so a reskin breaks it
+silently — which is exactly why it has a control and why mutation M8 pins the
+decision its reader makes.
+
 **Amazon is the sixth, and it is the only one that moves it.** Amazon does list
 the GO Plus +, so there is a real product watch there rather than a control
 alone. What that watch reads today is the reason both flipper defences exist: a
@@ -160,16 +172,36 @@ Pokémon Center.
 
 `scripts/evidence_check.py` is what stops that number drifting, **and it runs on
 every `make verify`** — the offline suite invokes it against this tree, so it is
-not a script somebody has to remember. It fails if a retailer outside the
-roadmap's scope is ever configured to make the count read five, and it fails if
-a retailer in scope is neither shipped nor recorded with a written refusal.
+not a script somebody has to remember. It is **six rules**, and they do not all
+point the same way:
 
-Those two rules are a **ceiling** on the count. It has a **floor** as well, and
-it needs one: a written refusal is one line, so nothing about "five or more"
-stops the number falling. A refusal cannot outrank a capture — if a retailer is
-not configured but `tests/fixtures/<retailer>/` still holds a page this repo
-really fetched, the gate fails, because a retailer we have read is not a
-retailer that refused us. `tests/test_support_matrix.py` closes the same gap in
+1. **In scope.** A retailer outside the roadmap's own scope table may not be
+   configured to make the count read higher.
+2. **Configured or refused.** A retailer inside it must be either shipped or
+   carrying a written verdict. `UNPROBED` is a third, *dated* state that expires
+   after 60 days, and `--strict` refuses it outright.
+3. **Count consistency.** A short count is honest only when neither of the hard
+   two landed.
+4. **A refusal cannot outrank a capture.** If a retailer is not configured but
+   `tests/fixtures/<retailer>/` still holds a page this repo really fetched, the
+   gate fails — a retailer we have read is not a retailer that refused us.
+5. **A configuration cannot outrank a refusal.** The mirror of rule 4, and it
+   exists because rule 4 alone was half a rule: rules 2 and 4 both skipped any
+   configured retailer, so a tree shipping a detector for a retailer its own
+   evidence log records as REFUSED passed clean.
+6. **A refusal must cite an observation.** REQ-07a, made mechanical. A `REFUSED`
+   verdict has to be backed by anchored `**Refusal observed (rung N):**` lines
+   whose bodies carry an actual *measurement* — a status code, a byte count, a
+   matched block phrase — and the two hard-two retailers need two of them,
+   including one at rung 3. This is the rule Phase 3 would have failed: it
+   dropped Target and Amazon on a desk review of their written terms, made zero
+   product-page requests to either, and every gate in this tree stayed green.
+   The anchored line *alone* is satisfiable by typing the sentence, which is why
+   the rule is shape **plus** measurement rather than shape alone.
+
+Rules 1–3 are a **ceiling** on the count. Rules 4–6 are the **floor**, and it
+needs one: a written refusal is one line, so nothing about "five or more" stops
+the number falling. `tests/test_support_matrix.py` closes the same gap in
 the table: every retailer in scope needs a rung of 1–4 here, anything on rung 3
 **or reading `dom`** has to say `degraded` in its own row, and **no row may claim
 a working rung (1–3) for a retailer nothing watches**. Rung 4 — dropped, with the

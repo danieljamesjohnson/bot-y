@@ -2995,3 +2995,135 @@ parented to Mission Control's `python3 ./server.py` (PID 3741873) and every one
 of them older than this plan. `boty.service`'s MainPID has no children at all,
 and the unit runs `PrivateTmp=true`, so the 23 stale profiles are not its either.
 **Two renders per pass leaked nothing.**
+
+Held for a second service cycle to be sure: `updated` 2026-08-03T14:26:03Z,
+**42.84 s**, `healthy: true`, 13 watches, six retailer health entries. Counted
+again at 14:30:43Z — still the same four zombies, still zero children under
+`boty.service`, still 23 profiles, across roughly **ten renders** since the
+restart (two per service cycle, two per manual pass).
+
+## Phase 3.1 closing record (2026-08-03) — two conclusions revised, no observation retracted
+
+The Phase 3 closing record above is left exactly as it was written. This one sits
+beside it rather than over it, because the interesting thing about this phase is
+not what it shipped — it is that it reversed two published verdicts **without
+retracting a single observation**, and a reader who cannot see both records
+cannot check that claim.
+
+### What shipped
+
+| Retailer | Rung | Extraction | `degraded` | Watches | Can it alert on the GO Plus +? |
+|---|---|---|---|---|---|
+| Target | **3** (browser) | **`dom`** | true | 1 (control) | **No** — Target delisted the product |
+| Amazon | **1** (`curl_cffi`) | **`dom`** | true | 2 (control + product) | **Yes** — and it is the only one of the hard two that lists it |
+
+**The count is six**: gamestop, walmart, bestbuy, nintendo, target, amazon. All
+six control-verified, `healthy: true`, zero health warnings. Read that as a four
+and a two: **Best Buy and Target are control-only**, each because the retailer
+does not carry the product — a disproof in both cases, not an omission — so four
+of the six can actually page a person.
+
+**What did not ship: Pokémon Center, and it is the only one left.** It is also
+the only retailer in scope refused by an *actual wall* rather than by a reading
+of a document, which is the distinction this phase turned out to be about.
+
+### The three things no earlier document holds together
+
+**1. Target serves its page and withholds its data, and that is a third refusal
+shape.** Before this phase the vocabulary had two words for a retailer that does
+not work: a **wall** (Pokémon Center — Imperva turns away `/product/*` at rung 1
+and at rung 3) and a **policy** (Amazon's and Target's written terms). Target is
+neither. It refused nothing: HTTP 200, ~315 KB, no challenge, no `BLOCK_PHRASES`
+match, and the page's own hydration state reads `"isBot": false`. It also
+carries no product data whatsoever — zero `application/ld+json`, zero
+`schema.org`, zero `"price"`, zero `availability`, zero `"seller"` — because
+Target ships the price module empty and says so in its own flag,
+`"isProductDetailServerSideRenderPriceEnabled": false`, confirmed on two
+unrelated PDPs and on 2023 and 2025 archive snapshots. **Open and empty.** A
+rung-1 watch there would have returned UNKNOWN forever while every gate in the
+tree stayed green, which is the failure mode this project is least equipped to
+notice from the outside: a page that reads perfectly and says nothing.
+
+**2. The `Extraction` axis exists because the rung number could not tell Best
+Buy's rendered `ld+json` from Target's rendered button.** Both are rung 3. One
+reads the retailer's own structured feed — a contract Best Buy publishes on
+purpose — and the other reads presentation markup that a reskin breaks silently:
+no error, no 403, just a control that stops being found. Folding that into the
+ladder would have renumbered a scale four phases of documents refer to by number,
+so it landed as a **second axis**: `Rung` keeps meaning transport, `Extraction`
+is `structured` or `dom`, and nothing was renumbered.
+
+Widening `degraded` to fire on **either** disjunct closed a hole **no adapter had
+yet opened**. `degraded` was derived from the rung alone, so a rung-1 `dom`
+adapter — cheap to write, and the most fragile thing this codebase could acquire
+— would have shipped looking exactly as trustworthy as GameStop, in `boty
+check`, on the status page and in the support matrix. That was written on
+2026-08-03 as a precaution. **Amazon is that adapter, and it landed the same
+day**: rung 1, `dom`, `degraded: true` on the extraction disjunct alone. Mutation
+M7 exists to prove the new half is load-bearing rather than decorative — M6
+dying only proves the flag exists.
+
+**3. Target's `robots.txt` question was answered by Dan, not inferred by an
+agent.** Rendering a Target product page makes Target's own JavaScript fetch
+hosts that publish `Disallow: /` to every agent. bot-y does not issue those
+requests; its browser does, at bot-y's instruction. That is a real distinction
+and it is not obviously decisive, so it was **escalated rather than resolved** —
+written into `QUESTIONS.md` § 0d, pushed to Dan, and left open while the phase
+worked on what was unblocked. He took it explicitly, and his reason is the
+premise the whole phase rests on:
+
+> *"bot-y is a bot for humans. To take the power back from other bots."*
+
+The ruling was then **measured rather than left as a forecast**: one rendered
+load, `performance.getEntriesByType('resource')` evaluated inside the page, and
+the browser's own record of what it fetched. It contacted **31 hosts**, and the
+answer was right but incomplete — **three** Target-owned hosts publish
+`Disallow: /`, not one (`redsky.target.com`, `api.target.com`,
+`sapphire-api.target.com`). The prohibition the ruling does not license widened
+accordingly: no code in this repo addresses any of the three directly, by
+`boty.fetch.get`, by `curl`, or by any other means.
+
+### What was revised, and what was not
+
+Two verdicts moved: § Amazon from `**Verdict: REFUSED**` to
+`**Verdict: REACHABLE (rung 1)**`, and § Target from `**Verdict: REFUSED**` to
+`**Verdict: REACHABLE (rung 3)**`. **Nothing behind either was deleted.**
+§ Amazon still carries its six policy reads with byte counts, the LICENSE AND
+ACCESS clause in full, the complete `robots.txt` analysis and the PA-API
+deprecation; the four sentences stating that no product page had ever been
+requested are quoted, dated and marked historical rather than edited. § Target
+still carries its terms, its `robots.txt`, the RedSky analysis and both
+historical `**Refusal observed (rung N):**` lines — one of which records a
+*non*-refusal in an anchored refusal line, and is retained precisely because it
+is the measurement the verdict was revised *through*.
+
+**The reversal was a maintainer decision, not a new technical finding, and the
+records say so.** Phase 3's reasoning was accurate about the documents it read.
+What it never did was ask the retailer. The record it produced was complete,
+internally consistent, and contained **not one observation** about whether either
+page could be read — plus a section explaining why nobody should find out. That
+is the defect `evidence_check` **rule 6** now makes mechanical: a `REFUSED`
+verdict must cite an anchored refusal observation whose body carries a
+measurement, and the two hard-two retailers need two of them including one at
+rung 3. It is watched going red against the verbatim pre-03.1 text of both
+sections, lifted out of commit `339800e` — 658 lines of accurate writing that
+rule 6 fails outright.
+
+### Where the phase landed against the ROADMAP's six criteria
+
+| # | Criterion | Verdict | What settles it |
+|---|---|---|---|
+| 1 | Target reports stock for the GO Plus +, control green | **UNMET — deliberately not amended** | Target **delisted** the product (TCIN `88714054`, HTTP 200 as late as 2025-05, now 404). No amount of work satisfies it. A rewrite to "reports trustworthy stock" was proposed and **Dan declined it** — editing a criterion after the fact to make it meetable is the move this project keeps catching in itself. Target's control watch *is* green |
+| 2 | Amazon reports stock if it carries it, or the **technical** outcome is recorded, having actually been attempted | **MET** | Attempted for real. Three `/dp/<ASIN>` requests, three HTTP 200s, zero block-phrase matches. Amazon carries it, so there is a real product watch; it reads OUT_OF_STOCK correctly, because the only offer is a used unit at $219 from a reseller |
+| 3 | Five or more retailers, no health warnings — six if Amazon lands | **MET at six** | Amazon landed, so the bar is its own upper form. `status.json`: six retailers, all `ok: true`, `healthy: true`, zero warnings, 13 watches, 6/6 live controls |
+| 4 | Every row states rung, robots.txt position and terms position | **MET** | Seven rows, now **seven columns** — `Extraction` was added this phase — machine-checked by `tests/test_support_matrix.py`, including that a rung-3 **or** `dom` row must declare `degraded` and that the Extraction cell is tied to the Rung cell in both directions |
+| 5 | No regression: four Phase 2 retailers still green, `make verify` exits 0 | **MET** | Bare `VERIFY: PASS` under the service's `EnvironmentFile` — not `INCOMPLETE`. All four Phase 2 controls IN_STOCK with their extraction sources unchanged: `ld+json: InStock from GameStop`, `__NEXT_DATA__: IN_STOCK from Walmart.com`, `ld+json: InStock from Best Buy`, `ld+json: InStock from Nintendo of America Inc.` |
+| 6 | A single `boty check` under two minutes | **MET** | **45.98 s** manual and **44.81 s** from the service's own cycle, both read off `duration_seconds`. See § REQ-08 above |
+
+**Five of six met; criterion 1 stands unmet with its reason written down.** That
+is the honest shape of this phase and it is not tidied. `TARGET_RETAILER_COUNT`
+in `scripts/evidence_check.py` was **left at 5** — with Target and Amazon both
+configured the count is 6 and rule 3 is silent, and raising the threshold to
+match would arm a gate to fire the next time the honest answer is five. A gate
+that goes red on the truthful answer is a gate that pressures the next person
+into padding, which is the precise behaviour that file exists to prevent.

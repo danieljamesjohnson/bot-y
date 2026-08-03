@@ -49,7 +49,9 @@ MODES
 exist exactly once, and carry exactly one well-formed verdict line?
 
 `--phase` asks whether the tree as a whole is telling the truth about its own
-retailer count, via the five rules in `check_phase`.
+retailer count, via the six rules in `check_phase`. Rules 1-5 are about the
+count itself; rule 6 is about *why* a retailer is absent, and it is the one
+Phase 3 would have failed.
 
 `--config`, `--evidence` and `--fixtures` exist so the tests can point either
 mode at a synthetic tree and watch it go red. A gate nobody has watched fail is
@@ -533,7 +535,7 @@ def check_phase(
 ) -> list[str]:
     """Is this tree telling the truth about its own retailer count?
 
-    Five rules, applied in order, reporting EVERY violation rather than stopping
+    Six rules, applied in order, reporting EVERY violation rather than stopping
     at the first — being told about one gap, fixing it, and being told about the
     next is how a gate gets muted.
 
