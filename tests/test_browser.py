@@ -136,19 +136,51 @@ def test_find_browser_returns_none_when_nothing_is_installed(monkeypatch: pytest
     assert browser.find_browser() is None
 
 
-def _fake_nodriver(monkeypatch: pytest.MonkeyPatch, seen: dict, explode: bool = False) -> None:
+def _fake_nodriver(
+    monkeypatch: pytest.MonkeyPatch,
+    seen: dict,
+    explode: bool = False,
+    profile: Path | None = None,
+    start_explodes: bool = False,
+) -> None:
     """Stand in for nodriver so `_render`'s real body can be exercised offline.
 
     Nothing here opens a socket or spawns a process — it records the launch
     keywords and hands back a tab-shaped object. `explode=True` makes navigation
     raise, to exercise the failure path through the `finally`.
+
+    The `_process` and `config` shims are not decoration, and neither is the
+    `util.get_registered_instances` registry. nodriver's real `Browser.stop()`
+    terminates its Chrome and returns immediately; whether that child is
+    *reaped* and whether its throwaway profile is *deleted* are properties of
+    `_render`'s teardown, not of `stop()`, and both leaked in production for the
+    life of the daemon because no test could see them. `seen["waited"]` and the
+    profile directory on disk are how they get observed rather than assumed.
     """
+
+    class _Process:
+        pid = 4242
+        returncode = None
+
+        async def wait(self) -> int:
+            seen["waited"] = True
+            return 0
 
     class _Tab:
         async def get_content(self) -> str:
             return "<html>fake</html>"
 
     class _Browser:
+        def __init__(self) -> None:
+            self._process = _Process()
+            # Shaped like nodriver's `Config`: a throwaway profile it made
+            # itself (`uses_custom_data_dir` False) is ours to delete; one the
+            # caller supplied is not.
+            self.config = types.SimpleNamespace(
+                user_data_dir=str(profile) if profile is not None else None,
+                uses_custom_data_dir=False,
+            )
+
         async def get(self, url: str) -> _Tab:
             seen["url"] = url
             if explode:
@@ -158,11 +190,28 @@ def _fake_nodriver(monkeypatch: pytest.MonkeyPatch, seen: dict, explode: bool = 
         def stop(self) -> None:
             seen["stopped"] = True
 
+    instances: set = set()
+
     async def _start(**kwargs: object) -> _Browser:
         seen.update(kwargs)
-        return _Browser()
+        made = _Browser()
+        # nodriver registers the instance the moment Chrome is spawned, before
+        # the DevTools handshake that can fail — which is what makes the
+        # registry the only handle on a browser whose `start()` never returned.
+        instances.add(made)
+        seen["instances"] = instances
+        if start_explodes:
+            raise RuntimeError("Failed to connect to browser")
+        return made
 
-    monkeypatch.setitem(sys.modules, "nodriver", types.SimpleNamespace(start=_start))
+    monkeypatch.setitem(
+        sys.modules,
+        "nodriver",
+        types.SimpleNamespace(
+            start=_start,
+            util=types.SimpleNamespace(get_registered_instances=lambda: instances),
+        ),
+    )
 
 
 def test_the_chrome_sandbox_is_on_unless_explicitly_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -201,6 +250,80 @@ def test_the_browser_is_stopped_even_when_the_page_explodes(monkeypatch: pytest.
         _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
 
     assert seen["stopped"] is True, "browser.stop() did not run on the failure path"
+
+
+@pytest.mark.parametrize("explode", [False, True])
+def test_a_render_reaps_its_chrome_and_deletes_its_profile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, explode: bool
+) -> None:
+    """`stop()` is not teardown. Reaping the child and deleting the profile is.
+
+    This is the finding that shipped: `boty watch` ran for an hour and held 13
+    defunct `chrome` children and 204 MB of `/tmp/uc_*` profiles, one of each
+    per poll cycle, climbing forever. `browser.stop()` sends SIGTERM and returns
+    — it does not `wait()`, so the loop closes before SIGCHLD is handled and the
+    child stays a zombie held by this process for as long as it lives. The
+    profile is nodriver's to delete and it only does so from an `atexit`
+    handler, which a monitor that never exits never reaches.
+
+    The existing `test_the_browser_is_stopped_even_when_the_page_explodes`
+    asserted `stop()` was called and passed throughout, which is exactly why
+    this was invisible: `stop()` *was* being called. Both halves are asserted
+    here, on the success path and the failure path, because a leak that only
+    happens when a page misbehaves is the one that compounds fastest.
+    """
+    profile = tmp_path / "uc_deadbeef"
+    (profile / "Default").mkdir(parents=True)
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen, explode=explode, profile=profile)
+
+    if explode:
+        with pytest.raises(RuntimeError, match="navigation blew up"):
+            _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+    else:
+        assert _REAL_RENDER("https://example.com/", None, 5.0, 0.0) == "<html>fake</html>"
+
+    assert seen.get("waited") is True, (
+        "the Chrome child was never awaited — SIGTERM without wait() leaves a "
+        "zombie held by this process for the life of the monitor"
+    )
+    assert not profile.exists(), (
+        f"the throwaway profile {profile.name} survived the render — nodriver "
+        "only removes it from an atexit handler `boty watch` never reaches"
+    )
+
+
+def test_a_caller_supplied_profile_is_not_deleted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Only the throwaway profile is ours to delete.
+
+    `uses_custom_data_dir` is nodriver's own record of who owns the directory.
+    Ignoring it would mean a future caller passing `user_data_dir=` — a logged
+    -in profile, say — has it silently rmtree'd out from under them by a stock
+    check. The teardown has to be aggressive about what it made and inert about
+    what it was handed.
+    """
+    profile = tmp_path / "my-real-profile"
+    (profile / "Default").mkdir(parents=True)
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen, profile=profile)
+
+    import nodriver  # the fake, installed above
+
+    original_start = nodriver.start
+
+    async def _start(**kwargs: object) -> object:
+        made = await original_start(**kwargs)
+        made.config.uses_custom_data_dir = True
+        return made
+
+    monkeypatch.setattr(nodriver, "start", _start)
+
+    _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+
+    assert profile.exists(), "a caller-supplied profile was deleted by the teardown"
+    assert seen.get("waited") is True, "the child must still be reaped"
 
 
 def test_importing_browser_does_not_import_nodriver() -> None:

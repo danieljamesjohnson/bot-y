@@ -29,9 +29,11 @@ Two things follow from that, and both are load-bearing:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import shutil
+from typing import Any
 
 from .fetch import BLOCK_PHRASES, Blocked, FetchError, Page
 
@@ -93,6 +95,57 @@ def find_browser() -> str | None:
     return None
 
 
+#: How long the teardown waits for a terminated Chrome to actually die.
+#:
+#: Bounded because this runs on the way out of a render that may already have
+#: timed out, and a monitor that hangs in its cleanup has failed in the same way
+#: as one that hangs in its fetch. If the wait expires we have leaked a process —
+#: but we have leaked exactly one, and the next cycle still runs.
+_REAP_TIMEOUT = 10.0
+
+
+async def _teardown(browser: Any) -> None:
+    """Stop a browser, reap its child, and delete its throwaway profile.
+
+    `browser.stop()` is not teardown, and believing it was cost this project a
+    production leak. nodriver's `stop()` sends SIGTERM and returns immediately:
+    it never `wait()`s. `asyncio.run` then closes the loop before SIGCHLD is
+    handled, so the Chrome process becomes a **zombie held by this process for
+    as long as it lives** — and for `boty watch`, that is forever. Measured on
+    the deployed unit: 13 defunct children after 71 minutes, one per poll cycle,
+    with no ceiling short of `TasksMax`.
+
+    The profile directory is the same defect wearing different clothes.
+    nodriver's `Config` creates `/tmp/uc_*` per launch and only ever removes it
+    from an `atexit` handler (`util.deconstruct_browser`), which a daemon that
+    never exits never reaches. Same measurement: 204 MB, ~170 MB/hour, and the
+    unit's `PrivateTmp` fills in days.
+
+    Every step is defensive because this is cleanup: it runs on failure paths,
+    including ones where the browser never finished starting, so a teardown that
+    raises would replace a real diagnosis with an error about tidying up.
+    """
+    with contextlib.suppress(Exception):
+        browser.stop()
+
+    proc = getattr(browser, "_process", None)
+    if proc is not None:
+        # The actual reap. Also the reason the "Event loop is closed" tracebacks
+        # went away: awaiting here lets the subprocess transports finalise while
+        # the loop is still alive, instead of at interpreter shutdown when it is
+        # not. That noise was logged as cosmetic; it was this leak surfacing.
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(proc.wait(), _REAP_TIMEOUT)
+
+    cfg = getattr(browser, "config", None)
+    data_dir = getattr(cfg, "user_data_dir", None)
+    # `uses_custom_data_dir` is nodriver's record of who owns the directory.
+    # Only the throwaway is ours to delete — rmtree'ing a caller-supplied
+    # profile would be a far worse bug than the one this fixes.
+    if data_dir and not getattr(cfg, "uses_custom_data_dir", False):
+        shutil.rmtree(data_dir, ignore_errors=True)
+
+
 def _render(url: str, executable: str | None, timeout: float, settle_seconds: float) -> str:
     """Launch a browser, navigate to `url`, and return the rendered HTML.
 
@@ -100,10 +153,18 @@ def _render(url: str, executable: str | None, timeout: float, settle_seconds: fl
     that starts a browser process — which is what makes it the seam the offline
     test guard patches by name. Keep it that way.
 
-    The whole coroutine is bounded by `asyncio.wait_for`, and the browser is
-    stopped in a `finally` on every path including cancellation. A hostile or
-    merely slow page must not be able to wedge a monitor cycle or leak a Chrome
-    process; a monitor that stops polling is as useless as one that lies.
+    The launch-and-drive work is bounded by `asyncio.wait_for`, and every
+    browser it started is torn down in a `finally` — stopped, reaped, and its
+    profile removed. A hostile or merely slow page must not be able to wedge a
+    monitor cycle or leak a Chrome process; a monitor that stops polling is as
+    useless as one that lies, and one that fills its own disk stops polling.
+
+    The timeout deliberately wraps the *inner* coroutine rather than the whole
+    thing. Teardown has to `await` — reaping a child is an await — and an
+    `await` inside a `finally` that is itself running under cancellation is not
+    reliable. Bounding the work and then cleaning up outside that bound means
+    the cleanup runs in an uncancelled context on every path, which is the only
+    way it can be depended on. `_REAP_TIMEOUT` keeps the cleanup itself bounded.
     """
     # Lazy, and first: `browser` is an optional extra, so an ImportError here is
     # an ordinary "you did not install it" that `fetch_rendered` turns into an
@@ -119,16 +180,22 @@ def _render(url: str, executable: str | None, timeout: float, settle_seconds: fl
         )
 
     async def _run() -> str:
-        browser = await nodriver.start(
-            headless=True,
-            browser_executable_path=executable,
-            sandbox=sandbox,
-            # No extensions, no persistent profile, no credentials: this browser
-            # sees public product URLs and nothing else. nodriver creates and
-            # removes a throwaway user-data dir per run.
-            browser_args=["--disable-extensions", "--disable-background-networking"],
-        )
-        try:
+        # Every browser this call started, so the teardown has a handle on it
+        # even when `_drive` did not get far enough to return one.
+        started: list[Any] = []
+
+        async def _drive() -> str:
+            browser = await nodriver.start(
+                headless=True,
+                browser_executable_path=executable,
+                sandbox=sandbox,
+                # No extensions, no persistent profile, no credentials: this
+                # browser sees public product URLs and nothing else. nodriver
+                # creates a throwaway user-data dir per run; deleting it again
+                # is `_teardown`'s job, not nodriver's — see its docstring.
+                browser_args=["--disable-extensions", "--disable-background-networking"],
+            )
+            started.append(browser)
             tab = await browser.get(url)
             # Client-side rendering: the interesting markup does not exist at
             # navigation-complete. Waiting a fixed beat is crude but honest —
@@ -137,10 +204,14 @@ def _render(url: str, executable: str | None, timeout: float, settle_seconds: fl
             await asyncio.sleep(settle_seconds)
             content = await tab.get_content()
             return str(content)
-        finally:
-            browser.stop()
 
-    return asyncio.run(asyncio.wait_for(_run(), timeout))
+        try:
+            return await asyncio.wait_for(_drive(), timeout)
+        finally:
+            for browser in started:
+                await _teardown(browser)
+
+    return asyncio.run(_run())
 
 
 def fetch_rendered(url: str, *, timeout: float = 45.0, settle_seconds: float = 3.0) -> Page:
