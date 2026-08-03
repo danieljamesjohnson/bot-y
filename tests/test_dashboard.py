@@ -7,6 +7,12 @@ the consuming half, so the page could — and did — quietly render neither, wh
 made a browser-read value look identical to a first-party one on the phone-sized
 surface behind `/tools/boty`. A contract asserted at one end only is a comment.
 
+The same file is also where every retailer-controlled string in this project
+ends up. `Result.detail` interpolates a seller name and an availability string
+straight out of a retailer's JSON, and the page assigns the result to
+`innerHTML`. So this module makes two claims about `served/boty/index.html`: it
+shows how much a reading is worth, and it does not execute what a retailer says.
+
 These are structural assertions against the file's source rather than a
 browser-driven test, deliberately. `make verify` has to run from a fresh clone
 with `pip install -e '.[dev]'` and nothing else; requiring a JavaScript runtime
@@ -22,6 +28,16 @@ from pathlib import Path
 import pytest
 
 DASHBOARD = Path(__file__).resolve().parent.parent / "served" / "boty" / "index.html"
+
+#: Fields whose values originate with a retailer rather than with the operator.
+#: `detail` is the sharp one — `f"{source}: {offer.raw_availability} from
+#: {seller}"` in `retailers._verdict_from_html`, both halves lifted verbatim out
+#: of the retailer's own JSON-LD. `name` and `url` come from
+#: `config/products.yaml` and are operator-controlled, but they are escaped too:
+#: the cost is nothing, and the rule "everything at this sink is escaped"
+#: survives contact with a future edit in a way that "these three but not those
+#: two" does not.
+UNTRUSTED = ("w.name", "w.detail", "w.retailer", "w.url", "r.retailer", "r.reason")
 
 
 @pytest.fixture(scope="module")
@@ -70,3 +86,64 @@ def test_the_degraded_tag_is_visually_distinct(page: str) -> None:
     )
 
 
+# --------------------------------------------------------------------------
+# WR-05: retailer strings reach innerHTML
+# --------------------------------------------------------------------------
+
+
+def test_the_dashboard_defines_an_html_escaper(page: str) -> None:
+    """Five characters, because escaping four of them is not escaping."""
+    assert re.search(r"\bconst\s+esc\s*=", page), "no `esc` helper defined"
+    for char, entity in (
+        ("&", "&amp;"),
+        ("<", "&lt;"),
+        (">", "&gt;"),
+        ('"', "&quot;"),
+        ("'", "&#39;"),
+    ):
+        assert entity in page, f"the escaper does not map {char!r} to {entity}"
+
+
+def test_every_retailer_controlled_string_is_escaped_before_innerhtml(page: str) -> None:
+    """The assertion that has to survive the next edit to this template.
+
+    `w.detail` is `f"{source}: {offer.raw_availability} from {seller}"` — both
+    halves straight out of a retailer's JSON-LD, unescaped, via `status.json`.
+    With `first_party_only: false`, a supported and tested setting, `_pick`
+    accepts any offer and an arbitrary marketplace seller's display name lands
+    in `innerHTML`. `raw_availability` is unbounded on both settings.
+
+    Because the page is proxied under Mission Control's `/tools/boty`, anything
+    injected here runs on Mission Control's origin rather than an isolated one.
+
+    Checks every `${...}` in the file rather than the known-bad ones, so adding
+    a new raw retailer field to the template fails here rather than shipping.
+    """
+    offenders = []
+    for expr in re.findall(r"\$\{([^{}]*)\}", page):
+        for field in UNTRUSTED:
+            # `w.url` inside an href is still interpolated into innerHTML, so it
+            # is held to the same rule as the rest.
+            if re.search(rf"(?<![\w.]){re.escape(field)}\b", expr) and "esc(" not in expr:
+                offenders.append(f"{field} in ${{{expr.strip()}}}")
+
+    assert not offenders, (
+        "retailer- or config-controlled strings reach `innerHTML` unescaped:\n  "
+        + "\n  ".join(sorted(set(offenders)))
+    )
+
+
+def test_the_health_banner_is_escaped_too(page: str) -> None:
+    """The banner is the second `innerHTML` sink and it is easy to forget.
+
+    `r.reason` is built from `Health`, which names failing controls and carries
+    detail text with the same provenance as `w.detail`. A page that escapes its
+    list and not its banner is a page with an XSS in it.
+    """
+    banner = re.search(r"banner\.innerHTML\s*=\s*(.+)", page)
+    assert banner, "the banner no longer assigns innerHTML — update this test"
+    line = banner.group(1)
+    for field in ("r.retailer", "r.reason"):
+        assert f"esc({field})" in line.replace(" ", ""), (
+            f"{field} is interpolated into the health banner unescaped"
+        )

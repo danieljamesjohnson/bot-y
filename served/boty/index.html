@@ -64,6 +64,24 @@
 <script>
 const fmtAge = s => s < 90 ? `${s|0}s ago` : s < 5400 ? `${(s/60)|0}m ago` : `${(s/3600)|0}h ago`;
 
+// Everything below builds HTML by interpolation and assigns it to innerHTML,
+// and not all of it is ours. `w.detail` is `"<source>: <availability> from
+// <seller>"` — both halves lifted verbatim out of the retailer's own JSON-LD by
+// boty.retailers, carried through status.json, and rendered here. With
+// `first_party_only: false` (a supported, documented, tested setting) any
+// marketplace seller's display name lands in that string; `raw_availability` is
+// unbounded either way. A seller who names their store
+// `<img src=x onerror=...>` would otherwise get script execution on THIS origin
+// — which, behind Mission Control's /tools/boty proxy, is Mission Control's,
+// not an isolated one.
+//
+// So: escape once, at the sink, and apply it to every interpolated value rather
+// than to the ones currently known to be attacker-reachable. Operator-controlled
+// fields go through it too. A rule of the form "these three but not those two"
+// does not survive the next edit to this template.
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
 async function tick() {
   let d;
   try {
@@ -85,7 +103,7 @@ async function tick() {
     banner.textContent = `Status is ${fmtAge(age)} — the monitor may not be running.`;
   } else if (bad.length) {
     banner.className = 'banner bad';
-    banner.innerHTML = bad.map(r => `<strong>${r.retailer}</strong>: ${r.reason}`).join('<br>');
+    banner.innerHTML = bad.map(r => `<strong>${esc(r.retailer)}</strong>: ${esc(r.reason)}`).join('<br>');
   } else {
     banner.className = 'banner ok';
     banner.textContent = 'All detectors verified by control products.';
@@ -95,8 +113,8 @@ async function tick() {
     <li>
       <span class="dot ${w.availability}"></span>
       <div>
-        <div>${w.url ? `<a class="name" href="${w.url}" target="_blank" rel="noopener">${w.name}</a>` : `<span class="name">${w.name}</span>`}${w.control ? '<span class="tag">control</span>' : ''}${w.degraded ? '<span class="tag degraded" title="read through a browser (rung 3) — lower confidence than a direct fetch">degraded</span>' : ''}</div>
-        <div class="meta">${w.retailer} · ${w.detail}</div>
+        <div>${w.url ? `<a class="name" href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a>` : `<span class="name">${esc(w.name)}</span>`}${w.control ? '<span class="tag">control</span>' : ''}${w.degraded ? '<span class="tag degraded" title="read through a browser (rung 3) — lower confidence than a direct fetch">degraded</span>' : ''}</div>
+        <div class="meta">${esc(w.retailer)} · ${esc(w.detail)}</div>
       </div>
       <span class="price">${w.price != null ? '$' + w.price.toFixed(2) : ''}</span>
     </li>`).join('');
