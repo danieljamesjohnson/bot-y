@@ -2,6 +2,73 @@
 
 Two things I cannot do myself. Everything else in the MVP is proceeding without them.
 
+## 0b. Target is rung 4 too — so the five-retailer bar is UNMET, at four
+
+**Not blocking, and there is nothing for you to do.** This is the note the two
+below were setting up, and it is the one that closes the question: Phase 3's
+criterion 5 wanted five working retailers. **It lands on four** — gamestop,
+walmart, bestbuy, nintendo — and it is recorded as unmet rather than padded.
+
+Target's Terms & Conditions (retrieved 2026-08-03,
+`https://www.target.com/c/terms-conditions/-/N-4sr7l`, document header
+`LAST UPDATED: April 15, 2026`) forbid this in the `Unlawful or Prohibited Uses`
+section:
+
+> Make any use of data extraction, scraping, mining or other data gathering
+> tools, or create a database by systematically downloading or storing Site
+> content, or otherwise scrape, collect, store or use any Content, account
+> information, product listings, descriptions, prices or images…
+
+That bullet carries no commercial-use qualifier — unlike the one above it, which
+does, and which would not have reached a personal restock monitor. And the
+Introduction closes the obvious objection in advance: *"Any person or entity who
+interacts with the Site through the use of crawlers, robots, browsers, data
+mining or extraction tools … is considered to be using the Site"*, and using the
+Site is agreeing to the terms. A scraper never clicks "I agree"; Target has
+written down that it does not need to.
+
+- **Zero requests were made to any Target product page.** The terms were read
+  first, deliberately, the same way Amazon's were. Four `curl` requests total —
+  two policy pages and two `robots.txt` files — all HTTP 200, ≥15 s apart. The
+  politeness budget was 12; 4 were spent, and no product page, TCIN lookup or
+  browser render ever happened.
+- **robots.txt is BROADER than the terms here, which is the opposite of Amazon.**
+  `www.target.com/robots.txt` does not disallow `/p/` at all, has no named-bot
+  blocks, and *publishes* `sitemap_pdp-index.xml.gz` — a product-detail index
+  that would have solved the TCIN problem this project gave up on in Phase 2. It
+  was not used. Taking the `/p/` gap because robots.txt omits it, while the
+  terms name prices explicitly, is the posture this project already ruled out
+  for Amazon's `/dp/` gap.
+- **Rung 2 (RedSky) is closed four ways.** `redsky.target.com/robots.txt` is
+  `User-agent: * / Disallow: /` — the whole host, every agent. Its `key`
+  parameter is not issuable: there is no portal and no signup, and the only way
+  to get one is to lift Target's own front-end constant, which means presenting
+  yourself to Target's API as Target's website. The terms cover it regardless of
+  hostname. And it is CAPTCHA-gated in practice, which is the least important of
+  the four because it is the only one that could change.
+
+**What it costs:** the fifth retailer, and that is now final rather than
+pending. Phase 3's two candidates were Target and Amazon; both are **rung 4**,
+both by written prohibition rather than by a wall, and neither cost this host a
+single product-page request. There is no third candidate — the Phase 2 search
+established that no other US retailer stocks the Pokémon GO Plus +, and a
+control-only retailer like Micro Center was probed and explicitly declined
+because it could never alert on the product.
+
+**What it does not cost:** anything else. `make verify` exits 0, all four
+retailers are control-verified and read IN_STOCK, `healthy` is true, and
+Nintendo still lists the GO Plus + at $54.99 MSRP first-party with no
+marketplace attached — the best restock signal this project has.
+
+Every retailer in the roadmap's scope is now either shipped or refused in
+writing, so the gap is fully described rather than merely small.
+`scripts/evidence_check.py --phase` passes on this tree for the first time, and
+03-03 wires it into `make verify` so the four cannot quietly become five.
+
+Full evidence — the clauses in context, the four requests with byte counts, both
+`robots.txt` files, and why nobody should re-probe — is in
+`docs/retailer-evidence.md` under `## Target`.
+
 ## 0a. Amazon is rung 4 — settled by its Conditions of Use, without a single probe
 
 **Not blocking, and there is nothing for you to do.** Same shape as the Pokémon
@@ -87,6 +154,10 @@ restock signal this project has.
 
 Phase 3 targets Target and Amazon. If either lands, the count reaches five
 there.
+
+**Update, 2026-08-03: neither landed.** Both are rung 4, both by a written
+prohibition in the retailer's own terms rather than by a wall. The count stays
+at four and criterion 5 is recorded unmet — see `0b` and `0a` above.
 
 ## 1. Telegram bot token — REGENERATE FIRST
 

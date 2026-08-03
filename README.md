@@ -82,18 +82,23 @@ actually tried against each one, and what came back, is in
 | Best Buy | 3 (2 with a key) | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
 | Pokémon Center | 4 | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 (headless Chrome, twice); its `robots.txt` forbids the API endpoints that would answer the stock question | ❌ Dropped, with the evidence written down. Not configured, and deliberately not padded into the count — it stocks the product, so a watch here would have looked plausible and read nothing forever |
 | Amazon | 4 | none — its Conditions of Use forbid it. The licence to use the site excludes "any collection and use of any product listings, descriptions, or prices" and "any use of data mining, robots, or similar data gathering and extraction tools" | ❌ Dropped, and dropped without ever fetching a product page. The terms were read first, so the reason is a written prohibition rather than a wall we could not get past — a wall can fall and this cannot. Not configured |
-| Target | — | RedSky API | 🚧 Planned |
+| Target | 4 | none — its Terms & Conditions forbid it. `Unlawful or Prohibited Uses` bars "any use of data extraction, scraping, mining or other data gathering tools" and "otherwise scrape, collect, store or use any Content … product listings, descriptions, prices or images", with no commercial-use qualifier. Rung 2 (RedSky) is closed separately: `redsky.target.com/robots.txt` is `Disallow: /` for every agent | ❌ Dropped, without ever fetching a product page. Note the direction of the disagreement: `www.target.com/robots.txt` does **not** disallow `/p/`, and Target publishes a product-detail sitemap — robots.txt is broader than the terms here, and the terms govern. Not configured |
 
 **Four working retailers, not five.** The roadmap's MVP bar was five, and this is
 what the bar actually bought: a retailer that cannot be read is dropped and
-documented rather than shipped as a detector with nothing behind it. Pokémon
-Center and Amazon are the two that fell out, for different reasons that are
-worth telling apart — Pokémon Center was walked down the whole ladder and
-refused at every rung, while Amazon was never probed at all because its terms
-answer the question before a request would. Neither has been padded into the
-count. [`docs/retailer-evidence.md`](docs/retailer-evidence.md) carries both
+documented rather than shipped as a detector with nothing behind it. **Three**
+fell out, for reasons worth telling apart — Pokémon Center was walked down the
+whole ladder and refused at every rung, while Amazon and Target were never
+probed at all, because each one's terms answer the question before a request
+would. None has been padded into the count.
+[`docs/retailer-evidence.md`](docs/retailer-evidence.md) carries all three
 records, including which two probes would establish whether anything has changed
-at Pokémon Center, and why the answer for Amazon is that nobody should look.
+at Pokémon Center, and why the answer for Amazon and Target is that nobody
+should look.
+
+That is the whole of the gap, incidentally: with Target settled, every retailer
+in the roadmap's scope is now either shipped or refused in writing. The bar is
+missed by one, and nothing about which retailer or why is left unrecorded.
 
 `scripts/evidence_check.py` is what stops that number drifting. It fails if a
 retailer outside the roadmap's scope is ever configured to make the count read
