@@ -53,6 +53,18 @@ BLOCK_PHRASES = (
     # rung-3 refusal, where the human-readable wording appeared in only one.
     "pardon our interruption",
     "_incapsula_resource",
+    # Akamai Bot Manager, found on kohls.com while probing for a fifth retailer.
+    # Same defect as the Imperva case above and the reason it is worth adding
+    # before anyone needs it: the challenge is served at HTTP **200**, so
+    # without a phrase here it is read as an ordinary page and surfaces as
+    # "page shape changed?" — blaming our parser for a retailer's refusal.
+    # Akamai fronts a large share of US retail *including Target*, which Phase 3
+    # walks the ladder at, so a misattributed refusal there would send someone
+    # debugging an extractor that is working fine.
+    # `sec-if-cpt-container` is the structural marker and the durable one;
+    # `scf-akamai-protected-by` depends on wording and may drift.
+    "sec-if-cpt-container",
+    "scf-akamai-protected-by",
 )
 
 

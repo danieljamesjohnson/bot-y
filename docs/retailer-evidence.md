@@ -528,3 +528,51 @@ carries its own detectable footprint. Rung 3 is not "rung 1 but stronger" — fo
 at least one retailer we already support, it is strictly worse. Escalate to it
 because a page genuinely needs JS or refuses HTTP at the connection layer, not
 because a page failed once.
+
+---
+
+## Fifth-retailer search (2026-08-02) — candidates probed, none adopted
+
+Phase 2 reached four retailers. Before deciding whether to add a fifth, seven
+candidates were probed with the real adapter stack. **Nothing was adopted**, and
+the reason is a market fact rather than a technical one:
+
+**No fifth US retailer stocks the Pokémon GO Plus +.** The set is GameStop,
+Walmart, Nintendo, Pokémon Center, Target and Amazon. Four are settled here; the
+last two are Phase 3's. Every remaining candidate could only ever be a
+*control-only* retailer like Best Buy — proving its own detector works while
+being permanently unable to alert on the product this project exists for.
+
+| Candidate | Verdict | Notes |
+|---|---|---|
+| Micro Center | **REACHABLE (rung 1)** | Config-only; `check_html` reads it as shipped. Verified twice 20 min apart. Availability is a real signal, not a constant — an RTX 5070 Ti read OUT_OF_STOCK at $999.99 in a session where six other products read IN_STOCK. Miss path (bogus id, search page) correctly yields UNKNOWN. Viable control: Inland HDMI cable, $9.99, house brand. **Not adopted — does not carry the GO Plus +.** |
+| Adorama | REACHABLE (rung 1) | Explicit `seller: "Adorama"`; needs one `FIRST_PARTY` line. No evergreen control verified — the page read was `Discontinued` — so it would fail `control_check.py` today. |
+| Kohl's | **REFUSED** | Akamai Bot Manager, behavioural challenge at HTTP 200. Found a defect in *our* code — see below. |
+| B&H | REFUSED | Product pages 403 while search returns 200; robots disallows the search path. |
+| Books-A-Million | REFUSED | Same shape as B&H. |
+| Meijer | REFUSED | AEM SPA shell — rung 3 only. |
+| Barnes & Noble | REFUSED (structural) | Now Shopify, but both product-URL forms 404 and product data is a bespoke Nuxt hydration array. |
+| Newegg | not established | One 404 on a dead listing, then stopped. It is a marketplace anyway. |
+
+### The Kohl's probe found a defect in our own code
+
+Akamai Bot Manager serves a behavioural challenge at **HTTP 200** carrying no
+human-readable "are you a robot" wording at all — the markers are structural.
+`BLOCK_PHRASES` matched nothing, so the wall came back as an ordinary page and
+the refusal surfaced as `no structured stock data found (page shape changed?)`,
+pointing at our own parser for a problem that has nothing to do with it.
+
+This is the third instance of one defect class: **a bot wall that returns 200.**
+DataDome answered 403 (honest), but Imperva and now Akamai both answer 200.
+
+Fixed the same way the Imperva case was, with both directions pinned:
+`sec-if-cpt-container` (structural, durable) and `scf-akamai-protected-by`
+(wording-dependent). `tests/test_fetch.py` asserts the challenge raises
+`Blocked`, and the existing fixture-replay test asserts no shipped fixture
+became newly "blocked" — an over-broad phrase would report a working retailer as
+refused forever, which is worse than the bug it fixes.
+
+**This matters for Phase 3 more than for Kohl's.** Akamai fronts a large share of
+US retail *including Target*. Without this, a Target refusal would have been
+misattributed to our extractor, and someone would have spent the phase debugging
+code that was working.

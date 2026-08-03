@@ -61,6 +61,23 @@ INCAPSULA_IFRAME = (
 )
 
 
+#: Verbatim shape from kohls.com, found while probing candidates for a fifth
+#: retailer. Akamai Bot Manager serves this behavioural challenge at HTTP 200
+#: with no human-readable "are you a robot" wording at all — the only markers
+#: are structural. It matters beyond Kohl's: Akamai fronts a large share of US
+#: retail including Target, which Phase 3 walks the ladder at.
+AKAMAI_CHALLENGE = (
+    "<!DOCTYPE html><html><head>"
+    '<meta name="robots" content="noindex, nofollow">'
+    '<link rel="stylesheet" href="/sec-if-cpt/style.css">'
+    "</head><body>"
+    '<div id="sec-if-cpt-container" data-scf-akamai-protected-by="Akamai Bot Manager">'
+    "</div>"
+    '<script src="/sec-if-cpt/challenge.js" async></script>'
+    "</body></html>"
+)
+
+
 class _FakeResponse:
     """Just enough of a curl_cffi response for `fetch.get` to read."""
 
@@ -118,6 +135,25 @@ def test_an_incapsula_iframe_is_blocked(monkeypatch: pytest.MonkeyPatch) -> None
 
     with pytest.raises(Blocked):
         fetch.get("https://www.pokemoncenter.com/product/715e10557/pokemon-go-plus", jitter=(0, 0))
+
+
+def test_an_akamai_challenge_at_http_200_is_blocked_not_a_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Imperva defect again, different vendor, found before it cost us.
+
+    Akamai's challenge carries no "are you a robot" wording — a phrase list
+    built only from human-readable copy would miss it entirely and report the
+    refusal as "page shape changed?", sending someone to debug an extractor
+    that is working perfectly. Added while probing a fifth retailer, ahead of
+    Phase 3 walking the ladder at Target, which Akamai also fronts.
+    """
+    _answer(monkeypatch, AKAMAI_CHALLENGE)
+
+    with pytest.raises(Blocked) as caught:
+        fetch.get("https://www.kohls.com/product/prd-1234/some-product.jsp", jitter=(0, 0))
+
+    assert "200" in str(caught.value), "the status is the point — say it out loud"
 
 
 def test_the_browser_rung_recognises_the_same_walls(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -97,18 +97,29 @@ himself in six months and get a real answer.
 
 ### Phase 2: Five Retailers Green
 
-**Goal**: Five retailers reporting trustworthy stock for the GO Plus +, each control-verified. This is the MVP bar.
+**Goal**: Every retailer we can actually reach reporting trustworthy stock for the GO Plus +, each control-verified.
 **Depends on**: Phase 1
 **Requirements**: REQ-04, REQ-05, REQ-06
 **Success Criteria** (what must be TRUE):
 
   1. Best Buy reports stock with NO credentials configured, flagged DEGRADED; and reports stock without the DEGRADED flag when an API key IS present
-  2. Pokémon Center and the Nintendo store each report stock for a real product
+  2. The Nintendo store reports stock for a real product; Pokémon Center does the same or is documented as unreachable with the evidence
   3. Every retailer has at least one control watch, and `boty check` shows all controls in stock
-  4. `boty check` reports five or more retailers with no health warnings
-  5. Each new adapter has fixture-backed tests from Phase 1
-  6. The support matrix records which escalation rung each retailer landed on
-  7. `make verify` exits 0
+  4. Each new adapter has fixture-backed tests from Phase 1
+  5. The support matrix records which escalation rung each retailer landed on
+  6. `make verify` exits 0
+
+**The five-retailer count moved to Phase 3** (2026-08-02, Dan's call). It was written here
+as the MVP bar on the assumption that a fifth reachable retailer existed. It does not: the
+US retail set for this device is GameStop, Walmart, Nintendo, Pokémon Center, Target and
+Amazon. Phase 2 settled four of them — Pokémon Center is rung 4 with four recorded
+refusals — and the remaining two are Phase 3's by this roadmap's own scope.
+
+A control-only fifth (Micro Center was probed and is viable, rung 1, config-only) would
+have moved the counter without moving the goal, since it does not carry the GO Plus + and
+could never alert on it. Adding it was declined for that reason. Target or Amazon landing
+in Phase 3 makes five honestly. Evidence for every candidate probed is in
+`docs/retailer-evidence.md`.
 
 **Plans**: 4 plans, in 3 waves
 
@@ -134,9 +145,10 @@ Plans:
   1. Target reports stock, or the support matrix records what was tried and why it failed
   2. Amazon reports stock, or the same
   3. Any retailer reached via rung 3 is flagged DEGRADED in the matrix and in `boty check` output
-  4. All controls still green; no regression in the five from Phase 2
-  5. A single `boty check` completes in under 2 minutes
-  6. `make verify` exits 0
+  4. All controls still green; no regression in the four from Phase 2
+  5. `boty check` reports five or more retailers with no health warnings — carried over from Phase 2, which reached four because no fifth reachable retailer stocks the GO Plus +. Target or Amazon landing satisfies it. If both are rung 4, this criterion is unmet and recorded as such, never padded with a retailer that does not carry the product
+  6. A single `boty check` completes in under 2 minutes
+  7. `make verify` exits 0
 
 **Plans**: 2 plans (parallelizable)
 
