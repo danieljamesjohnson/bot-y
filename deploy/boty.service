@@ -16,6 +16,20 @@ WorkingDirectory=/home/dan/CodeProjects/pokemongoplusplus
 # Secrets live here, mode 600, outside the repo. Missing file is fatal by
 # design — running with no notification target is a silent monitor, which is
 # the exact failure mode this project exists to prevent.
+#
+# If any watch uses a rung-3 (browser) retailer, this file must ALSO carry
+# BOTY_BROWSER_PATH, and on Ubuntu 24.04 BOTY_BROWSER_NO_SANDBOX=1. A login
+# shell can pick a browser up from PATH or an exported variable; systemd runs
+# with almost no environment and will not. That asymmetry is not theoretical —
+# it shipped once: `make verify` passed green in a developer shell that had
+# BOTY_BROWSER_PATH exported, while the deployed service could not find a
+# browser at all and paged with "control product is not reading IN_STOCK".
+#
+# The test for this before deploying is to run the control check the way the
+# service will, not the way your shell does:
+#
+#   env -i HOME="$HOME" PATH=/usr/bin:/bin \
+#     .venv/bin/python scripts/control_check.py
 EnvironmentFile=/home/dan/.config/boty/env
 
 ExecStart=/home/dan/CodeProjects/pokemongoplusplus/.venv/bin/boty watch -c config/products.yaml

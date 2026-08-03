@@ -108,6 +108,20 @@ user namespaces to binaries with no AppArmor profile — and aborts on startup;
 real reduction in isolation because this transport executes retailer JavaScript.
 A distro Chrome package is the better fix.
 
+**If you run bot-y under systemd, put both variables in the unit's
+`EnvironmentFile`, not just your shell.** Exporting them interactively makes
+`make verify` pass while the deployed monitor still cannot find a browser — the
+service starts with almost no environment. That combination is worse than a
+plain failure, because the green check reads as proof the thing works. It has
+happened here: a verify run passed in a shell with `BOTY_BROWSER_PATH` exported,
+and the service paged half an hour later with *"control product is not reading
+IN_STOCK — the detector is probably broken"*. Check it the way the service sees
+it before you trust a green:
+
+```bash
+env -i HOME="$HOME" PATH=/usr/bin:/bin .venv/bin/python scripts/control_check.py
+```
+
 ## Use
 
 Adding a product is editing `config/products.yaml`. No code, no rebuild:
