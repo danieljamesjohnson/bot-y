@@ -174,7 +174,7 @@ hydration payload. The frozen fixture therefore contains, verbatim:
 - `"true-client-ip":"192.0.2.1"` and
   `"x-forwarded-for":"192.0.2.1, 192.0.2.1, 192.0.2.1"` — **8
   occurrences** of the capturing host's public IP;
-- `"x-akamai-edgescape":"georegion=285,country_code=US,region_code=XX,city=REDACTED,dma=623,...,areacode=972,county=COLLIN,fips=48085,lat=33.1507,long=-96.823..."`
+- `"x-akamai-edgescape":"georegion=285,country_code=US,region_code=XX,city=REDACTED,dma=REDACTED,...,areacode=REDACTED,county=REDACTED,fips=REDACTED,lat=0.0000,long=0.0000"`
   — **3 occurrences** of city-level geolocation of that IP;
 - the capture user-agent, including `HeadlessChrome/149.0...` and Akamai's own
   `"akamai-bot":"unknown bot (headlesschro_...)"` classification.

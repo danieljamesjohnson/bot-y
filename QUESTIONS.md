@@ -18,11 +18,39 @@ number was your reversal of a written-terms reading, not a new technical
 finding, and a record that quietly agrees with itself afterwards is worth less
 than one that shows the turn.
 
-## 0e. Four already-public fixtures carry host geolocation — history rewrite? — OPEN 2026-08-03
+## 0e. Public history carries host geolocation **and this host's public IP** — history rewrite? — OPEN 2026-08-03
 
-**Not blocking phase 3.1; it is proceeding.** But it is the same class of problem
-as the incident that caused this repo to be deleted and recreated on 2026-08-03,
-and it is *already public*, so it is yours to call rather than mine.
+> ### READ THIS FIRST — the third round changed what is being asked
+>
+> This section opened as "four fixtures carry a coarse ZIP", and on that basis I
+> told you option 1 (leave it) was defensible. **It is not, and the reason is a
+> file nobody had looked at.**
+>
+> **`.planning/phases/02-five-retailers-green/02-REVIEW.md` is on `origin/main`
+> and contains this host's real public IP — three times — together with the full
+> `x-akamai-edgescape` record: city, county, DMA, FIPS, area code and
+> latitude/longitude.** That is not a coarse ZIP. That is precisely the artefact
+> whose discovery caused this repo to be deleted and recreated on 2026-08-03,
+> sitting in the public repo the whole time, in a *planning* file rather than a
+> fixture — which is why every scan aimed at `tests/fixtures/` missed it.
+>
+> **And this project already told itself to fix it.** That same file is Phase 2's
+> own code review. It *found* this leak, wrote it up, and prescribed the remedy:
+> *"Rewrite the blob out of history before Phase 4."* Phase 4 is the next phase.
+> The instruction was written, the fixture half was done, and the history half
+> was never carried out.
+>
+> It escaped the certifying grep for a dull reason worth recording: the grep was
+> case-sensitive and the file spells the city in capitals.
+>
+> **What this does to the options below.** Option 1 (leave it) was argued on "a
+> ZIP code is coarse". A public IP is not coarse — it is the address of the
+> machine, it is stable, and it is attributable. I no longer think option 1 is
+> defensible, and the recommendation is now **option 2 at minimum**, on the
+> schedule this repo already set for itself: before Phase 4.
+
+**Not blocking phase 3.1, which is complete.** It is *already public*, so it is
+yours to call rather than mine.
 
 **What happened.** 03.1-02 captured Target at rung 3 and the leak scan caught a
 serious one before commit — per-session `visitor_id`, an OAuth-shaped
@@ -114,11 +142,47 @@ Both of those mutations now go red; I ran them. Best Buy's `visitorId`s were
 already zeroed, its `55113`/`55423` are Best Buy's own Minnesota region, and
 `75039` in `unresolved-sku.html` is a 1worldsync URL path, not a ZIP.
 
-**The honest summary of two rounds:** the leak was found by a guard, the fix
-missed, the verifier caught the miss, the second fix missed less, and the
-verifier caught that too. What changed between rounds is that the rule is now
-pinned by tests rather than by my attention — which is the only version of this
-that survives the next capture.
+**THIRD CORRECTION, and it is the one that names the actual defect.** The
+verifier's third pass found the previous fix had **added no leak rule at all**.
+I had removed `"pickupStore":"202"`, `"stateCode":"TX"`, `storeId=202` and the
+WIC agency list *by hand*, then pinned only the guard's **scope** — so the same
+capture taken tomorrow would ship every one of them again. It probed 31 shapes
+of this class against the guard; **29 passed clean**, including all four the
+same commit had just removed. It also found the synthetic test cases still
+seeding two of the real values, and 11 of 15 mutations passing silently — among
+them "add the real city and ZIP to the allow-list" (one line, nothing red) and
+"narrow the scan to one retailer, dropping both Walmart fixtures".
+
+That is the whole story in one sentence: **for three rounds the enforcement was
+my attention, and attention only ever covers the list it was handed.**
+
+What exists now instead:
+
+- **13 rules keyed to the class**, not to a spelling — store number (JSON *and*
+  URL forms), state/region/province, city, `destinationZipCode`/`postCode`,
+  short-key `lat`/`lng`, DMA/FIPS/CBSA/county, street address, WIC agency,
+  `City, ST 12345`, and phone numbers in the four ways retailers write them.
+- **A leak case per rule.** Deleting *any one* of the 13 now turns the suite
+  red — I mutated all 13 and watched each one; the first sweep found one silent
+  and I merged the shadowed rule rather than leaving it.
+- **The allow-list is pinned to be a placeholder vocabulary.** Nothing real can
+  be added to it without a red test, because that was the cheapest way to
+  silently disable the whole gate.
+- **The scope is pinned to every retailer directory and both file types.**
+- Best Buy's default-store ZIPs redacted too — not allow-listed. A ZIP in a
+  fixture is a ZIP; deciding case-by-case which are "theirs" is how this
+  started.
+
+All fixtures still parse byte-identically: `IN_STOCK $229.99 Clove Brothers
+LLC`, `IN_STOCK $2.42 Walmart.com`, `IN_STOCK $59.99 Best Buy`. `make verify`
+bare `VERIFY: PASS`, 382 tests, 6/6 live controls, 8/8 mutations.
+
+**The honest summary of three rounds:** a guard found the first leak; my fix
+missed; the verifier caught it; my second fix missed less; the verifier caught
+that; my third fix turned out to be redaction wearing a gate's clothes; the
+verifier caught that too and named why. Each round I was fixing the instances I
+had been shown. The gate only became real when deleting any single rule started
+turning the suite red.
 
 **None of that changes the decision below.** The blobs are still in pushed
 history exactly as described. What changed is that the working tree really is

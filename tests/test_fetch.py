@@ -410,7 +410,9 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     carrying a session token, an OAuth-shaped `refreshToken`, a vendor API key,
     Akamai's geolocation of this host and five store addresses with phone
     numbers. It was widened afterwards, and one turn later it passed a Walmart
-    fixture rendering `Redacted, 00000` as visible markup, because every pattern
+    fixture rendering this host's city and ZIP as visible markup — the values are
+    not repeated here, for the same reason they were taken out of the page —
+    because every pattern
     it had learned was keyed on a JSON key name or a query parameter.
 
     So: one function, two callers. The real tree must be clean, and a synthetic
@@ -419,7 +421,14 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     """
     # Values the redaction is allowed to leave behind. 192.0.2.0/24 is
     # TEST-NET-1 (RFC 5737), reserved for documentation.
-    allowed = {"REDACTED", "00000", "0.0000", "0.0", "0", "REDACTED SUPERCENTER"}
+    # The redaction vocabulary. Every entry is a placeholder this repo writes on
+    # purpose, and each is obviously not a real value: `XX` is not a US state,
+    # `00000` is not an assignable ZIP, `192.0.2.0/24` is RFC 5737 TEST-NET-1.
+    # Nothing real is ever added here — allow-listing a real value is how a gate
+    # gets quietly satisfied, and a mutation that does exactly that is pinned in
+    # `test_the_allow_list_cannot_absorb_a_real_value`.
+    allowed = {"REDACTED", "00000", "0.0000", "0.0", "0", "XX",
+               "REDACTED SUPERCENTER", "REDACTED-CITY", "NOT-AVAILABLE"}
     leaks: list[str] = []
 
     # A CDN echoing the client's own address back into the page.
@@ -446,7 +455,6 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     json_markers = (
         (r'"(?:latitude|longitude)"\s*:\s*"?(-?\d+\.\d+)', "coordinate"),
         (r'"(?:zip|zipCode|postal_code|postalCode)"\s*:\s*"?(\d{4,})', "postal code"),
-        (r'"(address_line1|address_line2)"\s*:\s*"([^"]+)"', "street address"),
         (r'"(?:refreshToken|accessToken|sessionId|session_id|deviceId)"\s*:\s*"([^"]{8,})"', "session token"),
         (r'"(?:visitor_id|visitorId|guest_id|guestId)"\s*:\s*"([^"]{8,})"', "visitor id"),
     )
@@ -475,10 +483,56 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     if found:
         leaks.append(f"{name}: ZIP+4 {found.group(0)}")
 
+    # THE CLASSES REDACTED BY HAND, NOW ENFORCED — and this block is the point.
+    #
+    # Three rounds of this went: find a leak, redact the spellings in front of
+    # me, ship. The verifier caught a survivor every time, and the third round
+    # named why: the fixes added no RULE. `e871377` removed
+    # `"pickupStore":"202"`, `"stateCode":"TX"`, `storeId=202` and a WIC agency
+    # list by hand and then pinned only the guard's *scope* — so the same
+    # capture taken tomorrow would ship every one of them again. Enforcement
+    # that lives in somebody's attention only ever covers the list they were
+    # handed.
+    #
+    # A store number IS a locator: it resolves publicly to one address. A state
+    # is 1-in-50. Neither is a coordinate, and that is exactly why neither was
+    # caught by rules written against coordinates.
+    keyed = (
+        (r'"(?:pickup|delivery|preferred|nearest|selected|home|fulfillment)?[Ss]tore(?:Id|Number|No|Code)?"\s*:\s*"?(\d{2,})', "store number"),
+        (r'\bstore(?:Id|Number)\s*(?:=|%3D)\s*(\d{2,})', "store number in a URL"),
+        (r'"(?:state|region|province)(?:Code|OrProvinceCode|_code)?"\s*:\s*"([A-Z]{2})"', "state or region"),
+        (r'"(?:city|cityName|locality|town)"\s*:\s*"([A-Za-z][A-Za-z .\'-]{2,})"', "city"),
+        (r'"(?:destinationZipCode|postCode|post_code|zip5|zipcode)"\s*:\s*"?(\d{4,})', "postal code"),
+        (r'"(?:lat|lng|lon)"\s*:\s*"?(-?\d+\.\d+)', "coordinate"),
+        (r'"(?:dma|dmaCode|fips|fipsCode|cbsa|metro|county|countyName)"\s*:\s*"?([A-Za-z0-9][A-Za-z0-9 ]*)', "metro or county code"),
+        (r'"(?:address_?[Ll]ine(?:One|Two|[12])?|streetAddress|street1)"\s*:\s*"([^"]+)"', "street address"),
+        (r'(?:WICAgencies|wicAgencies)"\s*:\s*\[\s*"([A-Z]{2})"', "state via WIC agency"),
+    )
+    for pattern, what in keyed:
+        for match in re.finditer(pattern, body):
+            value = match.group(1)
+            if value.strip("0.- ") and value.upper() not in {a.upper() for a in allowed}:
+                leaks.append(f"{name}: {what} {value[:40]}")
+                break
+
+    # `City, ST 12345` — the postal form, which the `City, 12345` rule below
+    # misses because of the state in the middle.
+    found = re.search(r"\b([A-Z][a-z]{2,}(?: [A-Z][a-z]+){0,2}), ([A-Z]{2}) (\d{5})\b", body)
+    if found and found.group(1).upper() not in {a.upper() for a in allowed}:
+        leaks.append(f"{name}: rendered address {found.group(0)}")
+
+    # A phone number written any of the ways a retailer writes one. The
+    # hyphenated form is handled below; these are the rest.
+    for pattern in (r"\((\d{3})\)\s?\d{3}[-.\s]?\d{4}", r"\b(\d{3})\.\d{3}\.\d{4}\b", r"tel:\+?1?(\d{3})\d{7}"):
+        m = re.search(pattern, body)
+        if m and m.group(1) not in {"800", "833", "844", "855", "866", "877", "888"}:
+            leaks.append(f"{name}: phone number {m.group(0)}")
+            break
+
     # FREE TEXT, and this is the class that got through after the widening.
     #
     # Walmart does not write the shipping destination as JSON. It renders it,
-    # as `aria-label="Redacted, 00000, Change shipping address"` and as a button
+    # as `aria-label="<city>, <zip>, Change shipping address"` and as a button
     # label — visible markup, no key name anywhere near it. Every rule above is
     # keyed on a key name or a query parameter, so all of them were blind to it,
     # and two fixtures carrying it had been public since Phase 1.
@@ -518,6 +572,29 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
         '{"visitor_id":"0193f2ab-8c1d-7e2a-b4f6-9a0c1d2e3f45"}': "visitor id",
         "Call the store on 555-555-0134": "phone number",
         'aria-label="Exampleville, 99999, Change shipping address"': "rendered destination",
+        # One case per rule added after the third verification round. Without
+        # these the rules were unwatched: deleting the store-number rule left
+        # the suite green, which is how every previous round of this failed.
+        '{"pickupStore":"202"}': "store number",
+        '{"deliveryStore":"202"}': "store number",
+        '{"storeId":"1234"}': "store number",
+        "?storeId=202&pt=item": "store number in a URL",
+        "?storeId%3D202": "store number in a URL",
+        '{"stateOrProvinceCode":"TX"}': "state or region",
+        '{"regionCode":"TX"}': "state or region",
+        '{"city":"Exampleville"}': "city",
+        '{"destinationZipCode":"99999"}': "postal code",
+        '{"postCode":"99999"}': "postal code",
+        '{"lat":"12.345","lng":"-98.765"}': "coordinate",
+        '{"dma":"623"}': "metro or county code",
+        '{"countyName":"Exampleshire"}': "metro or county code",
+        '{"addressLineOne":"1 Example Way"}': "street address",
+        '{"address_line2":"Suite 4"}': "street address",
+        '{"deliveryWICAgencies":["TX"]}': "state via WIC agency",
+        "Exampleville, TX 99999": "rendered address",
+        "Call (555) 555-0134": "phone number",
+        "Call 555.555.0134": "phone number",
+        '<a href="tel:+15555550134">': "phone number",
     }
     for body, expected in cases.items():
         found = _identity_leaks("synthetic.html", body)
@@ -558,6 +635,58 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
             f"output or on ordinary retailer content is one nobody keeps: "
             f"{_identity_leaks('synthetic.html', benign)}"
         )
+
+
+def test_the_allow_list_cannot_absorb_a_real_value() -> None:
+    """`allowed` is a redaction vocabulary, not an exemption list.
+
+    The verifier's third pass found that adding this host's real city and ZIP to
+    `allowed` left the suite 380/380 green — the cheapest possible way to make
+    this gate stop working, one line, no rule deleted, nothing red. This pins
+    the shape of the set instead of trusting nobody will do that.
+
+    Every legitimate entry is a value that cannot be real: a zero, a
+    placeholder word, `XX` (not a US state), a documentation range. A real
+    city, a real ZIP, a real state or a real store number is by construction
+    not any of those.
+    """
+    import inspect
+
+    src = inspect.getsource(_identity_leaks)
+    start = src.index("allowed = {")
+    literal = src[start : src.index("}", start) + 1]
+
+    for entry in re.findall(r'"([^"]*)"', literal):
+        bare = entry.replace("-", "").replace(" ", "").replace(".", "")
+        assert (
+            not bare
+            or bare.isdigit() and set(bare) <= {"0"}          # 00000, 0, 0.0
+            or entry.upper() == "XX"                           # not a state
+            or "REDACTED" in entry.upper()                     # a placeholder word
+            or entry.upper() == "NOT-AVAILABLE"                # a CDN's own sentinel
+        ), (
+            f"{entry!r} is in the identity guard's allow-list but is not a "
+            f"placeholder. Allow-listing a real value silently disables this "
+            f"gate for that value — redact the value instead."
+        )
+
+
+def test_the_guard_scans_every_fixture_directory_not_just_some() -> None:
+    """The scope cannot be narrowed to a subset of retailers without a red test.
+
+    The verifier narrowed `_fixture_files` to `nintendo/*.html`, dropping BOTH
+    Walmart fixtures — the ones this whole thread is about — out of the scan.
+    380/380 green. A guard whose scope can be cut in half silently has the
+    scope it happens to have, not the scope somebody chose.
+    """
+    root = Path(__file__).parent / "fixtures"
+    scanned = {p.parent.name for p in _fixture_files(root)}
+    on_disk = {d.name for d in root.iterdir() if d.is_dir() and any(d.iterdir())}
+    assert on_disk <= scanned, (
+        f"the identity guard does not scan every retailer's fixtures — missing "
+        f"{sorted(on_disk - scanned)}. Every retailer this repo captures from "
+        f"can leak; the scan must cover all of them."
+    )
 
 
 def test_the_guard_scans_the_json_provenance_notes_not_only_the_pages() -> None:
