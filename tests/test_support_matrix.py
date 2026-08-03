@@ -60,10 +60,62 @@ CONFIG = REPO_ROOT / "config" / "products.yaml"
 #: than by a line number, so editing the prose around it cannot silently point
 #: this file at some other table — the `make verify` verdict table further down
 #: is three columns and the stage table is two, but that is luck, not a rule.
-HEADER_CELLS = ("Retailer", "Rung", "Method", "Status")
+HEADER_CELLS = ("Retailer", "Rung", "robots.txt", "Terms", "Method", "Status")
 
 #: Column indices within a matrix row.
-RETAILER, RUNG, METHOD, STATUS = 0, 1, 2, 3
+RETAILER, RUNG, ROBOTS, TERMS, METHOD, STATUS = 0, 1, 2, 3, 4, 5
+
+#: The vocabulary a robots.txt cell may open with (REQ-13).
+#:
+#: Fixed, because a cell nothing can parse is prose nobody enforces — `TBD`,
+#: `n/a`, a blank and a paragraph of hedging are all ways of not answering, and
+#: they all look filled in.
+#:
+#: `silent on` and `permits` are BOTH permissive and the distinction is
+#: editorial: `robots.txt` is a deny-list, so a path with no matching rule is
+#: permitted. `unread` is the fourth state and the honest one — see
+#: `UNREAD_POSITIONS`.
+ROBOTS_POSITIONS = ("permits", "disallows", "silent on", "unread")
+
+#: The vocabulary a Terms cell may open with (REQ-13).
+#:
+#: `silent` here means only the ABSENCE OF A PROHIBITION, which is not the same
+#: claim `silent on` makes in the robots column. A terms document that does not
+#: mention automated access has not licensed it.
+TERMS_POSITIONS = ("forbids", "permits", "silent", "unread")
+
+#: The positions that are prohibitive. Everything else in the vocabularies is
+#: permissive, except `unread`, which is neither and must not be treated as
+#: either — see `_disagrees`.
+PROHIBITIVE = ("disallows", "forbids")
+
+#: The literal marker a row carries when its two positions point opposite ways.
+DISAGREE = "⚠ disagree"
+
+#: Exactly which (retailer, column) cells may say `unread`, pinned literally.
+#:
+#: WHY THIS IS A PIN AND NOT A RULE. `unread` is the honest answer for a policy
+#: document that refused us, and three retailers did refuse on 2026-08-03 — but
+#: an unconditional fourth vocabulary word is also the cheapest possible escape
+#: from REQ-13. Paste `unread` into all fourteen position cells and every row is
+#: vocabulary-clean, no row can ever disagree, and `_misdeclared_disagreement`
+#: becomes a rule about the empty set. That is precisely how the Phase 2 count
+#: clause rotted: an escape hatch that stayed satisfied forever.
+#:
+#: So the set is enumerated. Widening it means editing a red test, in the same
+#: commit as the evidence-log entry that justifies it, exactly as
+#: `test_roadmap_retailers_is_exactly_the_seven_in_scope` forces for the
+#: retailer list. Narrowing it is what a later plan does when it finally reads
+#: one of these documents.
+UNREAD_POSITIONS = frozenset(
+    {
+        ("GameStop", ROBOTS),  # robots.txt itself returned 403 (Cloudflare)
+        ("GameStop", TERMS),  # not requested — no-escalation rule after the 403
+        ("Walmart", TERMS),  # `Robot or human?` challenge served at HTTP 200
+        ("Best Buy", ROBOTS),  # HTTP/2 INTERNAL_ERROR, connection layer
+        ("Best Buy", TERMS),  # same refusal, same day
+    }
+)
 
 #: A rung cell must begin with one of these. Rung 4 — "dropped, with the
 #: evidence written down" — is a real answer, so there is no honest reason for
@@ -210,6 +262,97 @@ def _overstated(rows: dict[str, list[str]], configured: set[str]) -> list[str]:
     )
 
 
+def _position(cell: str, vocabulary: tuple[str, ...]) -> str | None:
+    """The vocabulary word a cell opens with, or None if it opens with none.
+
+    Longest match first, so `silent on` is not shadowed by a shorter entry if
+    one is ever added — a prefix vocabulary where order changes the answer is a
+    rule that depends on how somebody typed the tuple.
+    """
+    for word in sorted(vocabulary, key=len, reverse=True):
+        if cell.startswith(word):
+            return word
+    return None
+
+
+def _positionless(rows: dict[str, list[str]]) -> dict[str, tuple[str, str]]:
+    """Retailers whose robots.txt or Terms cell does not state a position.
+
+    REQ-13's floor. A cell fails if it does not open with a word from its
+    vocabulary — blank, `TBD`, `n/a` and free prose all fail — and a *judged*
+    robots cell fails if it does not name the path in backticks, because a
+    position on no particular path is not a position. `robots.txt` rules are
+    per-path: `permits` is meaningless until you say permits WHAT, and the whole
+    reason this column exists is that Target permits `/p/` while disallowing all
+    of `redsky.target.com`.
+
+    An `unread` robots cell is exempt from the backtick requirement in the sense
+    that it is making a claim about a document rather than a path — but it is
+    not exempt from the vocabulary, and which rows may use it is pinned in
+    `UNREAD_POSITIONS`.
+    """
+    bad: dict[str, tuple[str, str]] = {}
+    for name in ROADMAP_RETAILERS.values():
+        if name not in rows:
+            continue
+        robots, terms = rows[name][ROBOTS], rows[name][TERMS]
+        position = _position(robots, ROBOTS_POSITIONS)
+        if position is None or (position != "unread" and "`" not in robots):
+            bad[name] = (robots, terms)
+        elif _position(terms, TERMS_POSITIONS) is None:
+            bad[name] = (robots, terms)
+    return bad
+
+
+def _disagrees(row: list[str]) -> bool | None:
+    """Do this row's two positions point in opposite directions?
+
+    `None` means the question cannot be asked — one side is `unread`, or the
+    cell states no position at all. That third answer is load-bearing: treating
+    `unread` as permissive would demand a `⚠ disagree` marker on a row where a
+    prohibition faces a document nobody has read, which claims a comparison
+    nobody has made.
+    """
+    robots = _position(row[ROBOTS], ROBOTS_POSITIONS)
+    terms = _position(row[TERMS], TERMS_POSITIONS)
+    if robots is None or terms is None or "unread" in (robots, terms):
+        return None
+    return (robots in PROHIBITIVE) != (terms in PROHIBITIVE)
+
+
+def _misdeclared_disagreement(rows: dict[str, list[str]]) -> list[str]:
+    """Rows whose `⚠ disagree` marker does not match whether they disagree.
+
+    DELIBERATELY TWO-DIRECTIONAL, and that is the whole value of it. A rule of
+    the form "every row must carry `⚠ disagree`" is satisfied by pasting the
+    marker into all seven rows, at which point it distinguishes nothing and
+    REQ-13's "a reader sees the disagreement" is decoration. This one goes red
+    for a marker that is MISSING and for one that is NOT EARNED, so the marker
+    keeps meaning something.
+
+    A row that cannot be compared (`_disagrees` → None) must not carry the
+    marker either: "we could not read one of these documents" is not a
+    disagreement, and dressing it as one would overstate what this repo knows.
+    """
+    return sorted(
+        name
+        for name in ROADMAP_RETAILERS.values()
+        if name in rows
+        and (DISAGREE in " ".join(rows[name])) is not (_disagrees(rows[name]) is True)
+    )
+
+
+def _unread_cells(rows: dict[str, list[str]]) -> set[tuple[str, int]]:
+    """Every (retailer, column) position cell currently saying `unread`."""
+    return {
+        (name, column)
+        for name in ROADMAP_RETAILERS.values()
+        if name in rows
+        for column, vocabulary in ((ROBOTS, ROBOTS_POSITIONS), (TERMS, TERMS_POSITIONS))
+        if _position(rows[name][column], vocabulary) == "unread"
+    }
+
+
 def _undeclared_degraded(rows: dict[str, list[str]]) -> list[str]:
     return [
         name
@@ -255,6 +398,75 @@ def test_every_roadmap_retailer_carries_a_rung_of_one_to_four() -> None:
         f"A retailer nobody has probed yet may use {UNPROBED_RUNG!r} here, but only while "
         "docs/retailer-evidence.md carries its UNPROBED verdict — which expires."
     )
+
+
+def test_the_matrix_header_is_exactly_the_six_cells() -> None:
+    """Asserted literally, so a column cannot move without a red test.
+
+    Every rule in this file indexes cells by position. Insert a column, or swap
+    `robots.txt` and `Terms`, and `_positionless` starts reading the Method cell
+    against the robots vocabulary — which fails loudly — while
+    `_misdeclared_disagreement` would quietly compare the wrong two cells and go
+    on passing. `_matrix` already asserts it can FIND this header; this asserts
+    the header is the one the constants describe.
+    """
+    lines = README.read_text(encoding="utf-8").splitlines()
+    headers = [tuple(_cells(line)) for line in lines if line.startswith("| Retailer |")]
+
+    assert headers == [HEADER_CELLS], headers
+
+
+def test_every_roadmap_retailer_states_a_robots_and_a_terms_position() -> None:
+    """REQ-13: three things per row, not one.
+
+    The rung says what bot-y managed to do. These two say what the retailer
+    published about it — the deny-list rule on the exact path fetched, and the
+    prose. A reader who only ever sees the resolved verdict has to take somebody
+    else's reading of both on trust.
+    """
+    rows = _matrix()
+
+    assert not _positionless(rows), (
+        f"no robots.txt/Terms position in the README support matrix for: {_positionless(rows)}. "
+        f"A robots cell opens with one of {ROBOTS_POSITIONS} and names the path in backticks; a "
+        f"Terms cell opens with one of {TERMS_POSITIONS}. Every position is backed by a URL and "
+        "a retrieval date in docs/retailer-evidence.md."
+    )
+
+
+def test_the_disagreement_marker_is_on_exactly_the_rows_that_earn_it() -> None:
+    """Both directions, against the shipped table.
+
+    Target is why REQ-13 exists — `robots.txt` permits `/p/` and publishes a
+    product sitemap while the Terms forbid extraction — and Nintendo is why it
+    is not a rule about retailers this repo declined: Nintendo ships, is watched
+    every five minutes, and its two signals disagree just as sharply.
+    """
+    rows = _matrix()
+
+    assert not _misdeclared_disagreement(rows), (
+        f"the {DISAGREE!r} marker does not match the stated positions for: "
+        f"{_misdeclared_disagreement(rows)}. The marker belongs on a row where exactly one of "
+        "the two positions is prohibitive, and nowhere else — including not on a row where one "
+        "document is `unread`, because that is not a comparison anybody has made."
+    )
+
+
+def test_only_the_pinned_cells_say_unread() -> None:
+    """`unread` is a written refusal, not a spare cell value.
+
+    Pinned literally for the reason `UNREAD_POSITIONS` gives: an unconditional
+    fourth vocabulary word is the cheapest way out of REQ-13, and it would rot
+    the way the Phase 2 count clause rotted — permanently satisfied, still
+    looking like a rule. Reading one of these documents narrows this set and is
+    a deliberate edit; adding a row to it is the edit worth reviewing.
+    """
+    rows = _matrix()
+
+    assert _unread_cells(rows) == set(UNREAD_POSITIONS), {
+        "unexpected": sorted(_unread_cells(rows) - set(UNREAD_POSITIONS)),
+        "no longer unread": sorted(set(UNREAD_POSITIONS) - _unread_cells(rows)),
+    }
 
 
 def test_a_rung_three_retailer_is_flagged_degraded_in_the_matrix() -> None:
@@ -433,6 +645,100 @@ def test_the_shipped_rung_four_rows_are_not_flagged_as_overstatement() -> None:
     for name in ("Pokémon Center", "Amazon", "Target"):
         assert rows[name][RUNG].startswith("4"), (name, rows[name][RUNG])
     assert _overstated(rows, configured) == []
+
+
+def test_a_blanked_robots_cell_fails_the_position_rule() -> None:
+    """The blank cell, which is how a column quietly stops being filled in."""
+    rows = _matrix(_corrupt("Target", ROBOTS, ""))
+
+    assert list(_positionless(rows)) == ["Target"]
+
+
+def test_a_tbd_terms_cell_fails_the_position_rule() -> None:
+    """`TBD` is the `Planned` evasion one column over: it looks filled in.
+
+    A reader skimming the table sees text in the cell and moves on. The rung
+    rule already learned this, which is why the vocabulary here is a fixed list
+    rather than "not empty".
+    """
+    rows = _matrix(_corrupt("Nintendo", TERMS, "TBD"))
+
+    assert list(_positionless(rows)) == ["Nintendo"]
+
+
+def test_a_robots_position_without_a_path_fails_the_position_rule() -> None:
+    """`permits` on its own is not a position — robots.txt rules are per-path.
+
+    Target is the case that proves it: `www.target.com` permits `/p/` while
+    `redsky.target.com` is `Disallow: /` for every agent. A bare `permits`
+    would be true of one host and false of the other, in a cell claiming to
+    describe the path this repo actually fetches.
+    """
+    rows = _matrix(_corrupt("Target", ROBOTS, "permits"))
+
+    assert list(_positionless(rows)) == ["Target"]
+
+
+def test_stripping_the_marker_from_a_disagreeing_row_fails() -> None:
+    """Direction one: the marker missing from a row that earns it.
+
+    Target's Status cell carries the whole of REQ-13 for the retailer REQ-13 was
+    written for. Remove it and the row still reads as a settled rung-4 refusal,
+    with the fact that Target's own `robots.txt` points the other way visible
+    nowhere in the table.
+    """
+    rows = _matrix(_corrupt("Target", STATUS, "❌ Dropped. Not configured"))
+
+    assert _disagrees(rows["Target"]) is True
+    assert _misdeclared_disagreement(rows) == ["Target"]
+
+
+def test_an_unearned_marker_on_an_agreeing_row_fails() -> None:
+    """Direction two, and the one that makes the rule worth having.
+
+    A one-directional rule — "a disagreeing row must be marked" — is satisfied
+    by marking all seven, which states nothing at all. So the marker must also
+    come OFF when it is not earned.
+
+    No shipped row has two agreeing positions today, so the agreeing case is
+    built: Pokémon Center's `robots.txt` cell is corrupted from `permits` to
+    `disallows`, which makes both of its positions prohibitive and the row an
+    agreement — and its `⚠ disagree` marker instantly unearned. Without this,
+    the rule would be one nobody has seen bite in this direction, which is
+    exactly the shape of every gate this project has had to replace.
+    """
+    rows = _matrix(_corrupt("Pokémon Center", ROBOTS, "disallows `/product/`"))
+
+    assert _disagrees(rows["Pokémon Center"]) is False
+    assert DISAGREE in " ".join(rows["Pokémon Center"])
+    assert _misdeclared_disagreement(rows) == ["Pokémon Center"]
+
+
+def test_the_marker_is_unearned_on_a_row_whose_document_was_never_read() -> None:
+    """The third answer: `unread` is not half of a disagreement.
+
+    Walmart's `robots.txt` permits `/ip/` and its terms were refused by a
+    challenge page. Marking that row `⚠ disagree` would claim a comparison
+    nobody has made — the more tempting error, because a prohibition is usually
+    what a terms document turns out to contain.
+    """
+    rows = _matrix(_corrupt("Walmart", STATUS, f"✅ Working. {DISAGREE}"))
+
+    assert _disagrees(rows["Walmart"]) is None
+    assert _misdeclared_disagreement(rows) == ["Walmart"]
+
+
+def test_an_unread_cell_on_a_row_that_never_earned_one_fails_the_pin() -> None:
+    """`unread` pasted into a new row is the escape REQ-13 would rot through.
+
+    Nintendo's terms were read in full and quoted in the evidence log. Replacing
+    that position with `unread` is vocabulary-clean, kills the row's
+    disagreement, and would be invisible to every other rule here.
+    """
+    rows = _matrix(_corrupt("Nintendo", TERMS, "unread — refused"))
+
+    assert not _positionless(rows), "the corrupted cell is still vocabulary-clean"
+    assert _unread_cells(rows) - set(UNREAD_POSITIONS) == {("Nintendo", TERMS)}
 
 
 def test_a_deleted_row_fails_the_presence_rule() -> None:

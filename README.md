@@ -74,15 +74,15 @@ it is a page we rendered rather than an answer the retailer gave us. What was
 actually tried against each one, and what came back, is in
 [`docs/retailer-evidence.md`](docs/retailer-evidence.md).
 
-| Retailer | Rung | Method | Status |
-|---|---|---|---|
-| GameStop | 1 | `curl_cffi` + schema.org JSON-LD | ✅ Working |
-| Walmart | 1 | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ✅ Working |
-| Nintendo | 1 | `curl_cffi` + schema.org JSON-LD | ✅ Working — first-party for the hardware, and the only place in this config that lists the GO Plus + at its $54.99 MSRP with no marketplace attached |
-| Best Buy | 3 (2 with a key) | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
-| Pokémon Center | 4 | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 (headless Chrome, twice); its `robots.txt` forbids the API endpoints that would answer the stock question | ❌ Dropped, with the evidence written down. Not configured, and deliberately not padded into the count — it stocks the product, so a watch here would have looked plausible and read nothing forever |
-| Amazon | 4 | none — its Conditions of Use forbid it. The licence to use the site excludes "any collection and use of any product listings, descriptions, or prices" and "any use of data mining, robots, or similar data gathering and extraction tools" | ❌ Dropped, and dropped without ever fetching a product page. The terms were read first, so the reason is a written prohibition rather than a wall we could not get past — a wall can fall and this cannot. Not configured |
-| Target | 4 | none — its Terms & Conditions forbid it. `Unlawful or Prohibited Uses` bars "any use of data extraction, scraping, mining or other data gathering tools" and "otherwise scrape, collect, store or use any Content … product listings, descriptions, prices or images", with no commercial-use qualifier. Rung 2 (RedSky) is closed separately: `redsky.target.com/robots.txt` is `Disallow: /` for every agent | ❌ Dropped, without ever fetching a product page. Note the direction of the disagreement: `www.target.com/robots.txt` does **not** disallow `/p/`, and Target publishes a product-detail sitemap — robots.txt is broader than the terms here, and the terms govern. Not configured |
+| Retailer | Rung | robots.txt | Terms | Method | Status |
+|---|---|---|---|---|---|
+| GameStop | 1 | unread — `robots.txt` itself returned 403 | unread — not requested | `curl_cffi` + schema.org JSON-LD | ✅ Working |
+| Walmart | 1 | permits `/ip/` | unread — challenge page, not the terms | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ✅ Working |
+| Nintendo | 1 | permits `/us/store/products/` | forbids automated means | `curl_cffi` + schema.org JSON-LD | ✅ Working — first-party for the hardware, and the only place in this config that lists the GO Plus + at its $54.99 MSRP with no marketplace attached. ⚠ disagree — `robots.txt` is `Allow: /` and publishes a store sitemap, while § 6 of the Terms of Use bars "any robot … spider, crawler, scraper or other automated means" |
+| Best Buy | 3 (2 with a key) | unread — refused at the connection layer | unread — same refusal | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
+| Pokémon Center | 4 | permits `/product/` | forbids data mining | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 (headless Chrome, twice); its `robots.txt` forbids the API endpoints that would answer the stock question | ❌ Dropped, with the evidence written down. Not configured, and deliberately not padded into the count — it stocks the product, so a watch here would have looked plausible and read nothing forever. ⚠ disagree — `/product/*` is not disallowed, but the Terms of Use prohibit data gathering outright |
+| Amazon | 4 | permits `/dp/` | forbids extraction | none — its Conditions of Use forbid it. The licence to use the site excludes "any collection and use of any product listings, descriptions, or prices" and "any use of data mining, robots, or similar data gathering and extraction tools" | ❌ Dropped, and dropped without ever fetching a product page. The terms were read first, so the reason is a written prohibition rather than a wall we could not get past — a wall can fall and this cannot. Not configured. ⚠ disagree — no rule matches `/dp/<ASIN>`, while the Conditions of Use forbid extraction |
+| Target | 4 | permits `/p/` | forbids extraction | none — its Terms & Conditions forbid it. `Unlawful or Prohibited Uses` bars "any use of data extraction, scraping, mining or other data gathering tools" and "otherwise scrape, collect, store or use any Content … product listings, descriptions, prices or images", with no commercial-use qualifier. Rung 2 (RedSky) is closed separately: `redsky.target.com/robots.txt` is `Disallow: /` for every agent | ❌ Dropped, without ever fetching a product page. ⚠ disagree — `www.target.com/robots.txt` does **not** disallow `/p/`, and Target publishes a product-detail sitemap, so robots.txt is broader than the terms here. Not configured |
 
 **Four working retailers, not five — and that is now the final answer, not a
 pending one.** The roadmap's MVP bar was five, and this is what the bar actually
@@ -136,6 +136,26 @@ Buy is served a Cloudflare wall by gamestop.com, which rung 1 reads on every
 `make verify`. Rung 3 fixes the JavaScript fingerprint and leaves the TLS one
 untouched, so it is for a retailer that refuses HTTP *at the connection layer* —
 not something to reach for because a fetch failed once.
+
+**Every row states three things, not one: a rung, where that retailer's
+`robots.txt` stands on the exact path bot-y fetches, and where its terms stand.**
+A row whose two signals point in opposite directions is marked `⚠ disagree`, and
+one whose signals agree is not — the marker is a finding, so a table where every
+row carried it would say nothing. Four rows carry it today, and one of them is a
+retailer this repo actively watches, which is the point: you are shown the
+disagreement rather than only the verdict somebody resolved it to.
+
+The positions come from
+[`docs/retailer-evidence.md`](docs/retailer-evidence.md), where each one is
+backed by a URL, an HTTP status and the date it was retrieved. Two of the words
+in those columns are worth reading precisely. `permits` means no rule in the
+`*` group matches the path — `robots.txt` is a deny-list, so silence there really
+is permission. `unread` means the policy document itself refused us, and it is
+written rather than guessed: three retailers turned away a plain `robots.txt` or
+terms request on 2026-08-03, and inventing a `permits` for a file nobody has read
+would be exactly the kind of filled-in-looking cell the rest of this section
+exists to prevent. `tests/test_support_matrix.py` pins which rows may say
+`unread`, so it cannot quietly spread to a fourth.
 
 ## Install
 
