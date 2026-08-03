@@ -767,6 +767,29 @@ def test_each_rule_fires_on_a_value_of_the_REAL_shape_not_just_the_synthetic_one
         ('{"lat":"-98.765012"}', "coordinate"),
         # a real-shaped area code and a 10-digit phone
         ("Store: 555-555-0100", "phone number"),
+        # --- Values chosen to DISCRIMINATE, each against a narrowing mutation
+        # that survived the round-6 sweep. Every one is absent from all 11
+        # captures (enforced by the provenance test).
+        #
+        # Akamai writes EdgeScape comma-separated, not as a query string —
+        # narrowing the marker loop to `[?&]` blinded the guard to the exact
+        # artefact 02-REVIEW.md leaked, silently.
+        ("x-akamai-edgescape: georegion=901,country_code=US,region_code=ZZ,city=Yarn", "geolocation"),
+        # a data- attribute whose name is NOT `data-preferred-store-id`
+        ('data-nearest-store-number="4243"', "store number in a data- attribute"),
+        # a store name shorter than 9 characters — real ones are ("Ames")
+        ('{"storeName":"Zeta"}', "store name"),
+        # a ZIP+4 and a ZIP that do not begin with 9
+        ("Ships to 10111-2233", "ZIP+4"),
+        ('{"zipCode":"10111"}', "postal code"),
+        ('{"shippingZipcode":"10222"}', "postal code"),
+        # a short-key coordinate with fewer than 3 decimals
+        ('{"lat":"12.3"}', "coordinate"),
+        # a city name shorter than 8 characters
+        ('{"city":"Quay"}', "city"),
+        # an IP whose first octet is not three digits
+        ("true-client-ip: 98.51.100.9", "true-client-ip"),
+        ("client-ip: 8.51.100.9", "client-ip"),
     ]
     for body, expected in real_shaped:
         found = _identity_leaks("synthetic.html", body)
@@ -871,6 +894,21 @@ _SCRUBBED_VALUE_HASHES = frozenset({
 })
 
 
+def test_the_scrubbed_value_deny_list_is_not_empty() -> None:
+    """Emptying the deny-list was a silent mutation.
+
+    It is the only thing standing between a maintainer and reusing a value
+    that was already scrubbed out of the fixtures — the corpus check cannot
+    see those, by definition. An empty frozenset satisfies every other test
+    in this file.
+    """
+    assert len(_SCRUBBED_VALUE_HASHES) >= 30, (
+        f"the scrubbed-value deny-list has {len(_SCRUBBED_VALUE_HASHES)} entries. "
+        f"It is harvested from the pre-redaction blobs in git; emptying or "
+        f"trimming it re-permits every value this repo has ever had to remove."
+    )
+
+
 def _is_known_real(value: str) -> bool:
     return hashlib.sha256(value.lower().encode()).hexdigest()[:16] in _SCRUBBED_VALUE_HASHES
 
@@ -951,8 +989,8 @@ def test_the_grid_cannot_be_shrunk_without_a_red_test() -> None:
         f"{sorted(classes - set(IDENTITY_GRID))}. Each has been leaked at least once."
     )
     filled = sum(1 for r in IDENTITY_GRID.values() for v in r.values() if v)
-    assert filled >= 30, (
-        f"grid has {filled} filled cells, floor is 30. Downgrading a cell to "
+    assert filled >= 34, (
+        f"grid has {filled} filled cells, floor is 34. Downgrading a cell to "
         f"`None` claims no retailer writes that class in that carrier — make "
         f"that claim in the diff, not by deleting a probe."
     )
