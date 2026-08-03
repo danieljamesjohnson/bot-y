@@ -1194,3 +1194,205 @@ def test_a_refusal_for_a_retailer_we_never_captured_is_still_clean(tmp_path: Pat
     )
 
     assert problems == [], problems
+
+
+# --------------------------------------------------------------------------
+# --phase rule 5: a configuration cannot outrank a refusal — the W-02 mirror
+# --------------------------------------------------------------------------
+
+
+def _w02_tree(tmp_path: Path, pokemoncenter_body: str) -> tuple[Path, Path, Path]:
+    """The W-02 shape: `pokemoncenter` SHIPPED, its section saying otherwise.
+
+    Returns (config, evidence, fixtures). The Pokémon Center body is the only
+    variable, because the whole point of rule 5 is that it is about the
+    disagreement and not about the retailer — swap the body for a REACHABLE
+    verdict and the same tree must come back clean.
+    """
+    config = _write_config(tmp_path, _SHIPPED + ["pokemoncenter"])
+    evidence = _write_evidence(
+        tmp_path,
+        [
+            ("Best Buy", _REACHABLE),
+            ("Nintendo (store.nintendo.com)", _REACHABLE),
+            ("Pokémon Center (pokemoncenter.com)", pokemoncenter_body),
+            ("Target (target.com)", _REFUSED),
+            ("Amazon (amazon.com)", _REFUSED),
+        ],
+    )
+    return config, evidence, _write_fixtures(tmp_path, [])
+
+
+def test_a_configured_retailer_with_a_standing_refusal_fails_the_phase_gate(
+    tmp_path: Path,
+) -> None:
+    """W-02, reproduced literally, as the case that used to return exit 0.
+
+    `03-VERIFICATION.md` recorded this tree — a `pokemoncenter` watch added to
+    `config/products.yaml` while `docs/retailer-evidence.md` goes on carrying
+    `**Verdict: REFUSED**` for Pokémon Center — producing
+
+        evidence check: PASS — phase
+        evidence_check exit: 0
+
+    Rule 1 passed (in scope) and rules 2 and 4 both `continue` on
+    `retailer in configured`, so the one flatly self-contradicting tree shape
+    walked between them. Re-confirmed against the tree immediately before rule 5
+    was written: `check_phase` returned `[]`.
+
+    EXACTLY ONE problem, asserted rather than `>= 1`: a rule that fires twice on
+    one contradiction reads as two defects, and the reader who chases the second
+    one stops trusting the first.
+    """
+    config, evidence, fixtures = _w02_tree(tmp_path, _REFUSED)
+
+    problems = evidence_check.check_phase(config, evidence, fixtures)
+
+    assert len(problems) == 1, problems
+    assert "rule 5" in problems[0], problems[0]
+    assert "Pokémon Center" in problems[0], problems[0]
+
+
+def test_the_same_tree_is_clean_once_the_verdict_agrees_with_the_watch(
+    tmp_path: Path,
+) -> None:
+    """The rule is about the disagreement, not about the retailer.
+
+    Same config, same seven sections, one verdict line changed from REFUSED to
+    REACHABLE — and it must go green. Without this, rule 5 could be satisfied by
+    a blanket "pokemoncenter must never be configured", which would make the
+    outcome this whole phase is walking towards — a refused retailer re-probed,
+    reached, and shipped — unrepresentable. That is precisely the failure mode
+    rule 2 grew `UNPROBED` to escape.
+    """
+    config, evidence, fixtures = _w02_tree(tmp_path, _REACHABLE)
+
+    assert evidence_check.check_phase(config, evidence, fixtures) == []
+
+
+def test_a_configured_retailer_recorded_unprobed_fails_the_phase_gate(
+    tmp_path: Path,
+) -> None:
+    """The same contradiction one step softer, and softer is what ships.
+
+    "Nobody has looked yet" alongside a shipped, control-verified detector is
+    not a grace period — it is a section nobody updated after the probe. Left
+    unchecked it would be the cheap way through rule 5: an UNPROBED line reads
+    as work-in-progress rather than as a claim, and it is one line to write.
+    """
+    config, evidence, fixtures = _w02_tree(tmp_path, _unprobed(_TODAY))
+
+    problems = evidence_check.check_phase(config, evidence, fixtures, today=_TODAY)
+
+    assert len(problems) == 1, problems
+    assert "rule 5" in problems[0], problems[0]
+    assert "Pokémon Center" in problems[0], problems[0]
+    assert "UNPROBED" in problems[0], problems[0]
+
+
+def test_a_configured_retailer_with_no_section_at_all_is_deliberately_clean(
+    tmp_path: Path,
+) -> None:
+    """The GameStop/Walmart shape, and it must stay green.
+
+    Both ship today and neither has ever had a section in the evidence log:
+    rule 2 requires one only from retailers that are NOT configured. If rule 5
+    demanded a section from every configured retailer it would redden the
+    shipped tree the moment it landed, and the fastest green would be two
+    hand-written sections for retailers nobody re-probed — inventing records to
+    satisfy a gate, which is the Phase 2 failure with the sign flipped.
+
+    Silence about a shipped retailer is a documentation gap. Rule 5 is about
+    self-contradiction, and a tree cannot contradict a claim nobody made.
+    """
+    config = _write_config(tmp_path, _SHIPPED)
+    evidence = _full_evidence(tmp_path)
+
+    assert evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, [])) == []
+
+    sections = evidence_check.split_sections(evidence.read_text(encoding="utf-8"))
+    for display in ("GameStop", "Walmart"):
+        assert evidence_check.sections_for(display, sections) == [], display
+
+
+def test_the_w02_tree_reaches_a_shell_as_exit_1(tmp_path: Path, capsys: Any) -> None:
+    """Driven through `main`, because a rule only a test can see is not a gate.
+
+    W-02's whole content was an exit code: `evidence check: PASS — phase`,
+    exit 0, on a tree that contradicts itself. Asserting `check_phase` returns a
+    list would leave that exact claim unchecked — the failure has to reach a
+    shell, on stderr, naming the rule.
+    """
+    config, evidence, fixtures = _w02_tree(tmp_path, _REFUSED)
+
+    code = evidence_check.main(
+        [
+            "--phase",
+            "--config",
+            str(config),
+            "--evidence",
+            str(evidence),
+            "--fixtures",
+            str(fixtures),
+        ]
+    )
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "rule 5 (a configuration cannot outrank a refusal)" in err, err
+    assert "Pokémon Center" in err, err
+
+
+def test_rule_5_is_silent_on_the_shipped_tree(tmp_path: Path) -> None:
+    """The correct starting state for this phase, pinned so it stays deliberate.
+
+    Target and Amazon are REFUSED and unconfigured today, so rule 5 has nothing
+    to say about them and `test_the_shipped_tree_passes_the_whole_phase_gate`
+    stays green. When 03.1 registers either one, this tree stops being silent
+    unless the verdict moves in the same commit — which is the entire reason
+    rule 5 lands before the retailers do.
+    """
+    problems = evidence_check.check_phase(
+        REPO_ROOT / "config" / "products.yaml",
+        REPO_ROOT / "docs" / "retailer-evidence.md",
+        REPO_ROOT / "tests" / "fixtures",
+    )
+
+    assert [p for p in problems if "rule 5" in p] == [], problems
+
+    configured = {
+        w.retailer
+        for w in evidence_check.Config.load(REPO_ROOT / "config" / "products.yaml").watches
+    }
+    assert "target" not in configured and "amazon" not in configured, configured
+
+
+def test_no_roadmap_retailer_resolves_to_more_than_one_section() -> None:
+    """The narrow case rule 5 hands to `check_retailer`, kept covered.
+
+    Rule 5 skips a retailer with more than one section, because `check_retailer`
+    already words that failure and reporting it twice trains a reader to skim.
+    But `test_the_real_shipped_evidence_document_passes_per_retailer` can only
+    drive `check_retailer` over retailers that HAVE a section — run it over
+    GameStop or Walmart and it fails for the absence, which is legal. So a
+    duplicate `## GameStop …` heading would have been seen by nothing at all.
+
+    This asks the one question that is safe for all seven: at most one section
+    each. It is also the guard on the Task-2 hazard — `sections_for` matches a
+    display name as a PREFIX, so any new `## ` heading beginning with a
+    retailer's name silently creates a second section for it.
+    """
+    sections = evidence_check.split_sections(
+        (REPO_ROOT / "docs" / "retailer-evidence.md").read_text(encoding="utf-8")
+    )
+    duplicated = {
+        display: len(evidence_check.sections_for(display, sections))
+        for display in evidence_check.ROADMAP_RETAILERS.values()
+        if len(evidence_check.sections_for(display, sections)) > 1
+    }
+
+    assert duplicated == {}, (
+        f"more than one `## ` section begins with these display names: {duplicated}. "
+        "`sections_for` matches a prefix, so a heading like `## Target and Amazon, …` "
+        "counts as a second Target section and nothing can tell which record is current."
+    )

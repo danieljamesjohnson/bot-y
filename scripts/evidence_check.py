@@ -49,7 +49,7 @@ MODES
 exist exactly once, and carry exactly one well-formed verdict line?
 
 `--phase` asks whether the tree as a whole is telling the truth about its own
-retailer count, via the four rules in `check_phase`.
+retailer count, via the five rules in `check_phase`.
 
 `--config`, `--evidence` and `--fixtures` exist so the tests can point either
 mode at a synthetic tree and watch it go red. A gate nobody has watched fail is
@@ -78,6 +78,37 @@ built specifically to be trustworthy still telling a reader both are watched. A
 working retailer silently disappearing is precisely the silent gap the phase is
 named after. Rule 4 is the floor, and `tests/test_support_matrix.py`'s
 overstatement rule is the other half of it.
+
+AND THE FLOOR NEEDED A MIRROR — W-02
+------------------------------------
+Rule 4 says a refusal cannot outrank a capture. It shipped without its opposite:
+*a configuration cannot outrank a refusal*. `03-VERIFICATION.md` recorded that
+hole as W-02, proved by execution — add a `pokemoncenter` watch to
+`config/products.yaml` while `docs/retailer-evidence.md` goes on carrying
+`**Verdict: REFUSED**` for Pokémon Center, and this script said
+
+    evidence check: PASS — phase
+    evidence_check exit: 0
+
+Rule 1 passed (in scope), and rules 2 and 4 BOTH `continue` on
+`retailer in configured` — so the one tree shape that is flatly
+self-contradicting walked between them untouched. Re-confirmed on the tree
+immediately before rule 5 was written: `check_phase` returned `[]`.
+
+`make verify` did still go red on that tree, which is why W-02 was a warning
+rather than a blocker — but it went red via
+`test_no_retailer_is_configured_without_a_page_we_have_actually_read`, a
+Phase-1-era fixture-provenance guard, and it did so BY ACCIDENT. That test wants
+a captured `tests/fixtures/pokemoncenter/*.html`, and padding this way cannot
+produce one because `boty.fixtures.capture` only writes after a live fetch and
+Imperva refuses to hand Pokémon Center's page over. The catch was a property of
+one retailer's anti-bot vendor, not of any rule. A retailer that a wall lets
+through — Target, next — would have padded the count clean.
+
+Note the shape, because it is the reason this paragraph is this long: the defect
+class CR-02 named — *a rule that points one way is half a rule* — survived the
+fix that named it, one rule over. Rule 5 is the mirror, and it is watched failing
+on the literal W-02 reproduction in `tests/test_evidence_check.py`.
 """
 
 from __future__ import annotations
@@ -394,7 +425,7 @@ def check_phase(
 ) -> list[str]:
     """Is this tree telling the truth about its own retailer count?
 
-    Four rules, applied in order, reporting EVERY violation rather than stopping
+    Five rules, applied in order, reporting EVERY violation rather than stopping
     at the first — being told about one gap, fixing it, and being told about the
     next is how a gate gets muted.
 
@@ -522,6 +553,64 @@ def check_phase(
                 "delete its fixtures in the same commit and say why in the evidence log."
             )
 
+    # RULE 5 — a configuration cannot outrank a refusal. THE MIRROR OF RULE 4.
+    #
+    # W-02, from the module docstring: rules 2 and 4 both `continue` on
+    # `retailer in configured`, so a tree that SHIPS a detector for a retailer
+    # its own evidence log records as refused passed clean. This is the rule for
+    # the one shape neither of them looks at.
+    #
+    # THREE CASES DELIBERATELY DO NOT FIRE, and each is an allowance rather than
+    # an oversight, so each is stated here rather than left to be inferred:
+    #
+    #   1. NO SECTION AT ALL. GameStop and Walmart are configured and have never
+    #      had a section in the evidence log; rule 2 requires one only from
+    #      retailers that are NOT configured. Demanding one here would redden the
+    #      shipped tree over a gap that is not a lie. Silence about a shipped
+    #      retailer is a documentation gap; this rule is about self-contradiction
+    #      only, and a tree cannot contradict a claim nobody made.
+    #   2. A REACHABLE VERDICT. Configured and recorded as readable is the
+    #      agreeing case — the state this whole phase is walking Target and
+    #      Amazon towards.
+    #   3. MORE THAN ONE SECTION. `check_retailer` already words that failure
+    #      ("two records of one retailer means nothing here can tell which is
+    #      current") and reporting it twice trains a reader to skim. Note the
+    #      narrow cost: `check_retailer` is driven over the real document by
+    #      `test_the_real_shipped_evidence_document_passes_per_retailer`, which
+    #      can only cover retailers that HAVE a section — so
+    #      `test_no_roadmap_retailer_resolves_to_more_than_one_section` covers
+    #      the rest, and duplicate headings stay caught for all seven.
+    for retailer, display in sorted(ROADMAP_RETAILERS.items()):
+        if retailer not in configured:
+            continue
+        found = sections_for(display, sections)
+        if len(found) != 1:
+            continue
+
+        if verdict_lines(found[0]) == [REFUSED]:
+            problems.append(
+                f"rule 5 (a configuration cannot outrank a refusal): {config_path} configures "
+                f"{retailer!r} while {evidence_path} records `{REFUSED}` for {display}. Rule 4 "
+                "stops a refusal outranking a capture; this is its mirror. A tree that ships a "
+                "detector for a retailer it has written down as refused is telling two stories, "
+                "and the honest edit is whichever one is now false — flip the verdict and say "
+                "why in the same commit, or drop the watch."
+            )
+
+        # "In scope, nobody has looked yet" and "shipped and control-verified"
+        # are the same contradiction one step softer, and softer is the version
+        # that survives review. A watch cannot have been built for a page nobody
+        # has opened.
+        pending = unprobed_lines(found[0])
+        if pending:
+            problems.append(
+                f"rule 5 (a configuration cannot outrank a refusal): {config_path} configures "
+                f"{retailer!r} while {evidence_path} still records `{pending[0]}` for {display}. "
+                "UNPROBED means nobody has looked yet, and a shipped detector is somebody having "
+                "looked — one of the two is stale. Record what the probe found and give the "
+                "section a settled verdict, or drop the watch."
+            )
+
     return problems
 
 
@@ -541,7 +630,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=(
             "check the whole tree: scope, configured-or-refused, count consistency, "
-            "and that no refusal contradicts a page we captured"
+            "and that no refusal contradicts a page we captured or a watch we ship"
         ),
     )
     ap.add_argument("-c", "--config", default="config/products.yaml")
