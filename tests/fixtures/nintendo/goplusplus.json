@@ -1,0 +1,10 @@
+{
+  "url": "https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-112387/",
+  "retailer": "nintendo",
+  "name": "goplusplus",
+  "captured_at": "2026-08-03T00:52:51Z",
+  "status": 200,
+  "bytes": 416346,
+  "note": "OutOfStock at $54.99 (exactly MSRP), sold by 'Nintendo of America Inc.' \u2014 schema.org Product inside an @graph, compound @type: [\"Product\"]",
+  "transport": "http"
+}

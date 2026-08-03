@@ -2,6 +2,46 @@
 
 Two things I cannot do myself. Everything else in the MVP is proceeding without them.
 
+## 0. Pokémon Center is rung 4 — the MVP ships with FOUR retailers, not five
+
+**Not blocking, and there is nothing for you to do. This is a heads-up about a
+number that will not match the roadmap.**
+
+Phase 2's criterion 4 says five retailers. It lands on **four**: gamestop,
+walmart, bestbuy, nintendo. Pokémon Center was walked all the way down the
+escalation ladder and refused at every rung, so it is documented as unreachable
+rather than shipped as a detector that cannot detect anything.
+
+- **Rung 1** (`curl_cffi`, chrome impersonation): product pages return Imperva's
+  `Pardon Our Interruption` at HTTP **200** (6,183 B), or a DataDome JS
+  challenge at HTTP 403 (858 B) on a cold connection. Four attempts, two
+  products, warmed session and cold. The **homepage** reads fine at rung 1 both
+  before and between those refusals — so this host is not IP-banned, the wall is
+  specifically on `/product/*`.
+- **Rung 2**: no documented public API, and Pokémon Center's own `robots.txt`
+  explicitly `Disallow`s `/cortex`, `/availabilities`, `/prices`, `/offers` and
+  `/items` — the exact endpoints that would answer the stock question. Closed by
+  the retailer's stated wishes, not just unavailable.
+- **Rung 3** (headless Chrome): refused twice, 120 s apart. `Request
+  unsuccessful` / `_Incapsula_Resource`, 1,085 B. `boty capture-fixture`
+  correctly refused to save the challenge page as a fixture.
+- **Rung 4**: documented. Full evidence, including the two probes worth
+  retrying later, is in `docs/retailer-evidence.md`.
+
+**No Pokémon Center watch was added to `config/products.yaml` to make the count
+read five.** The GO Plus + genuinely is listed there
+(`/product/715e10557/pokemon-go-plus`), so a watch would have looked entirely
+plausible — and would have been a permanently UNKNOWN detector raising a
+permanent health warning. Every other phase criterion holds: `make verify` exits
+0, all four retailers are control-verified, and `healthy` is true.
+
+Nintendo more than earned its place, incidentally: it stocks the GO Plus + at
+$54.99 MSRP, first-party, with no marketplace anywhere near it. That is the best
+restock signal this project has.
+
+Phase 3 targets Target and Amazon. If either lands, the count reaches five
+there.
+
 ## 1. Telegram bot token — REGENERATE FIRST
 
 The token in the script you dropped is **burned**. It was hardcoded in source and

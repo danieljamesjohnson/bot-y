@@ -253,6 +253,207 @@ binary, or a setuid `chrome_sandbox` helper.
 
 ---
 
+## Nintendo (store.nintendo.com / nintendo.com/us/store)
+
+**Probed:** 2026-08-02, from danserver over a residential connection.
+**Transport:** `boty.fetch.get` — `curl_cffi` with `chrome` impersonation. Rung 1.
+8 requests, spaced 12–20 s apart. No refusal, no rate limiting, no retry needed.
+
+**Verdict: REACHABLE (rung 1)**
+
+Nintendo's store is the cheapest retailer in this repo to support. It needs **no
+new adapter code at all** — no extractor, no `_make_checker` branch, no
+`MARKETPLACES` entry. `check_html` reads it as shipped; the only change is one
+`FIRST_PARTY` line and two YAML watches. `02-PATTERNS.md` §1 predicted exactly
+this, and it is worth stating plainly because the instinct on adding a retailer
+is to write a class.
+
+### What was observed
+
+| Target | Result |
+|---|---|
+| `/us/store/products/nintendo-switch-pro-controller/` (a guessed slug) | HTTP **404**, 217,381 B, a genuine rendered `Whoops! - Nintendo Official Site` page. A wrong slug is a clean 404, not a refusal |
+| `/us/store/hardware/accessories/` | Rendered, 584,321 B, `__NEXT_DATA__` carrying `urlKey` for every product in the category |
+| `/us/store/products/hdmi-cable-104947/` | Rendered, 384,351 B, **1** `ld+json` block, `ldjson_offers` → 1 offer, `price=7.99`, `seller='Nintendo of America Inc.'`, `InStock` |
+| `/robots.txt` | `User-agent: * / Allow: /`. Only named AI/scraper bots are disallowed; nothing here forbids what we do |
+| `/us/store/sitemap.xml` | 36,530 `<loc>` entries — the store's full product catalogue, published deliberately |
+| `/us/search/?q=pokemon%20go%20plus` | Renders, but results are client-side (Algolia). Not a usable discovery path at rung 1 — **the sitemap is** |
+| `/us/store/products/pokemon-go-plus-plus-112387/` | Rendered, 416,346 B, `ldjson_offers` → 1 offer, `price=54.99`, `seller='Nintendo of America Inc.'`, **`OutOfStock`** |
+
+### Does Nintendo sell the GO Plus +? — yes, and at MSRP
+
+Unlike Best Buy, this is a positive finding rather than a disproof. The store
+sitemap lists exactly two GO Plus + entries:
+
+```
+https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-112387/
+https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-strap-119138/
+```
+
+The first is the hardware. It reads `OutOfStock` at **$54.99** — MSRP to the
+cent, from the manufacturer, with no marketplace anywhere near it. That is the
+single most credible restock signal this project has: a first-party listing that
+cannot be held by a flipper and cannot be marked up.
+
+### The structured data, and the first live confirmation of the IN-03 fix
+
+```json
+{"@context": "https://schema.org/", "@graph": [
+  {"@type": ["Product"], "name": "Pokémon™ GO Plus+", "sku": "112387",
+   "offers": {"@type": "Offer", "priceCurrency": "USD", "price": "54.99",
+     "availability": "https://schema.org/OutOfStock",
+     "seller": {"@type": "Organization", "name": "Nintendo of America Inc."}}}]}
+```
+
+Three things about that payload, each one a piece of existing machinery earning
+its keep:
+
+1. **`@type` is a compound list, `["Product"]`, not the plain string `"Product"`.**
+   02-02 fixed IN-03 for precisely this case, and this is the first time it has
+   been seen on a live retailer. Before that fix, `ldjson_offers` compared
+   `@type` for exact equality, `saw_product` stayed False, and this page — a
+   page carrying complete, correct, first-party availability and price — would
+   have read as an unexplained UNKNOWN forever. The fix is not hypothetical
+   cover for a shape nobody emits. It is what makes Nintendo readable at all.
+2. **The Product node is inside an `@graph`,** which `parse._iter_nodes` already
+   walks.
+3. **`offers` is a single dict, not a list,** which `ldjson_offers` already
+   normalises (`offers if isinstance(offers, list) else [offers]`).
+
+`nextdata_offers` returns `None` on both pages — Nintendo has a `__NEXT_DATA__`
+blob but not at Walmart's product path, and it is never reached because ld+json
+answers first. **No new extractor was added**, and `_WALMART_PRODUCT_PATH` was
+not generalised into a searcher.
+
+### Seller attribution and marketplace status
+
+`offers.seller.name` is the literal string `"Nintendo of America Inc."` on every
+page seen, which lowercases to `nintendo of america inc.`. That is the value
+that goes in `FIRST_PARTY["nintendo"]`.
+
+**Nintendo's store has no marketplace.** There is no third-party seller surface,
+no buy box, no "other sellers" section — Nintendo of America is the only party
+who can sell on it. So `nintendo` goes in `FIRST_PARTY` and stays **out** of
+`MARKETPLACES`, which also means `_pick`'s unattributed-offer fallback covers a
+future page that omits the seller node, the same way it covers GameStop.
+
+### Control product
+
+- **`HDMI Cable (Nintendo Switch™/NES Classic Edition)`**, urlKey `hdmi-cable-104947`
+- `https://www.nintendo.com/us/store/products/hdmi-cable-104947/`
+- Read live as `InStock`, **$7.99**, `seller: Nintendo of America Inc.`
+
+It satisfies `config/products.yaml`'s control rule on every clause: first-party
+by construction, a replacement accessory restocked routinely, not a console, not
+a limited drop, and not subject to a buy-box fight because there is no box to
+fight over. Reserve candidate if it is ever discontinued: the AC adapter
+(`ac-adapter-104900`), seen in the same category listing.
+
+---
+
+## Pokémon Center (pokemoncenter.com)
+
+**Probed:** 2026-08-02, from danserver over a residential connection.
+**Transports:** `boty.fetch.get` (rung 1, `curl_cffi`/`chrome`) and
+`boty.browser._render` (rung 3, nodriver 0.50.3 driving Chrome for Testing 149
+headless). 10 requests total, spaced 12–25 s apart with a 120 s backoff before
+the final one. Stopped after the ladder was exhausted, not after a budget was.
+
+**Verdict: REFUSED**
+
+This is the finding that costs the phase its fifth retailer, and it is recorded
+as a finding rather than worked around. Pokémon Center is Imperva/Incapsula-
+protected **on product pages specifically**, and neither impersonated HTTP nor a
+real headless browser gets past it.
+
+### What was observed
+
+| Target | Transport | Result |
+|---|---|---|
+| `/` (homepage) | rung 1 | **Rendered, 671,021 B**, title `Pokémon Center Official Site`, `__NEXT_DATA__` present, 0 `ld+json` |
+| `/product/716E11935/detective-pikachu-returns` | rung 1, cold | **HTTP 403**, 858 B, `server: CloudFront`, a DataDome JS challenge (`var dd={'rt':'i','cid':…}`) |
+| `/` then the same product, one `curl_cffi` Session, with `Referer` | rung 1, warmed | **HTTP 200**, 6,183 B, `Pardon Our Interruption` — Imperva. Session cookies (`visid_incap_2682446`, `nlbi_2682446`, `incap_ses_69_2682446`) were set by the homepage and did not help |
+| `/product/715e10557/pokemon-go-plus` | rung 1, cold | **HTTP 200**, 6,183 B, `Pardon Our Interruption` again — byte-identical size, a different product |
+| `/product/715e10557/pokemon-go-plus` | rung 3 | **Blocked**, rendered challenge matched `'request unsuccessful'`; `boty capture-fixture` refused to write it to disk |
+| `/product/715e10557/pokemon-go-plus` | rung 3, after 120 s backoff | **Refused again**, 1,085 B, `_Incapsula_Resource` iframe, `distil_referrer`, no title, 0 `ld+json`, no `__NEXT_DATA__` |
+
+Four separate refusals across two products, two URL forms, two transports and
+two different WAF vendors. This is not rate limiting and not a one-off: the
+homepage passed rung 1 **twice**, before and between the refusals, so this host
+is not IP-banned. The wall is on `/product/*` and it is deliberate.
+
+### Why there is no rung 2
+
+Pokémon Center publishes no documented public API, and its internal Elastic Path
+Cortex endpoints are **explicitly forbidden by its own `robots.txt`**:
+
+```
+User-agent: *
+Disallow: /availabilities
+Disallow: /cortex
+Disallow: /items
+Disallow: /offers
+Disallow: /prices
+Disallow: /site/*/resourceapi/
+```
+
+Those are exactly the endpoints that would answer "is this in stock and at what
+price". Reading them would mean taking data the retailer has asked us in writing
+not to take, to power a monitor whose entire pitch is that its readings are
+trustworthy. So rung 2 is not merely unavailable here — it is closed, and by the
+retailer's own stated wishes. `/product/*` and `/sitemap.xml` are **not**
+disallowed, which is why the probes above were fair game and the API was not.
+
+### What was NOT done, and why
+
+- **No Pokémon Center watch is in `config/products.yaml`.** The product exists
+  (`/product/715e10557/pokemon-go-plus`, found via the allowed sitemap), so a
+  watch would have looked plausible and made `boty check` report five retailers.
+  It would also have been a detector that can never read anything, a control
+  that can never go green, and a permanent health warning. The five-retailer
+  criterion is not worth a retailer that does not work.
+- **No fixture was captured.** `boty.fixtures.capture` propagates `Blocked`, and
+  `boty/cli.py` printed *"refusing to save a challenge page as a fixture"* and
+  exited 1 — the T-02-22 mitigation working live rather than in a test. A
+  6 KB Imperva interstitial saved as `pokemoncenter/goplusplus.html` would have
+  made a test suite assert against a bot wall while looking perfectly green.
+- **No further escalation.** Rung 4 is the last rung. Beyond it are residential
+  proxies and CAPTCHA-solving services, which are out of scope for this project
+  by design and would not survive the "a fresh clone can do this" test anyway.
+
+### The interstitial that HTTP 200 hides
+
+Worth recording separately, because it is a defect this probe found in *our*
+code rather than in Pokémon Center's:
+
+Imperva serves `Pardon Our Interruption` with **HTTP 200**, and none of
+`boty.fetch.BLOCK_PHRASES` matched it. So `get()` returned it as a successful
+`Page`, and `_verdict_from_html` reported
+`no structured stock data found (page shape changed?)` — a fail-safe UNKNOWN
+with a **wrong reason attached**. The truthful reading is "we were blocked", and
+the two send a reader to completely different places: one says re-capture the
+fixture and see which assertions moved, the other says this retailer is turning
+us away.
+
+Nothing about this is Pokémon Center-specific — Imperva sits in front of a great
+many retailers, and the next one probed will hit the same silent
+misclassification. So it gets fixed rather than noted: `pardon our interruption`
+and `incapsula incident` join `boty.fetch.BLOCK_PHRASES` in 02-04 task 2, pinned
+by `tests/test_fetch.py` against the bytes recorded above.
+
+### If somebody retries this later
+
+Worth retrying, and here is what would make it worth retrying: the homepage is
+readable at rung 1 today, so whatever Imperva rule covers `/product/*` is
+narrower than a site-wide policy and could be relaxed or re-scoped. Re-run the
+two cheap probes at the top of this table before assuming anything — a cold
+rung-1 GET of any `/product/` URL, and one rung-3 render. If either comes back
+with `ld+json` or a `__NEXT_DATA__` product node, this section is stale and
+Pokémon Center is a one-line `FIRST_PARTY` entry away from working, the same as
+Nintendo turned out to be.
+
+---
+
 ## Cross-cutting observation: a browser is not a strict upgrade
 
 Not a verdict — GameStop is green on rung 1 and stays there — but it was
