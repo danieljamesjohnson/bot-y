@@ -87,6 +87,27 @@ BLOCK_PHRASES = (
     # reported a working retailer as blocked forever — the bad-bet failure this
     # list's own docstring warns about, one grep away from being shipped.
     "to discuss automated access to amazon data",
+    #
+    # ── DO NOT ADD `datadome`. ────────────────────────────────────────────────
+    #
+    # It is the obvious next entry and it is a bad bet, in the same shape as the
+    # rejected Amazon wording above. DataDome is a vendor, not a challenge: real
+    # Pokémon Center product pages reference DataDome *assets* while serving
+    # genuine content, so the phrase appears on working pages and blocked ones
+    # alike. Adding it reports that retailer as blocked forever.
+    #
+    # This is not a prediction. At least one other public project shipped
+    # exactly this false positive and had to revert it (recorded in the
+    # Pokémon Center prior-art review, 2026-08-03). DataDome's *challenge* is
+    # already covered without it: it is served at HTTP 403, which `get()`
+    # raises on before this list is ever consulted.
+    #
+    # The rule this instance illustrates, since it is the third time: a block
+    # phrase must be a string that appears on the wall and NOWHERE ELSE. A
+    # vendor name, a script src, a CDN header — all fail that test. If a
+    # DataDome tell is ever needed at HTTP 200, take it from the challenge
+    # markup itself and prove it absent from a real product page first, the way
+    # the Amazon entry above was.
 )
 
 

@@ -1110,11 +1110,42 @@ observations across both rungs, two of them at rung 3 — which is worth saying
 out loud, because it is the standard the hard two's refusal branches were
 written to and the only retailer in this file that has ever actually met it.
 
+**Refusal observed (rung 1):** `/terms-of-use`, 2026-08-03 — **HTTP 200**, **1,047 B**, matched two block phrases: `request unsuccessful` and `_incapsula_resource`.
+
+Not a product page: **the wall refuses the Terms of Use document itself.**
+Recorded because it changes what the next person can do rather than only what
+happened — see immediately below. (The measurement is on the anchored line
+deliberately: rule 6 reads whole lines, and this observation initially wrapped
+its byte count onto a second line and was correctly rejected by the gate.)
+
 ### The decisive reason is the Terms of Use, not the wall
 
 Added 2026-08-02 after a desk review of prior art. This supersedes the technical
 argument below as the *primary* reason, because a wall can fall and a written
 prohibition does not.
+
+> **Provenance, added 2026-08-03, and it is a caveat rather than a retraction.**
+> The clause quoted below comes from a **desk review of prior art, not from a
+> first-hand read of the document.** A first-hand read was attempted on
+> 2026-08-03 specifically to upgrade it, and Imperva refused the Terms of Use
+> page too (the rung-1 observation immediately above). So this citation cannot
+> currently be verified from this host, and saying so is the point: this file's
+> own standard — and `evidence_check` rule 6, added in Phase 3.1 — is that a
+> refusal cites an observation rather than a report.
+>
+> It stays as the primary reason anyway, for a reason worth stating: **the
+> verdict does not rest on it.** Pokémon Center carries five anchored refusal
+> observations at both rungs, more than any other retailer in this file, and
+> would be REFUSED on the technical record alone. The ToU is why nobody should
+> *re-probe* it, and if the wall ever falls, someone should read the document
+> first-hand before acting on this paragraph.
+>
+> One more thing the attempt produced, and it is not incidental: the refusal
+> body embeds **this host's public IP in a query string** (`cip=…`). That is the
+> leak class `QUESTIONS.md` § 0e is about, arriving live, in a policy-document
+> request. The response was scrubbed in the scratchpad and never went near the
+> repo. It is also exactly why `boty.fixtures.capture` refuses to write a
+> challenge page to disk.
 
 Pokémon Center's Terms of Use prohibit "any data mining, robots or similar data
 gathering or extraction methods designed to scrape or extract data from our
