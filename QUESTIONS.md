@@ -69,6 +69,25 @@ Full evidence — the clauses in context, the four requests with byte counts, bo
 `robots.txt` files, and why nobody should re-probe — is in
 `docs/retailer-evidence.md` under `## Target`.
 
+**Update 2026-08-03 (03-03, phase close).** Confirmed against a live run rather
+than left as a projection. `boty check` under the service's own environment
+reports **four** retailers — gamestop, walmart, bestbuy, nintendo — with
+`healthy: true` and no health warnings, so **phase 3 criterion 5 is recorded
+UNMET at four**, final. Both hard-two retailers are **rung 4**: Amazon by its
+Conditions of Use, Target by its Terms & Conditions, neither having been sent a
+single product-page request. Nothing was added to `config/products.yaml` to move
+the number, and the gate that would catch it if anyone tried
+(`scripts/evidence_check.py --phase`) now runs inside `make verify` via the
+offline suite, alongside a new `tests/test_support_matrix.py` that holds the
+README's table to the same standard.
+
+Two other numbers from the same run, since they are the ones that would have
+been quietly assumed otherwise: a full pass took **61.4 s against REQ-08's 120 s
+budget** (10 watches, 4 retailers, one on rung 3), and the deployed daemon
+showed **zero zombie children and zero leaked browser profiles across 41 minutes
+and 7 completed cycles** — which closes the CR-01 durability item
+`02-VERIFICATION.md` left open, the one no exit code could ever have closed.
+
 ## 0a. Amazon is rung 4 — settled by its Conditions of Use, without a single probe
 
 **Not blocking, and there is nothing for you to do.** Same shape as the Pokémon

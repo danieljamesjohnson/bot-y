@@ -1408,3 +1408,53 @@ does not carry the product."* It is also now **final rather than pending**:
 `make verify` fails if a later edit configures a retailer outside that scope or
 leaves one inside it with no verdict. The only way to move this number is the
 honest one.
+
+### REQ-08: how long a full pass actually takes
+
+Measured, not asserted. `boty.status.write` now publishes a `duration_seconds`
+key, so the figure is readable off `served/boty/status.json` after any pass
+rather than being re-timed by hand.
+
+**61.4 s against a 120 s budget**, at **10 watches across 4 retailers, one of
+them on rung 3** — measured 2026-08-03T05:12Z under the service's own
+`EnvironmentFile` via `systemd-run`, with `boty.service` stopped so the run was
+not racing a live cycle.
+
+| Measurement | Watches | Retailers | Result |
+|---|---|---|---|
+| 02-04 (Phase 2, hand-timed) | 10 | 4 (one rung 3) | ~40 s |
+| 03-02 (`time`, service env) | 10 | 4 (one rung 3) | 36.8 s |
+| 03-03 (published `duration_seconds`) | 10 | 4 (one rung 3) | **61.4 s** |
+
+The configuration did not change between these three — no watch was added or
+removed, and both hard-two retailers are rung 4, so nothing was ever configured
+for them. What changed in the third measurement is a **transient network
+failure**: `TRANSITION — Mega Evolution Booster Bundle` hit
+`Timeout: Failed to perform, curl: (28)` and went through `boty.fetch.get`'s
+retry and backoff before returning **UNKNOWN**. That single watch accounts for
+essentially all of the ~25 s difference from 03-02's run of the same config.
+
+Two things are worth reading off that rather than rounding away:
+
+- **The budget has real headroom, and the headroom is what absorbed the
+  timeout.** A retailer timing out is ordinary, and the pass still finished at
+  roughly half the budget.
+- **The timed-out watch read UNKNOWN, not OUT_OF_STOCK.** That is the core
+  promise of this project holding under exactly the condition that breaks it in
+  other monitors — a fetch that never completed did not become a stock verdict.
+
+REQ-08's wording is "at ~7 retailers". Four is what shipped, so four is what was
+measured; extrapolating a number for a seven-retailer configuration that was
+never run, and can never be run because three of the seven are refused in
+writing, would be inventing the measurement this section exists to avoid.
+
+**Confirmed a second time, by the deployed service itself.** `watch_cycle`
+publishes a duration too, so the number stays current on the dashboard rather
+than being whatever a human last measured. The first cycle after the restart —
+`updated` 2026-08-03T05:13:56Z — published **35.0 s**, `healthy: true`, four
+retailers, one `rung: browser` reading correctly flagged `degraded: true`, and
+**no UNKNOWN readings at all**. That is the same configuration as the 61.4 s
+measurement twelve minutes earlier, which settles what the difference was: a
+transient retailer timeout, not a cost this phase added. The budget figure to
+carry forward is therefore roughly **35–61 s at 10 watches and 4 retailers**,
+where the upper end already includes one retailer failing to answer.
