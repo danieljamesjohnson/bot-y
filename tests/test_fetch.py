@@ -391,6 +391,16 @@ def test_every_block_phrase_is_lowercase() -> None:
 # --------------------------------------------------------------------------
 
 
+def _fixture_files(root: Path) -> list[Path]:
+    """Everything the identity guard must read.
+
+    A named function rather than an inline glob so the SCOPE is pinnable —
+    see `test_the_guard_scans_the_json_provenance_notes_not_only_the_pages`.
+    The `.json` notes are not incidental: one of them has already leaked.
+    """
+    return sorted([*root.glob("*/*.html"), *root.glob("*/*.json")])
+
+
 def _identity_leaks(name: str, body: str) -> list[str]:
     """The rule, extracted so it can be watched failing.
 
@@ -449,11 +459,21 @@ def _identity_leaks(name: str, body: str) -> list[str]:
 
     # A US phone number or a ZIP+4 in a fixture is a geolocation of the
     # capturing host by another name: retailers render the *nearest stores*.
-    for pattern, what in ((r"\b\d{3}-\d{3}-\d{4}\b", "phone number"),
-                          (r"\b\d{5}-\d{4}\b", "ZIP+4")):
-        found = re.search(pattern, body)
-        if found:
-            leaks.append(f"{name}: {what} {found.group(0)}")
+    # Toll-free prefixes are excluded: a 1-800 customer-service number is
+    # printed on every page of a national retailer and locates nobody. A
+    # geographic area code beside a store listing is the thing that does.
+    for match in re.finditer(r"\b(\d{3})-\d{3}-\d{4}\b", body):
+        if match.group(1) in {"800", "833", "844", "855", "866", "877", "888"}:
+            continue
+        leaks.append(f"{name}: phone number {match.group(0)}")
+        break
+    # ZIP+4 stays fail-closed even though a `12345-6789` SKU can trip it: a
+    # false positive costs one redaction, a false negative costs a public
+    # address. If it ever fires on real product data, narrow it deliberately
+    # and say so here rather than deleting it.
+    found = re.search(r"\b\d{5}-\d{4}\b", body)
+    if found:
+        leaks.append(f"{name}: ZIP+4 {found.group(0)}")
 
     # FREE TEXT, and this is the class that got through after the widening.
     #
@@ -483,15 +503,21 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
     should have stopped. Each case is a leak that actually occurred in this
     repo, not an invented one.
     """
+    # EVERY value here is invented. The first version of this test seeded these
+    # cases with the real city and ZIP that had just been redacted out of the
+    # fixtures — which put them straight back into a tracked file, in the test
+    # written to keep them out. `Exampleville` is not a place and `99999` is not
+    # an assignable US ZIP; `203.0.113.0/24` is TEST-NET-3 and `555-01xx` is the
+    # reserved fictional exchange.
     cases = {
         "true-client-ip: 203.0.113.7": "true-client-ip",
-        "?city=Redacted&zip=00000": "geolocation",
-        '{"latitude":"33.170","longitude":"-96.780"}': "coordinate",
-        '{"zipCode":"00000"}': "postal code",
+        "?city=Exampleville&zip=99999": "geolocation",
+        '{"latitude":"12.345","longitude":"-98.765"}': "coordinate",
+        '{"zipCode":"99999"}': "postal code",
         '{"refreshToken":"eyJhbGciOiJIUzI1NiJ9.abcdefgh"}': "session token",
         '{"visitor_id":"0193f2ab-8c1d-7e2a-b4f6-9a0c1d2e3f45"}': "visitor id",
-        "Call the store on 972-555-0134": "phone number",
-        'aria-label="Redacted, 00000, Change shipping address"': "rendered destination",
+        "Call the store on 555-555-0134": "phone number",
+        'aria-label="Exampleville, 99999, Change shipping address"': "rendered destination",
     }
     for body, expected in cases.items():
         found = _identity_leaks("synthetic.html", body)
@@ -500,21 +526,72 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
             f"{body!r} was caught but classified as {found!r}, not {expected!r}"
         )
 
-    # And it must stay quiet on what redaction legitimately leaves behind,
-    # or it gets disabled within a week.
+    # And it must stay quiet on what redaction legitimately leaves behind, AND
+    # on real retailer content — or it gets disabled within a week, which is the
+    # failure mode that ends with no guard at all.
+    #
+    # The first version of this set was too easy: several entries matched no
+    # rule under any circumstances, so passing them proved nothing. These are
+    # the shapes that actually sit next to a leak in a captured page.
     for benign in (
+        # what redaction leaves behind
         '{"zipCode":"00000"}',
         '{"visitor_id":"00000000-0000-0000-0000-000000000000"}',
         "true-client-ip: 192.0.2.1",
         "?city=REDACTED&zip=00000",
         "Redacted, 00000",
-        "jQuery 3.3.6.4 loaded",
         '"city":"Redacted"',
+        '"stateOrProvinceCode":"XX"',
+        # real retailer content that is NOT a geolocation of this host
+        "jQuery 3.3.6.4 loaded",
+        '{"price":12345.00,"currency":"USD"}',
+        '{"gtin13":"0819338020563"}',
+        '"sku":"6577129"',
+        '{"itemId":"00000000"}',              # a ZIP-shaped substring inside a longer id
+        "Customer service: 1-800-925-6278",   # toll-free — a corporate number, not a store
+        '"releaseDate":"2026-08-04"',
+        '<path d="M12.345,67.89 L98.765,43.21"/>',
+        "Nintendo of America Inc., Redmond, Washington",  # a company address in a listing
     ):
         assert not _identity_leaks("synthetic.html", benign), (
             f"the guard cries wolf on {benign!r} — a guard that fires on redacted "
-            f"output is one nobody keeps"
+            f"output or on ordinary retailer content is one nobody keeps: "
+            f"{_identity_leaks('synthetic.html', benign)}"
         )
+
+
+def test_the_guard_scans_the_json_provenance_notes_not_only_the_pages() -> None:
+    """The `.json` half of the glob is pinned, because deleting it was silent.
+
+    `amazon/goplusplus.json`'s note once recorded its own redaction by naming the
+    values it removed — republishing, in the file documenting the removal, the
+    city and ZIP just stripped from the page beside it. The guard could not see
+    it because it globbed `*/*.html` and nothing else.
+
+    That was fixed by widening the glob, and then the phase verifier deleted the
+    `.json` half as a mutation and the suite stayed **379/379 green** — the notes
+    were clean by then, so nothing kept the widening honest. A guard whose scope
+    can be narrowed without a red test has the scope it happens to have, not the
+    scope somebody chose.
+    """
+    root = Path(__file__).parent / "fixtures"
+    scanned = _fixture_files(root)
+    suffixes = {p.suffix for p in scanned}
+
+    assert ".json" in suffixes, (
+        "the identity guard is not scanning the .json provenance notes. It is "
+        "the file that describes what was redacted, and it has already been the "
+        "one that leaked."
+    )
+    assert ".html" in suffixes, "the identity guard is not scanning the pages"
+
+    # And every note on disk is actually reached — a glob that matches one
+    # directory would satisfy the suffix check above while missing the rest.
+    on_disk = {p for p in root.glob("*/*.json")}
+    assert on_disk <= set(scanned), (
+        f"provenance notes exist that the guard does not scan: "
+        f"{sorted(str(p.relative_to(root)) for p in on_disk - set(scanned))}"
+    )
 
 
 def test_no_fixture_leaks_the_capturing_hosts_identity() -> None:
@@ -542,7 +619,7 @@ def test_no_fixture_leaks_the_capturing_hosts_identity() -> None:
     root = Path(__file__).parent / "fixtures"
     leaks: list[str] = []
 
-    for page in sorted([*root.glob("*/*.html"), *root.glob("*/*.json")]):
+    for page in _fixture_files(root):
         body = page.read_text(encoding="utf-8", errors="replace")
         leaks.extend(_identity_leaks(str(page.relative_to(root)), body))
 

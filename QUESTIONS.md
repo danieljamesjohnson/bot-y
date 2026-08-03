@@ -2,10 +2,12 @@
 
 Two credentials I cannot obtain myself. The one open decision (0d, Target/RedSky)
 was answered 2026-08-03 and is kept below as the record. **One new open decision:
-0e, below — the working tree is clean *now*, but the pushed public history is
-not.** (0e's first version claimed the tree was already clean; it was not, the
-phase verifier caught it, and the correction is recorded inside 0e rather than
-overwritten.)
+0e, below — every `tests/fixtures/` file is clean *now*, but the pushed public
+history is not.** (0e claimed a clean tree twice before it was true. The phase
+verifier caught both. Both corrections are recorded inside 0e rather than
+overwritten, and the only files still naming the leaked values are 0e itself and
+the three records that document the leak — which is its own question, flagged
+there rather than settled by scrubbing.)
 Everything else in the MVP is proceeding without them.
 
 **§ 0b is closed as of 2026-08-03 and needs nothing from you.** It asked what
@@ -74,17 +76,49 @@ actually happened:
   (``(`Redacted` x3, `00000` x3)``). The file documenting the removal was
   republishing the thing removed.
 
-**What is true now.** `grep -rE '\bRedacted\b|\b7503[0-9]\b' tests/fixtures/`
-returns nothing. The city, the ZIP, the store name and the store id are gone
-from both Walmart fixtures; both Amazon notes describe what was redacted
-without naming it. The guard scans `.json` as well as `.html`, has a free-text
-`City, 12345` rule, and — the part that was missing — the rule is now an
-extracted function with a test that watches it fail on one synthetic body per
-leak class, plus a benign set so it cannot be satisfied by crying wolf. I also
-watched the real-tree test go red on an injected `.json` note before trusting
-it. Best Buy's `visitorId`s were already zeroed and its `55113`/`55423` are
-Best Buy's own Minnesota region, not this host; `75039` in `unresolved-sku.html`
-is a 1worldsync URL path, not a ZIP.
+**SECOND CORRECTION, same day.** The first correction claimed the store id was
+gone and the tree was clean. The verifier's re-check found three more instances,
+and it was right again — the root cause each time was the same one: **the fix
+was keyed to the spellings I had just seen, not to the class.**
+
+- **The store number survived** in three spellings the redaction never touched:
+  `"pickupStore":"202"` ×3, `"deliveryStore":"202"` ×3 and `storeId=202` ×3 —
+  the last inside `&amp;`-escaped hrefs, i.e. visible markup. So did the state,
+  as `"stateCode"`, `"stateOrProvinceCode"`, Akamai's own `"regionCode"` and the
+  store's WIC agency list. A store number resolves publicly to the store whose
+  *name* the same commit removed for being a locator.
+- **The `.json` defect had a twin outside the glob.** `docs/retailer-evidence.md`
+  still named both values with per-class counts — the exact construct deleted
+  from `amazon/goplusplus.json` in the same commit.
+- **The fix introduced a new occurrence.** The synthetic leak cases in the new
+  guard test were seeded with the **real** city and ZIP — putting them back into
+  a tracked file, in the test written to keep them out. They now use
+  `Exampleville, 99999`, which is not a place and not an assignable ZIP.
+
+**What is true now, stated narrowly this time.** `git grep -E '\bRedacted\b|\b7503[0-9]\b'`
+returns hits in **four** files, all of which are *this record and its
+neighbours* — `QUESTIONS.md`, `03.1-VERIFICATION.md`, `03.1-02-SUMMARY.md` and
+`docs/retailer-evidence.md` — and none of which is a fixture. Deciding whether
+the audit trail may name what it audits is part of the decision below, not
+something I should settle by quietly scrubbing the evidence of the leak. Every
+`tests/fixtures/` file is clean of the city, the ZIP, the store name, the store
+id and the state, and both Walmart fixtures still parse **byte-identically**
+(`IN_STOCK $229.99 Clove Brothers LLC`; `IN_STOCK $2.42 Walmart.com`).
+
+The guard now scans `.json` as well as `.html`, has a free-text `City, 12345`
+rule, excludes toll-free numbers, and — the part that was missing entirely —
+is an extracted function pinned by two tests: one watching it fail on a
+synthetic body per leak class, one pinning the **scope**, because the verifier
+deleted the `.json` half of the glob as a mutation and the suite stayed green.
+Both of those mutations now go red; I ran them. Best Buy's `visitorId`s were
+already zeroed, its `55113`/`55423` are Best Buy's own Minnesota region, and
+`75039` in `unresolved-sku.html` is a 1worldsync URL path, not a ZIP.
+
+**The honest summary of two rounds:** the leak was found by a guard, the fix
+missed, the verifier caught the miss, the second fix missed less, and the
+verifier caught that too. What changed between rounds is that the rule is now
+pinned by tests rather than by my attention — which is the only version of this
+that survives the next capture.
 
 **None of that changes the decision below.** The blobs are still in pushed
 history exactly as described. What changed is that the working tree really is

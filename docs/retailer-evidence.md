@@ -433,9 +433,12 @@ alert. On Amazon the default is `None`, which on a marketplace is UNKNOWN.
 
 **The fixtures were redacted before commit, by class rather than by value** —
 03.1-02's lesson applied *before* a leak rather than after one. The raw captures
-carried Amazon's geolocation of this host (`Redacted` ×3 and ×3, `00000` ×6 and
-×3), a `session-id`, an `anti-csrftoken-a2z`, ten offer-listing tokens, an
-`x-amz-rid` request id and request timestamps. Every `<script>` body, every
+carried Amazon's geolocation of this host — the city (×3 and ×3) and the ZIP (×6
+and ×3), **deliberately not named here**, for exactly the reason they were taken
+out of the pages: a redaction record that spells out what it removed is a copy of
+it, and this sentence used to be one. It also carried a `session-id`, an
+`anti-csrftoken-a2z`, ten offer-listing tokens, an `x-amz-rid` request id and
+request timestamps. Every `<script>` body, every
 `<style>` body and every HTML comment was emptied or dropped, session/csrf/
 offer-listing/timestamp input values blanked, and every host marker replaced:
 3.2 MB → 1.77 MB and 1.89 MB → 1.08 MB, with the control, the seller, the price
