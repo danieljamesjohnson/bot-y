@@ -635,6 +635,64 @@ Fixed the same way the Imperva case was, with both directions pinned:
 became newly "blocked" — an over-broad phrase would report a working retailer as
 refused forever, which is worse than the bug it fixes.
 
+#### Re-probe, 2026-08-03 — the markers verified against live bytes
+
+The original probe's raw output was not saved, which made this the only entry in
+this document with no URL, no byte count and no excerpt — and the test constant
+`AKAMAI_CHALLENGE` was a hand-written reconstruction, so
+`test_an_akamai_challenge_at_http_200_is_blocked_not_a_page` was asserting our
+phrase against our own transcription of it. It would have passed identically if
+a marker were a typo, and the phrase would then simply never fire in production:
+Phase 3 walks the ladder at Target, Akamai-fronted, and the refusal would have
+surfaced as "no structured stock data found (page shape changed?)" — someone
+sent to debug a working extractor, which is the exact outcome the phrase was
+added to prevent.
+
+Re-probed to close that. **Both markers appear verbatim; neither needed
+correcting.**
+
+```
+URL:     https://www.kohls.com/product/prd-4351200/nintendo-switch-2.jsp
+STATUS:  200                      <- again: a wall, not an error
+BYTES:   2,377 (2,499 on a second fetch — the nonce length varies)
+CTYPE:   text/html
+```
+
+`sec-if-cpt-container` — 1 occurrence, at byte 213. The structural marker, and
+the durable one: it is the id of the container Akamai's own challenge script
+mounts into.
+
+```html
+...t3e30oTwx8?v=<REDACTED-NONCE>&amp;t=155122144"></script>
+<div id="sec-if-cpt-container" role="main" style="display: none">
+    <div class="behavioral-content">
+```
+
+`scf-akamai-protected-by` — 1 occurrence, at byte 849. Wording-dependent, hence
+secondary. Note the space before `=`, which is why the phrase is the bare class
+name and not `class="scf-akamai-protected-by"`:
+
+```html
+<div class="scf-akamai-logo-msg">
+    <p class ="scf-akamai-protected-by">Powered and protected by</p>
+</div>
+```
+
+The whole document is 2.4 KB of behavioural-challenge scaffolding with a
+`display: none` container, an Akamai logo, and two script tags — no product
+markup and no human-readable "are you a robot" copy anywhere, which is what makes
+the structural markers the only thing that can catch it.
+
+`tests/test_fetch.py`'s `AKAMAI_CHALLENGE` was replaced with these real bytes
+(nonce redacted). The test is no longer self-referential: a typo in either
+phrase now fails it, because the constant is the retailer's markup rather than
+ours. Verified by deliberately corrupting a marker and watching it go red.
+
+The bare vendor name `akamai` occurs 10 times in this body and would look like an
+attractive third marker. It is not: `docs/retailer-evidence.md` records 33
+occurrences of `akamai` on Best Buy's *working* search page and 15 in Walmart's
+CSP header, so it would report both retailers as permanently blocked.
+
 **This matters for Phase 3 more than for Kohl's.** Akamai fronts a large share of
 US retail *including Target*. Without this, a Target refusal would have been
 misattributed to our extractor, and someone would have spent the phase debugging

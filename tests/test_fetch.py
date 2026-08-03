@@ -63,21 +63,56 @@ INCAPSULA_IFRAME = (
 )
 
 
-#: Verbatim shape from kohls.com, found while probing candidates for a fifth
-#: retailer. Akamai Bot Manager serves this behavioural challenge at HTTP 200
-#: with no human-readable "are you a robot" wording at all — the only markers
-#: are structural. It matters beyond Kohl's: Akamai fronts a large share of US
-#: retail including Target, which Phase 3 walks the ladder at.
-AKAMAI_CHALLENGE = (
-    "<!DOCTYPE html><html><head>"
-    '<meta name="robots" content="noindex, nofollow">'
-    '<link rel="stylesheet" href="/sec-if-cpt/style.css">'
-    "</head><body>"
-    '<div id="sec-if-cpt-container" data-scf-akamai-protected-by="Akamai Bot Manager">'
-    "</div>"
-    '<script src="/sec-if-cpt/challenge.js" async></script>'
-    "</body></html>"
-)
+#: **Verbatim bytes** from kohls.com, re-fetched 2026-08-03, with only the
+#: per-session challenge nonce redacted. Akamai Bot Manager serves this
+#: behavioural challenge at HTTP 200 with no human-readable "are you a robot"
+#: wording at all — the only markers are structural. It matters well beyond
+#: Kohl's: Akamai fronts a large share of US retail including Target, which
+#: Phase 3 walks the ladder at.
+#:
+#: This used to be a hand-written *reconstruction*, and that made the test below
+#: worthless in the one way that mattered. Asserting our phrase against our own
+#: transcription of the challenge passes identically whether the marker is
+#: right or a typo — and a typo'd marker never fires in production, so the wall
+#: comes back as an ordinary page and the refusal is reported as "page shape
+#: changed?", sending someone to debug an extractor that is working perfectly.
+#: A green test would have said nothing either way.
+#:
+#: Now that these are the retailer's bytes rather than ours, a wrong phrase in
+#: `BLOCK_PHRASES` fails the test. Full provenance — URL, status, byte count and
+#: both matched substrings in context — is in `docs/retailer-evidence.md`.
+#:
+#: Note `class ="scf-akamai-protected-by"`: the space before `=` is Akamai's,
+#: reproduced exactly, and is why the phrase is the bare class name.
+AKAMAI_CHALLENGE = """<!DOCTYPE html>
+<html lang="en">
+<body><script type="text/javascript" src="/Borx/KBSP/bWL9/cO/vKew/LQiNt8aN5ku5/Zy90Gm97dAw/XS/t3e30oTwx8?v=<REDACTED-NONCE>&amp;t=155122144"></script>
+<div id="sec-if-cpt-container" role="main" style="display: none">
+    <div class="behavioral-content">
+        <div id="sec-bc-text-container"></div>
+        <div id="sec-bc-tile-parent">
+            <div id="sec-bc-tile-container"></div>
+        </div>
+        <div class="sec-bc-button-parent">
+            <div class="behavioral-button progress-btn-disabled">
+                <div class="btn" id="progress-button" role="button" disabled></div>
+                <div class="progress"></div>
+            </div>
+        </div>
+        </div>
+        <div class="scf-akamai-logo-sec-abc">
+            <div class="scf-akamai-logo-msg">
+                <p class ="scf-akamai-protected-by">Powered and protected by</p>
+            </div>
+            <div class="scf-akamai-logo-img">
+                <img src="https://www.akamai.com/site/ko/images/logo/akamai-logo1.svg" class="scf-akamai-logo" loading="lazy" alt="Akamai">
+            </div>
+            <div class="akamai-privacy" ><a href="https://www.akamai.com/privacy" target="_blank">Privacy</a></div>
+        </div>
+    </div>
+</div>
+<script type="text/javascript" src="https://www.kohls.com/public/40b35110c9d4347948c85e668a2ed087f723b7604ced"  ></script>
+</body></html>"""
 
 
 class _FakeResponse:
@@ -156,6 +191,29 @@ def test_an_akamai_challenge_at_http_200_is_blocked_not_a_page(
         fetch.get("https://www.kohls.com/product/prd-1234/some-product.jsp", jitter=(0, 0))
 
     assert "200" in str(caught.value), "the status is the point — say it out loud"
+
+
+@pytest.mark.parametrize("phrase", ["sec-if-cpt-container", "scf-akamai-protected-by"])
+def test_each_akamai_marker_appears_in_the_retailers_own_bytes(phrase: str) -> None:
+    """Points the assertion at the retailer's markup instead of at our copy of it.
+
+    The defect this replaces was not that the marker was wrong — it was
+    re-probed and both are verbatim — but that nothing could have told us if it
+    were. `AKAMAI_CHALLENGE` was a hand-written reconstruction, so the block
+    test asserted our phrase against our own transcription and would have gone
+    green over a typo. The phrase would then never fire in production, and an
+    Akamai refusal at Target would surface as "page shape changed?".
+
+    Stated as its own test rather than left implicit in the `Blocked` assertion
+    because the two say different things: that one says "this body is refused",
+    this one says "the string we refuse it *by* is a string the retailer
+    actually emits". Provenance in `docs/retailer-evidence.md`.
+    """
+    assert phrase in fetch.BLOCK_PHRASES, f"{phrase!r} is no longer a block phrase"
+    assert phrase in AKAMAI_CHALLENGE.lower(), (
+        f"{phrase!r} does not appear in the captured Kohl's challenge — either "
+        "the phrase is a typo, or the constant is no longer the retailer's bytes"
+    )
 
 
 def test_the_browser_rung_recognises_the_same_walls(monkeypatch: pytest.MonkeyPatch) -> None:
