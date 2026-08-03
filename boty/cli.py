@@ -160,8 +160,11 @@ def watch_cycle(
     failure episode, and the new set is returned rather than mutated so the
     caller holds exactly one copy of that memory.
     """
+    # monotonic, not time.time(): an NTP correction mid-pass would otherwise
+    # publish a negative duration into a file served over HTTP.
+    started = time.monotonic()
     results, health, alerts = run_once(cfg.watches, checker, state)
-    write_status(cfg.status_path, results, health)
+    write_status(cfg.status_path, results, health, duration_seconds=time.monotonic() - started)
 
     # Alerts are edge-triggered, and `run_once` has already committed the
     # transition to `state.seen` and saved it. So a send that does not arrive
@@ -306,11 +309,26 @@ def main(argv: list[str] | None = None) -> int:
     state = State.load(cfg.state_path)
 
     if args.command == "check":
+        # Timed around `run_once` rather than around the process: interpreter
+        # startup and config load are not what REQ-08's budget is about, and a
+        # number that drifts with Python's import time is not a measurement of
+        # retailers. `monotonic` for the reason in `boty.status.write`.
+        started = time.monotonic()
         results, health, alerts = run_once(cfg.watches, checker, state)
+        elapsed = time.monotonic() - started
         _report(results, health)
-        write_status(cfg.status_path, results, health)
+        write_status(cfg.status_path, results, health, duration_seconds=elapsed)
         if alerts:
             print(f"\n  {len(alerts)} alertable transition(s)")
+        # The human surface for REQ-08's two-minute budget; `duration_seconds`
+        # in the status file is the machine one. Both are cheap, and a budget
+        # whose only reading lives in a served file is one nobody looks at
+        # while watching a pass run.
+        retailers = len({w.retailer for w in cfg.watches})
+        print(
+            f"\n  {len(cfg.watches)} watch{'es' if len(cfg.watches) != 1 else ''} across "
+            f"{retailers} retailer{'s' if retailers != 1 else ''} in {elapsed:.1f}s"
+        )
         return 0
 
     # `watch` exists only to notify. With no URLs configured `send_restock`

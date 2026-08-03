@@ -18,10 +18,31 @@ from .models import Health, Result
 log = logging.getLogger(__name__)
 
 
-def write(path: Path, results: list[Result], health: list[Health]) -> None:
+def write(
+    path: Path,
+    results: list[Result],
+    health: list[Health],
+    *,
+    duration_seconds: float | None = None,
+) -> None:
     payload: dict[str, Any] = {
         "updated": int(time.time()),
         "healthy": all(h.ok for h in health),
+        # How long the pass that produced this file took, in seconds. Published
+        # so REQ-08's two-minute budget can be READ rather than re-measured by
+        # hand — the only figure this project had before it existed was a
+        # stopwatch number in a plan summary, which is a budget asserted rather
+        # than measured.
+        #
+        # `None` means "nobody timed this pass", which is not "it took no
+        # time": the same three-valued honesty `Availability` is built on,
+        # applied to a number. A missing measurement serialised as 0 would read
+        # off the dashboard as the fastest check ever recorded.
+        #
+        # Callers must time with `time.monotonic()`, never `time.time()`. This
+        # file is served over HTTP, and a wall clock stepping backwards during
+        # an NTP correction would publish a negative duration.
+        "duration_seconds": duration_seconds,
         "retailers": [
             {
                 "retailer": h.retailer,
