@@ -1,8 +1,75 @@
 # Blocked on Dan
 
 Two credentials I cannot obtain myself. The one open decision (0d, Target/RedSky)
-was answered 2026-08-03 and is kept below as the record. Everything else in the
-MVP is proceeding without them.
+was answered 2026-08-03 and is kept below as the record. **One new open decision:
+0e, below — the working tree is clean but the pushed public history is not.**
+Everything else in the MVP is proceeding without them.
+
+## 0e. Four already-public fixtures carry host geolocation — history rewrite? — OPEN 2026-08-03
+
+**Not blocking phase 3.1; it is proceeding.** But it is the same class of problem
+as the incident that caused this repo to be deleted and recreated on 2026-08-03,
+and it is *already public*, so it is yours to call rather than mine.
+
+**What happened.** 03.1-02 captured Target at rung 3 and the leak scan caught a
+serious one before commit — per-session `visitor_id`, an OAuth-shaped
+`refreshToken`, Target's RedSky key, Akamai's geolocation of this host, and the
+five nearest Target stores with street addresses and phone numbers. **The
+automated guard passed on it**: it knew EdgeScape's `lat=` query form, and Target
+writes JSON keys. The fixture was redacted by class (every `<script>` body
+emptied) and the guard widened to match semantics rather than eleven literal
+markers.
+
+**Then the widened guard found four more — already committed, already pushed.**
+
+| Pushed blob (on `origin/main`) | What it carries |
+|---|---|
+| `tests/fixtures/walmart/goplusplus.html` | `zipCode` **00000** |
+| `tests/fixtures/walmart/milk-control.html` | `zipCode` **00000** |
+| `tests/fixtures/bestbuy/pikachu-control.html` | `visitorId`, `zipCode` 55113 / 55423 |
+| `tests/fixtures/bestbuy/unresolved-sku.html` | `visitorId`, `zipCode` 55423 |
+
+Committed in `58e38ef` (Phase 1) and public ever since.
+
+**How bad, honestly, and the two halves differ.** The Best Buy ZIPs are 55113 and
+55423 — St. Paul and Richfield, Minnesota, which is Best Buy's own corporate
+region. Those read as *their* default store, not this host's location, and the
+`visitorId`s are stale session ids. **The Walmart pair is the real one:** 00000 is
+a single specific ZIP, it is not a Walmart default, and it is what Walmart's
+edge geolocated this host to. It is coarser than the public IP that caused the
+first incident, but it is the same kind of fact about where danserver sits, and
+it is on a public repo under your own name.
+
+**What is already true:** every one of these is redacted in the working tree as
+of `a4f2847`, the fixtures still drive their tests, and the widened guard now
+fails on the semantic markers rather than on a list of eleven literals — so this
+class cannot be re-committed silently.
+
+**What is NOT true:** redacting a file does not remove it from git history.
+`git show origin/main:tests/fixtures/walmart/goplusplus.html | grep 00000` still
+returns hits right now.
+
+**The options, and none of them is obviously right:**
+
+1. **Leave it.** A ZIP code is coarse, the repo is small and unwatched, and a
+   history rewrite on a public repo breaks every clone and every existing SHA.
+   The redaction stops it getting worse.
+2. **Rewrite history** (`git filter-repo` over those four blobs) and force-push.
+   Removes it from the default branch, but GitHub keeps unreferenced objects
+   reachable by SHA until GC, and forks/caches are not covered. Cheap here —
+   there are no other contributors.
+3. **Delete and recreate the repo**, as on 2026-08-03. The only option that
+   actually removes it, and it costs the stars/history/URL continuity.
+
+**My read, for what it is worth:** option 2. Option 3's cost was worth paying for
+a public IP; a ZIP code does not clear that bar, and option 1 leaves a fact about
+your home region in a public repo when removing it is an afternoon's work. But
+the first incident's precedent is yours, not mine, and reasonable people would
+pick 1.
+
+Whichever you pick, the fixture-capture guard is now the thing that stops a
+repeat, and it is the part I would not skip: it was watched failing on the real
+Target capture before it was trusted.
 
 ## 0d. Target / RedSky robots.txt — ANSWERED 2026-08-03 (Dan)
 
