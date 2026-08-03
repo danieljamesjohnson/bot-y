@@ -214,17 +214,31 @@ def test_retailer_with_no_first_party_list_is_unknown_not_out_of_stock(
     name its seller, as most schema.org markup does — `_pick` returns None.
     That used to become a confident OUT_OF_STOCK, when the truth is "this
     retailer has no first-party allow-list configured, so I cannot tell whose
-    offer this is". FIRST_PARTY covers four keys and REQUIREMENTS targets
-    seven retailers, so three Phase 2 adapters land straight into this path.
+    offer this is". REQUIREMENTS targets seven retailers, and every one of them
+    arrives through this door, so the door has to stay guarded while they do.
+
+    The example used to be `pokemoncenter`, and moving it is the point of this
+    edit rather than a tidy-up. The moment a retailer key gains a FIRST_PARTY
+    entry, a test written against it stops exercising WR-03 at all — it still
+    passes, it just proves something else, and nothing goes red to say so. That
+    is precisely how a guarantee gets hollowed out by an adapter that had every
+    reason to be added.
+
+    `costco` is chosen because it is named in the roadmap's narrowing rationale
+    as deliberately out of scope, so it is the key least likely to be configured
+    by a future plan. `pokemoncenter` was tempting — 02-04 established it as
+    rung 4, refused at every rung — but "unreachable today" is a weaker promise
+    than "out of scope on purpose", and the walls a retailer puts up can come
+    down again.
     """
     _serve(
         monkeypatch,
         _ldjson(availability="https://schema.org/InStock", price="54.99",
-                seller={"@type": "Organization", "name": "Pokémon Center"}),
-        "https://www.pokemoncenter.com/product/1",
+                seller={"@type": "Organization", "name": "Costco Wholesale"}),
+        "https://www.costco.com/product.1.html",
     )
     watch = Watch(
-        name="GO Plus +", retailer="pokemoncenter", target="https://www.pokemoncenter.com/product/1"
+        name="GO Plus +", retailer="costco", target="https://www.costco.com/product.1.html"
     )
 
     result = retailers.check_html(watch, first_party_only=True)
@@ -232,7 +246,11 @@ def test_retailer_with_no_first_party_list_is_unknown_not_out_of_stock(
     assert result.availability is Availability.UNKNOWN
     assert result.availability is not Availability.OUT_OF_STOCK
     assert result.alertable is False
-    assert "pokemoncenter" in result.detail
+    assert "costco" in result.detail
+    assert "costco" not in retailers.FIRST_PARTY, (
+        "this test's whole subject is a retailer with no allow-list — configuring "
+        "one silently turns it into a test of something else"
+    )
 
 
 def test_a_configured_retailer_still_reports_out_of_stock_for_a_third_party_offer(
@@ -684,6 +702,143 @@ def test_non_bestbuy_watches_are_untouched_by_the_bestbuy_branch(
 
 
 # --------------------------------------------------------------------------
+# Nintendo: rung 1, no adapter, and the only first-party GO Plus + we have
+# --------------------------------------------------------------------------
+
+NINTENDO_URL = "https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-112387/"
+NINTENDO_HDMI_URL = "https://www.nintendo.com/us/store/products/hdmi-cable-104947/"
+
+
+def test_nintendo_goplusplus_reads_out_of_stock_at_msrp(
+    monkeypatch: pytest.MonkeyPatch, nintendo_goplusplus: str
+) -> None:
+    """The most credible restock signal this project has, and it needs no adapter.
+
+    Nintendo makes the GO Plus +, lists it at $54.99 — MSRP to the cent — and
+    has no marketplace, so neither flipper defence has anything to defend
+    against here. `check_html` as shipped reads it: no new extractor, no
+    `_make_checker` branch, one `FIRST_PARTY` line.
+
+    The price assertion is not decoration. `Result.alertable` is False whenever
+    a ceiling is set and `price is None`, so a reading that got availability
+    right and price wrong would look healthy right up until the drop.
+    """
+    _serve(monkeypatch, nintendo_goplusplus, NINTENDO_URL)
+    watch = Watch(name="GO Plus +", retailer="nintendo", target=NINTENDO_URL, max_price=80)
+
+    result = retailers.check_html(watch, first_party_only=True)
+
+    assert result.availability is Availability.OUT_OF_STOCK
+    assert result.price == 54.99
+    assert result.alertable is False
+    assert "Nintendo of America" in result.detail
+    assert result.rung is Rung.TLS
+    assert result.degraded is False, "rung 1 is not a degraded transport"
+
+
+def test_nintendo_control_is_in_stock_priced_and_alertable(
+    monkeypatch: pytest.MonkeyPatch, nintendo_hdmi: str
+) -> None:
+    """The control has to be able to go green, with a price attached."""
+    _serve(monkeypatch, nintendo_hdmi, NINTENDO_HDMI_URL)
+    watch = Watch(name="HDMI cable", retailer="nintendo", target=NINTENDO_HDMI_URL, control=True)
+
+    result = retailers.check_html(watch, first_party_only=True)
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.price == 7.99
+    assert result.alertable is True
+    assert "InStock" in result.detail
+
+
+def test_nintendo_is_first_party_but_not_a_marketplace() -> None:
+    """Membership in each set is a claim about the site, decided by evidence.
+
+    Nintendo's store has no third-party seller surface at all — no buy box, no
+    "other sellers", nobody but Nintendo of America who can sell on it. So it
+    belongs in FIRST_PARTY and must stay out of MARKETPLACES, which is what
+    keeps `_pick`'s unattributed-offer fallback available for a future page that
+    drops the seller node. Putting it in MARKETPLACES "to be safe" would be the
+    opposite of safe: every unattributed offer would read UNKNOWN and the
+    control could never go green.
+    """
+    assert "nintendo" in retailers.FIRST_PARTY
+    assert "nintendo" not in retailers.MARKETPLACES
+    assert "nintendo of america inc." in retailers.FIRST_PARTY["nintendo"], (
+        "the allow-list is compared against `o.seller.strip().lower()`, and this "
+        "is the literal string Nintendo's schema.org markup carries"
+    )
+
+
+def test_unparseable_nintendo_page_is_unknown_not_out_of_stock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Restated for this retailer deliberately, not assumed to carry over.
+
+    Every retailer has its own way of getting lost, and this is the assertion
+    the whole project exists to keep true.
+    """
+    _serve(monkeypatch, "<html><body>Whoops! - Nintendo Official Site</body></html>", NINTENDO_URL)
+    watch = Watch(name="GO Plus +", retailer="nintendo", target=NINTENDO_URL, max_price=80)
+
+    result = retailers.check_html(watch, first_party_only=True)
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.availability is not Availability.OUT_OF_STOCK, (
+        "an unreadable Nintendo page must never be reported as out-of-stock — "
+        "that is the silent failure mode this project exists to prevent"
+    )
+    assert result.alertable is False
+    assert result.price is None
+    assert result.detail
+
+
+def test_blocked_nintendo_fetch_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    _raise(monkeypatch, Blocked("challenge page matched 'pardon our interruption' (HTTP 200)"))
+    watch = Watch(name="GO Plus +", retailer="nintendo", target=NINTENDO_URL)
+
+    result = retailers.check_html(watch)
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.availability is not Availability.OUT_OF_STOCK
+    assert "blocked" in result.detail
+    assert result.url == NINTENDO_URL
+
+
+def test_failed_nintendo_fetch_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    _raise(monkeypatch, FetchError("HTTP 404"))
+    watch = Watch(name="GO Plus +", retailer="nintendo", target=NINTENDO_URL)
+
+    result = retailers.check_html(watch)
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.availability is not Availability.OUT_OF_STOCK
+    assert "fetch failed" in result.detail
+    assert "404" in result.detail
+
+
+def test_nintendo_is_not_routed_through_the_browser(
+    monkeypatch: pytest.MonkeyPatch, nintendo_hdmi: str
+) -> None:
+    """Rung 1 means rung 1, through the same dispatch the live gate uses.
+
+    A browser is not a strict upgrade — headless Chrome is walled by GameStop
+    and by Pokémon Center — so a retailer that reads fine on rung 1 must never
+    quietly acquire a Chrome process because `_make_checker` grew an arm.
+    """
+    _serve(monkeypatch, nintendo_hdmi, NINTENDO_HDMI_URL)
+    _raise_rendered(monkeypatch, AssertionError("a Nintendo watch was routed through the browser"))
+
+    result = _make_checker(_bestbuy_config(""))(
+        Watch(name="HDMI cable", retailer="nintendo", target=NINTENDO_HDMI_URL, control=True)
+    )
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.rung is Rung.TLS
+    assert result.degraded is False
+
+
+# --------------------------------------------------------------------------
 # The shipped config: every retailer answers for itself
 # --------------------------------------------------------------------------
 
@@ -724,6 +879,60 @@ def test_the_shipped_bestbuy_watches_are_skus_with_no_ceiling_on_the_control() -
         assert w.target.isdigit(), f"{w.name}: {w.target!r} is not a Best Buy SKU"
     for w in controls:
         assert w.max_price is None, f"{w.name}: a control must not carry a price ceiling"
+
+
+def test_the_shipped_nintendo_watches_are_urls_with_no_ceiling_on_the_control() -> None:
+    """Nintendo reads `target` as a URL — the opposite of Best Buy, on purpose.
+
+    Nintendo publishes a 36,530-entry store sitemap and its product URLs are
+    stable and derivable from it, so there is nothing to resolve and no reason
+    to route through a search page. Best Buy's SKU indirection exists because
+    Best Buy's URLs are *not* derivable; copying that shape here would be
+    cargo-culting a workaround for a problem this retailer does not have.
+    """
+    cfg = Config.load(Path(__file__).resolve().parent.parent / "config" / "products.yaml")
+    nintendo = [w for w in cfg.watches if w.retailer == "nintendo"]
+
+    assert nintendo, "Nintendo is supported but not configured"
+    controls = [w for w in nintendo if w.control]
+    assert controls, "Nintendo has no control watch"
+
+    for w in nintendo:
+        assert w.target.startswith("https://www.nintendo.com/"), f"{w.name}: {w.target!r}"
+    for w in controls:
+        assert w.max_price is None, f"{w.name}: a control must not carry a price ceiling"
+
+
+def test_no_retailer_is_configured_without_a_page_we_have_actually_read() -> None:
+    """The anti-padding gate, and it is mechanical rather than a matter of trust.
+
+    Phase 2's criterion is a retailer *count*, which is exactly the kind of
+    target that invites a YAML entry for a site nobody has ever successfully
+    fetched. `scripts/control_check.py` already refuses a retailer with no
+    control, and `assess_health` already refuses one whose control cannot be
+    read — but both need a network to say so, and neither runs in CI.
+
+    A fixture cannot be faked into existence the same way: `boty.fixtures.capture`
+    only writes one after a live fetch that was not blocked, and refuses outright
+    on a challenge page. So "there is a frozen page on disk for this retailer" is
+    a durable, offline claim that we have read it at least once.
+
+    Pokémon Center is the case in point. 02-04 found it refused at every rung and
+    it has no fixture, so if a future edit adds a `retailer: pokemoncenter` watch
+    to make the count read five, this goes red — and points at
+    `docs/retailer-evidence.md`, where the reason is written down.
+    """
+    cfg = Config.load(Path(__file__).resolve().parent.parent / "config" / "products.yaml")
+    root = Path(__file__).resolve().parent / "fixtures"
+
+    unread = sorted(r for r in {w.retailer for w in cfg.watches} if not list((root / r).glob("*.html")))
+
+    assert not unread, (
+        f"configured with no captured page to show for it: {unread}. Either capture "
+        f"one (boty capture-fixture) or take the watch out — a retailer nobody has "
+        f"read is a detector that cannot detect, and it inflates the retailer count "
+        f"while doing it. See docs/retailer-evidence.md."
+    )
 
 
 # --------------------------------------------------------------------------

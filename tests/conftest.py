@@ -130,6 +130,30 @@ def bestbuy_pikachu() -> str:
 
 
 @pytest.fixture
+def nintendo_goplusplus() -> str:
+    """Nintendo GO Plus +: OutOfStock at $54.99, sold by Nintendo of America Inc.
+
+    The only first-party listing of this product anywhere in the config, and it
+    is priced at MSRP to the cent — Nintendo makes the thing, so there is no
+    marketplace and no markup to defend against here, only a drought to wait out.
+
+    Its `@type` is the compound `["Product"]`, which is what makes this page the
+    first live evidence that 02-02's IN-03 fix was load-bearing.
+    """
+    return load("nintendo", "goplusplus")
+
+
+@pytest.fixture
+def nintendo_hdmi() -> str:
+    """Nintendo control: InStock at $7.99, sold by Nintendo of America Inc.
+
+    A replacement HDMI cable — first-party by construction, restocked routinely,
+    not a console and not a limited drop.
+    """
+    return load("nintendo", "hdmi-control")
+
+
+@pytest.fixture
 def bestbuy_unresolved_sku() -> str:
     """Best Buy's answer for a SKU that resolves to nothing: no Product markup.
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 
-from boty.parse import ldjson_offers, nextdata_offers
+from boty.parse import _LDJSON_RE, ldjson_offers, nextdata_offers
 
 #: MSRP of the Pokémon GO Plus +. Anything far above this is a flipper.
 MSRP = 54.99
@@ -152,6 +152,48 @@ def test_ldjson_node_with_no_type_at_all_is_still_none() -> None:
 def test_ldjson_compound_type_product_with_no_offers_is_an_empty_list() -> None:
     """The None-vs-[] distinction applies to compound types too."""
     assert ldjson_offers(_ldjson_page({"@type": ["Product", "ProductModel"]})) == []
+
+
+def test_the_compound_type_fix_is_confirmed_by_a_real_retailer(nintendo_goplusplus: str) -> None:
+    """IN-03 against live bytes rather than a payload written to prove a point.
+
+    Every test above this one builds its own JSON, which means they all agree
+    with each other by construction and none of them is evidence that any
+    retailer emits this shape. Nintendo does: the GO Plus + page declares
+    `"@type": ["Product"]` — a one-element list, the least suspicious shape
+    imaginable, and the exact shape an `== "Product"` comparison drops on the
+    floor.
+
+    So this page is not just another fixture. Under the pre-02-02 extractor it
+    would have read as "no product markup here" and Nintendo would have been an
+    unexplained permanent UNKNOWN — a first-party retailer, publishing complete
+    and correct availability, invisible to us for a one-character reason.
+
+    The `@type` assertion looks redundant next to the offer assertion. It is
+    not: without it, a future Nintendo redesign to a plain-string `@type` would
+    turn this into a test that passes while proving nothing, and the compound
+    case would go back to being untested against anything real.
+    """
+    # The module's own block finder rather than a hand-rolled split: Nintendo
+    # carries `data-next-head=""` after the type attribute, and a test that
+    # re-implements this scan would go red for its own reasons rather than the
+    # extractor's.
+    doc = json.loads(_LDJSON_RE.findall(nintendo_goplusplus)[0].strip())
+    product = next(n for n in doc["@graph"] if isinstance(n, dict) and "offers" in n)
+
+    assert isinstance(product["@type"], list), (
+        "Nintendo stopped emitting a compound @type — this test is now the only "
+        "thing claiming a real retailer ever did, so find another one before "
+        "re-capturing this fixture"
+    )
+    assert "Product" in product["@type"]
+
+    offers = ldjson_offers(nintendo_goplusplus)
+    assert offers is not None, "the compound @type was skipped — IN-03 has regressed"
+    assert len(offers) == 1
+    assert offers[0].price == MSRP
+    assert offers[0].seller == "Nintendo of America Inc."
+    assert offers[0].raw_availability == "OutOfStock"
 
 
 # --------------------------------------------------------------------------
