@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-08-03T03:15:34.310Z"
+status: Ready to execute
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-08-03T04:05:11.794Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 11
+  completed_plans: 9
   percent: 50
 ---
 
@@ -21,19 +21,19 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 02 — Five Retailers Green
+**Current focus:** Phase 03 — The Hard Two
 
 ## Status
 
 **Milestone:** v1.0
 **Phase:** 3 of 4 (the hard two)
-**Plan:** Not started
-**Last session:** 2026-08-03T01:14:47.291Z
-**Stopped At:** Completed 02-04-PLAN.md
+**Plan:** 2 of 3
+**Last session:** 2026-08-03T04:05:11.790Z
+**Stopped At:** Completed 03-01-PLAN.md
 **Last Activity:** 2026-08-03
-**Last Activity Description:** Phase 02 complete, transitioned to Phase 3
+**Last Activity Description:** 03-01 complete — Amazon is rung 4 by its Conditions of Use (zero product-page requests), and `scripts/evidence_check.py` replaces Phase 2's vacuous count clause
 **Resume File:** None
-**Next command:** `/gsd-plan-phase 3` — running autonomously through Phase 3, halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
+**Next command:** `/gsd-execute-phase 3` — 03-02 (Target) is next and now carries the whole weight of phase criterion 5. Still halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
 
 ## What Exists
 
@@ -55,7 +55,7 @@ Working and deployed on danserver before this roadmap was written:
 
 ## Known Risks
 
-- **Amazon may be unreachable** without a browser or paid residential proxies. Phase 2 should establish this cheaply and early rather than sinking a plan into it.
+- ~~**Amazon may be unreachable** without a browser or paid residential proxies.~~ **Settled 2026-08-03 by 03-01, and not for the expected reason.** Reachability was never tested: Amazon's Conditions of Use forbid "any collection and use of any product listings, descriptions, or prices", so it is rung 4 with zero product-page requests ever made. No browser, no proxies, no transport work. Evidence in `docs/retailer-evidence.md` under `## Amazon`.
 - **Target is unresolved.** RedSky is CAPTCHA-gated even with a warmed cookie session; product pages fetch clean but we could not find a valid `www` TCIN. Stopped at three strikes.
 - **Fixtures go stale.** Saved HTML is a snapshot; a retailer can change its page and the fixtures will keep passing. Control products cover the live case, fixtures cover regression — neither substitutes for the other, and Phase 1 should make that split explicit.
 
@@ -80,6 +80,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 02 P02 | 34min | 3 tasks | 10 files |
 | Phase 02 P03 | 71min | 3 tasks | 12 files |
 | Phase 02 P04 | 35min | 3 tasks | 15 files |
+| Phase 03 P01 | 34min | 3 tasks | 6 files |
 
 ## Decisions
 
