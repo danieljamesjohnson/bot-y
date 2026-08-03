@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: "Completed 02-01-PLAN.md — Best Buy verdict: REACHABLE (rung 3)"
-last_updated: "2026-08-03T00:13:18.808Z"
-last_activity: 2026-08-02
+status: Ready to execute
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-08-03T00:21:41.311Z"
+last_activity: 2026-08-03
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 25
 ---
 
@@ -27,11 +27,11 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Milestone:** v1.0
 **Phase:** 2 of 4 (five retailers green)
-**Plan:** 1 of 4 complete (02-01 done; 02-02, 02-03, 02-04 remain)
-**Last session:** 2026-08-03T00:12:03.466Z
-**Stopped At:** Completed 02-01-PLAN.md — Best Buy verdict: REACHABLE (rung 3)
-**Last Activity:** 2026-08-02
-**Last Activity Description:** 02-01 complete — rung-3 browser transport, offline guard extended to cover it, Best Buy spike answered
+**Plan:** 2 of 4 complete (02-01, 02-02 done; 02-03, 02-04 remain)
+**Last session:** 2026-08-03T00:21:41.307Z
+**Stopped At:** Completed 02-02-PLAN.md
+**Last Activity:** 2026-08-03
+**Last Activity Description:** 02-02 complete — Result.rung/degraded, published in status.json and `boty check`, mutation M6 caught, IN-03 compound-@type fix
 **Resume File:** None
 **Next command:** `/gsd-plan-phase 2` — running autonomously through Phase 3, halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
 
@@ -77,6 +77,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 01 P03 | 5min | 3 tasks tasks | 10 files files |
 | Phase 01 P04 | 25min | 6 tasks | 5 files |
 | Phase 02 P01 | 62min | 3 tasks | 6 files |
+| Phase 02 P02 | 34min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -96,6 +97,9 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 02]: No evidence Best Buy carries the GO Plus + at all — Two searches returned only gift cards and unrelated titles; SKU 6577129 in test_retailers.py:316 appears nowhere in Best Buy results and is an unverified fixture value
 - [Phase 02]: nodriver installed as an OPTIONAL extra only, after a supply-chain audit — It is AGPL-3.0 to this project's MIT, and a contributor working on the HTTP retailers must never be forced to pull a browser stack
 - [Phase 02]: Chrome's sandbox stays on by default; BOTY_BROWSER_NO_SANDBOX is opt-in per host and logs a warning — Rung 3 executes attacker-controlled retailer JavaScript, so an isolation downgrade must be something a person chose rather than a silent default
+- [Phase 02]: Rung is a separate enum beside Availability, not a fourth availability value — monitor.assess_health and transitioned_to_stock branch on Availability and cli.SYMBOL is indexed unconditionally, so a fourth member is a KeyError mid-report
+- [Phase 02]: Result.degraded is derived from rung, never stored — one source of truth, so the support matrix claim and the runtime flag cannot drift apart
+- [Phase 02]: Degradation does not feed Health.ok and does not suppress alerts — assess_health answers 'is this detector verified', not 'how confident is the transport'; feeding it in would make phase criterion 4 (five retailers with no health warnings) unreachable by construction
 
 ### Blockers
 
