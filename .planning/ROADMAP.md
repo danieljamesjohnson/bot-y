@@ -203,8 +203,18 @@ as self-interest and basic decency. A blocked IP costs a working monitor, and ha
 someone's origin is how a hobby project becomes a nuisance. 5-minute cadence with jitter,
 unchanged. Probing budgets during development stay capped as in Phase 3.
 
-**Plans**: TBD by the planner. Target first — it has a robots-clean path and a published
-sitemap that solves the TCIN discovery problem Phase 2 gave up on.
+**Plans**: 4 plans. Target first — it has a robots-clean path and a published
+sitemap that solves the TCIN discovery problem Phase 2 gave up on. The two
+retailer plans both touch `boty/retailers.py`, `config/products.yaml` and
+`tests/test_retailers.py`, so every plan runs in its own wave: they serialize
+whatever the numbers say.
+
+Plans:
+
+- [ ] 03.1-01-PLAN.md — Both gates before either retailer moves: `evidence_check` rule 5 closes W-02, and REQ-13 becomes six machine-checked matrix columns
+- [ ] 03.1-02-PLAN.md — Target on the robots-clean path: sitemap → TCIN → `/p/`, the real seller string read off a live page, registered with a green control
+- [ ] 03.1-03-PLAN.md — Amazon, actually attempted: one live `/dp/<ASIN>` read, then registration or a refusal that cites an observation — plus rule 6, which makes REQ-07a mechanical
+- [ ] 03.1-04-PLAN.md — Close: no regression, a measured pass under two minutes, and the real count on the record
 
 ### Phase 4: Open Source Ready
 
