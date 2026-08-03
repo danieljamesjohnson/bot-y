@@ -119,6 +119,20 @@ def walmart_milk() -> str:
 
 
 @pytest.fixture
+def target_dust_cloths() -> str:
+    """Target control: IN_STOCK at $12.59, sold by Target, read off the DOM.
+
+    A rung-3 capture, and the only fixture here with no structured data in it at
+    all — Target ships none, which is why this retailer is read off its
+    add-to-cart control. Every `<script>` body was emptied before commit: the
+    raw capture carried a session token, a visitor id and Akamai's geolocation of
+    the capturing host, and a DOM reader needs none of it. See the fixture's
+    `.json` note.
+    """
+    return load("target", "control-dust-cloths")
+
+
+@pytest.fixture
 def bestbuy_pikachu() -> str:
     """Best Buy control: IN_STOCK at $59.99, sold by Best Buy (SKU 6216393).
 

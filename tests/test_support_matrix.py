@@ -707,15 +707,20 @@ def test_a_blanked_extraction_cell_fails_the_extraction_rule() -> None:
 def test_a_rung_four_row_claiming_an_extraction_fails() -> None:
     """Direction one: a claim to have read something off a retailer nobody watches.
 
-    Target is rung 4 with no watch. `structured` in its Extraction cell says a
-    schema.org feed is being read every five minutes, which is false in a way
-    no other rule here can see — `_overstated` reads the Rung cell, and the
+    Pokémon Center is rung 4 with no watch. `structured` in its Extraction cell
+    says a schema.org feed is being read every five minutes, which is false in a
+    way no other rule here can see — `_overstated` reads the Rung cell, and the
     Rung cell is honest.
-    """
-    rows = _matrix(_corrupt("Target", EXTRACTION, "structured"))
 
-    assert rows["Target"][RUNG].startswith("4"), "the corruption must leave the rung alone"
-    assert _extraction_mismatch(rows) == {"Target": ("4", "structured")}
+    Pokémon Center rather than Target, which this used to name: Target moved to
+    rung 3 + `dom` when it was registered. Pokémon Center is the most durable
+    rung-4 row in the table — refused at every rung, in writing, with a technical
+    wall behind it — so it is the one least likely to move this test again.
+    """
+    rows = _matrix(_corrupt("Pokémon Center", EXTRACTION, "structured"))
+
+    assert rows["Pokémon Center"][RUNG].startswith("4"), "the corruption must leave the rung alone"
+    assert _extraction_mismatch(rows) == {"Pokémon Center": ("4", "structured")}
 
 
 def test_a_working_rung_row_disclaiming_an_extraction_fails() -> None:
@@ -798,28 +803,42 @@ def test_a_watch_dropped_while_the_row_still_says_working_fails_the_overstatemen
 def test_a_rung_four_row_promoted_to_rung_one_fails_the_overstatement_rule() -> None:
     """The same rule from the other side: the table moving without the config.
 
-    Target is settled at rung 4 with no watch. Editing its rung cell to `1` —
-    the one-character version of claiming a retailer works — is caught by the
-    same predicate, so this is a rule about the disagreement rather than a rule
-    about `config/products.yaml` alone.
+    Pokémon Center is settled at rung 4 with no watch. Editing its rung cell to
+    `1` — the one-character version of claiming a retailer works — is caught by
+    the same predicate, so this is a rule about the disagreement rather than a
+    rule about `config/products.yaml` alone.
+
+    This used to name Target, and Target was registered at rung 3, so it had to
+    be repointed. **Pokémon Center and not Amazon**, deliberately: 03.1-03 may
+    move Amazon's row, and a test repointed twice is a test nobody trusts.
+    Pokémon Center is the most durable rung-4 row here — it was walked down the
+    whole ladder and refused at every one, so its rung is held up by a measured
+    wall rather than only by a written policy that a maintainer could reverse.
     """
-    rows = _matrix(_corrupt("Target", RUNG, "1"))
+    rows = _matrix(_corrupt("Pokémon Center", RUNG, "1"))
     configured = {w.retailer for w in Config.load(CONFIG).watches}
 
-    assert _overstated(rows, configured) == ["Target"]
+    assert _overstated(rows, configured) == ["Pokémon Center"]
 
 
 def test_the_shipped_rung_four_rows_are_not_flagged_as_overstatement() -> None:
     """The clean side. Rung 4 for an unwatched retailer is the honest answer.
 
     Without this, the rule could be satisfied by flagging every unconfigured
-    retailer, which would make the honest shortfall this phase recorded — three
+    retailer, which would make the honest shortfall this phase recorded — two
     retailers dropped with the evidence written down — unrepresentable.
+
+    Target is no longer in this tuple. It was registered at rung 3 with `dom`
+    extraction and a live control, so a rung-4 assertion on it would now be
+    asserting the opposite of the truth. Dropping it narrows what this test
+    watches by exactly one row and loosens no rule: Target is instead covered by
+    `_undeclared_degraded` and `_extraction_mismatch`, which both bite harder on
+    a rung-3 `dom` row than the overstatement rule ever did on a rung-4 one.
     """
     rows = _matrix()
     configured = {w.retailer for w in Config.load(CONFIG).watches}
 
-    for name in ("Pokémon Center", "Amazon", "Target"):
+    for name in ("Pokémon Center", "Amazon"):
         assert rows[name][RUNG].startswith("4"), (name, rows[name][RUNG])
     assert _overstated(rows, configured) == []
 

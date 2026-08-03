@@ -778,16 +778,48 @@ and two `robots.txt` files. **`boty.fetch.get` was never pointed at target.com,
 no browser was ever started against it, and no product page was requested at any
 point in this phase.**
 
-**Verdict: REFUSED**
+**Verdict: REACHABLE (rung 3)**
 
-Rung 4, and — as with Amazon — the decisive reason is written rather than
-technical. Target's Terms & Conditions prohibit this three separate ways, and
-one of the three has no commercial-use qualifier to argue about. The ladder was
-never walked, because the question "may we request this at all" was answered
-before any request whose legitimacy would have depended on the answer.
+**That verdict is the third answer this section has given, and everything behind
+all three is still here.** Read the whole section rather than this line: it is a
+record of a conclusion revised twice, on Dan's direction, with the observations
+underneath it untouched each time.
 
-This is the outcome that costs the phase its fifth retailer. It is recorded as
-that rather than padded — see the bottom of this section, and `QUESTIONS.md`.
+- **Phase 3 (2026-08-03, earlier):** REFUSED, on Target's Terms & Conditions,
+  with zero product-page requests ever made. Every quoted clause below stands.
+- **03.1-02 first execution (2026-08-03):** still REFUSED, but the basis was
+  rewritten from a written prohibition to a **measured technical wall** — Dan
+  reversed the terms reasoning, and the probe then found that Target serves the
+  page and withholds the data. Every byte count and zero-count below stands.
+- **03.1-02 rewrite (2026-08-03, this verdict):** REACHABLE at **rung 3 with
+  `dom` extraction**, after Dan answered the `robots.txt` question the probe
+  escalated (`QUESTIONS.md` § 0d, option 2). Nothing above was retracted to get
+  here. What changed is that a rung nobody had walked was walked.
+
+**What REACHABLE does and does not mean here.** Target's *pages* are reachable
+and always were — rung 1 returns HTTP 200 with no challenge. What was never
+reachable is Target's *stock data*, at rung 1 or rung 2. It is reachable at rung
+3 only in a specific and lossy sense: a browser renders the page, Target's own
+JavaScript fetches the numbers from hosts that publish `Disallow: /`, and bot-y
+reads the resulting **add-to-cart button**. There is no structured feed behind
+that reading.
+
+**So this is the least confident reading this project publishes, and the matrix
+says so.** Rung 3 + `dom`, `degraded=True` on every result, and a `[dom]` tag in
+`boty check`. A Target reskin breaks this silently — no error, no exception,
+just a control that stops reading — which is why Target is registered
+**control-only** and why mutation M8 exists.
+
+**Target is control-only, and that is a disproof rather than a shortfall.**
+Target delisted the Pokémon GO Plus +: TCIN `88714054` served HTTP 200 as
+recently as 2025-05-09 and 404s now. There is no product watch to add.
+
+Two anchored `**Refusal observed (rung N):**` lines survive further down this
+section. **They are historical, not current**, and they are left in place
+deliberately rather than deleted — they are the measurements this verdict was
+revised *through*. Note especially that the rung-1 line's own body says *"not a
+block — **HTTP 200**"*: it records that Target did **not** refuse the request,
+only the data. Neither line describes the current state of this retailer.
 
 ### What was retrieved
 
@@ -1105,6 +1137,19 @@ at the bottom of this file, and nothing here strengthens or weakens it.
 
 ### The sharp edge left in the code, and why it is safe to leave
 
+> **SUPERSEDED 2026-08-03 by the rung-3 walk at the end of this section.** The
+> hazard described below was real and is now **closed**, by a different route
+> than the one this subsection anticipated. It said the entry "must be replaced
+> with the real `offers.seller.name` string before a control can go green" —
+> there is no such string, at any rung, so that was impossible. What replaced it
+> instead: `FIRST_PARTY['target']` is no longer a guess about Target's markup but
+> a statement about **our own reader's output**, matched against the literal
+> `parse.TARGET_FIRST_PARTY_SELLER` that `add_to_cart_offers` emits when a PDP
+> carries no Target Plus partner block. The entry is also no longer dormant —
+> a Target control watch now dispatches through it. Nothing below is retracted;
+> the reasoning about `_pick`, `MARKETPLACES` and the confident-OUT_OF_STOCK
+> failure mode is exactly why it was closed the way it was.
+
 `boty/retailers.py:31` carries `"target": {"target"}` in `FIRST_PARTY` and
 `:54` lists `target` in `MARKETPLACES`. That combination has a real hazard: if
 Target's markup names its seller anything other than exactly `target` once
@@ -1132,6 +1177,15 @@ cycle. The control path is the drift detector, and it already works.
 
 ### Was Target reachable? — unknown, and deliberately so
 
+> **SUPERSEDED TWICE, and it is now ANSWERED.** This subsection recorded a
+> deliberate non-observation, which was the correct shape for a rung-4-by-terms
+> finding. It has since been measured at every rung: rung 1 returns HTTP 200 with
+> no challenge and no product data; rung 2 is closed in writing; **rung 3 renders
+> the page and the add-to-cart control reads cleanly.** The verdict line at the
+> top of this section is now `REACHABLE (rung 3)`. Nothing below is retracted —
+> it was an honest statement of what had not been looked at, and the answer is
+> now further down rather than here.
+
 This section records no HTTP status from a product page, no byte count from one,
 and no observation about Akamai, because none was collected. The two policy pages
 and both `robots.txt` files returned clean HTTP 200s from `curl` with no
@@ -1147,6 +1201,14 @@ to make the section look fuller would mean making exactly the requests the
 section's own conclusion says we should not make.
 
 ### If somebody revisits this later
+
+> **SUPERSEDED 2026-08-03.** Somebody did revisit it, twice, on Dan's direction.
+> The instruction below — *"Do not re-probe"* — no longer holds and has not held
+> since the probe recorded further down. It is kept because its **second half is
+> still live and still correct**: the list of things that would genuinely change
+> this verdict, and the `Agentic Commerce` section being the one to watch, are
+> unaffected by anything since. Target is now REACHABLE at rung 3, which is not
+> the same as Target having changed its mind about anything.
 
 **Do not re-probe.** There is nothing to re-probe: no wall was measured, so there
 is no wall that could weaken. A clean HTTP 200 from `/p/<slug>/-/A-<TCIN>` would
@@ -1178,6 +1240,19 @@ branch. It is the branch that was under the most pressure to be the first one:
 `03-01` settled Amazon at rung 4 the same day, so criterion 5 — five working
 retailers — rested on Target alone, and a REACHABLE here was the only thing that
 would have met it.
+
+> **SUPERSEDED 2026-08-03 — and the reasoning here is worth keeping precisely
+> because it was right at the time.** It argued that the honest branch was to
+> record the shortfall rather than pad the count, under pressure to do the
+> opposite. That was correct then and is not withdrawn. What changed is not the
+> standard but the evidence: Target now has a **live, control-verified** reading
+> and is registered on its merits, not to move a number. **The count is five** —
+> gamestop, walmart, bestbuy, nintendo, target — so the sentence immediately
+> below describes the tree before the rung-3 walk.
+>
+> This did **not** rescue the roadmap criterion the shortfall was about. Target
+> still cannot watch the Pokémon GO Plus +, because Target delisted it, so
+> criterion 1 stands UNMET — Dan's recorded call.
 
 It is met by not being met. **The count stays at four** — gamestop, walmart,
 bestbuy, nintendo — and phase criterion 5 is recorded unmet in `QUESTIONS.md`
@@ -1425,7 +1500,23 @@ rendered page reaches the data only by making the rung-2 requests through a
 browser. Closed by this project's own `robots.txt` rule, not by anything Target
 did to us. Nobody has measured whether Target would serve it.
 
+> **ANSWERED 2026-08-03 — this non-observation is no longer one.** Dan settled
+> the `robots.txt` question it was escalating (`QUESTIONS.md` § 0d, option 2),
+> rung 3 was then walked, and **Target serves it**: HTTP 200 to a headless
+> browser, no `BLOCK_PHRASES` match on any of three rendered pages, and a
+> readable add-to-cart control. The measurement is at the end of this section.
+> Recording it as a non-observation rather than inventing a refusal is what made
+> it answerable later, which is the whole argument for the distinction.
+
 #### What this leaves in the code, unchanged and still a guess
+
+> **CLOSED 2026-08-03 by the rung-3 walk below.** The diagnosis here was exact
+> and it is what made the fix possible: the guess could not be replaced with a
+> live `offers.seller.name`, because no such string exists at any rung. So it was
+> replaced with something else — see *"The seller question, decided"* at the end
+> of this section. The two bullets below both still hold: the guess *was*
+> unverifiable rather than merely unverified, and `target` *is* still in
+> `MARKETPLACES`. Only the words "unchanged" and "still dormant" have expired.
 
 **`FIRST_PARTY["target"] = {"target"}` was NOT widened, and it could not be.**
 The whole point of this probe was to replace that guess with the literal
@@ -1648,6 +1739,110 @@ The after-run is recorded at the close of this plan's registration subsection.
 
 **No `BLOCK_PHRASES` entry matched on any of the three rendered pages.** Target
 served an ordinary page to a headless browser exactly as it served one to rung 1.
+
+#### The seller question, decided
+
+The probe established that `FIRST_PARTY["target"] = {"target"}` could not be
+verified against Target's markup, because Target's markup has no seller name in
+it. That is still true, and it is why the entry could not simply be "fixed".
+
+**It is now a statement about our own reader's output rather than a guess about
+Target's.** `parse.add_to_cart_offers` emits the literal
+`parse.TARGET_FIRST_PARTY_SELLER` when a PDP carries no Target Plus partner
+block, and `FIRST_PARTY['target']` is the matching half of that. The claim
+underneath is checkable, and it was checked: `data-test="targetPlusExtraInfoSection"`
+and every wording of "sold by" occur **zero** times on the first-party control
+page, and unmissably on a partner-sold one.
+
+`target` **stays in `MARKETPLACES`**, which is not redundant. Removing it would
+re-enable `_pick`'s unattributed-offer fallback and let a Target Plus reseller
+listing hold the verdict — the flipper case the first-party filter exists for. A
+partner block whose name cannot be read yields `seller=None`, which on a
+marketplace is UNKNOWN. Both directions fail away from first-party.
+
+#### The fixture, and what had to be cut out of it before it could be committed
+
+**This is the part of the plan that came closest to repeating the incident that
+destroyed this repo**, and it is recorded in full because the near-miss is more
+useful than the outcome.
+
+`tests/fixtures/target/control-dust-cloths.html` is the control page captured at
+rung 3. The raw capture carried, all of it frozen for anyone who cloned the repo:
+
+- a per-session `visitor_id` Target minted for this render on this host;
+- an OAuth-shaped `refreshToken`;
+- Target's RedSky `key` constant — the very constant this project refused to lift
+  when it closed rung 2, so publishing it would have been inconsistent as well as
+  unkind;
+- Akamai's geolocation of this host, as `"zipCode"`, `"latitude"`, `"longitude"`
+  and `"state"`;
+- the **five nearest Target stores, with street addresses and phone numbers**,
+  and the store name rendered as visible page text.
+
+**The automated guard caught none of it.** `test_no_fixture_leaks_the_capturing_hosts_identity`
+knew EdgeScape's `lat=` / `zip=` query form; Target writes JSON keys. It passed.
+That is the failure mode the plan warned about in the abstract — *"the automated
+guard only knows the markers it was taught"* — occurring for real, and it is why
+the by-hand grep is not optional.
+
+**Redaction:** every `<script>` body was emptied. A DOM reader needs element
+markup, not the retailer's hydration state, so this costs the fixture nothing it
+is used for and removes the entire session-and-identity class in one move — the
+file went from 348 KB to 157 KB. The ZIP and store name that render as visible
+markup were replaced separately. The fixture still reads IN_STOCK at $12.59 with
+`seller="target"`, which is the property it exists to pin.
+
+**The guard was then widened** to match on semantics rather than on one CDN's
+spelling: coordinates, postal codes, street addresses, phone numbers, ZIP+4 and
+session/visitor tokens, in JSON form. Applied to the raw capture it now reports
+six leaks. **Applied to the fixtures already in the repo it found four more** —
+`walmart/goplusplus.html` and `walmart/milk-control.html` carried postal code
+`00000`, which is this host's own geolocation and had been public since Phase 2,
+and both Best Buy fixtures carried session visitor ids. All four were redacted in
+the same commit. Those are Walmart and Best Buy fixtures, found by a Target
+change; the leak class is the browser rung's, not any one retailer's.
+
+#### Registration
+
+- `config/products.yaml` gains **one** `retailer: target` watch, a control, and
+  **no** GO Plus + watch — Target delisted the product.
+- `boty/cli.py` `_make_checker` dispatches a `target` watch to
+  `check_target_browser`. `scripts/control_check.py` builds its checker through
+  the same function, so the gate and the monitor cannot route differently.
+- Every Target `Result` carries `rung=browser`, `extraction=dom` and therefore
+  `degraded=true`, on every path including the error paths and including the one
+  where the render succeeded and every reader came back empty — which is what a
+  broken render looks like, and which would otherwise have published as
+  `structured`.
+
+**Controls after registration, under the service's own `EnvironmentFile`:**
+
+```
+control check: 5 control(s), live
+  in_stock      gamestop  CONTROL — PS5 console                $549.99  ld+json: InStock from GameStop
+  in_stock      walmart   CONTROL — Great Value whole milk       $2.42  __NEXT_DATA__: IN_STOCK from Walmart.com
+  in_stock      bestbuy   CONTROL — Pokémon Let's Go, Pikach    $59.99  ld+json: InStock from Best Buy
+  in_stock      nintendo  CONTROL — Nintendo HDMI cable          $7.99  ld+json: InStock from Nintendo of America Inc.
+  in_stock      target    CONTROL — up&up microfiber dust cl    $12.59  add-to-cart control: add-to-cart enabled from target
+control check: PASS — 5/5 controls in stock
+```
+
+and the same reading through `boty check`, which is where the two axes become
+visible to a reader rather than only to the gate:
+
+```
+● target    CONTROL — up&up microfiber dus$   12.59  add-to-cart control: add-to-cart enabled from target [control] [degraded] [dom]
+```
+
+`served/boty/status.json` carries `"rung": "browser"`, `"extraction": "dom"` and
+`"degraded": true` for that watch, with `healthy: true` and a full pass in
+**40.1 s** against REQ-08's 120 s budget — 11 watches across 5 retailers, two of
+them now on the browser rung.
+
+**The retailer count is five.** It is five because Target reads, not to make the
+number — and the roadmap criterion the shortfall was really about (Target reports
+stock *for the GO Plus +*) stands UNMET regardless, because Target no longer
+lists the product.
 
 ---
 

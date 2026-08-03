@@ -18,7 +18,12 @@ from .config import Config
 from .models import Availability, Extraction, Health, Result, Watch
 from .monitor import State, run_once
 from .notify import send_health_warning, send_restock
-from .retailers import check_bestbuy_api, check_bestbuy_browser, check_html
+from .retailers import (
+    check_bestbuy_api,
+    check_bestbuy_browser,
+    check_html,
+    check_target_browser,
+)
 from .status import write as write_status
 
 log = logging.getLogger(__name__)
@@ -39,6 +44,12 @@ def _make_checker(cfg: Config) -> Callable[[Watch], Result]:
     So this stays one function with one `if`, and there is no registry to fall
     out of sync with it.
 
+    Target has one rung and no fallback at all, which is the opposite case and
+    worth stating next to Best Buy's. Its pages ship no structured data, so
+    there is nothing for `check_html` to read and no credential that would
+    change that — the browser is not an upgrade or a workaround here, it is the
+    only transport, and every reading it produces is degraded.
+
     Best Buy has two rungs and the fallback direction is the interesting part.
     With a key, the official API wins — sanctioned, more reliable, not degraded.
     Without one, the browser reads the page anyway, flagged degraded, and Best
@@ -53,6 +64,12 @@ def _make_checker(cfg: Config) -> Callable[[Watch], Result]:
             if cfg.bestbuy_api_key:
                 return check_bestbuy_api(watch, cfg.bestbuy_api_key)
             return check_bestbuy_browser(watch, first_party_only=cfg.first_party_only)
+        if watch.retailer == "target":
+            # No credentialed alternative to fall back to, unlike Best Buy: this
+            # is the only path Target has. Its page carries no structured data at
+            # any rung, so `check_html` would read it perfectly and say UNKNOWN
+            # forever.
+            return check_target_browser(watch, first_party_only=cfg.first_party_only)
         return check_html(watch, first_party_only=cfg.first_party_only)
 
     return check

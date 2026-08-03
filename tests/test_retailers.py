@@ -21,6 +21,7 @@ import pytest
 
 import json
 import os
+import re
 from pathlib import Path
 
 from boty import parse, retailers
@@ -1161,10 +1162,15 @@ def _target_disagreements(
     """Every way the Target verdict and the shipped tree could contradict each other.
 
     Takes its inputs as plain values rather than reading the repo, so the tests
-    below can drive BOTH branches — the shipped REFUSED one and a hypothetical
-    REACHABLE one — and watch each guard go red. A guard only ever exercised on
-    the branch the repo happens to be on is a guard nobody has seen fail, which
-    is the species this phase exists to replace.
+    below can drive BOTH branches and watch each guard go red. A guard only ever
+    exercised on the branch the repo happens to be on is a guard nobody has seen
+    fail, which is the species this phase exists to replace.
+
+    **The tree moved to the REACHABLE branch on 2026-08-03**, so the directions
+    have swapped: the REACHABLE checks now run against the real repo, and the
+    REFUSED checks are driven off a synthetic copy of the document. Both are
+    still watched failing, which is the whole point of taking values rather than
+    reading the repo.
     """
     refused = _target_verdict(evidence_text) == _REFUSED
     problems: list[str] = []
@@ -1201,39 +1207,45 @@ def _target_disagreements(
         problems.append("Target is REACHABLE but no page was frozen under tests/fixtures/target/")
     elif not any(seller.strip().lower() in allow_list for seller in fixture_sellers):
         problems.append(
-            f"FIRST_PARTY['target'] is {sorted(allow_list)}, and no offers.seller.name in "
-            f"the shipped Target fixture ({sorted(fixture_sellers)}) is a member of it. The "
-            "allow-list is OURS and the seller name is TARGET'S, so a value nobody read off "
-            "a live page is a guess — and the guess fails closed in the worst possible "
-            "direction: `target` is in MARKETPLACES, so `_pick` finds no named offer, the "
-            "unattributed fallback is disabled, and boty/retailers.py:177 returns a "
-            "CONFIDENT OUT_OF_STOCK on a page it read perfectly. Read the real "
-            "offers.seller.name off the capture and pin it."
+            f"FIRST_PARTY['target'] is {sorted(allow_list)}, and no seller read off the "
+            f"shipped Target fixture ({sorted(fixture_sellers)}) is a member of it. Target "
+            "publishes NO seller name at any rung, so this allow-list is not a claim about "
+            "Target's markup — it is a claim about `parse.add_to_cart_offers`, which emits "
+            "`parse.TARGET_FIRST_PARTY_SELLER` when a PDP carries no Target Plus partner "
+            "block. If the two ever drift apart the failure is silent and maximally wrong: "
+            "`target` is in MARKETPLACES, so `_pick` finds no named offer, the unattributed "
+            "fallback is disabled, and `_verdict_from_html` answers a page it read perfectly "
+            "with a CONFIDENT OUT_OF_STOCK. Pin them together, do not loosen either."
         )
     return problems
 
 
 def test_the_target_verdict_and_the_shipped_tree_agree() -> None:
-    """Target is REFUSED, so nothing in the shipped tree may claim otherwise.
+    """Target is REACHABLE, so the shipped tree must actually back that up.
 
-    03-02 settled Target at rung 4 on its Terms & Conditions without fetching a
-    single product page, so there is no watch, no control, no fixture and no
-    observed seller string. This asserts that against the real tree, in both
-    directions, and it is not a tautology: adding a `retailer: target` watch to
-    config/products.yaml turns it red, and so does committing anything under
-    tests/fixtures/target/.
+    The tree moved onto this branch on 2026-08-03: a `retailer: target` control
+    watch, a rung-3 fixture, and an allow-list that matches what the reader
+    emits. Not a tautology in this direction either — deleting the watch, the
+    control or the fixture turns it red, and so does an allow-list that no
+    longer matches the reader.
     """
     cfg = Config.load(_REPO_ROOT / "config" / "products.yaml")
     fixture_dir = _REPO_ROOT / "tests" / "fixtures" / "target"
     fixture_paths = sorted(fixture_dir.glob("*.html"))
 
-    # Read the seller names with the SAME extractors the checker uses, so this
-    # cannot pass against a fixture `_pick` would read differently. Empty today,
-    # because no Target page was ever fetched.
+    # Read the seller names with the SAME extractor the checker uses, so this
+    # cannot pass against a fixture `_pick` would read differently.
+    #
+    # `add_to_cart_offers`, and that substitution is the point rather than a
+    # detail. This used to call `ldjson_offers`/`nextdata_offers`, which return
+    # None on every Target page ever served — so on the REACHABLE branch the
+    # seller list would be empty and this guard would fire for a reason that has
+    # nothing to do with drift. Same guard, pointed at the reader that actually
+    # reads this retailer.
     sellers: list[str] = []
     for path in fixture_paths:
         html = path.read_text(encoding="utf-8", errors="replace")
-        offers = parse.ldjson_offers(html) or parse.nextdata_offers(html) or []
+        offers = parse.add_to_cart_offers(html) or []
         sellers.extend(o.seller for o in offers if o.seller)
 
     problems = _target_disagreements(
@@ -1248,32 +1260,41 @@ def test_the_target_verdict_and_the_shipped_tree_agree() -> None:
     assert problems == [], "\n".join(problems)
 
 
-def test_the_dormant_target_allow_list_entry_is_documented_as_a_guess() -> None:
-    """`FIRST_PARTY["target"]` was never read off a live page, and that is the point.
+def test_the_target_allow_list_entry_now_states_what_our_own_reader_emits() -> None:
+    """The entry stopped being a guess, and this pins what replaced it.
 
-    boty/retailers.py has carried `"target": {"target"}` since before this
-    project probed Target, and 03-02 deliberately did not widen it: doing so
-    would have required fetching a product page, which is the one thing Target's
-    Terms forbid. So the entry stays a guess, and it stays UNREACHABLE — nothing
-    dispatches a target watch, so no code path passes "target" to `_pick`.
-
-    This pins the second half. If a future plan adds a Target watch without
-    replacing the guess, `test_the_target_verdict_and_the_shipped_tree_agree`
-    goes red; this one records why the entry is allowed to sit there meanwhile.
+    `FIRST_PARTY["target"]` could never be verified against Target's markup:
+    Target publishes no seller name at any rung, so there was no live string to
+    widen it to. It is now a claim about OUR side of the boundary — the literal
+    `parse.add_to_cart_offers` emits when a PDP carries no Target Plus partner
+    block — and that claim is checkable, so it is checked here rather than
+    described in a comment.
     """
-    cfg = Config.load(_REPO_ROOT / "config" / "products.yaml")
+    reader_first_party = parse.add_to_cart_offers(
+        _target_control_html()
+    )
+    assert reader_first_party is not None
+    assert reader_first_party[0].seller == parse.TARGET_FIRST_PARTY_SELLER
+    assert parse.TARGET_FIRST_PARTY_SELLER in retailers.FIRST_PARTY["target"], (
+        "the reader's first-party literal and the allow-list are two halves of one "
+        "claim; drifting them apart returns a CONFIDENT OUT_OF_STOCK on a readable page"
+    )
 
-    assert "target" in retailers.FIRST_PARTY, (
-        "the entry is expected to be present but dormant — deleting it is a "
-        "deliberate change, not a tidy-up"
-    )
-    assert "target" not in {w.retailer for w in cfg.watches}, (
-        "a target watch makes the un-observed allow-list live, and boty/retailers.py:177 "
-        "then answers a readable page with a confident OUT_OF_STOCK"
-    )
     assert "target" in retailers.MARKETPLACES, (
         "Target Plus is a real third-party marketplace, so the unattributed-offer "
-        "fallback must stay disabled for it"
+        "fallback must stay disabled for it — removing it is what would let a "
+        "reseller listing alert"
+    )
+
+    partner = (
+        '<a data-test="targetPlusExtraInfoSection" href="/sp/joyin/-/N-10006960">'
+        "<span>Sold &amp; shipped by </span><span>Joyin</span></a>"
+    )
+    partner_offers = parse.add_to_cart_offers(_target_control_html(partner=partner))
+    assert partner_offers is not None
+    assert partner_offers[0].seller == "Joyin"
+    assert partner_offers[0].seller.strip().lower() not in retailers.FIRST_PARTY["target"], (
+        "a Target Plus partner must never land inside the first-party allow-list"
     )
 
 
@@ -1295,9 +1316,15 @@ def test_the_dormant_target_allow_list_entry_is_documented_as_a_guess() -> None:
 def test_the_refused_branch_catches_a_tree_that_contradicts_it(
     kwargs: dict[str, object], expected: str
 ) -> None:
-    """Watch the shipped branch fail. Each case is a real edit somebody could make."""
+    """Watch the REFUSED branch fail. Each case is a real edit somebody could make.
+
+    Driven off a SYNTHETIC refused copy of the document from here on: the tree
+    moved to REACHABLE on 2026-08-03, so reading the real file would silently
+    take the other branch and this test would assert nothing. The branch itself
+    is unchanged and still has to work — Target could be dropped again.
+    """
     base: dict[str, object] = {
-        "evidence_text": _EVIDENCE_PATH.read_text(encoding="utf-8"),
+        "evidence_text": _synthetic_refused_target(),
         "configured": {"gamestop"},
         "controlled": {"gamestop"},
         "fixture_names": [],
@@ -1310,103 +1337,131 @@ def test_the_refused_branch_catches_a_tree_that_contradicts_it(
     assert expected in problems[0]
 
 
-def test_a_reachable_target_registered_on_a_guessed_seller_string_is_caught() -> None:
-    """The drift guard, exercised on the branch this repo is not on.
+def test_a_reachable_target_whose_seller_string_drifted_is_caught() -> None:
+    """The drift guard, and it fails OFFLINE rather than waiting for a control.
 
-    This is the assertion 03-02 would have shipped against live bytes if Target
-    had been reachable, and it is the one that fails OFFLINE rather than waiting
-    for a control to redden. `"Target Corporation"` is used as the stand-in for
-    whatever Target actually sends: the point is only that the allow-list holds
-    `target` and the page holds something else, which is exactly the mismatch
-    that produces a confident OUT_OF_STOCK at boty/retailers.py:177.
+    `FIRST_PARTY['target']` and what `parse.add_to_cart_offers` emits are two
+    halves of one claim. `"Target Corporation"` stands in for the reader having
+    drifted away from the allow-list — a rename on either side. That mismatch is
+    exactly what produces a confident OUT_OF_STOCK on a page read perfectly:
+    `target` is in MARKETPLACES, so `_pick` finds no named offer and the
+    unattributed fallback is disabled.
     """
     problems = _target_disagreements(
-        evidence_text=_EVIDENCE_PATH.read_text(encoding="utf-8").replace(
-            _REFUSED, "**Verdict: REACHABLE (rung 1)**"
-        ),
+        # The real document, which now records REACHABLE. The `.replace(_REFUSED,
+        # …)` this used to carry is worse than a no-op today: the anchored line no
+        # longer says REFUSED, so it would rewrite the two surviving PROSE
+        # mentions instead and could mint a second anchored verdict line.
+        evidence_text=_EVIDENCE_PATH.read_text(encoding="utf-8"),
         configured={"target"},
         controlled={"target"},
-        fixture_names=["up-and-up-control.html"],
+        fixture_names=["control-dust-cloths.html"],
         allow_list={"target"},
         fixture_sellers=["Target Corporation"],
     )
 
     assert len(problems) == 1
-    assert "is a guess" in problems[0]
+    assert "no seller read off the shipped Target fixture" in problems[0]
     assert "CONFIDENT OUT_OF_STOCK" in problems[0]
 
 
-def _flip_only_the_anchored_target_verdict(evidence_text: str) -> str:
-    """The Target section's real verdict LINE flipped to REACHABLE, prose untouched.
+_REACHABLE_TARGET = "**Verdict: REACHABLE (rung 3)**"
 
-    The other tests here flip the verdict with a whole-document `.replace`, which
-    changes all three occurrences at once and so cannot tell an anchored reader
-    from a substring one. This changes exactly the one line a person editing the
-    log would change, and asserts the two prose mentions survive.
+
+def _flip_only_the_anchored_target_verdict(evidence_text: str) -> str:
+    """The Target section's real verdict LINE flipped to REFUSED, prose untouched.
+
+    Inverted on 2026-08-03 when the tree moved: it used to flip REFUSED to
+    REACHABLE. The purpose is unchanged and is the reason it exists at all — the
+    other tests here flip a verdict with a whole-document `.replace`, which
+    cannot tell an anchored reader from a substring one. This changes exactly the
+    one line a person editing the log would change.
+
+    The surviving prose mentions are what make that distinction observable, and
+    the count assertion is what stops this helper quietly becoming a no-op. The
+    Target section still quotes `**Verdict: REFUSED**` **twice** in prose — once
+    explaining the grammar, once describing rule 2 — so flipping the anchored
+    line to REFUSED must produce three.
     """
     start = evidence_text.index("\n## Target")
     end = evidence_text.index("\n## ", start + 1)
     section = evidence_text[start:end]
 
-    flipped = section.replace(f"\n{_REFUSED}\n", "\n**Verdict: REACHABLE (rung 1)**\n", 1)
+    before = section.count(_REFUSED)
+    assert before == 2, (
+        "this helper depends on the section quoting the REFUSED string in prose "
+        f"exactly twice; found {before}"
+    )
+    flipped = section.replace(f"\n{_REACHABLE_TARGET}\n", f"\n{_REFUSED}\n", 1)
     assert flipped != section, "no anchored verdict line found to flip"
-    assert flipped.count(_REFUSED) == 2, (
+    assert flipped.count(_REFUSED) == 3, (
         "the point of this helper is that the prose mentions survive the flip; "
-        f"found {flipped.count(_REFUSED)} rather than 2"
+        f"found {flipped.count(_REFUSED)} rather than 3"
     )
     return evidence_text[:start] + flipped + evidence_text[end:]
 
 
-def test_flipping_only_the_real_verdict_line_switches_the_guard_to_the_reachable_branch() -> None:
-    """The hole CR-01 found, pinned. This test failed against the shipped guard.
+def _synthetic_refused_target() -> str:
+    """The shipped document with Target's anchored verdict flipped back to REFUSED.
 
-    Someone registers Target — the terms change, or a sanctioned feed appears —
-    and edits the verdict line to REACHABLE. Under `_REFUSED in section` the
-    guard stayed on the REFUSED branch, because the section's own prose still
-    quotes the string twice, and reported NOTHING about a tree claiming Target
-    is reachable while shipping no watch, no control, no fixture and an
-    allow-list nobody ever read off a live page. Measured before the fix:
+    The REFUSED branch of the guard has to stay watched failing now that the tree
+    is on the other one. Built from the real file rather than typed out, so it
+    cannot drift away from the document's actual grammar.
+    """
+    return _flip_only_the_anchored_target_verdict(
+        _EVIDENCE_PATH.read_text(encoding="utf-8")
+    )
 
-        guard sees refused? -> True
-        problems reported on a flipped-to-REACHABLE tree: []
 
-    Worse than silence: the REFUSED branch's message would have asserted that
-    the evidence log records REFUSED, about a file that now says the opposite —
-    and the natural reading of a red test whose message contradicts the file it
-    names is "this assertion is stale". Editing it away puts the guessed
-    `FIRST_PARTY["target"]` live, and `target` is in MARKETPLACES, so a
-    perfectly readable Target page answers with a confident OUT_OF_STOCK.
+def test_flipping_only_the_real_verdict_line_switches_the_guard_to_the_refused_branch() -> None:
+    """The hole CR-01 found, still pinned — now from the other side.
+
+    The original defect: `_REFUSED in section` reported REFUSED for a document
+    whose verdict line said REACHABLE, because the section quotes the string in
+    prose too. The anchored reader fixed it. The tree has since moved onto the
+    REACHABLE branch, so the test that proves the reader is anchored has to move
+    with it — flip the one real verdict LINE to REFUSED, leave the prose alone,
+    and the guard must follow the line rather than the prose.
+
+    A substring reader fails this in the obvious direction now: it already sees
+    two REFUSED mentions in a REACHABLE document, so it would report the REFUSED
+    branch before anything was flipped at all.
     """
     flipped = _flip_only_the_anchored_target_verdict(
         _EVIDENCE_PATH.read_text(encoding="utf-8")
     )
 
-    problems = _target_disagreements(
-        evidence_text=flipped,
-        configured=set(),
-        controlled=set(),
-        fixture_names=[],
-        allow_list={"target"},
-        fixture_sellers=[],
+    assert _target_verdict(flipped) == _REFUSED, (
+        "the guard did not follow the anchored line onto the REFUSED branch"
     )
 
-    assert problems, "the REACHABLE branch did not run: the selector is still a substring test"
-    assert len(problems) == 3
-    assert "configures no target watch" in problems[0]
-    assert "no control watch" in problems[1]
-    assert "no page was frozen" in problems[2]
+    problems = _target_disagreements(
+        evidence_text=flipped,
+        configured={"target"},
+        controlled={"target"},
+        fixture_names=["control-dust-cloths.html"],
+        allow_list={"target"},
+        fixture_sellers=["target"],
+    )
+
+    assert problems, "the REFUSED branch did not run: the selector is still a substring test"
+    assert len(problems) == 2
+    assert "configures a target watch" in problems[0]
+    assert "tests/fixtures/target/" in problems[1]
 
 
-def test_the_prose_mentions_alone_do_not_hold_the_guard_on_the_refused_branch() -> None:
-    """The same document, verdict intact: the guard must still read REFUSED.
+def test_the_prose_mentions_alone_do_not_drag_the_guard_onto_the_refused_branch() -> None:
+    """The mirror, so the fix cannot be "always take the REFUSED branch".
 
-    The complement of the test above, so the fix cannot be "always take the
-    REACHABLE branch". Three occurrences of the string, one of them a verdict —
-    the anchored reader picks that one.
+    The shipped document records REACHABLE on its anchored line while still
+    quoting `**Verdict: REFUSED**` twice in prose — the grammar explanation and
+    the rule-2 paragraph. A substring reader would take the REFUSED branch on
+    that, which is now the failure with teeth: it would demand the removal of a
+    watch, a control and a fixture that are all correct.
     """
     text = _EVIDENCE_PATH.read_text(encoding="utf-8")
 
-    assert _target_verdict(text) == _REFUSED
+    assert _target_verdict(text) == _REACHABLE_TARGET
     assert text.count(_REFUSED) > 1, (
         "this test is only meaningful while the document quotes the string in prose too"
     )
@@ -1449,7 +1504,7 @@ def test_the_target_guard_inherits_the_gates_fence_handling() -> None:
     naming the wrong problem, for a documentation edit that broke nothing.
     Sharing the gate's reader means `strip_fences` covers both at once.
     """
-    real = _EVIDENCE_PATH.read_text(encoding="utf-8")
+    real = _synthetic_refused_target()
     with_template = real + (
         "\n---\n\n## How to record a verdict\n\n"
         "```markdown\n## Target (target.com)\n\n**Verdict: REACHABLE (rung 1)**\n```\n"
@@ -1477,12 +1532,10 @@ def test_a_reachable_target_backed_by_the_observed_seller_string_passes() -> Non
     rule about the branch.
     """
     problems = _target_disagreements(
-        evidence_text=_EVIDENCE_PATH.read_text(encoding="utf-8").replace(
-            _REFUSED, "**Verdict: REACHABLE (rung 1)**"
-        ),
+        evidence_text=_EVIDENCE_PATH.read_text(encoding="utf-8"),
         configured={"target"},
         controlled={"target"},
-        fixture_names=["up-and-up-control.html"],
+        fixture_names=["control-dust-cloths.html"],
         allow_list={"target", "target corporation"},
         fixture_sellers=["Target Corporation"],
     )
@@ -1715,3 +1768,147 @@ def test_check_target_browser_redacts_this_machines_paths_from_detail(
     r = retailers.check_target_browser(_target_watch())
     assert home not in r.detail
     assert "~" in r.detail
+
+
+# --------------------------------------------------------------------------
+# Target — the captured control page
+# --------------------------------------------------------------------------
+
+
+def test_target_control_fixture_is_in_stock_priced_and_alertable(
+    target_dust_cloths: str,
+) -> None:
+    """The live half of the Target guard, frozen. If this reads anything else the
+    detector is broken, and the control watch in `config/products.yaml` is what
+    says so within a cycle on the real page."""
+    watch = Watch(
+        name="CONTROL — up&up microfiber dust cloths",
+        retailer="target",
+        target=_TARGET_URL,
+        max_price=80,
+        control=True,
+    )
+    r = retailers._verdict_from_html(
+        watch,
+        target_dust_cloths,
+        url=_TARGET_URL,
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        allow_dom=True,
+    )
+
+    assert r.availability is Availability.IN_STOCK
+    assert r.price == 12.59
+    assert r.alertable
+    assert "add-to-cart" in r.detail
+
+
+def test_a_target_reading_declares_both_axes_and_is_degraded(
+    target_dust_cloths: str,
+) -> None:
+    r = retailers._verdict_from_html(
+        _target_watch(),
+        target_dust_cloths,
+        url=_TARGET_URL,
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        allow_dom=True,
+    )
+
+    assert r.rung is Rung.BROWSER
+    assert r.extraction is Extraction.DOM
+    assert r.degraded, "a browser transport AND a dom extraction — either alone is enough"
+
+
+def test_the_target_fixture_carries_no_structured_data_at_all(
+    target_dust_cloths: str,
+) -> None:
+    """Why this retailer needs a DOM reader, asserted rather than asserted-in-prose.
+
+    If Target ever starts shipping a structured feed this goes red, and the right
+    response is to read that instead and drop `allow_dom` — a strictly better
+    reading, and one nobody would otherwise notice had become available.
+    """
+    assert parse.ldjson_offers(target_dust_cloths) is None
+    assert parse.nextdata_offers(target_dust_cloths) is None
+    assert parse.add_to_cart_offers(target_dust_cloths) is not None
+
+
+def test_a_target_page_whose_control_vanished_is_unknown_never_out_of_stock(
+    target_dust_cloths: str,
+) -> None:
+    """The real fixture with the add-to-cart control removed — a broken render.
+
+    This is the production failure mode for this retailer: no exception, no
+    challenge, no 403, just a page whose control the reader can no longer find.
+    OUT_OF_STOCK here would be a confident wrong answer that looks exactly like a
+    drought, and it is the bug the whole three-state contract exists to prevent.
+
+    The extraction and the degraded flag are asserted explicitly, and that is the
+    half a verdict-only test would miss: this verdict is produced inside
+    `_verdict_from_html`, not by `check_target_browser`, so it is the one path
+    where a `structured` label could survive and tell a reader the DOM path was
+    never involved in the very failure that broke it.
+    """
+    broken = re.sub(
+        r'id="addToCartButtonOrTextIdFor\d+"', 'id="somethingElse"', target_dust_cloths
+    )
+    assert broken != target_dust_cloths, "the control was not found in the fixture"
+
+    r = retailers._verdict_from_html(
+        _target_watch(max_price=80),
+        broken,
+        url=_TARGET_URL,
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        allow_dom=True,
+    )
+
+    assert r.availability is Availability.UNKNOWN
+    assert r.availability is not Availability.OUT_OF_STOCK
+    assert not r.alertable
+    assert r.extraction is Extraction.DOM
+    assert r.rung is Rung.BROWSER
+    assert r.degraded
+
+
+def test_the_target_fixture_has_no_partner_block_so_it_reads_first_party(
+    target_dust_cloths: str,
+) -> None:
+    offers = parse.add_to_cart_offers(target_dust_cloths)
+    assert offers is not None
+    assert offers[0].seller == parse.TARGET_FIRST_PARTY_SELLER
+    assert "targetPlusExtraInfoSection" not in target_dust_cloths
+
+
+def test_a_target_watch_is_dispatched_to_the_browser_and_dom_path() -> None:
+    """`_make_checker` is the one place a watch meets a transport, and
+    `control_check.py` builds its checker with the same function — so this is
+    what makes the gate and the monitor route identically."""
+    cfg = Config.load(_REPO_ROOT / "config" / "products.yaml")
+    target_watches = [w for w in cfg.watches if w.retailer == "target"]
+
+    assert target_watches, "no target watch is configured"
+    assert all(w.control for w in target_watches), (
+        "Target is control-only: it delisted the GO Plus +, so a product watch "
+        "there would read UNKNOWN forever"
+    )
+
+    seen: list[str] = []
+
+    def fake_rendered(url: str, **kw: object) -> Page:
+        seen.append(url)
+        raise FetchError("stopped before the network")
+
+    import boty.retailers as R
+
+    original = R.fetch_rendered
+    try:
+        R.fetch_rendered = fake_rendered  # type: ignore[assignment]
+        r = _make_checker(cfg)(target_watches[0])
+    finally:
+        R.fetch_rendered = original  # type: ignore[assignment]
+
+    assert seen == [target_watches[0].target], "a target watch did not reach the browser rung"
+    assert r.rung is Rung.BROWSER
+    assert r.extraction is Extraction.DOM

@@ -1154,11 +1154,22 @@ def test_the_shipped_tree_would_fail_if_a_working_retailer_were_quietly_dropped(
         253 passed in 1.07s
         evidence check: PASS — phase
 
-    Rule 4 is the ONLY rule that fires on it — asserted below rather than
-    assumed, because a floor that only works while rule 2 happens to be broken
-    too is not a floor.
+    Rule 4 must fire on its own merits, which is asserted below rather than
+    assumed: a floor that only works while rule 2 happens to be broken too is not
+    a floor. So rule 2's silence is asserted separately from rule 4's two hits.
+
+    `target` joined the kept config on 2026-08-03. It is configured in the real
+    tree AND has a committed capture, so leaving it out here would fire rules 2
+    and 4 about a retailer this test is not about.
+
+    Keeping it does make **rule 3** fire, and that is correct rather than
+    incidental: Target is one of the HARD_TWO, and rule 3 exists to say that a
+    tree cannot both land a hard-two retailer and fall short of five. This
+    scenario deliberately deletes two working retailers, so it genuinely is such
+    a tree. The assertion below therefore filters to rule 4 rather than counting
+    every problem — which narrows what is asserted about, not what is required.
     """
-    config = _write_config(tmp_path, ["bestbuy", "nintendo"])
+    config = _write_config(tmp_path, ["bestbuy", "nintendo", "target"])
     evidence = tmp_path / "retailer-evidence.md"
     evidence.write_text(
         (REPO_ROOT / "docs" / "retailer-evidence.md").read_text(encoding="utf-8")
@@ -1171,21 +1182,33 @@ def test_the_shipped_tree_would_fail_if_a_working_retailer_were_quietly_dropped(
         config, evidence, REPO_ROOT / "tests" / "fixtures"
     )
 
-    assert len(problems) == 2, problems
-    assert all(p.startswith("rule 4") for p in problems), problems
-    assert "GameStop" in problems[0] and "goplusplus.html" in problems[0]
-    assert "Walmart" in problems[1] and "goplusplus.html" in problems[1]
+    rule_four = [p for p in problems if p.startswith("rule 4")]
+
+    assert [p for p in problems if p.startswith("rule 2")] == [], (
+        "rule 2 must be silent here, or rule 4's two hits prove nothing: a floor "
+        "that only bites while rule 2 is also failing is not a floor"
+    )
+    assert len(rule_four) == 2, problems
+    assert "GameStop" in rule_four[0] and "goplusplus.html" in rule_four[0]
+    assert "Walmart" in rule_four[1] and "goplusplus.html" in rule_four[1]
 
 
 def test_a_refusal_for_a_retailer_we_never_captured_is_still_clean(tmp_path: Path) -> None:
     """Rule 4 must not punish the honest refusals this phase actually produced.
 
-    Pokémon Center was walked down every rung and refused; Amazon and Target
-    were never fetched at all. None of the three has a capture directory, so
-    none of them trips this rule — which is the whole point of keying it on a
-    page we really read rather than on the count.
+    Pokémon Center was walked down every rung and refused; Amazon was never
+    fetched at all. Neither has a capture directory, so neither trips this rule —
+    which is the whole point of keying it on a page we really read rather than on
+    the count.
+
+    Target is no longer one of them, and it is added to the config here for that
+    reason rather than left out: it was fetched, it has a capture, and it is
+    configured in the shipped tree. Leaving it out would fire rules 2 and 4 about
+    a retailer this test is not about. `_SHIPPED` itself stays at four, because
+    every other test in this file uses it to build SYNTHETIC trees whose evidence
+    documents have no Target section at all.
     """
-    config = _write_config(tmp_path, _SHIPPED)
+    config = _write_config(tmp_path, _SHIPPED + ["target"])
 
     problems = evidence_check.check_phase(
         config,
@@ -1344,13 +1367,15 @@ def test_the_w02_tree_reaches_a_shell_as_exit_1(tmp_path: Path, capsys: Any) -> 
 
 
 def test_rule_5_is_silent_on_the_shipped_tree(tmp_path: Path) -> None:
-    """The correct starting state for this phase, pinned so it stays deliberate.
+    """Rule 5's silence on the shipped tree, pinned so it stays deliberate.
 
-    Target and Amazon are REFUSED and unconfigured today, so rule 5 has nothing
-    to say about them and `test_the_shipped_tree_passes_the_whole_phase_gate`
-    stays green. When 03.1 registers either one, this tree stops being silent
-    unless the verdict moves in the same commit — which is the entire reason
-    rule 5 lands before the retailers do.
+    This is the assertion rule 5 was landed early for, and it has now been
+    exercised for real. Target was registered on 2026-08-03 — and its verdict
+    moved to REACHABLE in the SAME commit, which is the only reason this tree is
+    still silent. Register it without flipping the verdict and rule 5 fires.
+
+    Amazon is the other half and is still the original shape: REFUSED and
+    unconfigured, so rule 5 has nothing to say about it either.
     """
     problems = evidence_check.check_phase(
         REPO_ROOT / "config" / "products.yaml",
@@ -1364,7 +1389,16 @@ def test_rule_5_is_silent_on_the_shipped_tree(tmp_path: Path) -> None:
         w.retailer
         for w in evidence_check.Config.load(REPO_ROOT / "config" / "products.yaml").watches
     }
-    assert "target" not in configured and "amazon" not in configured, configured
+    assert "amazon" not in configured, configured
+    assert "target" in configured, (
+        "Target is expected to be configured here — this test is meaningful "
+        "precisely because rule 5 stays silent on a CONFIGURED retailer whose "
+        "verdict moved with it"
+    )
+    assert (
+        "**Verdict: REACHABLE (rung 3)**"
+        in (REPO_ROOT / "docs" / "retailer-evidence.md").read_text(encoding="utf-8")
+    ), "a configured Target carrying a standing REFUSED is exactly what rule 5 catches"
 
 
 def test_no_roadmap_retailer_resolves_to_more_than_one_section() -> None:

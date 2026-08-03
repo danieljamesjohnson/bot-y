@@ -111,6 +111,39 @@ watches:
     target: https://www.nintendo.com/us/store/products/hdmi-cable-104947/
     control: true
 
+  # ---- Target -----------------------------------------------------------
+  # There is NO Target watch for the GO Plus + itself, and — like Best Buy above
+  # — that is a disproof rather than an oversight. Target DID list it: TCIN
+  # 88714054, slug `pok-233-mon-go-plus` (Target encodes `é` as `-233-`), served
+  # HTTP 200 as recently as 2025-05-09 in the Internet Archive. Both URL forms
+  # 404 today and the TCIN is gone from the PDP sitemap. The 2016 device
+  # (52162697) 404s too. A watch on a 404 reads UNKNOWN forever and reddens the
+  # health gate, so Target is control-only — the Best Buy shape.
+  #
+  # Target is also the only retailer here read from PRESENTATION markup. Its
+  # product pages carry no structured data at all — zero ld+json, zero
+  # schema.org, zero "price", and Target's own flag says so
+  # (isProductDetailServerSideRenderPriceEnabled: false); the numbers render
+  # client-side from an API host that is Disallow: / for every agent. So
+  # `check_target_browser` renders the page and reads the add-to-cart button,
+  # which is rung 3 AND dom, and every reading is flagged degraded.
+  #
+  # WHICH MEANS THIS WATCH IS LOAD-BEARING IN A WAY THE OTHER CONTROLS ARE NOT.
+  # A Target reskin does not break this detector loudly — it breaks it silently,
+  # because a CSS-framework change can rename or restyle the control without
+  # anybody at Target knowing we existed. This watch is how anyone finds out:
+  # `control_check.py` and `assess_health` redden within a cycle. Mutation M8 is
+  # the offline half of the same guard.
+  #
+  # An Up&up (Target owned brand) household staple: first-party by construction,
+  # restocked routinely, ships rather than being store-only — a store-only
+  # grocery line reads unavailable online while the detector is working
+  # perfectly — and never a Target Plus buy-box fight.
+  - name: CONTROL — up&up microfiber dust cloths
+    retailer: target
+    target: https://www.target.com/p/microfiber-dust-cloths-6pk-up-38-up-8482/-/A-90377926
+    control: true
+
   # ---- Pokémon Center: NOT here, on purpose -----------------------------
   # There is no `retailer: pokemoncenter` entry and that is a finding, not a gap.
   # Pokémon Center stocks the GO Plus + (/product/715e10557/pokemon-go-plus), so

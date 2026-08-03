@@ -1,0 +1,10 @@
+{
+  "url": "https://www.target.com/p/microfiber-dust-cloths-6pk-up-38-up-8482/-/A-90377926",
+  "retailer": "target",
+  "name": "control-dust-cloths",
+  "captured_at": "2026-08-03T12:58:14Z",
+  "status": 200,
+  "bytes": 157002,
+  "note": "Up&up microfiber dust cloths 6pk, TCIN 90377926. Captured 2026-08-03 at rung 3 (rendered), IN STOCK, $12.59, no Target Plus partner block. Target ships NO structured data on /p/, so this fixture exists to exercise the add-to-cart DOM reader — the only thing on the page there is to read. REDACTED BEFORE COMMIT, and the raw capture was worse than the plan's marker list predicted. It carried a per-session `visitor_id`, an OAuth-shaped `refreshToken`, Target's RedSky `key` constant, Akamai's geolocation of this host as `zipCode`/`latitude`/`longitude`/`state`, and the five nearest Target stores with their street addresses and phone numbers. The automated guard caught NONE of it: it knew only EdgeScape's `lat=`/`zip=` query form and Target writes JSON. Redaction: every <script> body was emptied — a DOM reader needs element markup, not the retailer's hydration state, so this costs the fixture nothing it is used for and removes the whole session/identity class at once — plus the store name and ZIP that render as visible markup. tests/test_fetch.py was widened in the same commit to catch coordinates, postal codes, street addresses, phone numbers and session tokens in JSON form, and it then found the same class of leak already committed in the walmart and bestbuy fixtures.",
+  "transport": "browser"
+}

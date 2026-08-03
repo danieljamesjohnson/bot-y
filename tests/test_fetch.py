@@ -317,6 +317,40 @@ def test_no_fixture_leaks_the_capturing_hosts_identity() -> None:
                     leaks.append(f"{page.relative_to(root)}: geolocation {marker}={value}")
                     break
 
+        # The same geolocation written as JSON, which is how Target's renderer
+        # emits it — and the reason this block exists.
+        #
+        # The check above knew only EdgeScape's `key=value` query form, so it
+        # passed cleanly on a Target capture carrying `"zipCode":"00000"`,
+        # `"latitude":"33.170"`, `"longitude":"-96.780"` and a list of the five
+        # nearest stores with their street addresses and phone numbers. A guard
+        # that only knows the markers it was taught will keep passing right up
+        # until the next capture, in whatever shape THAT retailer writes — which
+        # is precisely how the first leak reached a public repo. Anchored on the
+        # semantics (a coordinate, a postal code, a street address, a phone
+        # number, a session token) rather than on one CDN's spelling.
+        json_markers = (
+            (r'"(?:latitude|longitude)"\s*:\s*"?(-?\d+\.\d+)', "coordinate"),
+            (r'"(?:zip|zipCode|postal_code|postalCode)"\s*:\s*"?(\d{4,})', "postal code"),
+            (r'"(address_line1|address_line2)"\s*:\s*"([^"]+)"', "street address"),
+            (r'"(?:refreshToken|accessToken|sessionId|session_id|deviceId)"\s*:\s*"([^"]{8,})"', "session token"),
+            (r'"(?:visitor_id|visitorId|guest_id|guestId)"\s*:\s*"([^"]{8,})"', "visitor id"),
+        )
+        for pattern, what in json_markers:
+            for match in re.finditer(pattern, body, re.I):
+                value = match.group(match.lastindex or 0)
+                if value.strip("0.-") and value.upper() not in {a.upper() for a in allowed}:
+                    leaks.append(f"{page.relative_to(root)}: {what} {value[:40]}")
+                    break
+
+        # A US phone number or a ZIP+4 in a fixture is a geolocation of the
+        # capturing host by another name: retailers render the *nearest stores*.
+        for pattern, what in ((r"\b\d{3}-\d{3}-\d{4}\b", "phone number"),
+                              (r"\b\d{5}-\d{4}\b", "ZIP+4")):
+            found = re.search(pattern, body)
+            if found:
+                leaks.append(f"{page.relative_to(root)}: {what} {found.group(0)}")
+
     assert not leaks, (
         "committed fixtures carry the capturing host's identity — this repo is "
         "public:\n  " + "\n  ".join(sorted(set(leaks)))
