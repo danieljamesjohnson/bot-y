@@ -1412,6 +1412,63 @@ def test_the_prose_mentions_alone_do_not_hold_the_guard_on_the_refused_branch() 
     )
 
 
+def test_the_target_guard_reads_the_evidence_log_through_the_honesty_gate() -> None:
+    """One splitter and one verdict grammar for this document, not two.
+
+    Three independent readers of `docs/retailer-evidence.md` existed, and two of
+    them had ALREADY drifted apart in both available dimensions at once: this
+    file's splitter was a `split("\\n## ")` list while the gate's was a dict, and
+    this file's verdict test was a bare `in` while the gate's was line-anchored.
+    Each disagreement was a live defect, and the correct implementation was
+    split one to each file — WR-01 belonged to the gate, CR-01 belonged here, and
+    neither had both.
+
+    The identity check is the load-bearing half: `_REFUSED` must BE the gate's
+    constant, not a retyped copy that can be edited on one side. (Verified: two
+    equal literals in separate modules are distinct objects in CPython, so this
+    fails if the string is retyped.)
+    """
+    assert _REFUSED is _EVIDENCE.REFUSED  # type: ignore[attr-defined]
+
+    text = _EVIDENCE_PATH.read_text(encoding="utf-8")
+    through_the_gate = _EVIDENCE.verdict_lines(  # type: ignore[attr-defined]
+        _EVIDENCE.sections_for(  # type: ignore[attr-defined]
+            "Target", _EVIDENCE.split_sections(text)  # type: ignore[attr-defined]
+        )[0]
+    )
+    assert _target_verdict(text) == through_the_gate[0]
+
+
+def test_the_target_guard_inherits_the_gates_fence_handling() -> None:
+    """The behavioural half: a fix on one side must not leave the other behind.
+
+    A "how to record a verdict" section carrying a fenced Target template is a
+    realistic edit to a document that already explains its own grammar. The
+    private splitter would have counted it as a second `## Target` section and
+    tripped `_target_verdict`'s "expected exactly one" assertion — a red test
+    naming the wrong problem, for a documentation edit that broke nothing.
+    Sharing the gate's reader means `strip_fences` covers both at once.
+    """
+    real = _EVIDENCE_PATH.read_text(encoding="utf-8")
+    with_template = real + (
+        "\n---\n\n## How to record a verdict\n\n"
+        "```markdown\n## Target (target.com)\n\n**Verdict: REACHABLE (rung 1)**\n```\n"
+    )
+
+    assert _target_verdict(with_template) == _REFUSED
+    assert (
+        _target_disagreements(
+            evidence_text=with_template,
+            configured=set(),
+            controlled=set(),
+            fixture_names=[],
+            allow_list={"target"},
+            fixture_sellers=[],
+        )
+        == []
+    )
+
+
 def test_a_reachable_target_backed_by_the_observed_seller_string_passes() -> None:
     """The other side of the drift guard: an evidence-backed allow-list is clean.
 
