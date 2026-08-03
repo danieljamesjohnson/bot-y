@@ -1,0 +1,25 @@
+#!/bin/sh
+# Refuse to commit this machine's identity into a public repo.
+#
+# Installed with `make hooks`. Tracked in the repo (unlike .git/hooks) so a
+# contributor gets it too — which matters, because the moment this fails is a
+# contributor capturing a fixture from a retailer that echoes their IP back.
+#
+# This exists because the same rule lived only in the test suite for two days
+# and leaked seven times anyway. `make verify` finds a leak AFTER it is in
+# history; this finds it before. See scripts/identity_check.py for the story.
+#
+# It checks only what is STAGED, so it costs milliseconds on a normal commit.
+
+PY=".venv/bin/python"
+[ -x "$PY" ] || PY="python3"
+
+"$PY" scripts/identity_check.py --staged || {
+    echo "" >&2
+    echo "pre-commit: refusing the commit." >&2
+    echo "Fix the values above and re-stage. If you are certain this is a false" >&2
+    echo "positive, widen the rule in scripts/identity_check.py and add a case to" >&2
+    echo "tests/test_fetch.py — do NOT bypass with --no-verify, and do NOT add the" >&2
+    echo "value to the allow-list." >&2
+    exit 1
+}

@@ -91,7 +91,7 @@ actually happened:
   `Redacted, 00000` was still rendered as visible markup six times in
   `goplusplus.html` and twice in `milk-control.html`, including
   `aria-label="Redacted, 00000, Change shipping address"`. So was the city on its
-  own, and the named store (`Redacted Supercenter`, `storeId 202`),
+  own, and the named store (`Redacted Supercenter`, `storeId <n>`),
   which locates this host just as well as the ZIP does.
 - **The widened guard could not see any of it.** Every pattern it had learned
   was keyed on a JSON key name or a query parameter, because those were the
@@ -110,7 +110,7 @@ and it was right again — the root cause each time was the same one: **the fix
 was keyed to the spellings I had just seen, not to the class.**
 
 - **The store number survived** in three spellings the redaction never touched:
-  `"pickupStore":"202"` ×3, `"deliveryStore":"202"` ×3 and `storeId=202` ×3 —
+  `"pickupStore":"<n>"` ×3, `"deliveryStore":"<n>"` ×3 and `storeId=<n>` ×3 —
   the last inside `&amp;`-escaped hrefs, i.e. visible markup. So did the state,
   as `"stateCode"`, `"stateOrProvinceCode"`, Akamai's own `"regionCode"` and the
   store's WIC agency list. A store number resolves publicly to the store whose
@@ -121,7 +121,7 @@ was keyed to the spellings I had just seen, not to the class.**
 - **The fix introduced a new occurrence.** The synthetic leak cases in the new
   guard test were seeded with the **real** city and ZIP — putting them back into
   a tracked file, in the test written to keep them out. They now use
-  `Exampleville, 99999`, which is not a place and not an assignable ZIP.
+  `Exampleville, NNNNN`, which is not a place and not an assignable ZIP.
 
 **What is true now, stated narrowly this time.** `git grep -E '\bRedacted\b|\b7503[0-9]\b'`
 returns hits in **four** files, all of which are *this record and its
@@ -133,7 +133,7 @@ something I should settle by quietly scrubbing the evidence of the leak. Every
 id and the state, and both Walmart fixtures still parse **byte-identically**
 (`IN_STOCK $229.99 Clove Brothers LLC`; `IN_STOCK $2.42 Walmart.com`).
 
-The guard now scans `.json` as well as `.html`, has a free-text `City, 12345`
+The guard now scans `.json` as well as `.html`, has a free-text `City, NNNNN`
 rule, excludes toll-free numbers, and — the part that was missing entirely —
 is an extracted function pinned by two tests: one watching it fail on a
 synthetic body per leak class, one pinning the **scope**, because the verifier
@@ -144,7 +144,7 @@ already zeroed, its `55113`/`55423` are Best Buy's own Minnesota region, and
 
 **THIRD CORRECTION, and it is the one that names the actual defect.** The
 verifier's third pass found the previous fix had **added no leak rule at all**.
-I had removed `"pickupStore":"202"`, `"stateCode":"TX"`, `storeId=202` and the
+I had removed `"pickupStore":"<n>"`, `"stateCode":"<ST>"`, `storeId=<n>` and the
 WIC agency list *by hand*, then pinned only the guard's **scope** — so the same
 capture taken tomorrow would ship every one of them again. It probed 31 shapes
 of this class against the guard; **29 passed clean**, including all four the
@@ -161,7 +161,7 @@ What exists now instead:
 - **13 rules keyed to the class**, not to a spelling — store number (JSON *and*
   URL forms), state/region/province, city, `destinationZipCode`/`postCode`,
   short-key `lat`/`lng`, DMA/FIPS/CBSA/county, street address, WIC agency,
-  `City, ST 12345`, and phone numbers in the four ways retailers write them.
+  `City, ST NNNNN`, and phone numbers in the four ways retailers write them.
 - **A leak case per rule.** Deleting *any one* of the 13 now turns the suite
   red — I mutated all 13 and watched each one; the first sweep found one silent
   and I merged the shadowed rule rather than leaving it.
@@ -199,14 +199,14 @@ Closed now, and this time by mechanism rather than by inspection:
 
 - `region_code`, `georegion`, `network_type`, `pmsa`, `msa`, `asnum`,
   `timezone`, `continent` added to the marker loop; `shippingZipcode`,
-  `store_id`, and an uppercase-only `?state=TX` rule added. (Uppercase-only
+  `store_id`, and an uppercase-only `?state=<ST>` rule added. (Uppercase-only
   because a lowercase `&state=ca` is GameStop's own California-law consent
   config, not a fact about this host — the case distinction *is* the rule.)
 - **A shape test**: every rule must also fire on a value shaped like the real
   one and different from the synthetic — a short city, a ZIP not starting with
   9, a two-letter state, a one-digit store number. It caught a live miss
   immediately: the store-number rule required two digits and Best Buy's
-  fixtures carry `"storeId":"7"`.
+  fixtures carry `"storeId":"<n>"`.
 - **An ordering test**: both Walmart fixtures contain the redacted placeholder
   *before* the real value, so a rule that stops at the first allowed match is
   disabled for precisely the pages it exists for. That mutation was silent.

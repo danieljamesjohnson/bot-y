@@ -26,7 +26,7 @@ MAKE_Q := $(MAKE) --no-print-directory
 
 .DEFAULT_GOAL := help
 
-.PHONY: help test types controls fixtures mutation verify verify-offline check-venv
+.PHONY: help test types controls fixtures mutation identity hooks verify verify-offline check-venv
 
 help:
 	@echo "bot-y — make targets"
@@ -92,8 +92,21 @@ mutation: check-venv
 # install. Reporting that as FAIL told contributors their extractor was broken;
 # reporting it as an unqualified PASS would claim a detector was verified when
 # it was never reached. It gets its own verdict line.
+# Every tracked file, not just the fixtures — the leak that mattered most was in
+# .planning/, and the second-most was in tests/. Cheap and offline, so it runs
+# first: a leak is the one failure you cannot walk back after a push.
+identity: check-venv
+	@$(PYTHON) scripts/identity_check.py --all
+
+# Install the tracked pre-commit hook. Not automatic: writing to .git/hooks
+# behind someone's back is the kind of thing a build should ask for.
+hooks:
+	@install -m 0755 hooks/pre-commit .git/hooks/pre-commit
+	@echo "installed .git/hooks/pre-commit — staged files are now identity-checked"
+
 verify:
-	@echo "=== verify: tests, types, fixtures, controls, mutation ==="
+	@echo "=== verify: identity, tests, types, fixtures, controls, mutation ==="
+	@$(MAKE_Q) identity || { echo "VERIFY: FAIL (host identity in a tracked file)"; exit 1; }
 	@$(MAKE_Q) test     || { echo "VERIFY: FAIL (tests)"; exit 1; }
 	@$(MAKE_Q) types    || { echo "VERIFY: FAIL (types)"; exit 1; }
 	@$(MAKE_Q) fixtures || { echo "VERIFY: FAIL (fixtures)"; exit 1; }
