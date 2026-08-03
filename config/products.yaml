@@ -14,9 +14,15 @@ settings:
 
   state_path: state.json
 
-  # Free key from https://developer.bestbuy.com/ — Best Buy rejects
-  # impersonated HTTP at the connection layer, so the official API is the
-  # only sane path there. Without a key, bestbuy watches are skipped.
+  # OPTIONAL, and genuinely optional: leave it unset and Best Buy still works.
+  #
+  # Best Buy refuses impersonated HTTP at the connection layer, so its default
+  # path here is a real browser (rung 3), and every reading from it is flagged
+  # DEGRADED. A key from https://developer.bestbuy.com/ upgrades the same
+  # watches to the official API, which is more reliable and not degraded — but
+  # signup needs manual approval and rejects free email domains, so it can
+  # never be what a fresh clone depends on. Needs `pip install -e '.[browser]'`
+  # and a Chrome/Chromium binary; see BOTY_BROWSER_PATH in the README.
   bestbuy_api_key: ${BESTBUY_API_KEY}
 
 # Apprise URLs. Keep the secrets in the environment, not in this file.
@@ -52,6 +58,30 @@ watches:
   - name: CONTROL — Great Value whole milk
     retailer: walmart
     target: https://www.walmart.com/ip/Great-Value-Whole-Vitamin-D-Milk-Gallon-Plastic-Jug-128-Fl-Oz/10450114
+    control: true
+
+  # ---- Best Buy ---------------------------------------------------------
+  # `target` is a SKU, not a URL, and that is deliberate: the same entry has to
+  # serve both of Best Buy's rungs. Without BESTBUY_API_KEY a real browser
+  # reads the page (flagged DEGRADED); with one, the official Products API
+  # reads the same SKU and the flag drops. Neither path can be given a product
+  # URL, because Best Buy's live URLs are `/product/<slug>/<ID>` where <ID> is
+  # an opaque token that cannot be derived from the SKU — `bestbuy_product_url`
+  # goes through SKU search instead, which redirects.
+  #
+  # There is NO Best Buy watch for the GO Plus + itself, and that is a finding
+  # rather than an omission: Best Buy does not appear to carry the product.
+  # Searches for it return gift cards and unrelated Switch titles, and the SKU
+  # this repo used to carry for it (6577129) resolves to nothing. Watching a
+  # page that does not exist would produce a permanent UNKNOWN and a permanent
+  # health warning. See docs/retailer-evidence.md.
+  #
+  # An evergreen first-party catalogue title, restocked routinely and never a
+  # buy-box fight. Not the house-brand cable the rule would suggest: that page
+  # is one of the ones Best Buy reproducibly refuses to render.
+  - name: CONTROL — Pokémon Let's Go, Pikachu! (Switch)
+    retailer: bestbuy
+    target: "6216393"
     control: true
 
   # ---- transition controls: products SUPPOSED to change state ---------------

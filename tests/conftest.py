@@ -116,3 +116,26 @@ def walmart_goplusplus() -> str:
 def walmart_milk() -> str:
     """Walmart milk control: IN_STOCK at $2.42, sold by Walmart.com."""
     return load("walmart", "milk-control")
+
+
+@pytest.fixture
+def bestbuy_pikachu() -> str:
+    """Best Buy control: IN_STOCK at $59.99, sold by Best Buy (SKU 6216393).
+
+    A rung-3 capture — rendered DOM, not what curl would have seen — reached by
+    Best Buy's SKU search redirect, since Best Buy's product URLs are no longer
+    derivable from a SKU.
+    """
+    return load("bestbuy", "pikachu-control")
+
+
+@pytest.fixture
+def bestbuy_unresolved_sku() -> str:
+    """Best Buy's answer for a SKU that resolves to nothing: no Product markup.
+
+    A search page listing a dozen unrelated products, none of them carrying
+    schema.org Product data. The page it is a snapshot of is the reason the
+    adapter can say UNKNOWN honestly instead of reading somebody's accessory as
+    a restock.
+    """
+    return load("bestbuy", "unresolved-sku")
