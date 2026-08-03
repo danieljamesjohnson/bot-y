@@ -30,6 +30,11 @@ FIRST_PARTY = {
     "gamestop": {"gamestop", "gamestop.com"},
     "target": {"target"},
     "bestbuy": {"best buy", "bestbuy.com"},
+    # `Nintendo of America Inc.` is the literal `offers.seller.name` on every
+    # nintendo.com/us/store product page seen (docs/retailer-evidence.md); the
+    # shorter forms are here so a wording change does not silently demote the
+    # manufacturer of the product to an unrecognised third party.
+    "nintendo": {"nintendo of america inc.", "nintendo", "nintendo.com"},
 }
 
 
@@ -39,6 +44,13 @@ FIRST_PARTY = {
 #: UNKNOWN territory, not an implicit first-party pass. Stated explicitly here
 #: rather than left to fall out of the data, because the difference decides
 #: whether a $229.99 flip listing can alert.
+#:
+#: `nintendo` is deliberately absent, and that absence is a claim backed by
+#: evidence rather than an oversight: Nintendo's store has no third-party seller
+#: surface at all — no buy box, no "other sellers", nobody but Nintendo of
+#: America who can list on it. Adding it here "to be safe" would be the opposite
+#: of safe, because it would strip `_pick`'s unattributed-offer fallback and turn
+#: any future page that drops the seller node into a permanent UNKNOWN.
 MARKETPLACES = {"walmart", "target", "amazon", "bestbuy"}
 
 

@@ -42,6 +42,15 @@ watches:
     target: https://www.walmart.com/ip/Pok-mon-GO-Plus-for-Nintendo-Switch/1203950273
     max_price: 80
 
+  # The one that matters most. Nintendo MAKES this, lists it at $54.99 — MSRP to
+  # the cent — and has no marketplace, so neither flipper defence has anything to
+  # defend against here. The ceiling stays on anyway: it costs nothing and it is
+  # the independent second line if the seller filter ever regresses.
+  - name: Pokémon GO Plus +
+    retailer: nintendo
+    target: https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-112387/
+    max_price: 80
+
   # ---- controls: known-good products that prove the detector works ------
   # If one of these stops reading in-stock, the detector is broken and you
   # get told. Without them, a stale parser reports "out of stock" forever
@@ -83,6 +92,36 @@ watches:
     retailer: bestbuy
     target: "6216393"
     control: true
+
+  # ---- Nintendo ---------------------------------------------------------
+  # `target` is a plain URL, the opposite of Best Buy above, and deliberately so.
+  # Nintendo publishes a 36,530-entry store sitemap and its product URLs are
+  # stable and derivable from it, so there is nothing to resolve; Best Buy's SKU
+  # indirection is a workaround for a problem this retailer does not have.
+  #
+  # No adapter code exists for Nintendo and none is needed. Its pages carry
+  # ordinary schema.org Product markup that `check_html` already reads — the
+  # whole of its support is one FIRST_PARTY line and these two watches.
+  #
+  # A replacement cable: first-party by construction, restocked routinely, not a
+  # console and not a limited drop. Reserve candidate if it is ever discontinued
+  # is the AC adapter (`ac-adapter-104900`).
+  - name: CONTROL — Nintendo HDMI cable
+    retailer: nintendo
+    target: https://www.nintendo.com/us/store/products/hdmi-cable-104947/
+    control: true
+
+  # ---- Pokémon Center: NOT here, on purpose -----------------------------
+  # There is no `retailer: pokemoncenter` entry and that is a finding, not a gap.
+  # Pokémon Center stocks the GO Plus + (/product/715e10557/pokemon-go-plus), so
+  # a watch here would look entirely plausible — and would never read anything.
+  # Its product pages are Imperva-walled at rung 1 (HTTP 200 "Pardon Our
+  # Interruption") and at rung 3 (headless Chrome, refused twice), and its own
+  # robots.txt forbids the API endpoints that would answer the stock question.
+  # Rung 4, with the evidence in docs/retailer-evidence.md and QUESTIONS.md.
+  #
+  # It is worth retrying: the homepage reads fine at rung 1, so the wall is
+  # narrower than a site-wide policy.
 
   # ---- transition controls: products SUPPOSED to change state ---------------
   # The controls above prove "can we still read this page". These prove "do we

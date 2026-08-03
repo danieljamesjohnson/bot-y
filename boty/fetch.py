@@ -31,6 +31,13 @@ IMPERSONATE = "chrome"
 
 #: Interstitials are served with HTTP 200, so status code alone cannot detect
 #: a block. These are phrases that only appear on challenge pages.
+#:
+#: Every entry must be lower-case — `get()` lowercases the body once and matches
+#: these against it, so a capital anywhere here is a phrase that can never fire.
+#: `tests/test_fetch.py` pins that, along with the other direction: each phrase
+#: is a bet that no real product page contains it, and a bad bet reports a
+#: working retailer as blocked forever, which is a worse failure than the one
+#: this list prevents.
 BLOCK_PHRASES = (
     "robot or human",
     "verify you are human",
@@ -38,6 +45,14 @@ BLOCK_PHRASES = (
     "access to this page has been denied",
     "request unsuccessful",
     "are you a human",
+    # Imperva, added after pokemoncenter.com served this at HTTP **200** during
+    # 02-04's ladder walk. Without it the wall came back as an ordinary Page and
+    # the refusal was reported to the user as "page shape changed?" — a fail-safe
+    # UNKNOWN with a diagnosis pointing at our own parser. `_incapsula_resource`
+    # is the more durable of the two: it appeared in both the rung-1 and the
+    # rung-3 refusal, where the human-readable wording appeared in only one.
+    "pardon our interruption",
+    "_incapsula_resource",
 )
 
 
