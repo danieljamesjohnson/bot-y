@@ -174,7 +174,7 @@ Plans:
 
 **Goal**: Target and Amazon reporting trustworthy stock for the GO Plus +, control-verified, on whatever rung reaches them.
 **Depends on**: Phase 3
-**Requirements**: REQ-07 (revised), REQ-13
+**Requirements**: REQ-07a (revises REQ-07), REQ-13
 
 **Why this reverses Phase 3.** Phase 3 dropped both retailers on a reading of their
 Terms of Use, and recorded criterion 5 as permanently unmet. Dan's decision, 2026-08-03:
