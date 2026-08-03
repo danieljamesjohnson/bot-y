@@ -68,21 +68,40 @@ names.
 Every retailer lands on a **rung** of an escalation ladder, and bot-y says which
 one rather than presenting them all as equally trustworthy. Rung 1 is
 impersonated HTTP, rung 2 a retailer's own sanctioned API, rung 3 a real
-browser, rung 4 "dropped, with the evidence written down". Anything read on rung
-3 is flagged `[degraded]` in `boty check` and in the status JSON — it works, and
-it is a page we rendered rather than an answer the retailer gave us. What was
-actually tried against each one, and what came back, is in
+browser, rung 4 "dropped, with the evidence written down". What was actually
+tried against each one, and what came back, is in
 [`docs/retailer-evidence.md`](docs/retailer-evidence.md).
 
-| Retailer | Rung | robots.txt | Terms | Method | Status |
-|---|---|---|---|---|---|
-| GameStop | 1 | unread — `robots.txt` itself returned 403 | unread — not requested | `curl_cffi` + schema.org JSON-LD | ✅ Working |
-| Walmart | 1 | permits `/ip/` | unread — challenge page, not the terms | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ✅ Working |
-| Nintendo | 1 | permits `/us/store/products/` | forbids automated means | `curl_cffi` + schema.org JSON-LD | ✅ Working — first-party for the hardware, and the only place in this config that lists the GO Plus + at its $54.99 MSRP with no marketplace attached. ⚠ disagree — `robots.txt` is `Allow: /` and publishes a store sitemap, while § 6 of the Terms of Use bars "any robot … spider, crawler, scraper or other automated means" |
-| Best Buy | 3 (2 with a key) | unread — refused at the connection layer | unread — same refusal | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
-| Pokémon Center | 4 | permits `/product/` | forbids data mining | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 (headless Chrome, twice); its `robots.txt` forbids the API endpoints that would answer the stock question | ❌ Dropped, with the evidence written down. Not configured, and deliberately not padded into the count — it stocks the product, so a watch here would have looked plausible and read nothing forever. ⚠ disagree — `/product/*` is not disallowed, but the Terms of Use prohibit data gathering outright |
-| Amazon | 4 | permits `/dp/` | forbids extraction | none — its Conditions of Use forbid it. The licence to use the site excludes "any collection and use of any product listings, descriptions, or prices" and "any use of data mining, robots, or similar data gathering and extraction tools" | ❌ Dropped, and dropped without ever fetching a product page. The terms were read first, so the reason is a written prohibition rather than a wall we could not get past — a wall can fall and this cannot. Not configured. ⚠ disagree — no rule matches `/dp/<ASIN>`, while the Conditions of Use forbid extraction |
-| Target | 4 | permits `/p/` | forbids extraction | none — but **not** for the reason the Terms give. `/p/` was fetched at rung 1 on 2026-08-03: **HTTP 200**, ~315 KB, no challenge, no block phrase, `"isBot": false` — and **zero** `application/ld+json`, zero `"price"`, zero `availability`, zero `"seller"`. Target ships the price module empty (`isProductDetailServerSideRenderPriceEnabled: false`) and loads stock from `redsky.target.com`, whose `robots.txt` is `Disallow: /` for every agent. Rung 3 would reach the data only by making those same requests through a browser | ❌ Dropped — probed, reachable, and carrying no stock data to read. The page is served perfectly and is empty of offers, so a watch here would read UNKNOWN forever. Target also **no longer lists** the GO Plus + (TCIN `88714054`, HTTP 200 as late as 2025-05, now 404). ⚠ disagree — `www.target.com/robots.txt` does **not** disallow `/p/`, and Target publishes a product-detail sitemap, so robots.txt is broader than the terms here. Not configured |
+**A rung is only half of what a reading is worth, so there is a second column
+beside it.** The rung says *how the bytes were obtained*. The **Extraction**
+says *what was read out of them* — `structured` for the retailer's own
+machine-readable feed (schema.org JSON-LD, a Next.js hydration payload, an API
+response), `dom` for presentation markup, and `—` for a rung-4 retailer, where
+nothing is read at all because nothing is watched.
+
+The two are independent, and Best Buy is why the distinction had to exist. It is
+rung 3 + `structured`: a browser renders the page, and what is then read off it
+is Best Buy's own schema.org feed — a document they maintain because Google
+Shopping depends on it. A rung-3 + `dom` retailer would be a different animal on
+the same rung, and a rung-1 + `dom` adapter is perfectly possible and would be
+the most fragile thing in this repo.
+
+`[degraded]` fires on **either** — a page we rendered, or a reading lifted out of
+presentation markup — because both mean *discount this*. It is worth being blunt
+about what a `dom` row costs you: **a reskin breaks it silently.** No error, no
+403, no red control until the next control cycle; the parser simply stops
+finding the button and the reading goes quiet. That is precisely the failure this
+whole project exists to catch, so the column is a warning, not a label.
+
+| Retailer | Rung | Extraction | robots.txt | Terms | Method | Status |
+|---|---|---|---|---|---|---|
+| GameStop | 1 | structured | unread — `robots.txt` itself returned 403 | unread — not requested | `curl_cffi` + schema.org JSON-LD | ✅ Working |
+| Walmart | 1 | structured | permits `/ip/` | unread — challenge page, not the terms | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ✅ Working |
+| Nintendo | 1 | structured | permits `/us/store/products/` | forbids automated means | `curl_cffi` + schema.org JSON-LD | ✅ Working — first-party for the hardware, and the only place in this config that lists the GO Plus + at its $54.99 MSRP with no marketplace attached. ⚠ disagree — `robots.txt` is `Allow: /` and publishes a store sitemap, while § 6 of the Terms of Use bars "any robot … spider, crawler, scraper or other automated means" |
+| Best Buy | 3 (2 with a key) | structured | unread — refused at the connection layer | unread — same refusal | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
+| Pokémon Center | 4 | — | permits `/product/` | forbids data mining | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 (headless Chrome, twice); its `robots.txt` forbids the API endpoints that would answer the stock question | ❌ Dropped, with the evidence written down. Not configured, and deliberately not padded into the count — it stocks the product, so a watch here would have looked plausible and read nothing forever. ⚠ disagree — `/product/*` is not disallowed, but the Terms of Use prohibit data gathering outright |
+| Amazon | 4 | — | permits `/dp/` | forbids extraction | none — its Conditions of Use forbid it. The licence to use the site excludes "any collection and use of any product listings, descriptions, or prices" and "any use of data mining, robots, or similar data gathering and extraction tools" | ❌ Dropped, and dropped without ever fetching a product page. The terms were read first, so the reason is a written prohibition rather than a wall we could not get past — a wall can fall and this cannot. Not configured. ⚠ disagree — no rule matches `/dp/<ASIN>`, while the Conditions of Use forbid extraction |
+| Target | 4 | — | permits `/p/` | forbids extraction | none — but **not** for the reason the Terms give. `/p/` was fetched at rung 1 on 2026-08-03: **HTTP 200**, ~315 KB, no challenge, no block phrase, `"isBot": false` — and **zero** `application/ld+json`, zero `"price"`, zero `availability`, zero `"seller"`. Target ships the price module empty (`isProductDetailServerSideRenderPriceEnabled: false`) and loads stock from `redsky.target.com`, whose `robots.txt` is `Disallow: /` for every agent. Rung 3 would reach the data only by making those same requests through a browser | ❌ Dropped — probed, reachable, and carrying no stock data to read. The page is served perfectly and is empty of offers, so a watch here would read UNKNOWN forever. Target also **no longer lists** the GO Plus + (TCIN `88714054`, HTTP 200 as late as 2025-05, now 404). ⚠ disagree — `www.target.com/robots.txt` does **not** disallow `/p/`, and Target publishes a product-detail sitemap, so robots.txt is broader than the terms here. Not configured |
 
 **Four working retailers, not five — and that is now the final answer, not a
 pending one.** The roadmap's MVP bar was five, and this is what the bar actually
@@ -128,9 +147,16 @@ not configured but `tests/fixtures/<retailer>/` still holds a page this repo
 really fetched, the gate fails, because a retailer we have read is not a
 retailer that refused us. `tests/test_support_matrix.py` closes the same gap in
 the table: every retailer in scope needs a rung of 1–4 here, anything on rung 3
-has to say `degraded` in its own row, and **no row may claim a working rung
-(1–3) for a retailer nothing watches**. Rung 4 — dropped, with the evidence
-written down — is the only honest rung for a retailer the monitor does not read.
+**or reading `dom`** has to say `degraded` in its own row, and **no row may claim
+a working rung (1–3) for a retailer nothing watches**. Rung 4 — dropped, with the
+evidence written down — is the only honest rung for a retailer the monitor does
+not read.
+
+The Extraction cell is held to the rung beside it in **both** directions, for the
+same reason `⚠ disagree` is: a rung-4 row must say `—`, and a working-rung row
+must never say it. Otherwise `—` would become a blank that means nothing and
+answers everything — the escape hatch `unread` had to be pinned against, one
+column over.
 
 There is one temporary third state, for the same reason: a gate that makes the
 honest answer unrepresentable pressures the padding it was built to stop. A
@@ -147,8 +173,9 @@ Buy is served a Cloudflare wall by gamestop.com, which rung 1 reads on every
 untouched, so it is for a retailer that refuses HTTP *at the connection layer* —
 not something to reach for because a fetch failed once.
 
-**Every row states three things, not one: a rung, where that retailer's
-`robots.txt` stands on the exact path bot-y fetches, and where its terms stand.**
+**Every row states four things, not one: a rung, what was extracted off the
+page, where that retailer's `robots.txt` stands on the exact path bot-y fetches,
+and where its terms stand.**
 A row whose two signals point in opposite directions is marked `⚠ disagree`, and
 one whose signals agree is not — the marker is a finding, so a table where every
 row carried it would say nothing. Four rows carry it today, and one of them is a

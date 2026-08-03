@@ -1690,6 +1690,42 @@ that is a fact about today's tree rather than a property of the rule, and
 `tests/test_support_matrix.py` builds the agreeing case by corruption so the
 `⚠ disagree` marker is watched coming off as well as going on.
 
+### The row contract grew a fourth field on 2026-08-03: Extraction
+
+**Written 2026-08-03, Phase 3.1 plan 05.** REQ-13's row contract was three
+things — a rung, a `robots.txt` position and a terms position. It is now four.
+Every README row also states **what was read out of the page**.
+
+- **`structured`** — the retailer's own machine-readable feed: schema.org
+  JSON-LD, a Next.js hydration payload, an API response. They maintain it
+  because Google Shopping depends on it, so it rots slowly and it breaks
+  loudly.
+- **`dom`** — presentation markup. A button's text, a class name. It works, and
+  **a reskin breaks it silently**: no error, no 403, no red control until the
+  next control cycle. That is the exact failure mode this project exists to
+  catch, so the cell is a warning rather than a label.
+- **`—`** — a rung-4 retailer, where nothing is extracted because nothing is
+  watched. Tied to the Rung cell in both directions by `_extraction_mismatch`
+  in `tests/test_support_matrix.py`, so it is a claim rather than a blank.
+
+**What motivated it is the Best Buy / Target contrast, and it is a real
+distinction today's rung alone could not express.** Best Buy is rung 3 +
+`structured`: a headless browser renders the page, and what is then read off it
+is Best Buy's own schema.org feed — the retailer's own answer, obtained the hard
+way. Target at rung 3 would be `dom`: its pages carry **zero** `ld+json`, zero
+`"price"`, zero `availability` and zero `"seller"` (measured 2026-08-03,
+recorded under `## Target` above), so the only thing left to read is the button
+that renders. Both are "browser". One is the retailer telling us; the other is
+us reading their layout.
+
+`Result.degraded` widened in the same change, and this is the half worth
+recording: it used to be derived from the rung alone, so a rung-1 DOM adapter —
+cheap to write, and the most fragile thing this codebase could acquire — would
+have been published as a first-class reading in `boty check`, on the status page
+and in the support matrix. Mutation **M7** now reverts only that new disjunct
+and the suite goes red, so the second half of the flag is proved load-bearing
+rather than decorative.
+
 ### What was requested for this section, and what it cost
 
 **Budget: 8 requests, ≥ 15 s apart, no retries, no escalation. 7 were spent**,

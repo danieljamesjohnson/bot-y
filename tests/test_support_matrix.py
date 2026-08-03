@@ -60,10 +60,10 @@ CONFIG = REPO_ROOT / "config" / "products.yaml"
 #: than by a line number, so editing the prose around it cannot silently point
 #: this file at some other table — the `make verify` verdict table further down
 #: is three columns and the stage table is two, but that is luck, not a rule.
-HEADER_CELLS = ("Retailer", "Rung", "robots.txt", "Terms", "Method", "Status")
+HEADER_CELLS = ("Retailer", "Rung", "Extraction", "robots.txt", "Terms", "Method", "Status")
 
 #: Column indices within a matrix row.
-RETAILER, RUNG, ROBOTS, TERMS, METHOD, STATUS = 0, 1, 2, 3, 4, 5
+RETAILER, RUNG, EXTRACTION, ROBOTS, TERMS, METHOD, STATUS = 0, 1, 2, 3, 4, 5, 6
 
 #: The vocabulary a robots.txt cell may open with (REQ-13).
 #:
@@ -126,6 +126,26 @@ RUNGS = {"1", "2", "3", "4"}
 #: honest rung for a retailer nothing watches, so these three are exactly the
 #: cells that must be backed by a configured watch.
 WORKING_RUNGS = {"1", "2", "3"}
+
+#: The vocabulary an Extraction cell may state, mirroring `boty.models.Extraction`
+#: — `structured` for a retailer's own machine-readable feed, `dom` for
+#: presentation markup a reskin breaks silently.
+#:
+#: The second axis exists because a rung is only half of what a reading is
+#: worth. Best Buy is rung 3 + `structured`: a browser renders the page and
+#: what is read off it is Best Buy's own schema.org feed. A rung-3 + `dom` row
+#: would sit on the same rung and be worth materially less.
+EXTRACTIONS = ("structured", "dom")
+
+#: What a rung-4 row states, because nothing is extracted from a retailer the
+#: monitor does not read.
+#:
+#: Tied to the Rung cell in BOTH directions by `_extraction_mismatch`, so this
+#: is a claim rather than a blank. A `—` accepted unconditionally would be the
+#: REQ-13 escape hatch `UNREAD_POSITIONS` had to be pinned against: paste it
+#: into all seven rows and the column distinguishes nothing while looking
+#: filled in.
+NO_EXTRACTION = "—"
 
 
 def _load_evidence_check() -> Any:
@@ -247,7 +267,8 @@ def _overstated(rows: dict[str, list[str]], configured: set[str]) -> list[str]:
     This checks the reverse: the table OVERSTATING it.
 
     Nothing enforced it before. `_rungless` only wants a digit 1-4 and
-    `_undeclared_degraded` only looks at rung-3 rows, so
+    `_undeclared_degraded` looked only at rung-3 rows (it now looks at `dom`
+    rows too, but that is still not this claim), so
     `| GameStop | 1 | curl_cffi + schema.org JSON-LD | ✅ Working |` passed every
     rule whether or not a gamestop watch existed. Reproduced: with the gamestop
     and walmart watch blocks deleted and two REFUSED sections appended, 253
@@ -353,12 +374,56 @@ def _unread_cells(rows: dict[str, list[str]]) -> set[tuple[str, int]]:
     }
 
 
+def _extraction_mismatch(rows: dict[str, list[str]]) -> dict[str, tuple[str, str]]:
+    """Rows whose Extraction cell and Rung cell disagree about whether anything is read.
+
+    DELIBERATELY TWO-DIRECTIONAL, for the reason `_misdeclared_disagreement`
+    is. A rung-4 row must carry `—` because nothing is extracted from a
+    retailer the monitor does not read; a rung-1/2/3 row must carry a member of
+    `EXTRACTIONS`, because a row claiming a working rung is claiming a reading,
+    and a reading came from somewhere.
+
+    One-directional would be worthless. "Every row must state an Extraction" is
+    satisfied by writing `—` in all seven, at which point the column says
+    nothing and the rung-3-versus-rung-3 distinction it was added for is gone.
+    So `—` is not a free cell: it is a claim about the rung beside it, and it
+    goes red when the two disagree either way.
+
+    Returns `{retailer: (rung_cell, extraction_cell)}`.
+    """
+    bad: dict[str, tuple[str, str]] = {}
+    for name in ROADMAP_RETAILERS.values():
+        if name not in rows:
+            continue
+        rung, extraction = rows[name][RUNG], rows[name][EXTRACTION]
+        working = rung[:1] in WORKING_RUNGS
+        if working and extraction not in EXTRACTIONS:
+            bad[name] = (rung, extraction)
+        elif not working and extraction != NO_EXTRACTION:
+            bad[name] = (rung, extraction)
+    return bad
+
+
 def _undeclared_degraded(rows: dict[str, list[str]]) -> list[str]:
+    """Rows whose reading is lower-confidence and whose text does not say so.
+
+    `Result.degraded` has TWO disjuncts now — `rung is BROWSER or extraction is
+    DOM` — and the matrix half has to track both. If it only tracked the rung,
+    the two halves of criterion 3's degraded contract would drift apart: a DOM
+    reading would be flagged at runtime and presented as first-class in the
+    table a reader consults *before* deciding whether to trust the number. That
+    is the WR-04 shape this file's preamble was written about, and it is the
+    more expensive direction of the two.
+
+    A `dom` row on rung 1 is the case worth naming. Nothing about its transport
+    is wrong; it is what was read out of the bytes that a reader has to
+    discount, and no rule looking only at the rung column can see it.
+    """
     return [
         name
         for name in ROADMAP_RETAILERS.values()
         if name in rows
-        and rows[name][RUNG].startswith("3")
+        and (rows[name][RUNG].startswith("3") or rows[name][EXTRACTION] == "dom")
         and "degrad" not in " ".join(rows[name]).lower()
     ]
 
@@ -400,7 +465,7 @@ def test_every_roadmap_retailer_carries_a_rung_of_one_to_four() -> None:
     )
 
 
-def test_the_matrix_header_is_exactly_the_six_cells() -> None:
+def test_the_matrix_header_is_exactly_the_seven_cells() -> None:
     """Asserted literally, so a column cannot move without a red test.
 
     Every rule in this file indexes cells by position. Insert a column, or swap
@@ -409,6 +474,12 @@ def test_the_matrix_header_is_exactly_the_six_cells() -> None:
     `_misdeclared_disagreement` would quietly compare the wrong two cells and go
     on passing. `_matrix` already asserts it can FIND this header; this asserts
     the header is the one the constants describe.
+
+    This is the test that caught the change it is now asserting. Inserting
+    `Extraction` at index 2 went red here first, and the reindex below it was
+    made deliberately rather than discovered later by a rule quietly comparing
+    the wrong two cells. That is the whole reason the header is written out
+    literally instead of derived from the file.
     """
     lines = README.read_text(encoding="utf-8").splitlines()
     headers = [tuple(_cells(line)) for line in lines if line.startswith("| Retailer |")]
@@ -469,20 +540,41 @@ def test_only_the_pinned_cells_say_unread() -> None:
     }
 
 
-def test_a_rung_three_retailer_is_flagged_degraded_in_the_matrix() -> None:
-    """The matrix half of phase criterion 3.
+def test_every_roadmap_retailer_states_an_extraction_matching_its_rung() -> None:
+    """REQ-13's fourth field, against the shipped table.
+
+    A rung says how the bytes were obtained; an Extraction says what was read
+    out of them. Best Buy is rung 3 + `structured` and Target would be rung 3 +
+    `dom` — same rung, materially different readings — which is the whole
+    reason this column is not folded into the one beside it.
+    """
+    rows = _matrix()
+
+    assert not _extraction_mismatch(rows), (
+        f"the Extraction cell disagrees with the Rung cell for: {_extraction_mismatch(rows)}. "
+        f"A working rung (1-3) states one of {EXTRACTIONS}; rung 4 states {NO_EXTRACTION!r}, "
+        "because nothing is extracted from a retailer the monitor does not read."
+    )
+
+
+def test_a_lower_confidence_retailer_is_flagged_degraded_in_the_matrix() -> None:
+    """The matrix half of phase criterion 3, on both of the flag's disjuncts.
 
     A browser-rendered reading is a page we rendered rather than an answer the
     retailer gave us, and the table is consulted before the number is trusted.
     Flagging it at runtime while the matrix presents it as first-class puts the
     caveat exactly where nobody reads it.
+
+    `Result.degraded` widened to fire on a `dom` extraction as well, so this
+    rule widened with it in the same commit. Two halves of one contract that
+    are allowed to drift are the WR-04 failure this file exists to prevent.
     """
     rows = _matrix()
 
     assert not _undeclared_degraded(rows), (
-        f"rung-3 retailers not flagged degraded in the README support matrix: "
+        f"retailers not flagged degraded in the README support matrix: "
         f"{_undeclared_degraded(rows)}. Phase 3 criterion 3 requires DEGRADED in the "
-        "matrix as well as in `boty check`."
+        "matrix as well as in `boty check`, for a rung-3 row or a `dom` row alike."
     )
 
 
@@ -537,7 +629,18 @@ def test_the_matrix_does_not_advertise_a_retailer_the_monitor_does_not_watch() -
 
 def _corrupt(retailer: str, column: int, value: str) -> str:
     """The real README with one cell of one retailer's row replaced."""
-    lines = README.read_text(encoding="utf-8").splitlines()
+    return _corrupt_text(README.read_text(encoding="utf-8"), retailer, column, value)
+
+
+def _corrupt_text(text: str, retailer: str, column: int, value: str) -> str:
+    """The same edit against text already corrupted once.
+
+    Two cells have to move together to build the clean `dom` case: a row that
+    reads `dom` AND declares itself degraded. Composing corruptions is what
+    keeps that case derived from the real README rather than typed out, which
+    is the point of running these rules against the shipped table at all.
+    """
+    lines = text.splitlines()
     for i, line in enumerate(lines):
         if line.startswith("|") and _cells(line)[RETAILER] == retailer:
             cells = _cells(line)
@@ -588,6 +691,80 @@ def test_a_planned_rung_cell_fails_even_for_an_unprobed_retailer() -> None:
     rows = _matrix(_corrupt("Target", RUNG, "Planned"))
 
     assert _rungless(rows, unprobed={"Target"}) == {"Target": "Planned"}
+
+
+def test_a_blanked_extraction_cell_fails_the_extraction_rule() -> None:
+    """The blank cell, which is how a column quietly stops being filled in.
+
+    Same failure `_positionless` was written for one column over: nobody
+    notices an empty cell in a wide markdown table, and the row still parses.
+    """
+    rows = _matrix(_corrupt("GameStop", EXTRACTION, ""))
+
+    assert _extraction_mismatch(rows) == {"GameStop": ("1", "")}
+
+
+def test_a_rung_four_row_claiming_an_extraction_fails() -> None:
+    """Direction one: a claim to have read something off a retailer nobody watches.
+
+    Target is rung 4 with no watch. `structured` in its Extraction cell says a
+    schema.org feed is being read every five minutes, which is false in a way
+    no other rule here can see — `_overstated` reads the Rung cell, and the
+    Rung cell is honest.
+    """
+    rows = _matrix(_corrupt("Target", EXTRACTION, "structured"))
+
+    assert rows["Target"][RUNG].startswith("4"), "the corruption must leave the rung alone"
+    assert _extraction_mismatch(rows) == {"Target": ("4", "structured")}
+
+
+def test_a_working_rung_row_disclaiming_an_extraction_fails() -> None:
+    """Direction two, and the one that makes the rule worth having.
+
+    Without it, `—` would be an unconditional escape from the column: paste it
+    into all seven rows and every one is clean while the axis states nothing.
+    That is exactly how `unread` would have rotted REQ-13 had it not been
+    pinned, and how the Phase 2 count clause actually did rot.
+    """
+    rows = _matrix(_corrupt("Walmart", EXTRACTION, NO_EXTRACTION))
+
+    assert _extraction_mismatch(rows) == {"Walmart": ("1", NO_EXTRACTION)}
+
+
+def test_a_rung_one_dom_row_with_no_degraded_flag_fails_the_degraded_rule() -> None:
+    """The matrix half of the hole the runtime half closed, watched biting.
+
+    A rung-1 DOM adapter is cheap to write and the most fragile thing anyone
+    could add to this codebase. Before `Result.degraded` widened, it would have
+    shipped looking fully trustworthy — and before this rule widened with it,
+    its README row would have too, sitting at rung 1 beside GameStop's
+    schema.org feed with nothing to tell them apart.
+
+    GameStop's Status cell contains no `degrad` today, so this corruption
+    really does go red rather than being masked by prose that happens to
+    mention the word.
+    """
+    rows = _matrix(_corrupt("GameStop", EXTRACTION, "dom"))
+
+    assert rows["GameStop"][RUNG].startswith("1"), "the corruption must leave the rung alone"
+    assert not _extraction_mismatch(rows), "a rung-1 `dom` row is a coherent claim, not a mismatch"
+    assert _undeclared_degraded(rows) == ["GameStop"]
+
+
+def test_the_same_dom_row_declaring_degraded_is_clean() -> None:
+    """The rule is about the disagreement, not about the word `dom`.
+
+    Without this pair, `_undeclared_degraded` would be indistinguishable from
+    "no row may say `dom`" — which would make the honest state unrepresentable
+    and pressure exactly the padding every other gate here was built to stop.
+    A DOM reading that says it is degraded is a supported retailer, correctly
+    described.
+    """
+    corrupted = _corrupt("GameStop", EXTRACTION, "dom")
+    rows = _matrix(_corrupt_text(corrupted, "GameStop", STATUS, "✅ Working, `[degraded]`"))
+
+    assert rows["GameStop"][EXTRACTION] == "dom"
+    assert _undeclared_degraded(rows) == []
 
 
 def test_a_rung_three_row_stripped_of_degraded_fails_the_degraded_rule() -> None:
