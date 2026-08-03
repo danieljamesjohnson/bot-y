@@ -1355,3 +1355,56 @@ CSP header, so it would report both retailers as permanently blocked.
 US retail *including Target*. Without this, a Target refusal would have been
 misattributed to our extractor, and someone would have spent the phase debugging
 code that was working.
+
+## Phase 3 closing record (2026-08-03) — what shipped, what did not, and the count
+
+This is the phase's own summary, written where a reader looking for "so which
+retailers actually work" will find it. The per-retailer sections above are the
+evidence; this is what they add up to.
+
+**What shipped: nothing new, and that is the finding.** Phase 3 was scoped to
+two retailers — Target and Amazon — and both were settled at **rung 4 by their
+own written terms**, without a single request being made to a product page at
+either one. No adapter was written, no fixture was captured, no watch was added
+to `config/products.yaml`, and `boty/retailers.py` was not touched across the
+whole phase. The two additions are gates rather than detectors:
+`scripts/evidence_check.py` (03-01) and `tests/test_support_matrix.py` (03-03).
+
+**What did not ship, and why each one is a different kind of refusal:**
+
+| Retailer | Rung | What settled it | Product-page requests |
+|---|---|---|---|
+| Amazon | 4 | `LICENSE AND ACCESS` in its Conditions of Use forbids the **method** and independently names the **data** — "any collection and use of any product listings, descriptions, or prices" | **0** |
+| Target | 4 | `Unlawful or Prohibited Uses` in its Terms & Conditions forbids data extraction with **no commercial-use qualifier**, and the "limited license" carve-out closes rather than opens | **0** |
+| Pokémon Center | 4 | Settled in Phase 2 by a ladder walked to exhaustion: Imperva refuses `/product/*` at rung 1 and at rung 3, and `robots.txt` closes the API endpoints | n/a (Phase 2) |
+
+Amazon and Target are refusals of a different kind from Pokémon Center's. A wall
+can fall — Pokémon Center's section carries the two probes that would establish
+whether it has. A written prohibition does not, and the correct action for both
+of the hard two is that **nobody should look again**.
+
+### The retailer count: four, and criterion 5 is UNMET
+
+`boty check` reports **four** retailers — GameStop, Walmart, Nintendo and Best
+Buy — all control-verified and healthy. The roadmap's Phase 3 criterion 5 asks
+for five or more. It is **unmet**, and it is recorded rather than padded.
+
+This is the outcome the roadmap explicitly anticipated: *"If both are rung 4,
+this criterion is unmet and recorded as such, never padded with a retailer that
+does not carry the product."* It is also now **final rather than pending**:
+
+- Every retailer in the roadmap's Retailer Scope table is now either shipped or
+  carries a `**Verdict: REFUSED**` section in this document. There is no
+  seventh candidate; the US retail set for this device is the seven listed.
+- A control-only fifth was available and was declined. Micro Center was probed
+  in Phase 2, found viable at rung 1 with a real control and a real fixture, and
+  turned down because it does not carry the Pokémon GO Plus + and could never
+  alert on it. Adding it would have moved the counter without moving the goal.
+- Of the four that work, **three** carry the GO Plus + itself (GameStop, Walmart,
+  Nintendo). Best Buy is control-only: it does not appear to stock the product,
+  which is a disproof backed by two searches rather than an omission.
+
+`scripts/evidence_check.py --phase` now runs inside the offline suite, so
+`make verify` fails if a later edit configures a retailer outside that scope or
+leaves one inside it with no verdict. The only way to move this number is the
+honest one.

@@ -84,13 +84,18 @@ actually tried against each one, and what came back, is in
 | Amazon | 4 | none — its Conditions of Use forbid it. The licence to use the site excludes "any collection and use of any product listings, descriptions, or prices" and "any use of data mining, robots, or similar data gathering and extraction tools" | ❌ Dropped, and dropped without ever fetching a product page. The terms were read first, so the reason is a written prohibition rather than a wall we could not get past — a wall can fall and this cannot. Not configured |
 | Target | 4 | none — its Terms & Conditions forbid it. `Unlawful or Prohibited Uses` bars "any use of data extraction, scraping, mining or other data gathering tools" and "otherwise scrape, collect, store or use any Content … product listings, descriptions, prices or images", with no commercial-use qualifier. Rung 2 (RedSky) is closed separately: `redsky.target.com/robots.txt` is `Disallow: /` for every agent | ❌ Dropped, without ever fetching a product page. Note the direction of the disagreement: `www.target.com/robots.txt` does **not** disallow `/p/`, and Target publishes a product-detail sitemap — robots.txt is broader than the terms here, and the terms govern. Not configured |
 
-**Four working retailers, not five.** The roadmap's MVP bar was five, and this is
-what the bar actually bought: a retailer that cannot be read is dropped and
-documented rather than shipped as a detector with nothing behind it. **Three**
-fell out, for reasons worth telling apart — Pokémon Center was walked down the
-whole ladder and refused at every rung, while Amazon and Target were never
-probed at all, because each one's terms answer the question before a request
-would. None has been padded into the count.
+**Four working retailers, not five — and that is now the final answer, not a
+pending one.** The roadmap's MVP bar was five, and this is what the bar actually
+bought: a retailer that cannot be read is dropped and documented rather than
+shipped as a detector with nothing behind it. **Three** fell out, for reasons
+worth telling apart — Pokémon Center was walked down the whole ladder and
+refused at every rung, while Amazon and Target were never probed at all, because
+each one's terms answer the question before a request would. None has been
+padded into the count. The number did not move in Phase 3 because both of the
+retailers that could have moved it refused **in writing**, and the US retail set
+for this device holds no sixth candidate that stocks the product;
+[`QUESTIONS.md`](QUESTIONS.md) records that shortfall as a decision for the
+maintainer rather than a task somebody can close.
 [`docs/retailer-evidence.md`](docs/retailer-evidence.md) carries all three
 records, including which two probes would establish whether anything has changed
 at Pokémon Center, and why the answer for Amazon and Target is that nobody
@@ -100,10 +105,14 @@ That is the whole of the gap, incidentally: with Target settled, every retailer
 in the roadmap's scope is now either shipped or refused in writing. The bar is
 missed by one, and nothing about which retailer or why is left unrecorded.
 
-`scripts/evidence_check.py` is what stops that number drifting. It fails if a
-retailer outside the roadmap's scope is ever configured to make the count read
-five, and it fails if a retailer in scope is neither shipped nor recorded with a
-written refusal.
+`scripts/evidence_check.py` is what stops that number drifting, **and it runs on
+every `make verify`** — the offline suite invokes it against this tree, so it is
+not a script somebody has to remember. It fails if a retailer outside the
+roadmap's scope is ever configured to make the count read five, and it fails if
+a retailer in scope is neither shipped nor recorded with a written refusal.
+`tests/test_support_matrix.py` holds the table above to the same standard: every
+retailer in scope needs a rung of 1–4 here, and anything on rung 3 has to say
+`degraded` in its own row.
 
 **A browser is not a strict upgrade.** The same headless Chrome that reads Best
 Buy is served a Cloudflare wall by gamestop.com, which rung 1 reads on every

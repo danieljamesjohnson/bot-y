@@ -567,12 +567,43 @@ def test_the_configured_set_comes_from_config_load_not_a_second_yaml_parse(
 
 
 def test_the_real_shipped_evidence_document_passes_per_retailer() -> None:
-    """The three retailers already settled, checked against the real file.
+    """Every settled retailer, checked one at a time against the real file.
 
-    Deliberately per-retailer and NOT `--phase`: Target has no verdict until
-    03-02, so a whole-tree assertion here would go red between plans for a
-    reason that is not a defect. See the test above.
+    Per-retailer as well as `--phase` below, because the two fail differently:
+    this one names the retailer whose section is malformed, while the phase gate
+    reports which rule the tree as a whole broke. Being told "something is wrong
+    with the evidence log" is how a gate gets muted.
+
+    (Until 03-02 this was deliberately the ONLY real-tree check here, because
+    Target had no verdict and a whole-tree assertion would have gone red between
+    plans for a reason that was not a defect. Target is now settled at rung 4,
+    so the phase gate below can join it.)
     """
     evidence = REPO_ROOT / "docs" / "retailer-evidence.md"
-    for display in ("Best Buy", "Nintendo", "Pokémon Center", "Amazon"):
+    for display in ("Best Buy", "Nintendo", "Pokémon Center", "Amazon", "Target"):
         assert evidence_check.check_retailer(display, evidence) == [], display
+
+
+def test_the_shipped_tree_passes_the_whole_phase_gate() -> None:
+    """This line is what puts the honesty gate inside `make verify`.
+
+    A gate that only runs inside one plan's `verify` block dies with the plan.
+    This one runs in the `test` stage on every `make verify` from now on, so a
+    later edit that pads the retailer set with a store that cannot carry the
+    product, or leaves a roadmap retailer with no verdict at all, goes red
+    without anybody remembering to run a script.
+
+    It is deliberately NOT a new Makefile stage: the stage list and the four
+    exit codes are pinned by `tests/test_verify_makefile.py`, so a stage would
+    be a large change for no extra signal.
+
+    The problems are included in the message because "the phase gate failed" is
+    not actionable and "rule 2 (configured or refused): Target is not
+    configured and the evidence log records no section for it" is.
+    """
+    problems = evidence_check.check_phase(
+        REPO_ROOT / "config" / "products.yaml",
+        REPO_ROOT / "docs" / "retailer-evidence.md",
+    )
+
+    assert problems == [], "the shipped tree fails its own honesty gate:\n  " + "\n  ".join(problems)
