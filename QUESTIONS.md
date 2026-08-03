@@ -2,6 +2,52 @@
 
 Two things I cannot do myself. Everything else in the MVP is proceeding without them.
 
+## 0a. Amazon is rung 4 — settled by its Conditions of Use, without a single probe
+
+**Not blocking, and there is nothing for you to do.** Same shape as the Pokémon
+Center note below: a number that will not match the roadmap, written down before
+you have to ask about it.
+
+Amazon's Conditions of Use (retrieved 2026-08-03,
+`https://www.amazon.com/gp/help/customer/display.html?nodeId=GLSBYFE9MGKKQXXM`,
+document header `Last updated: May 30, 2025`) grant a licence to use the site
+that explicitly **excludes** —
+
+> …any collection and use of any product listings, descriptions, or prices; …
+> or any use of data mining, robots, or similar data gathering and extraction
+> tools.
+
+Availability and price are the only two things bot-y reads. There is no reading
+of that sentence under which this monitor is doing something else, and no
+transport changes which side of it we are on. So it is **rung 4**, and the
+decisive reason is a written prohibition rather than a wall — which is the more
+durable finding, because a wall can fall and this cannot.
+
+- **Zero requests were made to any Amazon product page.** The terms were read
+  first, deliberately, so that `docs/retailer-evidence.md` could say plainly
+  that bot-y makes no requests to amazon.com. Six `curl` requests total, all to
+  policy and developer-documentation pages, spaced 22–24 s apart.
+- **robots.txt is narrower than the ToU, and they disagree.** `/dp/<ASIN>`
+  carries no `Disallow`, but `/dp/product-availability/` and `/gp/offer-listing/`
+  — the paths that most directly answer the stock question — are closed. Reading
+  `/dp/` because robots.txt forgot to mention it, while the ToU names prices, is
+  the posture this project has already ruled out.
+- **Rung 2 is closed too, and it moved recently.** The Product Advertising API 5
+  is deprecated and now answers HTTP 403. Its successor, the Creators API,
+  requires an Amazon Associates account — a commercial agreement, plus a tax
+  interview, a Partner Tag and per-region approval. A fresh clone cannot get
+  that, which is the same test Best Buy's API failed.
+
+**What it costs:** the fifth retailer, if Target also refuses. That is criterion
+5 of Phase 3 and it would then be recorded as unmet rather than padded. Nothing
+is blocked on you either way, and Target is the next plan.
+
+Full evidence, including the quoted clause in context and the six requests with
+their byte counts, is in `docs/retailer-evidence.md` under `## Amazon`. This
+phase also shipped `scripts/evidence_check.py`, which makes the shortfall
+mechanically impossible to paper over later — Phase 2's version of that gate had
+decayed into one that could no longer fail.
+
 ## 0. Pokémon Center is rung 4 — the MVP ships with FOUR retailers, not five
 
 **Not blocking, and there is nothing for you to do. This is a heads-up about a

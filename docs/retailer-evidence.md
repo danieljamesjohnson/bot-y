@@ -199,6 +199,51 @@ Use above are not suspended by holding an Associates account. The Creators API i
 a sanctioned path for affiliate publishers to *promote* products, not a
 back-channel around the clause that forbids collecting prices.
 
+### What was NOT done, and why
+
+- **No product page was ever requested.** Not at rung 1, not at rung 3, not
+  once. The Conditions of Use were read first precisely so this sentence could
+  be written: **bot-y makes no requests to amazon.com.** There is no watch in
+  `config/products.yaml`, no `FIRST_PARTY["amazon"]` entry, no dispatch branch
+  and no fixture under `tests/fixtures/amazon/`. `amazon` remains in
+  `boty.retailers.MARKETPLACES` — it is the archetypal buy-box marketplace and
+  that entry is a statement about the retailer, not a claim to support it.
+- **No transport work at all.** This is the difference from Pokémon Center,
+  which cost ten probes across two transports and two WAF vendors before a desk
+  review of its Terms produced the reason that actually settled it. Here the
+  reading came first, so nothing was spent finding out how well-defended a page
+  is that we would not be entitled to read either way. `.planning/ROADMAP.md`
+  asks for reachability to be established "cheaply *before* investing in an
+  adapter"; six policy reads is as cheap as that gets.
+- **The Creators API was not signed up for.** Rung 2 exists on paper and the
+  fresh-clone rule closes it — see above. Obtaining the credential personally
+  would have made *this host* able to read Amazon while every clone of this repo
+  could not, which is a footnote in the README rather than support, and the
+  clause forbidding collection of prices is not suspended by holding one anyway.
+- **The `/dp/<ASIN>` gap in robots.txt was not walked through.** It is real: the
+  bare product path carries no `Disallow`. Taking it because the narrower
+  technical file omits it, while the broader written one names prices
+  explicitly, is the posture `03-CONTEXT.md` locks this project out of.
+
+### If somebody revisits this later
+
+**Do not re-probe.** There is nothing to re-probe: no wall was measured, so
+there is no wall that could weaken. Periodically retrying a retailer whose terms
+forbid automated interaction — waiting for enforcement to lapse, or for a
+fingerprint to start working — is exactly the behaviour this project should not
+have, and here there is not even the excuse of a technical question left open.
+A clean HTTP 200 from `/dp/<ASIN>` would prove only that we had been rude
+successfully.
+
+**What would actually change this** is Amazon saying something different. A
+product-availability signal a non-commercial user can subscribe to; a Creators
+API tier that does not require an affiliate relationship and whose licence
+permits reading stock for personal use; or a revision of the LICENSE AND ACCESS
+clause that stops naming prices. Any of those is a genuine rung 2 and would be
+worth wiring up the same afternoon. The retrieval date and the `Last updated`
+header above are recorded so a future reader can tell at a glance whether the
+document they are looking at is the one this verdict was based on.
+
 ### Why this is the plan succeeding
 
 The roadmap's criterion for this retailer is "Amazon reports stock, **or** the
