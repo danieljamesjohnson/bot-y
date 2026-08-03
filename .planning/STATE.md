@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 03.1-05-PLAN.md (Extraction axis) — wave 3 done, wave 4 (03.1-02, Target) unblocked
-last_updated: "2026-08-03T12:35:47.933Z"
+stopped_at: Completed 03.1-02-PLAN.md (Target). Wave 4 done; wave 5 (03.1-03, Amazon) unblocked
+last_updated: "2026-08-03T13:18:12.323Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 17
-  completed_plans: 13
-  percent: 60
+  completed_plans: 14
+  percent: 82
 ---
 
 # State: bot-y
@@ -27,15 +27,15 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Milestone:** v1.0
 **Phase:** 03.1 of 5 (Target and Amazon, supported) — INSERTED, reverses a Phase 3 decision
-**Plan:** 3 of 4 complete
-**Last session:** 2026-08-03T12:34:55.727Z
-**Stopped At:** Completed 03.1-05-PLAN.md (the Extraction axis). Wave 3 done; wave 4 (03.1-02, Target) unblocked
+**Plan:** 4 of 4 complete
+**Last session:** 2026-08-03T13:17:25.572Z
+**Stopped At:** Completed 03.1-02-PLAN.md (Target). Wave 4 done; wave 5 (03.1-03, Amazon) unblocked
 **Last Activity:** 2026-08-03
-**Last Activity Description:** 03.1-05 shipped the Extraction axis. `Extraction` (`structured` | `dom`) now sits beside `Rung` as a second, independent axis — nothing renumbered — and `Result.degraded` widened to `self.rung is Rung.BROWSER or self.extraction is Extraction.DOM`. That closes a latent hole: `degraded` was derived from the rung alone, so a rung-1 DOM adapter would have shipped looking fully trustworthy. `status.json` publishes `extraction`, `boty check` gained a `[dom]` tag, the dashboard a `.tag.dom`, M6 was re-anchored and M7 added over the dom disjunct alone (7/7 caught). The README matrix is seven columns with `_extraction_mismatch` tying the Extraction cell to the Rung cell both ways. `make verify` bare-PASS under the service EnvironmentFile with 4/4 live controls. No retailer registered, no fixture captured, no verdict changed — the count stays at four.
+**Last Activity Description:** 03.1-02 registered **Target — the fifth retailer**, at rung 3 with `dom` extraction, **control-only**. Its pages carry no structured data at all, so `parse.add_to_cart_offers` reads the rendered add-to-cart button: enabled means buyable, `disabled=""` means out of stock. That distinction is measured, not assumed — Target KEEPS the button and disables it — which is what lets the reader return `None` (UNKNOWN) for an absent control without trading anything away. `check_target_browser` labels `rung=browser` + `extraction=dom` on every path, and `_verdict_from_html` gained an opt-in `allow_dom` that carries `extraction=` on all six returns including the no-offers UNKNOWN (plan-check W-2 closed). `FIRST_PARTY['target']` stopped being an unverifiable guess and became a statement about our own reader's output. M8 mutates the availability decision; 8/8 caught. Live: **5/5 controls**, Target IN_STOCK $12.59, `[control] [degraded] [dom]`, full pass 40.1 s of REQ-08's 120 s, `make verify` bare-PASS. **The fixture nearly repeated the incident that destroyed this repo:** the raw capture carried a session token, a visitor id, Akamai's geolocation of this host and five nearby stores with street addresses — and the automated leak guard PASSED on it, because it knew EdgeScape's `lat=` form and Target writes JSON. Redacted by emptying every `<script>`; the guard was then widened and **found the same leak class already committed in two Walmart and two Best Buy fixtures**, including this host's own ZIP, public since Phase 2. All redacted. Target still cannot watch the GO Plus + — it delisted the product — so ROADMAP criterion 1 stands UNMET.
 
-**Previously:** Target probed for the first time — three pages, all HTTP 200, no challenge, no block phrase, `"isBot": false` — and ZERO price/availability/seller on any of them; Target renders stock from `redsky.target.com` (`Disallow: /`). ALSO a disproof: Target delisted the GO Plus + (TCIN 88714054 was 200 in 2025-05, now 404s), so it can only ever be control-only. Both escalations then ANSWERED by Dan 2026-08-03: (a) QUESTIONS.md 0d — proceed at rung 3, the browser fetches RedSky at our instruction and that is recorded in the open; (b) ROADMAP criterion 1 stays UNMET, amendment declined. Phase replanned to 5 plans: 03.1-05 adds an Extraction axis (structured|dom) so `degraded` fires on browser transport OR dom extraction.
+**Previously:** 03.1-05 shipped the **Extraction axis** — `Extraction` (`structured` | `dom`) beside `Rung` as a second independent axis, nothing renumbered, with `Result.degraded` widened to `self.rung is Rung.BROWSER or self.extraction is Extraction.DOM`. That closed a latent hole before the adapter that would have exposed it, and 03.1-02 is the adapter: Best Buy and Target are both "browser", and only the extraction axis says that one reads a schema.org feed and the other reads markup a reskin breaks silently. Before that, the rung-1 probe (`c79e8ce`, kept as `03.1-02-PROBE-RECORD.md`) found Target serving the page and withholding the data, and disproved that Target still lists the GO Plus +.
 **Resume File:** None
-**Next command:** `/gsd-autonomous --from 03.1` — resume at **wave 4 (03.1-02, Target)**. Before executing it, apply the plan-check fixes that are now live: **B-1** (carry the `sudo systemd-run --property=EnvironmentFile=/home/dan/.config/boty/env` wrapper into every step of 03.1-02 and 03.1-03 that touches the browser rung or `control_check.py` — a bare shell cannot start Chrome and `make verify` turns that into a green), **B-2** (03.1-04's `must_haves` still names the six-cell README header, which no longer exists — the string is now `| Retailer | Rung | Extraction | robots.txt | Terms | Method | Status |`), and **W-2** (`_verdict_from_html`, not `check_target_browser`, produces the no-offers verdict, so it needs `Extraction.DOM` stated explicitly when `allow_dom=True`). Still halting before Phase 4 — PyPI and the v1.0.0 tag are Dan's to trigger
+**Next command:** `/gsd-autonomous --from 03.1` — resume at **wave 5 (03.1-03, Amazon)**. Three things it needs, all recorded in `03.1-02-SUMMARY.md`: (1) **§ Target is now a REACHABLE section carrying two historical `**Refusal observed (rung N):**` lines**, and the rung-1 one's body says *"not a block — **HTTP 200**"* — rule 6 must be proved to ignore them, and plan-check B-3's option (a) does NOT fix that line, since it has both a status code and two byte counts and still records a non-refusal; (2) `_SHIPPED` in `tests/test_evidence_check.py` is still the four retailers and feeds synthetic trees — widen at the call site, not the constant; (3) five retailers are configured, so `evidence_check` rule 3 no longer fires on a landed HARD_TWO member. **B-2 is still live for 03.1-04**: its `must_haves` names the six-cell README header, which no longer exists — the string is `| Retailer | Rung | Extraction | robots.txt | Terms | Method | Status |`. Still halting before Phase 4 — PyPI and the v1.0.0 tag are Dan's to trigger
 
 ## What Exists
 
@@ -88,6 +88,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 03.1 P01 | 62min | 3 tasks | 5 files |
 | Phase 03.1 P02 | 78min | 1 tasks | 3 files |
 | Phase 03.1 P05 | 8min | 2 tasks | 11 files |
+| Phase 03.1 P02 | 35min | 3 tasks | 21 files |
 
 ## Decisions
 
@@ -136,6 +137,9 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 03.1]: Result.degraded widened to fire on a browser transport OR a dom extraction, with a mutation per disjunct — It was derived from the rung alone, so a rung-1 DOM adapter — the most fragile thing this codebase could acquire — would have shipped looking fully trustworthy; M6 dying proves the flag exists, only M7 proves the new half is load-bearing
 - [Phase 03.1]: Result.extraction declared LAST with a default of STRUCTURED, and Extraction fed into neither Availability nor Health — Every pre-existing construction site stays valid and keeps its meaning; a fourth Availability member is a KeyError in cli.SYMBOL mid-report, and a dom reading flipping Health.ok would raise a permanent health warning that never clears
 - [Phase 03.1]: The README Extraction cell is tied to the Rung cell in BOTH directions — a rung-4 row must say '—' and a working-rung row never may — A '—' accepted unconditionally would be the REQ-13 escape hatch UNREAD_POSITIONS had to be pinned against: paste it into all seven rows and the column distinguishes nothing while looking filled in
+- [Phase 03.1]: Target is the fifth retailer: rung 3 + dom extraction, control-only, every reading degraded. Its pages carry NO structured data, so the rendered add-to-cart button is the only stock signal there is.
+- [Phase 03.1]: FIRST_PARTY['target'] is now a statement about our own reader's output (parse.TARGET_FIRST_PARTY_SELLER) rather than an unverifiable guess about Target's markup — Target publishes no seller name at any rung.
+- [Phase 03.1]: The rung-3 Target fixture leaked this host's geolocation, a session token and nearby-store addresses, and the automated guard PASSED on it. Redacted by emptying every <script> body; the guard was widened and then found the same leak class already committed in 4 walmart/bestbuy fixtures.
 
 ### Blockers
 
