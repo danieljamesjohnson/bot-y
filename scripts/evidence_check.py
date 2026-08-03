@@ -133,23 +133,36 @@ REFUSED = "**Verdict: REFUSED**"
 _HEADING_RE = re.compile(r"^## (.+)$", re.MULTILINE)
 
 
-def split_sections(text: str) -> dict[str, str]:
-    """Map each `## ` heading to its body, in document order.
+def split_sections(text: str) -> list[tuple[str, str]]:
+    """Every `## ` heading paired with its body, in document order.
 
     Everything above the first heading is excluded BY CONSTRUCTION rather than
     by a filter somebody could later forget. That preamble is where the evidence
     log spells out the verdict vocabulary, so a checker able to see it would
     find both verdict strings in a document containing no findings whatsoever.
+
+    A LIST OF PAIRS, NOT A DICT, AND THAT IS LOAD-BEARING. Keying on the heading
+    means two sections with the SAME heading overwrite rather than accumulate,
+    and the one that survives is whichever came last in the file. `check_retailer`
+    has a bespoke failure for exactly that case — "two records of one retailer
+    means nothing here can tell which is current" — and a dict makes it
+    unreachable for the likeliest duplicate there is: a re-record appended under
+    a copy-pasted heading. A self-contradicting evidence log then passes clean,
+    with document order silently choosing its verdict. Both existing duplicate
+    tests used deliberately DISTINCT headings, so the hole was invisible to the
+    suite; `test_two_sections_under_the_same_heading_fail` covers it now.
     """
-    sections: dict[str, str] = {}
     matches = list(_HEADING_RE.finditer(text))
-    for i, match in enumerate(matches):
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        sections[match.group(1).strip()] = text[match.end() : end]
-    return sections
+    return [
+        (
+            match.group(1).strip(),
+            text[match.end() : (matches[i + 1].start() if i + 1 < len(matches) else len(text))],
+        )
+        for i, match in enumerate(matches)
+    ]
 
 
-def sections_for(display_name: str, sections: dict[str, str]) -> list[str]:
+def sections_for(display_name: str, sections: list[tuple[str, str]]) -> list[str]:
     """Bodies of every section whose heading BEGINS WITH `display_name`.
 
     Prefix rather than equality because the headings carry a parenthetical of
@@ -159,7 +172,7 @@ def sections_for(display_name: str, sections: dict[str, str]) -> list[str]:
     and "two people wrote it down and we cannot tell which is current" send a
     reader to completely different places.
     """
-    return [body for heading, body in sections.items() if heading.startswith(display_name)]
+    return [body for heading, body in sections if heading.startswith(display_name)]
 
 
 def verdict_lines(body: str) -> list[str]:

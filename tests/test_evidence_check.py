@@ -238,6 +238,59 @@ def test_two_sections_for_one_retailer_fail(tmp_path: Path) -> None:
     assert "2 sections" in problems[0]
 
 
+def test_two_sections_under_the_same_heading_fail(tmp_path: Path) -> None:
+    """The duplicate the two tests above could not reach, and the likelier one.
+
+    Both existing duplicate cases use deliberately DISTINCT headings — "Amazon
+    (amazon.com)" beside "Amazon, revisited", "Amazon (x)" beside "Amazon (y)" —
+    so they exercise the prefix match rather than the collapse. The realistic
+    mistake is the opposite: appending a re-record under a copy-pasted heading.
+    While `split_sections` returned a dict that case did not fail at all, it
+    OVERWROTE, and the surviving record was whichever came last in the file.
+    """
+    evidence = _write_evidence(
+        tmp_path,
+        [("Amazon (amazon.com)", _REFUSED), ("Amazon (amazon.com)", _REACHABLE)],
+    )
+
+    problems = evidence_check.check_retailer("Amazon", evidence)
+    assert len(problems) == 1
+    assert "2 sections" in problems[0]
+
+
+def test_a_repeated_heading_does_not_let_the_last_record_win(tmp_path: Path) -> None:
+    """Document order must not be what decides a verdict.
+
+    The same two records in either order: a REFUSED and a REACHABLE for one
+    unconfigured retailer is a contradiction, and it has to read as one from
+    both directions. Under the dict splitter each order quietly produced the
+    LAST record's verdict, so `--phase` returned `[]` for one ordering and would
+    have returned `[]` for the other — a self-contradicting log certified clean,
+    twice, for opposite reasons.
+    """
+    for i, pair in enumerate(
+        [
+            [("Amazon (amazon.com)", _REFUSED), ("Amazon (amazon.com)", _REACHABLE)],
+            [("Amazon (amazon.com)", _REACHABLE), ("Amazon (amazon.com)", _REFUSED)],
+        ]
+    ):
+        evidence = _write_evidence(
+            tmp_path / f"order{i}",
+            [
+                ("Pokémon Center (pokemoncenter.com)", _REFUSED),
+                ("Target (target.com)", _REFUSED),
+                *pair,
+            ],
+        )
+        config = _write_config(tmp_path / f"order{i}", _SHIPPED)
+
+        problems = evidence_check.check_phase(config, evidence)
+
+        assert len(problems) == 1, (pair, problems)
+        assert "Amazon" in problems[0]
+        assert "rule 2" in problems[0].lower()
+
+
 def test_the_two_section_message_differs_from_the_missing_section_message(
     tmp_path: Path,
 ) -> None:
