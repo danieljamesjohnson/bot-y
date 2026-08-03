@@ -1371,6 +1371,264 @@ US retail *including Target*. Without this, a Target refusal would have been
 misattributed to our extractor, and someone would have spent the phase debugging
 code that was working.
 
+## Where robots.txt and the terms disagree, per retailer (REQ-13)
+
+**Written 2026-08-03, Phase 3.1 plan 01.**
+
+The `README.md` support matrix states a robots.txt position and a terms position
+for every row, and this section is where those cells come from. REQ-13 exists
+because at Target the two signals point in opposite directions — `robots.txt`
+permits `/p/` and publishes a product-detail sitemap, while the Terms &
+Conditions forbid using data-gathering tools on the Site at all — and a matrix
+that printed only the resolved verdict would hide the very thing a reader needs
+in order to reach their own conclusion from the same facts. So both are stated,
+side by side, and where they conflict the row says so.
+
+**The two `silent`s are not the same claim, and conflating them is the easiest
+mistake to make here.**
+
+- `robots.txt` is a **deny-list**. A path with no matching rule in the `*` group
+  is *permitted* — silence there is permission, and that is why the matrix cell
+  says `permits` for a path nothing disallows rather than hedging.
+- A terms document is **prose**. Silence there is only the absence of a
+  prohibition. It is not a licence, and it can be read as one only by someone who
+  wants to.
+
+**A fourth position exists, and it is the honest one: `unread`.** Three of the
+four retailers approached for this section refused the policy document itself.
+Writing `permits` or `silent` for a document nobody has read would be inventing
+evidence to fill a column — the same failure the retailer count was gated against
+in Phase 2, one table over. `unread` states what is actually known: which URL was
+requested, on what date, and exactly how it was refused. Which rows may carry it
+is pinned literally in `tests/test_support_matrix.py`
+(`UNREAD_POSITIONS`), so it cannot spread to a new row without a deliberate edit
+to a red test.
+
+### The seven, at a glance
+
+| Retailer | Path this repo fetches | robots.txt | Terms | Disagree? |
+|---|---|---|---|---|
+| GameStop | `/…/products/…` (PDP) | unread — `robots.txt` refused, HTTP 403 Cloudflare, 2026-08-03 | unread — not requested; the no-escalation rule moved on after the refusal above | no position to compare |
+| Walmart | `/ip/<slug>/<id>` | permits — no rule in the `*` group matches `/ip/`, and item-page sitemaps are published, 2026-08-03 | unread — the terms URL served a `Robot or human?` challenge, 2026-08-03 | no position to compare |
+| Best Buy | `/site/searchpage.jsp`, `/site/…/….p` | unread — connection-layer refusal, HTTP/2 `INTERNAL_ERROR`, 2026-08-03 | unread — same refusal, same day | no position to compare |
+| Nintendo | `/us/store/products/<slug>/` | permits — `User-agent: * / Allow: /`, nothing matches the store path, store sitemap published, 2026-08-03 | forbids — § 6 bars "any robot … spider, crawler, scraper or other automated means", 2026-08-03 | **yes** |
+| Pokémon Center | `/product/<id>/…` | permits — `/product/*` is explicitly not disallowed (the API paths are), Phase 2 | forbids — bars "any data mining, robots or similar data gathering or extraction methods", Phase 2 | **yes** |
+| Target | `/p/<slug>/-/A-<TCIN>` | permits — the only `/p/` rule is `/p/premium-registry`; `sitemap_pdp-index.xml.gz` published, 2026-08-02 | forbids — `Unlawful or Prohibited Uses` bars data extraction and bars using prices at all, 2026-08-02 | **yes** |
+| Amazon | `/dp/<ASIN>` | permits — no rule matches `/dp/<ASIN>`; `/dp/product-availability/` and `/gp/offer-listing/` ARE disallowed, 2026-08-02 | forbids — the licence excludes "any use of data mining, robots, or similar data gathering and extraction tools", 2026-08-02 | **yes** |
+
+Amazon, Target and Pokémon Center are **cited, not re-derived**: their
+`robots.txt` files and terms documents were read in Phase 2 and Phase 3, the
+observations are recorded in their sections above, and nothing about them was
+re-requested for this section. Phase 3.1 revises the *conclusions* drawn from
+that evidence; the evidence itself stands.
+
+Four rows disagree and three have no position to compare. **No row agrees** —
+that is a fact about today's tree rather than a property of the rule, and
+`tests/test_support_matrix.py` builds the agreeing case by corruption so the
+`⚠ disagree` marker is watched coming off as well as going on.
+
+### What was requested for this section, and what it cost
+
+**Budget: 8 requests, ≥ 15 s apart, no retries, no escalation. 7 were spent**,
+all at 16 s spacing, every one of them a `robots.txt` or a public policy
+document. No product page was fetched, no fixture was captured, and no request
+was repeated.
+
+`scripts/control_check.py`, before the first request and after the last:
+
+```
+before  2026-08-03T10:32Z   control check: PASS — 4/4 controls in stock
+after   2026-08-03T10:36Z   control check: PASS — 4/4 controls in stock
+             retrying gamestop/CONTROL — PS5 console: fetch failed: HTTP 403
+```
+
+**Read that second line rather than the PASS on the end of it.** The GameStop
+control needed a retry after a 403 — the first time this repo has recorded one
+on a control — and it happened minutes after plain `curl` was refused 403 by
+`gamestop.com/robots.txt` from the same host. The retry succeeded and the
+monitor is fine, so this is a near miss and not a failure. It is also exactly the
+cost the politeness budget exists to avoid: a blocked IP costs a working monitor,
+and the retailer that pushed back is one of the four this repo actually watches.
+It is the reason no eighth request was spent going back to GameStop for its
+terms page.
+
+**One deviation from the budget, recorded because it was a real slip.** The rule
+is "on a refusal, record it and move to the next *retailer*". The refusal guard
+was written against HTTP ≥ 400 and Best Buy refused at the transport layer with
+no status code at all, so the guard did not fire and the Best Buy terms request
+went out after the Best Buy `robots.txt` request had already been refused. One
+request too many to a retailer that had just said no. It was not a retry — a
+different document — and the total stayed under the cap, but the instruction was
+"move on" and it did not.
+
+### GameStop — `robots.txt` refused, terms not reached
+
+| Request | Result |
+|---|---|
+| `https://www.gamestop.com/robots.txt` | **HTTP 403**, 4,572 B, `text/html`. Not a `robots.txt` at all: a Cloudflare interstitial titled `Attention Required! | Cloudflare` |
+| GameStop terms of use | **not requested.** After the refusal above, the no-escalation rule moves to the next retailer |
+
+The refusal page says, in full sentences:
+
+> Sorry, you have been blocked
+>
+> You are unable to access gamestop.com
+>
+> This website is using a security service to protect itself from online attacks.
+> The action you just performed triggered the security solution.
+
+**Nothing else from that page is transcribed here, and that is deliberate.** The
+body also carried a Cloudflare Ray ID and *this host's public IPv6 address*.
+Committing either into a public repository is the leak that cost this project a
+whole repository on 2026-08-03 (`03.1-CONTEXT.md`, "rung-3 captures leak the
+capturing host's identity"), and a refusal page is a fixture by another name.
+Only the vendor's own boilerplate is quoted.
+
+Worth stating plainly, because it is the finding rather than a footnote:
+**GameStop serves this repo product pages at rung 1 on every `make verify`, and
+refused it the `robots.txt` that would say whether it wants to.** The difference
+is the transport — `boty.fetch.get` replays a real Chrome TLS ClientHello via
+`curl_cffi`, and plain `curl` does not. Re-requesting through the impersonating
+transport would be escalation, which the phase forbids, so GameStop's position is
+`unread` and stays there until somebody decides that question deliberately.
+
+### Walmart — `robots.txt` read, terms refused behind an HTTP 200
+
+| Request | Result |
+|---|---|
+| `https://www.walmart.com/robots.txt` | **HTTP 200**, 3,584 B, `text/plain`. One `*` group, ~60 `Disallow` lines, 40 `Sitemap:` lines |
+| `https://www.walmart.com/terms-of-use` | **HTTP 200**, 15,195 B — but redirected to `https://www.walmart.com/blocked?url=…&uuid=…` and titled `Robot or human?`. A challenge page, not the terms |
+
+**The path this repo fetches is `/ip/<slug>/<id>`, and no rule in the `*` group
+matches it.** The `Disallow` list is checkout, account, internal APIs, search and
+store-locator paths:
+
+```
+User-agent: *
+Disallow: /account/
+Disallow: /api/
+Disallow: /search
+Disallow: /orders
+Disallow: /typeahead/
+Disallow: */api/wpa
+```
+
+There is no `/ip/` rule, and Walmart publishes item-page sitemaps by name:
+
+```
+Sitemap: https://www.walmart.com/sitemap_hi_ip.xml
+Sitemap: https://www.walmart.com/sitemap_itp_01.xml
+Sitemap: https://www.walmart.com/sitemap_itp_02.xml
+Sitemap: https://www.walmart.com/sitemap_product_03.xml
+```
+
+Note `Disallow: /search` — a discovery path this repo does not use for Walmart
+and now has a written reason not to. `Crawl-delay: 5` is set, but only for
+`Slurp`.
+
+**The terms are `unread`, and the shape of that refusal is the one this project
+already has a name for.** HTTP 200 with a challenge body is exactly the Pokémon
+Center interstitial pattern recorded above — a status code that says yes over a
+page that says no. Recorded as a refusal, not as a document, and not retried.
+
+### Best Buy — refused at the connection layer, both documents
+
+| Request | Result |
+|---|---|
+| `https://www.bestbuy.com/robots.txt` | **no HTTP status**, 0 B. `curl: (92) HTTP/2 stream 1 was not closed cleanly: INTERNAL_ERROR (err 2)` |
+| `https://www.bestbuy.com/site/help-topics/terms-and-conditions/pcmcat204400050067.c?id=pcmcat204400050067` | **no HTTP status**, 0 B. Identical `curl: (92)` reset |
+
+This corroborates the Best Buy finding already in this document rather than
+adding a new one: *"Best Buy refuses impersonated HTTP at the connection layer
+regardless of TLS fingerprint — HTTP/2 stream reset, HTTP/1.1 timeout"*. That was
+recorded for product pages; it holds for `/robots.txt` and for the terms page
+too, and plain `curl` is refused the same way `curl_cffi` was. Best Buy is read
+here at rung 3, through a real browser, and the two policy documents are the one
+thing nobody has pointed a browser at.
+
+Both positions are `unread`. Best Buy is the only retailer in scope with neither
+signal recorded.
+
+### Nintendo — both read, and they disagree
+
+| Request | Result |
+|---|---|
+| `https://www.nintendo.com/robots.txt` | **HTTP 200**, 5,167 B, `text/plain`, 2026-08-03 |
+| `https://www.nintendo.com/us/terms-of-use/` | **HTTP 200**, 260,998 B, `text/html`, 2026-08-03. The document carries `Last Updated: May 24, 2016` |
+
+**robots.txt permits the path this repo fetches.** The file opens with the `*`
+group, and it is one line:
+
+```
+User-agent: *
+Allow: /
+```
+
+Every `Disallow: /` below it is scoped to a *named* crawler — `Kangaroo Bot`,
+`Nutch`, `Omgili`, `PanguBot`, `PetalBot`, `Timpibot` and others. A second `*`
+group near the end adds four rules, none of which matches a store path:
+
+```
+User-agent: *
+Disallow: /sg/support/qa-list
+Disallow: /my/support/qa-list
+Disallow: /th/support/qa-list
+Disallow: /ph/support/qa-list
+```
+
+Nothing in the file matches `/us/store/products/<slug>/`, and the store
+catalogue is published as a sitemap:
+
+```
+Sitemap: https://www.nintendo.com/us/store/sitemap.xml
+```
+
+This corroborates the Phase 2 reading in the Nintendo section above
+(`User-agent: * / Allow: /`, only named bots disallowed) from a different
+transport, ten months of site changes later.
+
+**The same file ends with a prohibition that is not a directive.** The last four
+lines are `#` comments — mechanically inert, and a statement of the operator's
+wishes all the same:
+
+> Nintendo Co., Ltd. and its affiliated companies ("Nintendo") therefore
+> explicitly reserve all their rights in any content made available […] Any use
+> of such content for the development, training, programming, improvement and/or
+> enhancement of artificial intelligence (including, but not limited to,
+> generative AI systems), web scraping, machine learning, or any form of text or
+> data mining by any means, is strictly prohibited, unless specifically and
+> explicitly authorized in writing by the Nintendo company that owns the
+> respective rights.
+
+A parser sees `Allow: /`. A reader sees "web scraping … is strictly prohibited".
+The matrix cell reports the directive, because that is what the column is for,
+and this paragraph is why the row is not the whole story.
+
+**The Terms of Use forbid automated access, in the same words as Amazon's and
+Target's.** § 6, *Acceptable Use of the Services*, under "You further agree not
+to":
+
+> Use any robot, iframe, spider, crawler, scraper or other automated means or
+> interface not provided by us to access the Services, including, without
+> limitation, for the purpose of copying, extracting, aggregating, displaying,
+> publishing or distributing any content or data made available via Services.
+
+The same list also bars any use that "could interfere with, disrupt, negatively
+affect or inhibit other users" or that "could damage, disable, overburden or
+impair the functioning of the Services" — the load-shape clause, which a 5-minute
+cadence against one URL does not come close to, and which is the only clause here
+that turns on *how much* rather than *by what means*.
+
+**So Nintendo's two signals point in opposite directions, and Nintendo is a
+retailer this repo ships.** That is a sharper instance of the same disagreement
+recorded at Target, Amazon and Pokémon Center, and it is recorded here in the
+same words rather than softened because this one is already in
+`config/products.yaml`. Phase 3.1's premise (`03.1-CONTEXT.md`) is that a written
+prohibition is a fact to state rather than an instruction this project takes —
+"bot-y is a bot for humans" — so the row says `⚠ disagree` and the watch stays.
+A reader who weighs it differently now has the clause, the URL and the date to
+weigh it with, which is the whole of REQ-13.
+
 ## Phase 3 closing record (2026-08-03) — what shipped, what did not, and the count
 
 This is the phase's own summary, written where a reader looking for "so which
