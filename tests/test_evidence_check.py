@@ -194,6 +194,88 @@ def test_the_preamble_alone_satisfies_nothing(tmp_path: Path) -> None:
         ), display
 
 
+#: A markdown example of the format, exactly as a "how to record a verdict"
+#: section would carry it. Every character of it is real grammar; none of it is
+#: a finding. Written as a raw triple-quoted string with the fence inside so the
+#: test document really does contain a fence.
+_FENCED_EXAMPLE = """\
+Nothing was actually probed. This section documents the format.
+
+```markdown
+## Amazon (amazon.com)
+
+**Verdict: REFUSED**
+```
+"""
+
+
+def test_a_fenced_example_of_the_format_is_not_a_record(tmp_path: Path) -> None:
+    """`test_the_preamble_alone_satisfies_nothing`, one route along.
+
+    The preamble exclusion is by construction and holds. It does not cover the
+    other place this document talks about its own grammar: a fenced template.
+    Neither the heading regex nor the verdict regex can see a fence, so before
+    `strip_fences` this document — whose only content is an example and the
+    sentence "Nothing was actually probed." — certified Amazon as properly
+    recorded. Same failure as the Phase 2 substring clause, different door.
+    """
+    path = tmp_path / "retailer-evidence.md"
+    path.write_text(_PREAMBLE + _FENCED_EXAMPLE, encoding="utf-8")
+
+    for display in evidence_check.ROADMAP_RETAILERS.values():
+        assert (
+            evidence_check.main(["--retailer", display, "--evidence", str(path)]) == 1
+        ), display
+
+
+def test_a_fenced_example_below_a_real_record_does_not_replace_it(tmp_path: Path) -> None:
+    """The compounding case, and the reason this is not merely cosmetic.
+
+    An example naturally uses a real retailer's name, which produces a heading
+    IDENTICAL to that retailer's real section. So the two failures multiply: the
+    dict splitter would have let the example overwrite the record, and with the
+    splitter fixed the example instead reads as a second record and trips the
+    duplicate rule. Either way a documentation edit silently breaks the log.
+    Neither happens now — the record stands and the example is not a section.
+    """
+    path = tmp_path / "retailer-evidence.md"
+    path.write_text(
+        _PREAMBLE
+        + f"## Amazon (amazon.com)\n\n{_REFUSED}\n---\n\n"
+        + "## How to record a verdict\n\n"
+        + _FENCED_EXAMPLE,
+        encoding="utf-8",
+    )
+
+    assert evidence_check.check_retailer("Amazon", path) == []
+    assert [heading for heading, _ in evidence_check.split_sections(
+        path.read_text(encoding="utf-8")
+    )] == ["Amazon (amazon.com)", "How to record a verdict"]
+
+
+def test_stripping_fences_leaves_the_real_documents_records_alone() -> None:
+    """The shipped log is 1400+ lines with 20-odd fenced blocks. Read it.
+
+    A fence regex that mispairs — closing a ``` block on a ~~~, or running greedy
+    across two blocks — would swallow whole sections of the real document and
+    every gate downstream would go quiet about them. This asserts the count of
+    real records and verdicts survives the strip, against the actual file.
+    """
+    text = (REPO_ROOT / "docs" / "retailer-evidence.md").read_text(encoding="utf-8")
+
+    headings = [heading for heading, _ in evidence_check.split_sections(text)]
+    verdicts = [
+        line
+        for _, body in evidence_check.split_sections(text)
+        for line in evidence_check.verdict_lines(body)
+    ]
+
+    assert len(headings) == len(set(headings)), f"duplicate headings: {headings}"
+    for display in ("Amazon", "Best Buy", "Nintendo", "Pokémon Center", "Target"):
+        assert len(evidence_check.sections_for(display, evidence_check.split_sections(text))) == 1
+    assert len(verdicts) == 5, verdicts
+
+
 def test_a_section_with_no_verdict_line_fails(tmp_path: Path) -> None:
     evidence = _write_evidence(
         tmp_path, [("Amazon (amazon.com)", "We had a look. It seemed hard.\n")]

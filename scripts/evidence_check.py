@@ -132,9 +132,41 @@ REFUSED = "**Verdict: REFUSED**"
 
 _HEADING_RE = re.compile(r"^## (.+)$", re.MULTILINE)
 
+#: A fenced code block, opened and closed by the SAME fence marker.
+#:
+#: Non-greedy so consecutive blocks do not merge into one, and the closing fence
+#: is matched by backreference so a ```` ``` ```` block is not closed by a `~~~`.
+_FENCE_RE = re.compile(r"^(?P<fence>```|~~~).*?^(?P=fence)[ \t]*$", re.MULTILINE | re.DOTALL)
+
+
+def strip_fences(text: str) -> str:
+    """Remove fenced code blocks, so an EXAMPLE of the format is not a record.
+
+    Neither `_HEADING_RE` nor `VERDICT_RE` can tell a real heading from one
+    inside a fence, and the evidence log is a document about its own grammar: it
+    already carries a vocabulary preamble, and the natural way to document how
+    to record a verdict is a fenced template using a real retailer's name. Left
+    in, that template is indexed as a genuine record — a document whose ONLY
+    content is a fenced example and the sentence "Nothing was actually probed."
+    passed `check_retailer` for Amazon, which is verbatim the failure the module
+    docstring above exists to close, reached by a route the preamble exclusion
+    does not cover.
+
+    Worse in combination with the duplicate-heading collapse this file used to
+    have: an example using a real retailer's name produces an IDENTICAL heading
+    to that retailer's real section, so a template placed below a real record
+    would have replaced it outright.
+
+    The fenced text is dropped rather than blanked line-for-line: nothing here
+    reports line numbers, and the sections either side keep their own bodies.
+    """
+    return _FENCE_RE.sub("", text)
+
 
 def split_sections(text: str) -> list[tuple[str, str]]:
     """Every `## ` heading paired with its body, in document order.
+
+    Fenced code blocks are stripped first — see `strip_fences`.
 
     Everything above the first heading is excluded BY CONSTRUCTION rather than
     by a filter somebody could later forget. That preamble is where the evidence
@@ -152,6 +184,7 @@ def split_sections(text: str) -> list[tuple[str, str]]:
     tests used deliberately DISTINCT headings, so the hole was invisible to the
     suite; `test_two_sections_under_the_same_heading_fail` covers it now.
     """
+    text = strip_fences(text)
     matches = list(_HEADING_RE.finditer(text))
     return [
         (
