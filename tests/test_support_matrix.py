@@ -834,11 +834,23 @@ def test_the_shipped_rung_four_rows_are_not_flagged_as_overstatement() -> None:
     watches by exactly one row and loosens no rule: Target is instead covered by
     `_undeclared_degraded` and `_extraction_mismatch`, which both bite harder on
     a rung-3 `dom` row than the overstatement rule ever did on a rung-4 one.
+
+    **Amazon left the same way on 2026-08-03, one wave later**, and for a
+    stronger reason: it was registered at rung **1** with `dom` extraction, a
+    live control and a real product watch. One name is left in the tuple, which
+    is the point at which a list like this stops being a list — Pokémon Center is
+    now the only genuinely dropped retailer in scope, and if it ever lands, this
+    test has nothing left to assert and should be deleted rather than kept green
+    by inventing a row for it.
+
+    The clean-side assertion (`_overstated(...) == []`) is unchanged and still
+    covers all seven rows, so nothing stops watching when a name leaves the
+    tuple — only the "and its rung really is 4" half narrows.
     """
     rows = _matrix()
     configured = {w.retailer for w in Config.load(CONFIG).watches}
 
-    for name in ("Pokémon Center", "Amazon"):
+    for name in ("Pokémon Center",):
         assert rows[name][RUNG].startswith("4"), (name, rows[name][RUNG])
     assert _overstated(rows, configured) == []
 

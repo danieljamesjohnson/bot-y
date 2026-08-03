@@ -1912,3 +1912,261 @@ def test_a_target_watch_is_dispatched_to_the_browser_and_dom_path() -> None:
     assert seen == [target_watches[0].target], "a target watch did not reach the browser rung"
     assert r.rung is Rung.BROWSER
     assert r.extraction is Extraction.DOM
+
+
+# --------------------------------------------------------------------------
+# Amazon — rung 1 + dom, and the marketplace case this project was built for
+# --------------------------------------------------------------------------
+
+_AMAZON_CONTROL_URL = "https://www.amazon.com/dp/B00NTCH52W"
+_AMAZON_PRODUCT_URL = "https://www.amazon.com/dp/B0BX2P43PX"
+
+
+def _amazon_watch(url: str = _AMAZON_PRODUCT_URL, **kw: object) -> Watch:
+    return Watch(name="probe", retailer="amazon", target=url, **kw)  # type: ignore[arg-type]
+
+
+def _amazon_verdict(html: str, watch: Watch, url: str) -> object:
+    """Every Amazon reading goes through the adapter's own arguments.
+
+    Written out rather than defaulted, because the two that matter here are the
+    two `check_amazon` sets and a test that guessed them would prove nothing
+    about the shipped path: `rung=Rung.TLS` (no browser — Amazon serves this to
+    curl) and `allow_dom=True` (no structured data — the control is the only
+    reader there is).
+    """
+    return retailers._verdict_from_html(
+        watch,
+        html,
+        url=url,
+        first_party_only=True,
+        rung=Rung.TLS,
+        allow_dom=True,
+    )
+
+
+def test_the_amazon_fixture_carries_no_structured_data_at_all(
+    amazon_aa_batteries: str, amazon_goplusplus: str
+) -> None:
+    """Why this retailer needs a DOM reader at rung 1, asserted rather than said.
+
+    Amazon is the second retailer here whose product page publishes nothing
+    structured — and the first where that is true of the *plain HTTP response*
+    rather than of a rendered DOM. If Amazon ever starts shipping a feed this
+    goes red, and the right response is to read that instead and drop
+    `allow_dom`: a strictly better reading that nobody would otherwise notice had
+    become available.
+    """
+    for html in (amazon_aa_batteries, amazon_goplusplus):
+        assert parse.ldjson_offers(html) is None
+        assert parse.nextdata_offers(html) is None
+        assert "application/ld+json" not in html
+        assert parse.add_to_cart_offers(html) is not None
+
+
+def test_amazon_control_fixture_is_in_stock_first_party_priced_and_alertable(
+    amazon_aa_batteries: str,
+) -> None:
+    """The live half of the Amazon guard, frozen.
+
+    `Amazon.com` is the verbatim buy-box seller string this page renders under
+    the label `Shipper / Seller`, and it is the value `FIRST_PARTY['amazon']` was
+    set from. If this reads anything else the detector is broken, and the control
+    watch in `config/products.yaml` says so within a cycle on the real page.
+    """
+    watch = Watch(
+        name="CONTROL — Amazon Basics AA batteries (20-pack)",
+        retailer="amazon",
+        target=_AMAZON_CONTROL_URL,
+        max_price=80,
+        control=True,
+    )
+    r = _amazon_verdict(amazon_aa_batteries, watch, _AMAZON_CONTROL_URL)
+
+    assert r.availability is Availability.IN_STOCK
+    assert r.price == 9.99
+    assert r.alertable
+    assert "add-to-cart" in r.detail
+    assert "Amazon.com" in r.detail
+
+
+def test_an_amazon_reading_declares_both_axes_and_is_degraded(
+    amazon_aa_batteries: str,
+) -> None:
+    """The disjunct 03.1-05 added, with its first rung-1 user.
+
+    Best Buy and Target are degraded because a browser produced them. This
+    reading came from plain impersonated HTTP — `Rung.TLS`, the same transport
+    GameStop and Walmart use and the least suspicious thing this project does —
+    and is degraded anyway, because of WHAT was read rather than HOW. Delete the
+    `or self.extraction is Extraction.DOM` half and this row starts publishing
+    as a first-class structured reading; that is mutation M7.
+    """
+    r = _amazon_verdict(amazon_aa_batteries, _amazon_watch(), _AMAZON_CONTROL_URL)
+
+    assert r.rung is Rung.TLS, "no browser: Amazon serves this to curl_cffi"
+    assert r.extraction is Extraction.DOM
+    assert r.degraded, "a dom extraction alone is enough — the rung is 1 here"
+
+
+def test_the_amazon_go_plus_plus_reseller_is_rejected_by_the_first_party_filter(
+    amazon_goplusplus: str,
+) -> None:
+    """The whole project, in one fixture, and it is a live page rather than a point.
+
+    Amazon's only offer for the Pokémon GO Plus + on 2026-08-03 was a USED unit
+    at $219 — four times the $54.99 MSRP — sold by `LO Store (We Record Serial
+    Numbers To avoid FRAUD)` through Amazon's used buy box. It is buyable, it is
+    in stock, and alerting on it would be worse than never alerting at all.
+
+    Note which defence fires: the seller filter, *before* the ceiling is ever
+    consulted. OUT_OF_STOCK is the correct verdict rather than a hedge — the page
+    was read perfectly and there is no first-party offer on it.
+    """
+    offers = parse.add_to_cart_offers(amazon_goplusplus)
+    assert offers is not None
+    assert offers[0].available, "the used buy box is live — this is not a sold-out page"
+    assert offers[0].price == 219.0
+    assert offers[0].seller == "LO Store (We Record Serial Numbers To avoid FRAUD)"
+    assert offers[0].seller not in retailers.FIRST_PARTY["amazon"]
+
+    r = _amazon_verdict(amazon_goplusplus, _amazon_watch(max_price=80), _AMAZON_PRODUCT_URL)
+
+    assert r.availability is Availability.OUT_OF_STOCK
+    assert not r.alertable
+    assert "none first-party" in r.detail
+
+
+def test_an_amazon_first_party_offer_over_the_ceiling_is_suppressed_independently(
+    amazon_aa_batteries: str,
+) -> None:
+    """The second defence, proved on its own by removing the first from the question.
+
+    The control page IS first-party, so the seller filter passes it — and a
+    `max_price` under its price must still stop it. Two independent lines: the
+    Walmart pair proves this for a structured reader, and Amazon is where it
+    matters most, because Amazon is the marketplace that actually lists the
+    product this project watches.
+    """
+    r = _amazon_verdict(
+        amazon_aa_batteries, _amazon_watch(_AMAZON_CONTROL_URL, max_price=5), _AMAZON_CONTROL_URL
+    )
+
+    assert r.availability is Availability.IN_STOCK, "the reading is fine; the price is not"
+    assert r.price == 9.99
+    assert not r.alertable, "$9.99 is over a $5 ceiling"
+
+
+def test_an_amazon_page_whose_control_vanished_is_unknown_never_out_of_stock(
+    amazon_aa_batteries: str,
+) -> None:
+    """The real fixture with the add-to-cart control removed — a buy-box redesign.
+
+    This is the production failure mode for this retailer, and it is quieter than
+    Target's: no browser to fail, no exception, no challenge, no 403 — just an
+    `<input>` whose id Amazon renamed. OUT_OF_STOCK here would be a confident
+    wrong answer that looks exactly like a drought.
+
+    Amazon compounds it. Target KEEPS its control and disables it when an item is
+    out of stock, so absence there provably means the render failed. Amazon
+    REMOVES the control instead, so absence is genuinely ambiguous — and this
+    plan never observed an unavailable Amazon page, so the reader has no basis to
+    resolve the ambiguity and must not try.
+
+    The extraction and the degraded flag are asserted explicitly, and that is the
+    half a verdict-only test would miss: this verdict is produced inside
+    `_verdict_from_html`, not by `check_amazon`, so it is the one path where a
+    `structured` label could survive and tell a reader the DOM path was never
+    involved in the very failure that broke it.
+    """
+    broken = amazon_aa_batteries.replace('id="add-to-cart-button"', 'id="somethingElse"')
+    assert broken != amazon_aa_batteries, "the control was not found in the fixture"
+
+    r = _amazon_verdict(broken, _amazon_watch(max_price=80), _AMAZON_CONTROL_URL)
+
+    assert r.availability is Availability.UNKNOWN
+    assert r.availability is not Availability.OUT_OF_STOCK
+    assert not r.alertable
+    assert r.extraction is Extraction.DOM
+    assert r.rung is Rung.TLS
+    assert r.degraded
+
+
+def test_an_amazon_offer_with_no_seller_recorded_is_unknown_not_a_verdict(
+    amazon_aa_batteries: str,
+) -> None:
+    """The marketplace case that matters most here, and the one Target cannot have.
+
+    On Target, absence of a seller block IS the first-party signal — measured, and
+    `parse.TARGET_FIRST_PARTY_SELLER` is what the reader emits for it. Carrying
+    that default across to Amazon would have been the single most damaging line in
+    this plan: every unreadable Amazon buy box would read as sold by Amazon, and
+    a reseller whose block the parser failed on would alert.
+
+    So the DOM reader defaults per page family, and on Amazon the default is
+    `None`. `amazon` is in `MARKETPLACES`, which disables `_pick`'s
+    unattributed-offer fallback, and an offer nobody is recorded as selling is
+    UNKNOWN — never OUT_OF_STOCK, and never a $229 flip.
+    """
+    anonymous = amazon_aa_batteries.replace(
+        'data-csa-c-slot-id="odf-feature-text-desktop-merchant-info"',
+        'data-csa-c-slot-id="odf-feature-text-desktop-something-else"',
+    )
+    assert anonymous != amazon_aa_batteries, "the merchant-info slot was not found"
+
+    offers = parse.add_to_cart_offers(anonymous)
+    assert offers is not None
+    assert offers[0].seller is None, (
+        "an Amazon page with no readable seller must NOT inherit Target's "
+        "first-party-by-absence rule"
+    )
+
+    r = _amazon_verdict(anonymous, _amazon_watch(max_price=80), _AMAZON_CONTROL_URL)
+
+    assert r.availability is Availability.UNKNOWN
+    assert r.availability is not Availability.OUT_OF_STOCK
+    assert not r.alertable
+    assert "marketplace" in r.detail
+
+
+def test_an_amazon_watch_is_dispatched_to_the_rung_one_dom_path() -> None:
+    """`_make_checker` is the one place a watch meets a transport, and
+    `control_check.py` builds its checker with the same function — so this is
+    what makes the gate and the monitor route identically.
+
+    Amazon is the one retailer here with BOTH a control and a real product watch
+    on the GO Plus +, which is worth pinning: Best Buy and Target are
+    control-only because neither carries the product any more, and Amazon does.
+    """
+    cfg = Config.load(_REPO_ROOT / "config" / "products.yaml")
+    amazon_watches = [w for w in cfg.watches if w.retailer == "amazon"]
+
+    assert amazon_watches, "no amazon watch is configured"
+    assert any(w.control for w in amazon_watches), (
+        "a configured retailer with no control watch fails control_check outright"
+    )
+    assert any(not w.control and w.max_price == 80 for w in amazon_watches), (
+        "Amazon lists the GO Plus +, so it gets a real product watch with the "
+        "MSRP-anchored ceiling on it — unlike Best Buy and Target, which do not"
+    )
+
+    seen: list[str] = []
+
+    def fake_get(url: str, **kw: object) -> Page:
+        seen.append(url)
+        raise FetchError("stopped before the network")
+
+    import boty.retailers as R
+
+    original = R.get
+    try:
+        R.get = fake_get  # type: ignore[assignment]
+        r = _make_checker(cfg)(amazon_watches[0])
+    finally:
+        R.get = original  # type: ignore[assignment]
+
+    assert seen == [amazon_watches[0].target], "an amazon watch did not reach rung 1"
+    assert r.rung is Rung.TLS, "no browser rung for Amazon — the ladder stops at 1"
+    assert r.extraction is Extraction.DOM, (
+        "the extraction label follows the reader that ran, error paths included"
+    )

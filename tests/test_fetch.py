@@ -115,6 +115,71 @@ AKAMAI_CHALLENGE = """<!DOCTYPE html>
 </body></html>"""
 
 
+#: Amazon's automated-access interstitial, verbatim, minus one per-request token.
+#:
+#: Retrieved 2026-08-03 from `https://www.amazon.com/dp/B0BX2P43PX` — a URL that
+#: had served the full 1.9 MB product page eight minutes earlier — when two
+#: `boty capture-fixture` calls were made 12 s apart instead of the 20 s the
+#: politeness budget requires. **HTTP 200, 3,781 B.** It matched no block phrase
+#: at the time, so `fetch.get` returned it as an ordinary `Page` and
+#: `fixtures.capture` wrote a bot wall to disk under a product's name.
+#:
+#: Note what it posts to: `/errors_page/validateCaptcha`. It is a captcha gate,
+#: not an error page, whatever the heading says. The `amzn` value is a
+#: per-request token and is the one thing replaced here.
+AMAZON_AUTOMATED_ACCESS_WALL = """<!DOCTYPE html>
+<html class="a-no-js" lang="en-us"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title dir="ltr">Amazon.com</title>
+</head>
+<body>
+
+<!--
+        To discuss automated access to Amazon data please contact api-services-support@amazon.com.
+        For information about migrating to our APIs refer to our Marketplace APIs at https://developer.amazonservices.com/ref=rm_c_sv, or our Product Advertising API at https://affiliate-program.amazon.com/gp/advertising/api/detail/main.html/ref=rm_c_ac for advertising use cases.
+-->
+
+<!--
+Correios.DoNotSend
+-->
+
+<div class="a-container a-padding-double-large" style="min-width:350px;padding:44px 0 !important">
+    <div class="a-row a-spacing-double-large" style="width: 350px; margin: 0 auto">
+        <div class="a-row a-spacing-medium a-text-center"><i class="a-icon a-logo" alt="Amazon logo"></i></div>
+        <div class="a-box a-alert a-alert-info a-spacing-base">
+            <div class="a-box-inner">
+                <i class="a-icon a-icon-alert" alt="Alert icon"></i>
+                <h4>Click the button below to continue shopping</h4>
+                </div>
+            </div>
+            <div class="a-section">
+                <div class="a-box a-color-offset-background">
+                    <div class="a-box-inner a-padding-extra-large">
+                        <form method="get" action="/errors_page/validateCaptcha" name="">
+                            <input type="hidden" name="amzn" value="<REDACTED-TOKEN>" /><input type="hidden" name="amzn-r" value="&#047;" />
+                            <input type="hidden" name="field-keywords" value="UNMUNG" />
+                            <div class="a-section a-spacing-extra-large">
+                                <div class="a-row">
+                                    <span class="a-button a-button-primary a-span12">
+                                        <span class="a-button-inner">
+                                            <button type="submit" class="a-button-text" alt="Continue shopping">Continue shopping</button>
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="a-text-center a-size-mini a-color-base">
+          &copy; 1996-2025, Amazon.com, Inc. or its affiliates
+        </div>
+    </div>
+</body></html>
+"""
+
+
 class _FakeResponse:
     """Just enough of a curl_cffi response for `fetch.get` to read."""
 
@@ -216,6 +281,45 @@ def test_each_akamai_marker_appears_in_the_retailers_own_bytes(phrase: str) -> N
     )
 
 
+def test_amazons_automated_access_wall_at_http_200_is_blocked_not_a_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Imperva defect a third time, on the retailer where it actually bit.
+
+    This one is not a near miss. `boty.fixtures.capture` is documented never to
+    write a fixture from a refused fetch — "a capture that swallowed them would
+    write a CAPTCHA interstitial to disk under a product's name and poison every
+    test that reads it" — and on 2026-08-03 it did precisely that, because no
+    phrase matched Amazon's wall and `get()` therefore handed `capture` an
+    ordinary `Page`. The file was deleted rather than committed and the phrase
+    was added in the same task.
+    """
+    _answer(monkeypatch, AMAZON_AUTOMATED_ACCESS_WALL)
+
+    with pytest.raises(Blocked) as caught:
+        fetch.get("https://www.amazon.com/dp/B0BX2P43PX", jitter=(0, 0))
+
+    assert "200" in str(caught.value), "the status is the point — say it out loud"
+
+
+def test_the_amazon_marker_appears_in_amazons_own_bytes() -> None:
+    """Same reasoning as the Akamai pair: assert the phrase against the retailer.
+
+    And one thing the Akamai pair did not have to check — that the phrase was
+    the RIGHT one of the candidates. The human-readable heading on Amazon's wall
+    is "Click the button below to continue shopping", and the wording a search
+    would suggest, "something went wrong on our end", appears in real Amazon
+    product pages. `test_a_real_product_page_is_not_mistaken_for_a_challenge` is
+    parametrised over both Amazon fixtures for exactly that reason.
+    """
+    phrase = "to discuss automated access to amazon data"
+    assert phrase in fetch.BLOCK_PHRASES, f"{phrase!r} is no longer a block phrase"
+    assert phrase in AMAZON_AUTOMATED_ACCESS_WALL.lower(), (
+        f"{phrase!r} does not appear in the captured Amazon wall — either the "
+        "phrase is a typo, or the constant is no longer the retailer's bytes"
+    )
+
+
 def test_the_browser_rung_recognises_the_same_walls(monkeypatch: pytest.MonkeyPatch) -> None:
     """`boty.browser` scans `BLOCK_PHRASES` too, so a phrase added for rung 1
     has to protect rung 3 without anybody remembering to do it twice.
@@ -235,7 +339,21 @@ def test_the_browser_rung_recognises_the_same_walls(monkeypatch: pytest.MonkeyPa
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("fixture_name", ["nintendo_hdmi", "nintendo_goplusplus", "gamestop_ps5"])
+@pytest.mark.parametrize(
+    "fixture_name",
+    [
+        "nintendo_hdmi",
+        "nintendo_goplusplus",
+        "gamestop_ps5",
+        # Both Amazon fixtures, and they earn their place rather than padding
+        # the list: the phrase added for Amazon's wall in 03.1-03 was chosen
+        # over the obvious one *because* the obvious one — the visible wording
+        # "something went wrong on our end" — appears once in each of these two
+        # real product pages. This parametrisation is what would have caught it.
+        "amazon_aa_batteries",
+        "amazon_goplusplus",
+    ],
+)
 def test_a_real_product_page_is_not_mistaken_for_a_challenge(
     monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest, fixture_name: str
 ) -> None:

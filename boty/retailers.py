@@ -50,6 +50,25 @@ FIRST_PARTY = {
     # lets a Target Plus reseller listing alert — the flipper case the whole
     # first-party filter exists for.
     "target": {parse.TARGET_FIRST_PARTY_SELLER},
+    # `Amazon.com` is the literal buy-box seller string, read verbatim off
+    # https://www.amazon.com/dp/B00NTCH52W (Amazon Basics 20-pack AA) on
+    # 2026-08-03 at rung 1, from the offer-display feature Amazon labels
+    # `Shipper / Seller`:
+    #
+    #     <span class="…offer-display-feature-text-message">Amazon.com</span>
+    #
+    # The bare `amazon` is here for the same reason Nintendo's short forms are:
+    # so a wording change does not silently demote the retailer to an
+    # unrecognised third party. Nothing longer is guessed — the entry is one
+    # observed string plus the obvious contraction of it.
+    #
+    # `amazon` stays in MARKETPLACES below and that is the load-bearing half.
+    # Amazon's buy box is frequently a third party's, and on the Pokémon GO
+    # Plus + it currently IS one: a USED unit from
+    # `LO Store (We Record Serial Numbers To avoid FRAUD)` at $219 against a
+    # $54.99 MSRP. Without the marketplace entry `_pick`'s unattributed-offer
+    # fallback would hand the buy box to whoever holds it.
+    "amazon": {"amazon.com", "amazon"},
     "bestbuy": {"best buy", "bestbuy.com"},
     # `Nintendo of America Inc.` is the literal `offers.seller.name` on every
     # nintendo.com/us/store product page seen (docs/retailer-evidence.md); the
@@ -261,6 +280,70 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
         url=watch.target,
         first_party_only=first_party_only,
         rung=Rung.TLS,
+    )
+
+
+def check_amazon(watch: Watch, *, first_party_only: bool = True) -> Result:
+    """Amazon at rung 1, reading the add-to-cart control — the cheap/fragile corner.
+
+    The same transport as `check_html` and a different reader, which is the
+    whole of the difference and the reason this is a separate function rather
+    than a flag on that one. Amazon serves its `/dp/<ASIN>` page to impersonated
+    HTTP without complaint — three requests on 2026-08-03, three HTTP 200s, no
+    `BLOCK_PHRASES` match, 1.9–3.2 MB each — and publishes **no** structured
+    stock data in it: zero `application/ld+json`, no `__NEXT_DATA__`, and not one
+    of its JSON script blobs carries a price, an availability or a seller.
+
+    What it does serve, server-side and with no browser, is the add-to-cart
+    control, the `#availability` line and a named buy-box seller. So Amazon is
+    **rung 1 + `dom`**: the cheapest transport this project has with the most
+    fragile extraction it has. That combination is exactly the one 03.1-05
+    widened `Result.degraded` for — a DOM reading is discounted because of what
+    was read, independently of how the bytes arrived — and Amazon is its first
+    real user. Do not "upgrade" this to rung 3: the ladder says stop at the
+    first rung that works, and starting a browser to obtain bytes curl already
+    returned would spend a Chrome process to learn nothing.
+
+    Every Result carries `extraction=Extraction.DOM`, the error paths included,
+    for the reason `check_target_browser` gives about its rung: it is a fact
+    about how a reading was obtained rather than about the verdict, and the
+    support matrix makes its claim on this field's word. The rung stays the
+    default `Rung.TLS`, because that is what it is.
+
+    Failure strings go through `_redact_host_paths` on the same principle as the
+    browser adapters — `status.write` copies `detail` into a file served over
+    HTTP — even though rung 1 has no browser path to leak. It costs nothing and
+    it means no adapter is the one that forgot.
+    """
+    try:
+        page = get(watch.target)
+    except Blocked as exc:
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=_redact_host_paths(f"blocked: {exc}"),
+            url=watch.target,
+            extraction=Extraction.DOM,
+        )
+    except FetchError as exc:
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=_redact_host_paths(f"fetch failed: {exc}"),
+            url=watch.target,
+            extraction=Extraction.DOM,
+        )
+
+    return _verdict_from_html(
+        watch,
+        page.text,
+        url=watch.target,
+        first_party_only=first_party_only,
+        rung=Rung.TLS,
+        # No `sku=`: Amazon is addressed by `/dp/<ASIN>`, so the page that came
+        # back is self-evidently the product asked for. Best Buy's SKU binding
+        # is a workaround for a search redirect this retailer does not have.
+        allow_dom=True,
     )
 
 

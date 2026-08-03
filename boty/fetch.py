@@ -65,6 +65,28 @@ BLOCK_PHRASES = (
     # `scf-akamai-protected-by` depends on wording and may drift.
     "sec-if-cpt-container",
     "scf-akamai-protected-by",
+    # Amazon's own automated-access interstitial, found the hard way during
+    # 03.1-03: two `boty capture-fixture` calls 12 s apart instead of the
+    # required 20 s, and the second came back as a 3,781 B page reading
+    # "Click the button below to continue shopping" at HTTP **200**. Nothing in
+    # this list matched it, so `fetch.get` returned it as an ordinary Page and
+    # `fixtures.capture` wrote a bot wall to disk under a product's name — the
+    # exact silent failure `capture` is documented never to produce, reached
+    # through the one hole that makes it possible.
+    #
+    # Downstream that reads as `no structured stock data found (page shape
+    # changed?)`: fail-safe in outcome, and a diagnosis pointing at our own
+    # parser for a refusal that is Amazon's. Verbatim the Imperva and Akamai
+    # defect above, on a third vendor.
+    #
+    # The phrase is the notice Amazon embeds in the wall's own markup, which is
+    # both the most durable string on the page and the least likely to appear on
+    # a real one. THE OBVIOUS CHOICE WAS CHECKED AND REJECTED: the visible
+    # wording "something went wrong on our end" appears once in each of the two
+    # real Amazon product pages this plan fetched, so adding it would have
+    # reported a working retailer as blocked forever — the bad-bet failure this
+    # list's own docstring warns about, one grep away from being shipped.
+    "to discuss automated access to amazon data",
 )
 
 

@@ -224,7 +224,7 @@ ADD_TO_CART_PHRASES = ("add to cart", "preorder", "pre-order")
 #:
 #: Target's own name for it is a warning worth keeping: `addToCartButtonOrText`.
 #: Target considers this slot capable of rendering text rather than a button, so
-#: `_TargetPdpParser` matches the prefix on *any* tag, not just `<button>`.
+#: `_AddToCartParser` matches the prefix on *any* tag, not just `<button>`.
 _CONTROL_ID_PREFIX = "addToCartButtonOrTextIdFor"
 
 #: The Target Plus partner block — `data-test` here, because this one is stable
@@ -242,7 +242,86 @@ _PRICE_TEST = "product-price"
 #: A statement about THIS READER'S OUTPUT, not a guess about Target's markup —
 #: which matters, because `boty.retailers.FIRST_PARTY['target']` is checked
 #: against it and used to be an unverifiable guess. See that dict's comment.
+#:
+#: **It applies to Target's page family and to nothing else.** Amazon states its
+#: buy-box seller in every layout observed, so on an Amazon page the absence of
+#: a seller block means this reader could not read one — UNKNOWN on a
+#: marketplace — not that Amazon is selling it. That distinction is why
+#: `_ControlFamily` exists rather than one global default.
 TARGET_FIRST_PARTY_SELLER = "target"
+
+#: Which retailer's page family a control was found on.
+#:
+#: The DOM reader serves two retailers and they disagree about exactly one
+#: thing: what the ABSENCE of a seller block means. On Target it means
+#: first-party — measured, `docs/retailer-evidence.md` § Target: a Target Plus
+#: listing carries a "Sold & shipped by" block and a Target-sold one carries
+#: nothing in its place. On Amazon it means the opposite of a fact: Amazon names
+#: its buy-box seller in both layouts seen (`Shipper / Seller` on a new offer, a
+#: `Sold by` anchor on a used one), so nothing to read is this reader getting
+#: lost, and `amazon` is in `MARKETPLACES` precisely so that reads UNKNOWN.
+#:
+#: A single global default would have to pick one of those and be wrong for the
+#: other retailer, silently, in the direction that lets a reseller alert.
+_TARGET_FAMILY = "target"
+_AMAZON_FAMILY = "amazon"
+
+#: Amazon's add-to-cart control ids — EXACT strings, not a prefix.
+#:
+#: Amazon's is the mirror image of Target's control and every difference is
+#: structural rather than cosmetic (observed 2026-08-03, `/dp/B00NTCH52W` and
+#: `/dp/B0BX2P43PX`):
+#:
+#:   - it is a **void `<input>`**, so the depth-based region capture below never
+#:     sees it and it has to be read straight off its attributes;
+#:   - its label lives in the **`value` attribute**, not in child text;
+#:   - its id is fixed per layout rather than per product — `add-to-cart-button`
+#:     for the ordinary buy box and `add-to-cart-button-ubb` for a **used** one,
+#:     which is the layout the Pokémon GO Plus + is currently sold through.
+#:
+#: Amazon removes the control when an item cannot be bought rather than
+#: disabling it, which is the opposite of Target's measured behaviour. Absence
+#: therefore reads UNKNOWN here for a different reason than it does there, and
+#: the same safe direction: this plan never observed an unavailable Amazon page,
+#: so nothing in this reader may say OUT_OF_STOCK on Amazon's word.
+AMAZON_CONTROL_IDS = frozenset({"add-to-cart-button", "add-to-cart-button-ubb"})
+
+#: The buy-box seller on Amazon's ordinary offer-display layout. Two nested
+#: anchors, because neither is safe alone: the container slot id is the
+#: semantically correct region but its body also carries a popover description,
+#: and the inner message class is reused by every other offer-display feature on
+#: the page (ten of them). The inner class is read only inside the container.
+_AMAZON_SELLER_SLOT = "odf-feature-text-desktop-merchant-info"
+_AMAZON_SELLER_TEXT = "offer-display-feature-text-message"
+
+#: The buy-box seller on Amazon's USED offer layout, where the seller is the
+#: text of a profile link. The lead-in ("Sold by") sits outside the anchor, so
+#: the anchor's text is the seller name and nothing else.
+_AMAZON_UBB_SELLER_ID = "sellerProfileTriggerId"
+
+#: Amazon's buy-box price. A class fragment rather than an id: `priceToPay` is
+#: Amazon's own name for "the number in the buy box", and it appears on the
+#: element wrapping both the screen-reader and the visual copies of it.
+#:
+#: An Amazon page carries SEVERAL of these — the headline price and then one per
+#: buying option (`$9.99` headline, `$9.49` one-time at -5%, `$8.49` Subscribe &
+#: Save at -15%, on the shipped control fixture). The reader takes the first in
+#: document order, which is the headline the buy box actually displays and, on
+#: everything observed, the HIGHEST of them. That is the safe direction for the
+#: `max_price` ceiling: reporting a price no lower than the one you would pay
+#: can suppress a marginal alert, while reporting a discounted option as the
+#: price could let a flip through a ceiling it should have failed.
+_AMAZON_PRICE_CLASS = "priceToPay"
+
+#: The first money-shaped run in a price region.
+#:
+#: Both retailers wrap a price in several elements and Amazon interleaves the
+#: accessible copy with a savings blurb, so a region reads
+#: `$8.49 with 15 percent savings $ 8 . 49`. `_as_float` over that whole string
+#: returns None and the reader would report a priced offer with no price —
+#: which `Result.alertable` treats as not alertable, so the failure would be a
+#: silent missed restock rather than a loud error.
+_MONEY_RE = re.compile(r"\$\s*([\d,]+(?:\.\d{1,2})?)")
 
 #: Strips the lead-in off a partner block so only the partner's name is left.
 #: "Sold & shipped by Joyin" -> "Joyin". The ampersand is Target's actual
@@ -267,17 +346,40 @@ _VOID_TAGS = frozenset(
 )
 
 
-class _TargetPdpParser(HTMLParser):
-    """Pull the add-to-cart control, the price and the partner block out of a PDP.
+def _disabled(a: dict[str, str]) -> bool:
+    """Whether an element's attributes say the control cannot be used.
+
+    `aria-disabled` counts as well as the real attribute. Only `disabled=""` was
+    observed on a control itself, but a React component that swaps to the ARIA
+    form is a rewrite away, and the direction of this default is the safe one:
+    an unrecognised disabled state reads as NOT buyable.
+    """
+    return "disabled" in a or a.get("aria-disabled", "").lower() == "true"
+
+
+class _AddToCartParser(HTMLParser):
+    """Pull the add-to-cart control, the price and the seller out of a PDP.
 
     `html.parser` from the standard library, deliberately: this project keeps a
-    small dependency surface, and adding an HTML parsing library to read three
-    elements off one retailer's page would be a poor trade. It also means there
+    small dependency surface, and adding an HTML parsing library to read four
+    elements off two retailers' pages would be a poor trade. It also means there
     is no third-party parser sitting in front of bytes a retailer controls.
 
-    Regions are captured by depth rather than by tag, because all three targets
-    wrap their text in nested spans and divs — the partner name is in a `Subtext`
-    span inside an anchor, and the button label can sit beside an SVG.
+    Regions are captured by depth rather than by tag, because most of the
+    targets wrap their text in nested spans and divs — Target's partner name is
+    in a `Subtext` span inside an anchor, Amazon's seller is a span inside a div
+    inside a feature container, and a button label can sit beside an SVG.
+
+    **Amazon's control is the exception and it is handled before the depth
+    counter is touched at all.** It is a void `<input>`: it never gets an end
+    tag, so there is no region to close and nothing between the tags to buffer.
+    Its label is in the `value` attribute and its state is on the same element,
+    so both are read straight off the attributes as the tag goes past.
+
+    One parser and not two, on purpose. A second near-identical reader is a
+    second place for the same bug, and the bug this one exists to prevent —
+    reporting out-of-stock when the honest answer is "I got lost" — is exactly
+    the kind that gets fixed in one copy.
     """
 
     def __init__(self) -> None:
@@ -285,15 +387,24 @@ class _TargetPdpParser(HTMLParser):
         self._depth = 0
         # (kind, depth_at_open, disabled, text buffer)
         self._open: list[tuple[str, int, bool, list[str]]] = []
-        self.controls: list[tuple[str, bool]] = []
+        # (visible text, disabled, which retailer's page family it came from)
+        self.controls: list[tuple[str, bool, str]] = []
         self.prices: list[str] = []
         self.partners: list[str] = []
+        self.sellers: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        a = {k.lower(): (v or "") for k, v in attrs}
+
+        # Amazon's control, read off the attributes before the void-tag return
+        # below discards it. Recorded even on a non-void tag, so a future layout
+        # that renders the same id as a <button> still reads.
+        if a.get("id", "") in AMAZON_CONTROL_IDS:
+            self.controls.append((a.get("value", ""), _disabled(a), _AMAZON_FAMILY))
+
         if tag in _VOID_TAGS:
             return
         self._depth += 1
-        a = {k.lower(): (v or "") for k, v in attrs}
 
         kind: str | None = None
         if a.get("id", "").startswith(_CONTROL_ID_PREFIX):
@@ -302,15 +413,25 @@ class _TargetPdpParser(HTMLParser):
             kind = "partner"
         elif a.get("data-test") == _PRICE_TEST:
             kind = "price"
+        elif a.get("data-csa-c-slot-id") == _AMAZON_SELLER_SLOT:
+            # The container, not the value. Its body also carries a popover
+            # description, so the name is read from the inner span below.
+            kind = "merchant"
+        elif a.get("id", "") == _AMAZON_UBB_SELLER_ID:
+            kind = "seller"
+        elif _AMAZON_SELLER_TEXT in a.get("class", "") and any(
+            open_kind == "merchant" for open_kind, _, _, _ in self._open
+        ):
+            # Only inside the merchant container: this class is shared by all ten
+            # offer-display features on an Amazon page, so unscoped it would read
+            # the return policy as the seller.
+            kind = "seller"
+        elif _AMAZON_PRICE_CLASS in a.get("class", ""):
+            kind = "price"
         if kind is None:
             return
 
-        # `aria-disabled` counts as well as the real attribute. Only `disabled=""`
-        # was observed on the control itself, but a React component that swaps to
-        # the ARIA form is a rewrite away, and the direction of this default is
-        # the safe one: an unrecognised disabled state reads as NOT buyable.
-        disabled = "disabled" in a or a.get("aria-disabled", "").lower() == "true"
-        self._open.append((kind, self._depth, disabled, []))
+        self._open.append((kind, self._depth, _disabled(a), []))
 
     def handle_data(self, data: str) -> None:
         for _, _, _, buf in self._open:
@@ -323,16 +444,21 @@ class _TargetPdpParser(HTMLParser):
             kind, _, disabled, buf = self._open.pop()
             text = " ".join("".join(buf).split())
             if kind == "control":
-                self.controls.append((text, disabled))
+                self.controls.append((text, disabled, _TARGET_FAMILY))
             elif kind == "partner":
                 self.partners.append(text)
+            elif kind == "seller":
+                self.sellers.append(text)
+            elif kind == "merchant":
+                # A container, never a value.
+                pass
             else:
                 self.prices.append(text)
         self._depth = max(0, self._depth - 1)
 
 
 def add_to_cart_offers(html: str) -> list[Offer] | None:
-    """Stock state read off the rendered add-to-cart control. Target's only path.
+    """Stock state read off the add-to-cart control. Target's and Amazon's only path.
 
     Returns None — never `[]`, never `available=False` — when the control is not
     on the page. The distinction is the whole safety property of this reader, and
@@ -353,15 +479,29 @@ def add_to_cart_offers(html: str) -> list[Offer] | None:
     name for it, `addToCartButtonOrText`, says is a thing it can do — the honest
     answer is "the page changed and I got lost", not out-of-stock.
 
-    The seller is a Target Plus question. A partner-sold listing carries a
-    "Sold & shipped by <Partner>" block and a first-party one carries nothing in
-    its place, so absence is what this reader reports as first-party. That claim
-    is an observation (`docs/retailer-evidence.md` § Target) rather than an
-    assumption, and it is what `FIRST_PARTY['target']` now means. A partner block
-    whose name cannot be read yields `seller=None`, which on a marketplace is
-    UNKNOWN — the safe direction, and not first-party.
+    Amazon reaches the same conclusion from the opposite fact and the two must
+    not be collapsed. Amazon **removes** the control when an item cannot be
+    bought, so absence there is genuinely ambiguous between "sold out" and "the
+    page changed" — and since this reader has never seen an unavailable Amazon
+    page, it says UNKNOWN rather than guessing which. Amazon also serves this
+    control in the plain HTTP response, with no browser: it is a `dom`
+    extraction on a rung-1 transport, which is why `Result.degraded` was widened
+    to fire on the extraction axis independently of the rung.
+
+    **The seller is where the two retailers disagree, and the disagreement is
+    load-bearing.** On Target it is a Target Plus question: a partner-sold
+    listing carries a "Sold & shipped by <Partner>" block and a first-party one
+    carries nothing in its place, so absence is what this reader reports as
+    first-party. That claim is an observation
+    (`docs/retailer-evidence.md` § Target) rather than an assumption, and it is
+    what `FIRST_PARTY['target']` means. On Amazon there is no such absence to
+    read: Amazon names the buy-box seller in both layouts observed, so nothing
+    to read means this reader could not read it, and the answer is `None` —
+    UNKNOWN on a marketplace, never first-party. A partner or buy-box block
+    whose name will not parse yields `None` on both. Every direction fails away
+    from first-party.
     """
-    parser = _TargetPdpParser()
+    parser = _AddToCartParser()
     try:
         parser.feed(html)
         parser.close()
@@ -377,20 +517,24 @@ def add_to_cart_offers(html: str) -> list[Offer] | None:
     # on every page seen. If that ever stops being true the control watch reads
     # wrong and reddens `make verify` within a cycle, which is the drift
     # detector this retailer is registered control-only to provide.
-    text, disabled = parser.controls[0]
+    text, disabled, family = parser.controls[0]
     if not any(phrase in text.lower() for phrase in ADD_TO_CART_PHRASES):
         return None
 
     available = not disabled
 
-    seller: str | None = TARGET_FIRST_PARTY_SELLER
-    if parser.partners:
+    # The default is per page family, not global. See `_TARGET_FAMILY`.
+    seller: str | None = TARGET_FIRST_PARTY_SELLER if family == _TARGET_FAMILY else None
+    if family == _TARGET_FAMILY and parser.partners:
         stripped = _PARTNER_PREFIX_RE.sub("", parser.partners[0]).strip()
         seller = stripped or None
+    elif family == _AMAZON_FAMILY and parser.sellers:
+        seller = parser.sellers[0].strip() or None
 
     price = None
     for raw in parser.prices:
-        price = _as_float(raw)
+        money = _MONEY_RE.search(raw)
+        price = _as_float(money.group(1)) if money else _as_float(raw)
         if price is not None:
             break
 

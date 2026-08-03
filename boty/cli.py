@@ -19,6 +19,7 @@ from .models import Availability, Extraction, Health, Result, Watch
 from .monitor import State, run_once
 from .notify import send_health_warning, send_restock
 from .retailers import (
+    check_amazon,
     check_bestbuy_api,
     check_bestbuy_browser,
     check_html,
@@ -64,6 +65,14 @@ def _make_checker(cfg: Config) -> Callable[[Watch], Result]:
             if cfg.bestbuy_api_key:
                 return check_bestbuy_api(watch, cfg.bestbuy_api_key)
             return check_bestbuy_browser(watch, first_party_only=cfg.first_party_only)
+        if watch.retailer == "amazon":
+            # The same transport `check_html` uses and a different reader, so
+            # this arm exists only to opt Amazon into the DOM fallback. Amazon
+            # serves its /dp/ page to impersonated HTTP and publishes no
+            # structured stock data in it, so `check_html` would read the page
+            # perfectly and say UNKNOWN forever — Target's problem at a cheaper
+            # rung.
+            return check_amazon(watch, first_party_only=cfg.first_party_only)
         if watch.retailer == "target":
             # No credentialed alternative to fall back to, unlike Best Buy: this
             # is the only path Target has. Its page carries no structured data at

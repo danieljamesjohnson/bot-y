@@ -133,6 +133,42 @@ def target_dust_cloths() -> str:
 
 
 @pytest.fixture
+def amazon_aa_batteries() -> str:
+    """Amazon control: IN_STOCK at $9.99, sold by Amazon.com, read off the DOM.
+
+    A **rung-1** capture — impersonated HTTP, no browser — and the second fixture
+    here with no structured data in it at all. Amazon serves `/dp/<ASIN>` to curl
+    without complaint and publishes zero `application/ld+json`, no
+    `__NEXT_DATA__` and no JSON blob carrying a price, an availability or a
+    seller, so the add-to-cart control is the only reader there is. That makes it
+    the cheapest transport in this project with the most fragile extraction in
+    it.
+
+    Its `Shipper / Seller` feature reads the verbatim `Amazon.com` that
+    `FIRST_PARTY['amazon']` is set from. Every `<script>` and `<style>` body was
+    emptied before commit; see the fixture's `.json` note.
+    """
+    return load("amazon", "control-aa-batteries")
+
+
+@pytest.fixture
+def amazon_goplusplus() -> str:
+    """Amazon GO Plus +: a USED unit at $219 from a third-party reseller.
+
+    The flip this whole project is built to refuse, captured live rather than
+    written to prove a point: `LO Store (We Record Serial Numbers To avoid
+    FRAUD)` holding Amazon's used buy box at four times the $54.99 MSRP, with
+    `#availability` reading `Only 10 left in stock - order soon.`
+
+    Two independent defences suppress it and this fixture exercises both — the
+    seller is not in `FIRST_PARTY['amazon']` and `amazon` is in `MARKETPLACES`,
+    so the offer never reaches the `max_price` ceiling that would also have
+    stopped it.
+    """
+    return load("amazon", "goplusplus")
+
+
+@pytest.fixture
 def bestbuy_pikachu() -> str:
     """Best Buy control: IN_STOCK at $59.99, sold by Best Buy (SKU 6216393).
 

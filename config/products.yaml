@@ -144,6 +144,50 @@ watches:
     target: https://www.target.com/p/microfiber-dust-cloths-6pk-up-38-up-8482/-/A-90377926
     control: true
 
+  # ---- Amazon -----------------------------------------------------------
+  # Amazon serves `/dp/<ASIN>` to impersonated HTTP without complaint — three
+  # requests on 2026-08-03, three HTTP 200s, zero BLOCK_PHRASES matches — and
+  # publishes no structured stock data in it: zero ld+json, no __NEXT_DATA__,
+  # and not one JSON blob on the page carrying a price, an availability or a
+  # seller. The add-to-cart control, the price and the buy-box seller are all
+  # server-rendered, so `check_amazon` reads those. That is rung 1 AND dom: the
+  # cheapest transport here with the most fragile extraction here, and every
+  # reading is flagged degraded on the extraction axis alone.
+  #
+  # THE SAME WARNING THE TARGET BLOCK CARRIES APPLIES, minus the browser. An
+  # Amazon buy-box redesign does not break this loudly; it breaks it silently,
+  # and this control is how anyone finds out. Mutation M8 is the offline half.
+  #
+  # An Amazon Basics line, which is the safe control class on this retailer
+  # specifically: Amazon's buy box rotates between sellers, and an Amazon-owned
+  # brand is sold by Amazon's own entity by construction, so there is no
+  # rotation to lose to. A household consumable rather than an electronics item,
+  # for the same reason the Walmart control is a gallon of milk. The first
+  # candidate was an Amazon Basics HDMI cable and it was rejected on sight of
+  # its own page: `Only 2 left in stock - order soon.` A control that can
+  # plausibly sell out reddens `make verify` for a reason that is not a defect.
+  - name: CONTROL — Amazon Basics AA batteries (20-pack)
+    retailer: amazon
+    target: https://www.amazon.com/dp/B00NTCH52W
+    control: true
+
+  # UNLIKE Best Buy and Target, Amazon DOES list the Pokémon GO Plus + — and
+  # the listing is the exact thing this project exists not to alert on. The only
+  # offer on ASIN B0BX2P43PX on 2026-08-03 was a USED unit from
+  # `LO Store (We Record Serial Numbers To avoid FRAUD)` at $219 against a
+  # $54.99 MSRP. Both defences catch it independently: the seller is not in
+  # FIRST_PARTY['amazon'] and `amazon` is in MARKETPLACES, so the offer is
+  # suppressed before the ceiling is ever consulted; and $219 is well over it
+  # if the buy box ever returns to Amazon at a flipper's price.
+  #
+  # So this watch reads OUT_OF_STOCK today and that is the correct answer: there
+  # is no first-party Amazon offer. It flips to IN_STOCK the day Amazon itself
+  # sells one, which is the alert worth having.
+  - name: Pokémon GO Plus +
+    retailer: amazon
+    target: https://www.amazon.com/dp/B0BX2P43PX
+    max_price: 80
+
   # ---- Pokémon Center: NOT here, on purpose -----------------------------
   # There is no `retailer: pokemoncenter` entry and that is a finding, not a gap.
   # Pokémon Center stocks the GO Plus + (/product/715e10557/pokemon-go-plus), so

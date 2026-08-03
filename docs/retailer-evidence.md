@@ -39,21 +39,47 @@ Anything reached by browser is flagged DEGRADED in the support matrix and in
 
 ## Amazon (amazon.com)
 
-**Probed:** 2026-08-03, from danserver over a residential connection.
-**Transport:** `curl` — a one-off, human-shaped read of public policy documents.
-**`boty.fetch.get` was never pointed at amazon.com and no product page was
-requested at any point in this phase.** That ordering is the finding rather than
-a courtesy: the question "may we request this at all" was settled *before* any
-request whose legitimacy would have depended on the answer, so this section can
-make a claim the Pokémon Center one could only make retroactively.
+**Probed:** 2026-08-03 twice — first with `curl` for the policy documents, then
+with `boty.fetch.get` for three `/dp/<ASIN>` product pages. Both from danserver
+over a residential connection.
+**Transport:** `curl` for the policy reads; impersonated HTTP (rung 1) for the
+product pages. No browser was ever started against amazon.com.
 
-**Verdict: REFUSED**
+**Verdict: REACHABLE (rung 1)**
 
-Rung 4, and the decisive reason is written rather than technical. Amazon's
-Conditions of Use prohibit exactly what this monitor does, twice over — once by
-naming the *data* and once by naming the *method*. No wall was ever reached
-because none needed to be, and no transport work was spent on a retailer that
-should not ship regardless of which transport won.
+**That verdict replaces a REFUSED one recorded earlier the same day, and nothing
+behind the REFUSED is retracted.** Read the whole section rather than this line.
+
+- **Phase 3, 03-01 (2026-08-03, earlier):** REFUSED, on Amazon's Conditions of
+  Use, with **zero** product-page requests ever made. Every quoted clause, every
+  byte count and the whole `robots.txt` analysis below stand exactly as written.
+- **03.1-03 (2026-08-03, this verdict):** REACHABLE at **rung 1 with `dom`
+  extraction**, after Dan reversed the terms reasoning and the question nobody
+  had asked was finally asked. Amazon serves `/dp/<ASIN>` to impersonated HTTP:
+  three requests, three HTTP 200s, no challenge, correct product titles.
+
+**What REACHABLE means here, precisely.** Amazon's product pages are reachable
+and carry a readable stock signal — but **not a structured one**. There is no
+`application/ld+json` on a `/dp/` page, no `__NEXT_DATA__`, and no JSON blob
+carrying a price, an availability or a seller. What is server-rendered is the
+add-to-cart control, the `#availability` line and a named buy-box seller, and
+that is what `boty.retailers.check_amazon` reads.
+
+**So this is Target's fragility on GameStop's transport, and the matrix says
+so.** Rung 1 + `dom`, `degraded=True` on every result, a `[dom]` tag in `boty
+check`. Cheap to run and silent to break: an Amazon buy-box redesign produces no
+error, only a control that stops reading. That is the combination 03.1-05
+widened `Result.degraded` for, and Amazon is its first real user.
+
+**Amazon is the one retailer of the hard two that does list the product** — and
+the listing is the exact thing this project exists not to alert on. See the
+2026-08-03 subsection: a **used** unit at **$219** from a third-party reseller
+against a $54.99 MSRP.
+
+The Conditions of Use quotations, the `robots.txt` analysis and the PA-API
+deprecation all remain below, in full. They are still true and they still feed
+the REQ-13 Terms cell; what changed is that they are no longer the *decisive*
+reason for a rung, because that decision was Dan's to make and he made it.
 
 ### 2026-08-03, 03.1-03 — the request Phase 3 never made
 
@@ -298,6 +324,126 @@ the last:
 Both runs read all five live, browser rung included; neither was an
 `INCOMPLETE` (exit 4) green.
 
+### 2026-08-03, 03.1-03 — what was then built, and the wall we walked into on the way
+
+#### Amazon refused us exactly once, and it was our own fault
+
+Two `boty capture-fixture` calls were made **12 s apart** rather than the ≥ 20 s
+the budget above requires. The second came back like this, from the same URL
+that had served 1.89 MB of product page eight minutes earlier:
+
+**Refusal observed (rung 1):** `https://www.amazon.com/dp/B0BX2P43PX` — **HTTP
+200**, **3,781 B**, `<title>Amazon.com</title>`, body reading *"Click the button
+below to continue shopping"* over a form posting to
+`/errors_page/validateCaptcha`, plus Amazon's own notice *"To discuss automated
+access to Amazon data please contact api-services-support@amazon.com."*
+
+**That line is historical, and it records a cadence throttle rather than a
+policy wall.** It is kept because it is a measurement and because it is the only
+refusal this repository has ever seen from Amazon. It does not describe the
+current state of this retailer: the same path served a full page before it and
+has served one on every control run since.
+
+**Two things follow, and the second one is the serious one.**
+
+First, the spacing rule is not decoration. 12 s is enough to trip it and 85 s is
+not.
+
+Second — **no `BLOCK_PHRASES` entry matched that wall.** So `boty.fetch.get`
+returned a captcha gate as an ordinary `Page`, and `boty.fixtures.capture`
+wrote it to disk under a product's name, which is verbatim the outcome
+`capture`'s own docstring says it exists to prevent: *"a capture that swallowed
+them would write a CAPTCHA interstitial to disk under a product's name and
+poison every test that reads it."* Downstream it would have read as
+`no structured stock data found (page shape changed?)` — fail-safe in outcome,
+and a diagnosis blaming our parser for Amazon's refusal. **This is the Imperva
+defect of 02-04 and the Akamai defect of the fifth-retailer search, on a third
+vendor, and this time it actually bit.**
+
+The file was deleted rather than committed and
+`"to discuss automated access to amazon data"` was added to `BLOCK_PHRASES` in
+the same task, with the wall embedded verbatim in `tests/test_fetch.py` as
+`AMAZON_AUTOMATED_ACCESS_WALL` so the phrase is asserted against Amazon's bytes
+rather than against our transcription of them.
+
+**The obvious phrase was checked and rejected, and that check is the point.**
+The wall's human-readable heading is *"Click the button below to continue
+shopping"*, and the wording a search would have suggested — *"something went
+wrong on our end"* — appears **once in each of the two real Amazon product pages
+this plan fetched**. Adding it would have reported a working retailer as blocked
+forever, which is the bad-bet failure `BLOCK_PHRASES`'s own docstring warns
+about, one grep away from being shipped.
+`test_a_real_product_page_is_not_mistaken_for_a_challenge` is now parametrised
+over both Amazon fixtures for exactly that reason.
+
+#### What landed
+
+| | |
+|---|---|
+| Adapter | `boty.retailers.check_amazon` — `boty.fetch.get` + `_verdict_from_html(rung=Rung.TLS, allow_dom=True)`. `extraction=Extraction.DOM` on every path, error paths included |
+| Reader | `boty.parse.add_to_cart_offers`, **widened rather than duplicated**. Amazon's control is a void `<input>` whose label is in its `value` attribute and whose id is fixed per layout (`add-to-cart-button`, or `-ubb` on a used buy box); Target's is a `<button>` with a per-product id prefix. One parser, two page families, one availability decision — and mutation M8 still covers it |
+| Allow-list | `FIRST_PARTY["amazon"] = {"amazon.com", "amazon"}`, from the verbatim `Amazon.com` read off `/dp/B00NTCH52W`. `amazon` stays in `MARKETPLACES` |
+| Watches | a control on `B00NTCH52W` and a **real product watch** on `B0BX2P43PX` with `max_price: 80` — Amazon is the only one of the hard two that lists the GO Plus + |
+| Block phrase | `"to discuss automated access to amazon data"` added to `boty.fetch.BLOCK_PHRASES` |
+| Fixtures | `tests/fixtures/amazon/control-aa-batteries.html` and `goplusplus.html`, both redacted by class before commit |
+
+**The seller default is per page family, and that is the single most dangerous
+line in this plan had it gone the other way.** On Target, *absence* of a seller
+block is the first-party signal — measured, § Target. Carrying that default
+across to Amazon would have meant every Amazon buy box the parser could not read
+would report as sold by Amazon, so a reseller whose block failed to parse would
+alert. On Amazon the default is `None`, which on a marketplace is UNKNOWN.
+`test_an_amazon_offer_with_no_seller_recorded_is_unknown_not_a_verdict` pins it.
+
+**The fixtures were redacted before commit, by class rather than by value** —
+03.1-02's lesson applied *before* a leak rather than after one. The raw captures
+carried Amazon's geolocation of this host (`Redacted` ×3 and ×3, `00000` ×6 and
+×3), a `session-id`, an `anti-csrftoken-a2z`, ten offer-listing tokens, an
+`x-amz-rid` request id and request timestamps. Every `<script>` body, every
+`<style>` body and every HTML comment was emptied or dropped, session/csrf/
+offer-listing/timestamp input values blanked, and every host marker replaced:
+3.2 MB → 1.77 MB and 1.89 MB → 1.08 MB, with the control, the seller, the price
+and the availability line all still reading. A hand scan for the host's public
+IP, its city, its ZIP, coordinates, phone numbers, ZIP+4, session tokens and
+request ids comes back clean, and the widened automated guard passes.
+
+**One redaction bug is worth recording because it is the same shape as the
+guard's.** The first pass matched secret input names with an *anchored* pattern
+ending in `offerlistingid`, and Amazon writes `items[0.base][offerListingId]` —
+so the token survived, silently, in a file that looked redacted. Containment
+rather than anchoring fixed it, and the by-hand rescan is what found it. A guard
+that only knows the exact spelling it was taught keeps passing until the shape
+changes.
+
+#### Live, after registration
+
+`scripts/control_check.py` under the service `EnvironmentFile`, 13:58:05Z:
+
+```
+control check: 6 control(s), live
+  in_stock  amazon  CONTROL — Amazon Basics AA batteri  $9.99  add-to-cart control: add-to-cart enabled from Amazon.com
+control check: PASS — 6/6 controls in stock
+```
+
+Exit **0**, six live controls, not an `INCOMPLETE` green. **Six configured
+retailers.**
+
+#### The budget, finally
+
+**5 of 6 requests spent**, and the sixth was deliberately not spent. Three
+probes (Task 1) plus two `capture-fixture` calls, one of which returned the wall
+above. Rather than re-request the product page, the fixture was written from the
+**bytes of the 13:31:19Z probe** — a live `boty.fetch.get` response this
+repository already held, saved outside the repo at the time — and its `.json`
+sidecar records that provenance in full. **Zero rendered loads**, against a cap
+of two.
+
+Control-check requests are counted separately and deliberately: they are the
+shipped monitor's ordinary behaviour, one request per pass, mandated by this
+plan's own gates and by `boty.service` every 300 s from here on. Folding them
+into a probing budget would make the budget meaningless the moment the retailer
+was registered.
+
 ### What was retrieved
 
 | Target | Result |
@@ -457,64 +603,85 @@ Use above are not suspended by holding an Associates account. The Creators API i
 a sanctioned path for affiliate publishers to *promote* products, not a
 back-channel around the clause that forbids collecting prices.
 
-### What was NOT done, and why
+### What was NOT done, and why — revised 2026-08-03 by 03.1-03
 
-- **No product page was ever requested.** Not at rung 1, not at rung 3, not
-  once. The Conditions of Use were read first precisely so this sentence could
-  be written: **bot-y makes no requests to amazon.com.** There is no watch in
-  `config/products.yaml`, no `FIRST_PARTY["amazon"]` entry, no dispatch branch
-  and no fixture under `tests/fixtures/amazon/`. `amazon` remains in
-  `boty.retailers.MARKETPLACES` — it is the archetypal buy-box marketplace and
-  that entry is a statement about the retailer, not a claim to support it.
-- **No transport work at all.** This is the difference from Pokémon Center,
-  which cost ten probes across two transports and two WAF vendors before a desk
-  review of its Terms produced the reason that actually settled it. Here the
-  reading came first, so nothing was spent finding out how well-defended a page
-  is that we would not be entitled to read either way. `.planning/ROADMAP.md`
-  asks for reachability to be established "cheaply *before* investing in an
-  adapter"; six policy reads is as cheap as that gets.
-- **The Creators API was not signed up for.** Rung 2 exists on paper and the
-  fresh-clone rule closes it — see above. Obtaining the credential personally
-  would have made *this host* able to read Amazon while every clone of this repo
-  could not, which is a footnote in the README rather than support, and the
-  clause forbidding collection of prices is not suspended by holding one anyway.
-- **The `/dp/<ASIN>` gap in robots.txt was not walked through.** It is real: the
-  bare product path carries no `Disallow`. Taking it because the narrower
-  technical file omits it, while the broader written one names prices
-  explicitly, is the posture `03-CONTEXT.md` locks this project out of.
+The four bullets this heading used to carry were Phase 3's, and the first two of
+them said no product page had ever been requested. **Both are now historical**;
+they are quoted and dated in the 2026-08-03 subsection above rather than edited
+into something they never said. What follows is what is *not* done as of this
+verdict.
+
+- **Still no rung 2, and the reason is unchanged.** The Creators API was not
+  signed up for. It needs an Associates account governed by a commercial
+  operating agreement, a completed tax interview, a payment method, a Partner Tag
+  and a per-region approval — see the fresh-clone analysis above. A person
+  cloning this repo to watch one $54.99 accessory cannot obtain that. Nothing in
+  this plan changes that assessment; rung 1 works, so rung 2 was never needed.
+- **Still no browser.** Amazon serves the add-to-cart control in the rung-1
+  bytes, so rung 3 would spend a Chrome process to obtain something curl already
+  returned. The ladder says stop at the first rung that works.
+- **The three disallowed paths were not touched.**
+  `/gp/product/product-availability`, `/dp/product-availability/` and
+  `/gp/offer-listing/` carry a `Disallow` in Amazon's `robots.txt` and this
+  repository has never requested any of them. `/dp/<ASIN>` — which carries no
+  `Disallow` and no matching rule anywhere in the `*` group — is the only path
+  read. That distinction is the whole of the robots.txt position and it is
+  unchanged from Phase 3's reading of the same file.
+- **No unavailable Amazon page was ever seen.** All three pages fetched were
+  available, so this repository has no observation of what Amazon renders when an
+  item cannot be bought. `parse.add_to_cart_offers` therefore returns `None`
+  (UNKNOWN) when the control is absent and will never say OUT_OF_STOCK on
+  Amazon's word from an absence. That is a gap, recorded as one.
+- **The politeness budget was not spent.** 5 of 6 requests, 0 of 2 permitted
+  rendered loads.
 
 ### If somebody revisits this later
 
-**Do not re-probe.** There is nothing to re-probe: no wall was measured, so
-there is no wall that could weaken. Periodically retrying a retailer whose terms
-forbid automated interaction — waiting for enforcement to lapse, or for a
-fingerprint to start working — is exactly the behaviour this project should not
-have, and here there is not even the excuse of a technical question left open.
-A clean HTTP 200 from `/dp/<ASIN>` would prove only that we had been rude
-successfully.
+**The instruction here used to be "do not re-probe", and it was right when it
+was written** — there was no wall to weaken and nothing to learn. It is quoted
+in the 2026-08-03 subsection above as one of the four passages this plan
+supersedes. What replaces it:
 
-**What would actually change this** is Amazon saying something different. A
-product-availability signal a non-commercial user can subscribe to; a Creators
-API tier that does not require an affiliate relationship and whose licence
-permits reading stock for personal use; or a revision of the LICENSE AND ACCESS
-clause that stops naming prices. Any of those is a genuine rung 2 and would be
-worth wiring up the same afternoon. The retrieval date and the `Last updated`
-header above are recorded so a future reader can tell at a glance whether the
-document they are looking at is the one this verdict was based on.
+**Do re-read the Conditions of Use, and read them as a person rather than as a
+gate.** The LICENSE AND ACCESS clause quoted in full above still says what it
+says, and this project still reads two of the fields it names. That tension is
+not resolved by this verdict; it is *decided*, by the maintainer, on the record,
+in these words: *"bot-y is a bot for humans. To take the power back from other
+bots."* Somebody inheriting this repository is entitled to decide differently,
+and everything they would need to is above: the clause verbatim, the retrieval
+date, the `Last updated` header, and the robots.txt analysis that disagrees with
+it in the narrower direction.
+
+**Do expect this detector to break quietly.** It reads presentation markup on a
+retailer that A/B-tests its buy box continuously. The control watch on
+`B00NTCH52W` and mutation M8 are the two things that will tell you; there is no
+third.
+
+**What would still be a genuine upgrade** is Amazon publishing something
+structured a non-commercial user may read — a product-availability signal, or a
+Creators API tier without the affiliate relationship. Either would move this off
+`dom` and drop the `degraded` flag, and would be worth wiring up the same
+afternoon.
 
 ### Why this is the plan succeeding
 
 The roadmap's criterion for this retailer is "Amazon reports stock, **or** the
-support matrix records what was tried and why it failed." This is the second
-branch, and it is the better one to land on: a written prohibition is a more
-durable finding than a wall, because a wall can fall and this cannot. Nobody has
-to re-derive it in six months, and nobody has to wonder whether a different TLS
-fingerprint would have worked. It would have.
+support matrix records what was tried and why it failed." **This is now the
+first branch**, and getting there cost three product-page requests.
 
-It costs the phase its fifth retailer unless Target lands — see `QUESTIONS.md`.
-That is recorded rather than papered over: no Amazon watch, and no substitute
-retailer added to move the count. `scripts/evidence_check.py`, added by this same
-plan, is what makes that shortfall mechanically impossible to hide later.
+That is worth being precise about, because the second branch had already been
+recorded and it looked complete: quoted clauses, a full `robots.txt` analysis,
+six policy reads with byte counts, a coherent argument. Everything in it was
+true. What it did not contain was a single observation about whether the page
+could be read — and it had a section explaining why nobody should ever find out.
+A finding that forecloses its own disproof is the shape worth recognising here;
+REQ-07a and `evidence_check` rule 6 exist so the tree can recognise it
+mechanically rather than relying on somebody re-reading the prose.
+
+The count is now **six retailers configured**, and Amazon is the only one of the
+six that both lists the Pokémon GO Plus + and is a marketplace — which makes it
+the only place the seller filter and the price ceiling have anything to defend
+against. They are defending against something today: a used unit at $219.
 
 ---
 

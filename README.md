@@ -102,16 +102,24 @@ whole project exists to catch, so the column is a warning, not a label.
 | Nintendo | 1 | structured | permits `/us/store/products/` | forbids automated means | `curl_cffi` + schema.org JSON-LD | ✅ Working — first-party for the hardware, and the only place in this config that lists the GO Plus + at its $54.99 MSRP with no marketplace attached. ⚠ disagree — `robots.txt` is `Allow: /` and publishes a store sitemap, while § 6 of the Terms of Use bars "any robot … spider, crawler, scraper or other automated means" |
 | Best Buy | 3 (2 with a key) | structured | unread — refused at the connection layer | unread — same refusal | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
 | Pokémon Center | 4 | — | permits `/product/` | forbids data mining | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 (headless Chrome, twice); its `robots.txt` forbids the API endpoints that would answer the stock question | ❌ Dropped, with the evidence written down. Not configured, and deliberately not padded into the count — it stocks the product, so a watch here would have looked plausible and read nothing forever. ⚠ disagree — `/product/*` is not disallowed, but the Terms of Use prohibit data gathering outright |
-| Amazon | 4 | — | permits `/dp/` | forbids extraction | none — its Conditions of Use forbid it. The licence to use the site excludes "any collection and use of any product listings, descriptions, or prices" and "any use of data mining, robots, or similar data gathering and extraction tools" | ❌ Dropped, and dropped without ever fetching a product page. The terms were read first, so the reason is a written prohibition rather than a wall we could not get past — a wall can fall and this cannot. Not configured. ⚠ disagree — no rule matches `/dp/<ASIN>`, while the Conditions of Use forbid extraction |
+| Amazon | 1 | dom | permits `/dp/` | forbids extraction | `curl_cffi` + the **add-to-cart control**, with no browser. Amazon serves `/dp/<ASIN>` to impersonated HTTP — three requests on 2026-08-03, three HTTP 200s, no challenge — and ships **no** structured data in it: zero `application/ld+json`, no `__NEXT_DATA__`, and no JSON blob on the page carrying a price, an availability or a seller. What is server-rendered is the control (`id="add-to-cart-button"`, or `-ubb` on a used buy box), the `#availability` line and a named buy-box seller, read verbatim: `Amazon.com` on a first-party offer. The three paths `robots.txt` disallows — `/gp/product/product-availability`, `/dp/product-availability/`, `/gp/offer-listing/` — are never requested | ⚠️ Working, `[degraded]` `[dom]` — **the cheapest transport here with the most fragile extraction here.** A buy-box redesign breaks it silently: no error, no 403, just a control that stops reading, which is why a control watch and mutation M8 both cover it. Amazon is the one retailer of the hard two that **does** list the GO Plus + — and the only offer on it is a **used** unit at **$219** from `LO Store (We Record Serial Numbers To avoid FRAUD)` against a $54.99 MSRP, which is verbatim the alert this project exists not to send. Both defences suppress it independently. Rung 4 stood here until 2026-08-03 on a reading of the Conditions of Use; every clause of that reading is still in the evidence log and none of it was retracted — the maintainer reversed which document decides. ⚠ disagree — no rule matches `/dp/<ASIN>`, while the Conditions of Use forbid extraction |
 | Target | 3 | dom | permits `/p/` | forbids extraction | Headless browser + the **add-to-cart button**. Target ships no structured data on `/p/` at all — zero `application/ld+json`, zero `"price"`, zero `"seller"`, an empty price module and its own `isProductDetailServerSideRenderPriceEnabled: false` — and renders stock client-side. So there is nothing to read but presentation markup: the control at `id="addToCartButtonOrTextIdFor<TCIN>"`, buyable when enabled and out of stock when `disabled`. A `Sold & shipped by` block marks a Target Plus partner and is not treated as first-party | ⚠️ Working, `[degraded]` `[dom]` — **control-only, and the most fragile detector here.** A reskin breaks it silently: no error, no 403, just a control that stops reading, which is why one exists and why mutation M8 pins it. There is no GO Plus + watch because Target **delisted** the product (TCIN `88714054`, HTTP 200 as late as 2025-05, now 404) — a disproof, not an omission. Rendering the page makes Target's own JavaScript fetch three Target hosts that publish `Disallow: /`; that is recorded in the open in `QUESTIONS.md` § 0d, measured rather than assumed, and no code here addresses them directly. ⚠ disagree — `robots.txt` does **not** disallow `/p/` and Target publishes a product-detail sitemap, so it is broader than the terms here |
 
-**Five working retailers.** The roadmap's MVP bar was five, and the number is
+**Six working retailers.** The roadmap's MVP bar was five, and the number is
 worth reading with its history attached, because it sat at four for most of this
-project's life and the difference is not that the bar was lowered. Two retailers
-are still dropped, for reasons worth telling apart. Pokémon Center was walked
-down the whole ladder and **refused at every rung**. Amazon has not been probed
-at all: its Conditions of Use forbid collecting prices, so the reason is a
-written prohibition rather than a wall. Neither has been padded into the count.
+project's life and the difference is not that the bar was lowered. **One**
+retailer is still dropped: Pokémon Center, walked down the whole ladder and
+**refused at every rung**. It has not been padded into the count.
+
+Amazon was the seventh row and the second dropped one until 2026-08-03, on a
+reading of its Conditions of Use rather than on a wall — and with **zero**
+product-page requests ever made, which is the part worth pausing on. The record
+was complete and internally consistent: quoted clauses, a full `robots.txt`
+analysis, six policy reads with byte counts. It contained no observation about
+whether the page could be read, and a section explaining why nobody should find
+out. When the maintainer reversed which document decides, the question took
+three requests to answer: HTTP 200, every time, with the add-to-cart control
+sitting in the response. Nothing in the old record was retracted to get there.
 
 **Target is the fifth, and it is the one worth reading**, because it is the
 failure mode this project is least equipped to notice from the outside: a page
@@ -133,17 +141,22 @@ so on every line it prints.
 
 Target still cannot watch the GO Plus + itself, and that is a **disproof**:
 Target listed it (TCIN `88714054`, HTTP 200 as late as 2025-05) and delisted it.
-So the fifth retailer does not move the thing the count was a proxy for. The US retail set for this device holds no sixth candidate that stocks
-the product. [`docs/retailer-evidence.md`](docs/retailer-evidence.md) carries all
-three records, including which two probes would establish whether anything has
-changed at Pokémon Center.
+So the fifth retailer does not move the thing the count was a proxy for — the
+same disproof already recorded for Best Buy.
 
-One more thing the Target probe settled, and it cuts the other way: **Target no
-longer lists the Pokémon GO Plus + at all.** TCIN `88714054` served HTTP 200 as
-recently as 2025-05 and now 404s. So even a working Target adapter would have had
-nothing to point at the product this project exists to watch — the same disproof
-already recorded for Best Buy. The bar is missed by one, and nothing about which
-retailer or why is left unrecorded.
+**Amazon is the sixth, and it is the only one that moves it.** Amazon does list
+the GO Plus +, so there is a real product watch there rather than a control
+alone. What that watch reads today is the reason both flipper defences exist: a
+**used** unit at **$219** from a third-party reseller, four times the $54.99
+MSRP. The seller is not in `FIRST_PARTY['amazon']` and `amazon` is in
+`MARKETPLACES`, so the offer is suppressed before the `max_price: 80` ceiling is
+even consulted — two independent refusals of the same listing. The watch reads
+OUT_OF_STOCK, which is the correct answer: there is no first-party Amazon offer.
+It flips the day Amazon itself sells one.
+
+[`docs/retailer-evidence.md`](docs/retailer-evidence.md) carries every record,
+including which two probes would establish whether anything has changed at
+Pokémon Center.
 
 `scripts/evidence_check.py` is what stops that number drifting, **and it runs on
 every `make verify`** — the offline suite invokes it against this tree, so it is
