@@ -1188,6 +1188,269 @@ roadmap retailer to be configured *or* to carry `**Verdict: REFUSED**` in this
 file, and rule 3 requires a short count to be consistent with the verdicts behind
 it.
 
+### 2026-08-03 — the conclusion above is revised at the maintainer's direction, and Target was probed for the first time
+
+**Everything above this heading stands. Nothing in it is retracted, softened or
+deleted** — every byte count, every quoted clause, the RedSky `Disallow: /`, the
+robots.txt analysis. What changed is the *conclusion drawn from it*, and it was
+changed by a decision rather than by a discovery.
+
+**The decision is Dan's, taken 2026-08-03**, in his words:
+
+> "bot-y is a bot for humans. To take the power back from other bots."
+
+Phase 3 dropped Target on a reading of its Terms of Use without ever fetching a
+product page. Dan reversed that. The consistency argument that settled it is
+recorded one section down and is worth restating here: **Nintendo has the same
+robots-permits / terms-forbid disagreement as Target** — § 6 of Nintendo's Terms
+of Use bars "any robot … spider, crawler, scraper or other automated means" —
+and Nintendo is this project's best retailer, the only one that lists the GO
+Plus + at its $54.99 MSRP with no marketplace attached. The terms argument was
+never applied consistently, and the honest fix was to stop applying it rather
+than to drop Nintendo.
+
+So the subsections above titled *"The decision this leaves for the ladder walk"*,
+*"Was Target reachable? — unknown, and deliberately so"* and *"If somebody
+revisits this later"* are **superseded by this one**. In particular the
+instruction *"Do not re-probe"* no longer holds, and the sentence *"bot-y makes
+no requests to target.com"* stopped being true at 2026-08-03. The ladder was
+walked. What follows is what it found.
+
+**The verdict line at the top of this section is unchanged, and that is the
+finding.** It is no longer held up by the Terms of Use. It is held up by a
+technical wall that was measured rather than read, and the wall is a shape this
+project had not met before: **Target serves the product page and withholds the
+product data.**
+
+#### What was requested, and the politeness budget
+
+**11 requests of the 12 budgeted, ≥ 15 s apart, no retries, no request to
+`redsky.target.com` at any point.** `boty.fetch.get` (curl_cffi) was used for
+every product page, so `BLOCK_PHRASES` was in front of Target's bytes each time.
+The sitemap and `robots.txt` reads were plain `curl`.
+
+| # | Requested | Result |
+|---|---|---|
+| 1 | `https://www.target.com/sitemap_pdp-index.xml.gz` | **HTTP 200**, 8,921 B, `application/xml`. Served **uncompressed** despite the `.gz` name. Names **110** PDP shards |
+| 2 | `https://www.target.com/pdp/sitemap_20-0001.xml.gz` | **HTTP 200**, 8,550,438 B, 22,806 URLs, TCIN `1000000074` → `1009852919` |
+| 3 | `https://www.target.com/robots.txt` | **HTTP 200**, 3,226 B, `text/plain`. Re-read to check the paths below; identical in substance to the Phase 3 reading |
+| 4 | `https://www.target.com/sitemap_taxonomy-brand-index.xml.gz` | **HTTP 200**, 196 B. Names one shard |
+| 5 | `https://www.target.com/b/sitemap_0001.xml.gz` | **HTTP 200**, 2,820,427 B, 37,504 brand URLs |
+| 6 | `https://www.target.com/b/pokemon-go/-/N-q643lez1n7g` | **HTTP 200**, 138,984 B. **No `BLOCK_PHRASES` match.** `__NEXT_DATA__` present, **zero product TCINs** — the grid loads from RedSky |
+| 7 | `https://www.target.com/pdp/sitemap_19-0003.xml.gz` | **HTTP 200**, 7,252,922 B, 15,328 URLs, TCIN `88337078` → `9999999350` |
+| 8 | `https://www.target.com/p/pok-233-mon-go-plus/-/A-88714054` | **HTTP 404** |
+| 9 | `https://www.target.com/p/pokemon-go-plus/-/A-88714054` | **HTTP 404** |
+| 10 | `https://www.target.com/p/microfiber-dust-cloths-6pk-up-38-up-8482/-/A-90377926` | **HTTP 200**, 314,757 B. **No `BLOCK_PHRASES` match.** No offers of any kind — see below |
+| 11 | `https://www.target.com/p/premium-plastic-spoons-48ct-up-38-up-8482/-/A-89685884` | **HTTP 200**, 318,690 B. Identical shape |
+
+`robots.txt` confirms `/b/` and `/c/` carry no rule; the only `/p/` rule is
+`/p/premium-registry`; `/pl/`, `/shop/` and `/s?` are disallowed and were not
+requested. Every request above is to a path Target's own `robots.txt` permits.
+
+**Controls before and after, both under the service `EnvironmentFile`:**
+
+```
+control check: PASS — 4/4 controls in stock      (before, 2026-08-03)
+  in_stock  gamestop  CONTROL — PS5 console               $549.99  ld+json: InStock from GameStop
+  in_stock  walmart   CONTROL — Great Value whole milk      $2.42  __NEXT_DATA__: IN_STOCK from Walmart.com
+  in_stock  bestbuy   CONTROL — Pokémon Let's Go, Pikach   $59.99  ld+json: InStock from Best Buy
+  in_stock  nintendo  CONTROL — Nintendo HDMI cable         $7.99  ld+json: InStock from Nintendo of America Inc.
+
+control check: PASS — 4/4 controls in stock      (after, byte-identical)
+```
+
+No retries were needed on either run. Dan's monitor was never at risk.
+
+#### How the GO Plus + TCIN was found — and the sitemap is not the index it looks like
+
+The PDP sitemap was expected to answer the TCIN-discovery problem Phase 2
+abandoned Target over. **It cannot, and the reason is structural rather than a
+matter of spending more requests.**
+
+The 110 shards are sorted by TCIN *as a string*, in **two independent runs**:
+shard `20-0001` opens at the lexicographic minimum (`1000000074`) while shard
+`19-0003` closes at the lexicographic maximum (`9999999350`). So prefixes `00`–`19`
+are one full-range sorted partition and `20`–`39` are another. That ordering is
+useful for looking a **known** TCIN up and useless for the opposite job: a search
+by product *slug* has no locality at all, so finding one product by name means
+grepping all 110 shards — roughly 900 MB. Two shards were fetched and grepped for
+`go-plus` and `pokemon-go`; both came back empty, which under this structure is
+uninformative rather than a disproof.
+
+The brand sitemap looked like a shortcut and was not one:
+`https://www.target.com/b/pokemon-go/-/N-q643lez1n7g` exists and reads cleanly at
+rung 1, but its product grid is client-side and carries no TCINs (request 6).
+
+**The public-source fallback was attempted and every general search engine
+refused it**, which is worth recording because it is the same wall this repo hit
+at GameStop and Walmart in `03.1-01`, from the same host:
+
+| Source | Result |
+|---|---|
+| `html.duckduckgo.com` / `lite.duckduckgo.com` | HTTP **202** challenge |
+| `ecosia.org` | HTTP **403** |
+| `search.yahoo.com` | HTTP **500** |
+| `reddit.com/search.json` | HTTP **403** |
+| 5 SearXNG instances | 1 anti-bot interstitial, 4 × HTTP **429** |
+| Bing, Google, DuckDuckGo via headless Chrome | CAPTCHA on all three ("Please solve the challenge below", "Our systems have detected unusual traffic") |
+
+**What worked was the Internet Archive's CDX index** —
+`web.archive.org/cdx/search/cdx`, a public index that exists to be queried and
+that costs Target nothing. A prefix scan of `www.target.com/p/pok` filtered to
+`go-plus` returns exactly two products, and it also revealed Target's slug
+encoding: **`é` is written `-233-`**, so the GO Plus + slug is
+`pok-233-mon-go-plus` and no guess at `pokemon-go-plus-plus` would ever have hit
+it.
+
+```
+https://www.target.com/p/pok-233-mon-go-plus/-/A-88714054
+https://www.target.com/p/pokemon-go-plus/-/A-52162697
+```
+
+The archived snapshot of the first, `20230522181904`, carries
+`<title>Pokémon Go Plus + : Target</title>`. **TCIN 88714054 is the Pokémon GO
+Plus +**, settled by observation rather than inference. `52162697` is the 2016
+original device.
+
+#### Does Target list the Pokémon GO Plus +? — no, not any more, and this is a disproof
+
+**It did, and it does not.** TCIN 88714054 was archived returning HTTP 200 as
+recently as **2025-05-09**. Today both URL forms answer **HTTP 404** (requests 8
+and 9), and the TCIN appears in neither PDP shard searched — consistent with a
+delisted product being dropped from the sitemap. The 2016 device's TCIN
+(`52162697`) 404s as well.
+
+This is the Best Buy shape — a **disproof**, not the "deliberate non-finding" the
+subsection above recorded — and it means that even a Target adapter would have
+had nothing to point at the product this project exists to watch. It changes only
+whether a GO Plus + watch could ship. It is **not** the reason Target stays
+unregistered.
+
+#### The wall: Target serves the page and withholds the data
+
+This is the load-bearing observation of this probe and it was not the outcome the
+plan expected.
+
+Both live control candidates (requests 10 and 11) returned a **complete, correct,
+unchallenged product page**: HTTP 200, ~315 KB, the right `<title>`, and **no
+`BLOCK_PHRASES` entry matched** — not the Akamai markers Phase 2 added
+*specifically because Akamai fronts Target*, not Imperva, nothing. Target did not
+refuse the request and did not classify us as one to refuse: the page's own
+`__NEXT_DATA__` carries `"isBot": false` and `"isAiAgent": false`.
+
+And there is nothing on the page to read:
+
+```
+boty.parse.ldjson_offers(html)   -> None
+boty.parse.nextdata_offers(html) -> None
+```
+
+Measured across the whole 314,757-byte document:
+
+| Signal | Occurrences |
+|---|---|
+| `application/ld+json` | **0** |
+| `schema.org` | **0** |
+| `"price"` | **0** |
+| `availability` (any case) | **0** |
+| `"seller"` | **0** |
+| `InStock` / `OutOfStock` / `current_retail` | **0** |
+| `<meta property="og:type" content="product">` | 1 — the only product metadata on the page |
+
+`__NEXT_DATA__` is present and large (137,816 B) and carries page scaffolding and
+RedSky endpoint configuration, not product state. The price module ships as an
+empty hole:
+
+```json
+{"module_type": "ProductDetailPrice", "version": 0, "module_data": {}}
+```
+
+```html
+<div data-module-type="ProductDetailPrice">
+  <div data-test="price-module-placeholder"></div>
+</div>
+```
+
+and Target's own flag says so out loud, on both pages:
+
+```json
+"isProductDetailServerSideRenderPriceEnabled": false
+```
+
+**That flag is the reason this was probed twice.** A feature flag can be
+cohort-based, and a cohort-based wall would fall on a retry — so a second,
+unrelated PDP was fetched (request 11). Same flag, same empty placeholder, same
+zero counts. Two archived snapshots, from **2023-05** and **2025-05**, carry no
+`application/ld+json` either. The wall is structural and long-standing, not a
+cohort we happened to land in.
+
+**So `_verdict_from_html` would read this page perfectly and return
+`UNKNOWN — "no structured stock data found (page shape changed?)"`, forever.**
+That is the UNKNOWN contract working exactly as designed; it is also a detector
+that can never detect.
+
+#### Why there is no rung left, and what is being asked of the maintainer
+
+- **Rung 1 is open and empty.** The page is permitted by `robots.txt`, is served
+  without a challenge, and contains no price, no availability and no seller.
+- **Rung 2 (RedSky) is unchanged.** `redsky.target.com/robots.txt` is 41 bytes of
+  `Disallow: /` for every agent. **No request was made to that host at any point
+  in this probe.**
+- **Rung 3 was not attempted, and that is a decision rather than an omission.** A
+  headless browser would render the numbers — by executing Target's JavaScript,
+  whose entire job on this page is to call `redsky.target.com`. Reaching the data
+  through rung 3 means causing exactly the requests rung 2 is closed over. This
+  project respects `robots.txt` — it is the standard it applied to Pokémon
+  Center's `/cortex` endpoints — so that path is closed by the same rule, and
+  `03.1-02-PLAN.md` forbids it in terms.
+
+**This is where the plan hands the question back.** Dan's 2026-08-03 decision
+settled the *Terms of Use*: a written prohibition is a fact to state, not an
+instruction this project takes. It did not settle `robots.txt`, and this is a
+`robots.txt` question — a different one, and the only remaining route to Target's
+stock data. It is recorded in `QUESTIONS.md` rather than answered here.
+
+**Refusal observed (rung 1):** not a block — **HTTP 200**, 314,757 B and 318,690 B
+on two unrelated PDPs, **no `BLOCK_PHRASES` match**, `"isBot": false`. What was
+refused is the *data*, not the request: zero `application/ld+json`, zero
+`"price"`, zero `availability`, zero `"seller"`, an empty
+`ProductDetailPrice` module and `isProductDetailServerSideRenderPriceEnabled: false`.
+
+**Refusal observed (rung 2):** `redsky.target.com/robots.txt` — 41 B,
+`User-agent: *` / `Disallow: /`. Closed by the retailer in writing to every
+agent. Not requested.
+
+**Rung 3 not attempted (recorded as a non-observation, not a refusal):** a
+rendered page reaches the data only by making the rung-2 requests through a
+browser. Closed by this project's own `robots.txt` rule, not by anything Target
+did to us. Nobody has measured whether Target would serve it.
+
+#### What this leaves in the code, unchanged and still a guess
+
+**`FIRST_PARTY["target"] = {"target"}` was NOT widened, and it could not be.**
+The whole point of this probe was to replace that guess with the literal
+`offers.seller.name` off a live page — and **Target's pages carry no
+`offers.seller.name` at all**, at any rung this project will use. The hazard the
+subsection above describes is therefore intact and still dormant: nothing
+dispatches a Target watch, so nothing passes `"target"` to `_pick`.
+
+Two things follow, and they are the useful ones:
+
+- **The guess is now known to be unverifiable rather than merely unverified.** Any
+  future plan that registers Target must obtain that string from whatever
+  transport it decides to use, and the answer cannot come from `/p/` HTML.
+- **`target` stays in `MARKETPLACES`.** Target Plus is a real third-party
+  marketplace; that entry is a statement about the retailer, not a claim to
+  support it.
+
+**No watch, no control and no fixture were added**, and that is deliberate. A
+`retailer: target` control would read UNKNOWN on every pass; `control_check.py`
+and `monitor.assess_health` would redden `make verify` within a cycle, and the
+support matrix would advertise a retailer the monitor cannot read. Registering
+Target on the strength of a page that carries no stock data would be exactly the
+"detector with nothing behind it" the matrix exists to prevent. **The retailer
+count stays at four.**
+
 ---
 
 ## What was built on both of these (2026-08-02, 02-04 tasks 2 and 3)

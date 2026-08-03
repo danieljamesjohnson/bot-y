@@ -82,28 +82,38 @@ actually tried against each one, and what came back, is in
 | Best Buy | 3 (2 with a key) | unread — refused at the connection layer | unread — same refusal | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
 | Pokémon Center | 4 | permits `/product/` | forbids data mining | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 (headless Chrome, twice); its `robots.txt` forbids the API endpoints that would answer the stock question | ❌ Dropped, with the evidence written down. Not configured, and deliberately not padded into the count — it stocks the product, so a watch here would have looked plausible and read nothing forever. ⚠ disagree — `/product/*` is not disallowed, but the Terms of Use prohibit data gathering outright |
 | Amazon | 4 | permits `/dp/` | forbids extraction | none — its Conditions of Use forbid it. The licence to use the site excludes "any collection and use of any product listings, descriptions, or prices" and "any use of data mining, robots, or similar data gathering and extraction tools" | ❌ Dropped, and dropped without ever fetching a product page. The terms were read first, so the reason is a written prohibition rather than a wall we could not get past — a wall can fall and this cannot. Not configured. ⚠ disagree — no rule matches `/dp/<ASIN>`, while the Conditions of Use forbid extraction |
-| Target | 4 | permits `/p/` | forbids extraction | none — its Terms & Conditions forbid it. `Unlawful or Prohibited Uses` bars "any use of data extraction, scraping, mining or other data gathering tools" and "otherwise scrape, collect, store or use any Content … product listings, descriptions, prices or images", with no commercial-use qualifier. Rung 2 (RedSky) is closed separately: `redsky.target.com/robots.txt` is `Disallow: /` for every agent | ❌ Dropped, without ever fetching a product page. ⚠ disagree — `www.target.com/robots.txt` does **not** disallow `/p/`, and Target publishes a product-detail sitemap, so robots.txt is broader than the terms here. Not configured |
+| Target | 4 | permits `/p/` | forbids extraction | none — but **not** for the reason the Terms give. `/p/` was fetched at rung 1 on 2026-08-03: **HTTP 200**, ~315 KB, no challenge, no block phrase, `"isBot": false` — and **zero** `application/ld+json`, zero `"price"`, zero `availability`, zero `"seller"`. Target ships the price module empty (`isProductDetailServerSideRenderPriceEnabled: false`) and loads stock from `redsky.target.com`, whose `robots.txt` is `Disallow: /` for every agent. Rung 3 would reach the data only by making those same requests through a browser | ❌ Dropped — probed, reachable, and carrying no stock data to read. The page is served perfectly and is empty of offers, so a watch here would read UNKNOWN forever. Target also **no longer lists** the GO Plus + (TCIN `88714054`, HTTP 200 as late as 2025-05, now 404). ⚠ disagree — `www.target.com/robots.txt` does **not** disallow `/p/`, and Target publishes a product-detail sitemap, so robots.txt is broader than the terms here. Not configured |
 
 **Four working retailers, not five — and that is now the final answer, not a
 pending one.** The roadmap's MVP bar was five, and this is what the bar actually
 bought: a retailer that cannot be read is dropped and documented rather than
 shipped as a detector with nothing behind it. **Three** fell out, for reasons
-worth telling apart — Pokémon Center was walked down the whole ladder and
-refused at every rung, while Amazon and Target were never probed at all, because
-each one's terms answer the question before a request would. None has been
-padded into the count. The number did not move in Phase 3 because both of the
-retailers that could have moved it refused **in writing**, and the US retail set
-for this device holds no sixth candidate that stocks the product;
-[`QUESTIONS.md`](QUESTIONS.md) records that shortfall as a decision for the
-maintainer rather than a task somebody can close.
-[`docs/retailer-evidence.md`](docs/retailer-evidence.md) carries all three
-records, including which two probes would establish whether anything has changed
-at Pokémon Center, and why the answer for Amazon and Target is that nobody
-should look.
+worth telling apart — and the three reasons are genuinely different. Pokémon
+Center was walked down the whole ladder and **refused at every rung**. Target was
+probed on 2026-08-03 and **refused at none of them**: its product pages are
+permitted by its own `robots.txt`, are served without a challenge, and contain no
+price, no availability and no seller, because Target renders all of that from an
+API host it closes to every agent. Amazon has not been probed. None has been
+padded into the count.
 
-That is the whole of the gap, incidentally: with Target settled, every retailer
-in the roadmap's scope is now either shipped or refused in writing. The bar is
-missed by one, and nothing about which retailer or why is left unrecorded.
+The Target case is the one worth reading, because it is the failure mode this
+project is least equipped to notice from the outside: a page that reads
+*perfectly* and says *nothing*. A watch there would return UNKNOWN on every pass
+forever, which is why one was not added — and why
+[`QUESTIONS.md`](QUESTIONS.md) records the remaining route (a headless browser,
+which reaches the numbers only by calling the disallowed API host on Target's
+behalf) as a `robots.txt` decision for the maintainer rather than a task somebody
+can close. The US retail set for this device holds no sixth candidate that stocks
+the product. [`docs/retailer-evidence.md`](docs/retailer-evidence.md) carries all
+three records, including which two probes would establish whether anything has
+changed at Pokémon Center.
+
+One more thing the Target probe settled, and it cuts the other way: **Target no
+longer lists the Pokémon GO Plus + at all.** TCIN `88714054` served HTTP 200 as
+recently as 2025-05 and now 404s. So even a working Target adapter would have had
+nothing to point at the product this project exists to watch — the same disproof
+already recorded for Best Buy. The bar is missed by one, and nothing about which
+retailer or why is left unrecorded.
 
 `scripts/evidence_check.py` is what stops that number drifting, **and it runs on
 every `make verify`** — the offline suite invokes it against this tree, so it is
