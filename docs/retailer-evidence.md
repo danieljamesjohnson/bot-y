@@ -755,6 +755,270 @@ data most of all, are shipping without it.
 
 ---
 
+## Target (target.com)
+
+**Probed:** 2026-08-03, from danserver over a residential connection.
+**Transport:** `curl` — a one-off, human-shaped read of two public policy pages
+and two `robots.txt` files. **`boty.fetch.get` was never pointed at target.com,
+no browser was ever started against it, and no product page was requested at any
+point in this phase.**
+
+**Verdict: REFUSED**
+
+Rung 4, and — as with Amazon — the decisive reason is written rather than
+technical. Target's Terms & Conditions prohibit this three separate ways, and
+one of the three has no commercial-use qualifier to argue about. The ladder was
+never walked, because the question "may we request this at all" was answered
+before any request whose legitimacy would have depended on the answer.
+
+This is the outcome that costs the phase its fifth retailer. It is recorded as
+that rather than padded — see the bottom of this section, and `QUESTIONS.md`.
+
+### What was retrieved
+
+| Requested | Result |
+|---|---|
+| `https://www.target.com/c/terms-conditions/-/N-4sr7p` | **HTTP 200**, 374,015 B, `text/html; charset=utf-8`. **The wrong document** — node `4sr7p` is the *Privacy Policy* (`"canonical_url":"/c/target-privacy-policy/-/N-4sr7p"`, `"seo_h1":"Target Privacy Policy"`), despite the `terms-conditions` slug in the requested path. Recorded rather than quietly dropped; the correct node id was then read out of this page's own `children` list instead of guessed a second time |
+| `https://www.target.com/c/terms-conditions/-/N-4sr7l` | **HTTP 200**, 471,173 B, `text/html; charset=utf-8`, no redirect. `"seo_h1":"Terms & Conditions"`, `"canonical_url":"/c/terms-conditions/-/N-4sr7l"`. Document header reads `LAST UPDATED: April 15, 2026` |
+| `https://www.target.com/robots.txt` | **HTTP 200**, 3,226 B, `text/plain`, 122 lines, **one** `User-agent` group |
+| `https://redsky.target.com/robots.txt` | **HTTP 200**, 41 B, `text/plain;charset=UTF-8`. The whole body is three lines |
+
+**Four requests in total, spaced ≥15 s apart, no retries, no refusals, and every
+one of them HTTP 200.** Two to a public policy page, two to the files on the
+internet whose entire purpose is to be fetched by an automated agent. **Zero to
+a product page. Zero from bot-y.** The politeness budget for this plan was 12
+requests; 4 were spent, all on documents, and the remaining 8 were not needed
+because the first document settled it.
+
+Note the first row: the URL `03-02-PLAN.md` names as the starting point,
+`/c/terms-conditions/-/N-4sr7p`, serves Target's Privacy Policy. The Terms &
+Conditions live one node over at `N-4sr7l`. Both are recorded because a future
+reader following the plan's URL would otherwise quote the wrong document and
+find no prohibition in it.
+
+### The operative clauses, quoted in full
+
+All from the Terms & Conditions at
+`https://www.target.com/c/terms-conditions/-/N-4sr7l`, retrieved **2026-08-03**,
+document header `LAST UPDATED: April 15, 2026`. Whole sentences are reproduced
+so a future reader can judge their scope rather than trusting this document's
+reading of them.
+
+**1. The Introduction, which is what makes a bot a party to these terms at all:**
+
+> BY ACCESSING OR OTHERWISE USING THE SITE YOU AGREE TO THESE TERMS &
+> CONDITIONS. **Any person or entity who interacts with the Site through the use
+> of crawlers, robots, browsers, data mining or extraction tools, or other
+> functionality, whether such functionality is installed or placed by such person
+> or entity or a third party, is considered to be using the Site.** If at any
+> time you do not accept all of these Terms & Conditions, you must immediately
+> stop using the Site.
+
+That sentence is unusually direct and it forecloses the obvious objection. A
+scraper does not click "I agree"; Target has written down that operating one *is*
+using the Site, and using the Site *is* agreeing. There is no version of pointing
+bot-y at target.com that is outside these terms.
+
+**2. `Unlawful or Prohibited Uses` — three of the "YOU MAY NOT" bullets:**
+
+> Whether on behalf of yourself or on behalf of any third party, YOU MAY NOT:
+> Make any commercial use of the Site or its Content, including making any
+> collection or use of any product listings, descriptions, prices or images; […]
+> **Use or attempt to use any engine, software, tool, agent, data or other device
+> or mechanism (including browsers, spiders, robots, avatars or intelligent
+> agents) to navigate or search the Site other than the search engine and search
+> agents provided by Target, generally publicly available browsers, or approved
+> Agentic Commerce Agents;** […] **Make any use of data extraction, scraping,
+> mining or other data gathering tools, or create a database by systematically
+> downloading or storing Site content, or otherwise scrape, collect, store or use
+> any Content, account information, product listings, descriptions, prices or
+> images, except pursuant to the limited license granted by these Terms &
+> Conditions;**
+
+**3. The `Agentic Commerce and Delegated Access` section**, which is new since
+anyone last looked at this file and which closes the one door a 2026 reader might
+think had opened:
+
+> The terms in this section apply if you expressly authorize an agent powered
+> through AI ("Agentic Commerce Agent") to access and perform certain functions
+> in your Target account on your behalf. **Only Agentic Commerce Agents expressly
+> approved by you and by Target are considered Agentic Commerce Agents. Other
+> automated or unauthorized agentic tools are expressly prohibited.**
+
+### Reading those clauses honestly, including where they do not bite
+
+Two of the three prohibitions have arguable edges, and this record is worth more
+if it says so rather than stacking everything up as decisive.
+
+- **The commercial-use bullet does not obviously reach bot-y.** It forbids
+  "**any commercial use** of the Site or its Content, including making any
+  collection or use of any product listings, descriptions, prices or images". A
+  personal restock monitor is not commercial use, so that bullet is not the one
+  that settles this. (Amazon's equivalent clause *is* decisive, because Amazon
+  writes the listings-and-prices carve-out as an exclusion *from* the personal,
+  non-commercial licence rather than as a commercial-use prohibition. The two
+  read similarly and are structured differently.)
+- **The navigation bullet has a carve-out that might cover rung 3.** It permits
+  "generally publicly available browsers", and rung 3 drives a real, publicly
+  available Chrome. A determined reading could put headless Chrome inside that
+  carve-out — though the same bullet names "robots" and "intelligent agents" in
+  its prohibition, and an unattended process polling a product page every five
+  minutes is plainly the thing being described. Call it arguable rather than
+  settled.
+
+**The third bullet has no such edge, and it is the one that decides this.** It is
+not qualified by commercial use, it names no permitted-tool carve-out, and it
+prohibits four things bot-y does by definition:
+
+1. "Make any use of **data extraction, scraping, mining or other data gathering
+   tools**" — that is a description of this program.
+2. "create a database by **systematically downloading or storing Site content**"
+   — `boty.fixtures.capture` writes retailer HTML to disk; `state.json` stores a
+   per-watch availability and price history.
+3. "otherwise **scrape, collect, store or use any Content** […] **product
+   listings, descriptions, prices or images**" — availability and price are the
+   only two fields bot-y reads, and it stores both.
+4. The verb "**use**" in that list is the widest of them. Even a read that
+   persisted nothing at all would still be *using* a price.
+
+**The `except pursuant to the limited license` carve-out closes rather than
+opens.** The licence it points at is granted in the `License and Access` section
+immediately above:
+
+> Target grants you a limited license to access and make personal use of the Site
+> and the Content for NONCOMMERCIAL PURPOSES ONLY and **only to the extent such
+> use does not violate these Terms & Conditions including, without limitation,
+> the prohibitions listed in the "UNLAWFUL OR PROHIBITED USES" section of these
+> Terms & Conditions**. You may download, print and copy Content for personal,
+> noncommercial purposes only, provided you do not modify or alter the Content in
+> any way, delete or change any copyright or trademark notice, or violate these
+> Terms & Conditions in any way.
+
+So the exception is circular by construction: the prohibition permits what the
+licence allows, and the licence allows nothing the prohibition forbids. The
+circle closes against us. bot-y's use being personal and non-commercial gets it
+past the *first* condition of that licence and straight into the second.
+
+### robots.txt — permissive, and it disagrees with the Terms
+
+The same shape as Amazon and Pokémon Center, and the disagreement is sharper here
+than at either: reading `www.target.com/robots.txt` alone would have produced not
+just a different answer but an *encouraging* one.
+
+The file is 122 lines with exactly **one** `User-agent` group — `*`. There are no
+named-bot blocks at all: no `GPTBot`, no `ClaudeBot`, no `Scrapy`, nothing of the
+kind Amazon lists 99 of. The `Disallow` list is a long, specific set of legacy
+WebSphere endpoints, checkout and account paths, and search/facet URLs:
+
+```
+Disallow: /s?
+Disallow: /cart
+Disallow: /account/
+Disallow: /shop/
+Disallow: /pl/
+Disallow: /p/premium-registry
+```
+
+**The product-detail path `/p/` is not disallowed.** The only `/p/` rule in the
+file is `/p/premium-registry`, and `/p/<slug>/-/A-<TCIN>` — the exact URL form a
+stock read needs — carries no rule matching it anywhere in the group. Target goes
+further and *publishes the map*:
+
+```
+Sitemap: https://www.target.com/sitemap_pdp-index.xml.gz
+Sitemap: https://www.target.com/sitemap_keywords-index.xml.gz
+Sitemap: https://www.target.com/sitemap_taxonomy-categories-index.xml.gz
+Sitemap: https://www.target.com/sitemap_taxonomy-brand-index.xml.gz
+Sitemap: https://www.target.com/sitemap_facet-categories-index.xml.gz
+Sitemap: https://www.target.com/sitemap_stores-index.xml.gz
+```
+
+`sitemap_pdp-index.xml.gz` is a product-detail-page index — a sanctioned
+discovery path of exactly the kind Nintendo publishes and Amazon does not, and
+the very thing that would have solved the TCIN-discovery problem
+`.planning/STATE.md` records Phase 2 stopping on.
+
+**So robots.txt is materially broader than the Terms & Conditions, and the two
+disagree.** robots.txt would permit fetching `/p/<slug>/-/A-<TCIN>`, and hands
+you an index to find them with; the Terms forbid using data-gathering tools on
+the Site and forbid collecting, storing or using prices at all. Where they
+disagree, the Terms are the document Target says you agree to by operating a
+crawler against the Site, and a narrower technical file does not license what the
+broader written one refuses. Taking the `/p/` gap because robots.txt omits it,
+while the Terms name prices explicitly, is precisely the "respects robots.txt
+while working around the ToU" posture that
+`.planning/phases/03-the-hard-two/03-CONTEXT.md` locks this project out of — and
+it is the same call this repo already made for Amazon's `/dp/<ASIN>` gap eight
+hours earlier.
+
+### Rung 2 — RedSky, settled here rather than left to a ladder walk
+
+`redsky.target.com` is Target's own internal aggregation API
+(`/redsky_aggregations/v1/web/pdp_client_v1?tcin=…&key=…`). It is not a
+documented public product, has no signup, no terms of service of its own and no
+published contract. It is closed **four** separate ways, and the first one is
+mechanical:
+
+**1. Its `robots.txt` disallows the entire host, for every agent.** The whole
+file, all 41 bytes of it:
+
+```
+User-agent: *
+Crawl-delay: 1
+Disallow: /
+```
+
+No `Allow`, no exceptions, no named groups. This is the same standard Pokémon
+Center's `/cortex` endpoints were held to, and Target's version is broader than
+Pokémon Center's — that file closed five specific paths, this one closes the
+host. Reading it would mean taking data the retailer has asked in writing not to
+take, to power a monitor whose entire pitch is that its readings are
+trustworthy.
+
+**2. The `key` parameter fails the fresh-clone rule.** `.planning/REQUIREMENTS.md`
+requires a retailer's PRIMARY path to work for someone who clones this repo and
+adds no credentials. RedSky's `key` is not issued to anybody: there is no
+developer portal, no application, no approval. The only way to obtain one is to
+lift the constant out of Target's own front-end JavaScript. That is not "a
+credential a fresh clone cannot get" in the way Best Buy's API key or Amazon's
+Partner Tag are — it is worse. Best Buy's key is a real credential this project
+could hold and chose to document as optional; RedSky's is Target's internal
+secret, and using it means presenting yourself to Target's API as Target's own
+website. There is no reading under which that is sanctioned access.
+
+**3. The Terms above cover it regardless of host.** They govern "the Target
+website located at www.target.com **and all other sites, mobile sites, services,
+applications, platforms and tools where these Terms & Conditions appear or are
+linked** (collectively, the 'Site')", and the prohibition is on collecting prices
+by any means, not on a particular hostname.
+
+**4. It is CAPTCHA-gated in practice.** `.planning/STATE.md` records from earlier
+work that RedSky answers with a CAPTCHA even when driven from a warmed cookie
+session. That is a separate, technical fact and it belongs in the record — but it
+is the least important of the four, because it is the only one that could change.
+The other three cannot.
+
+### The decision this leaves for the ladder walk
+
+Written down explicitly, because the next step branches on it mechanically and a
+reader should be able to check the branch was taken correctly.
+
+**The Terms contain a written prohibition on automated access.** The bullet that
+establishes it is quoted in full above and is not qualified by commercial use:
+*"Make any use of data extraction, scraping, mining or other data gathering
+tools, or create a database by systematically downloading or storing Site
+content, or otherwise scrape, collect, store or use any Content, account
+information, product listings, descriptions, prices or images…"*
+
+So the verdict is `**Verdict: REFUSED**`, the primary reason is that clause, and
+**no request may be made to any target.com product page at any rung** — not at
+rung 1 to see whether Akamai answers, not at rung 3, not to discover a TCIN, and
+not "just to record an observation". Rung 1 is closed by the Terms; rung 2 is
+closed four ways above; rung 3 is closed by the same Terms as rung 1 and adds
+nothing a prohibition can be argued out of. There is no rung left to walk.
+
+---
+
 ## What was built on both of these (2026-08-02, 02-04 tasks 2 and 3)
 
 ### Nintendo — shipped, and the diff is the finding
