@@ -150,12 +150,24 @@ Plans:
   6. A single `boty check` completes in under 2 minutes
   7. `make verify` exits 0
 
-**Plans**: 2 plans (parallelizable)
+**Plans**: 3 plans, in 3 waves
+
+**Not parallelizable, and the ordering is deliberate.** Both retailer plans touch
+`boty/retailers.py`, `config/products.yaml` and `tests/test_retailers.py` on the branch
+where their retailer lands, so they serialize whatever the wave numbers say — the same
+lesson Phase 2 learned. Amazon goes first because it is the cheap one: its Conditions of
+Use are expected to settle it before any transport work, which is this section's own
+instruction ("establish reachability cheaply *before* investing in an adapter"), and its
+outcome tells the Target plan whether criterion 5 rests on Target alone.
+
+The likely honest outcome is both refused, both documented, criterion 5 unmet. Every plan
+is written so that verifies as complete rather than as a failure.
 
 Plans:
 
-- [ ] 03-01: Target — RedSky is CAPTCHA-gated even with a warmed session; product pages fetch clean, so the blocker is finding a valid `www` TCIN. Walk the ladder
-- [ ] 03-02: Amazon — expected hostile. Establish reachability cheaply *before* investing in an adapter; drop with evidence if rung 3 also fails
+- [ ] 03-01-PLAN.md — Amazon: read the Conditions of Use before touching the transport; build the unpaddable-count gate; settle Amazon's rung (wave 1)
+- [ ] 03-02-PLAN.md — Target: read the Terms first, then walk the ladder politely; register it or record rung 4 with per-rung evidence (wave 2)
+- [ ] 03-03-PLAN.md — Close the phase: publish and measure the pass duration (REQ-08), complete and gate the support matrix, prove it live under the service's own environment (wave 3)
 
 ### Phase 4: Open Source Ready
 
