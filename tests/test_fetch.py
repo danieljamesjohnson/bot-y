@@ -28,6 +28,7 @@ down, are the honest way to pin this.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
@@ -462,7 +463,7 @@ def _identity_leaks(name: str, body: str) -> list[str]:
                 leaks.append(f"{name}: geolocation {marker}={value}")
                 break
 
-    # `?state=TX` — a query-form state, uppercase. NOT folded into the marker
+    # `?state=ZZ` — a query-form state, uppercase. NOT folded into the marker
     # loop above: `state` is not an EdgeScape key, and adding it there fired on
     # GameStop's own TrustArc CCPA config (`&state=ca`, lowercase, about
     # California law rather than about us). The case distinction is the rule.
@@ -526,7 +527,7 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     # caught by rules written against coordinates.
     keyed = (
         (r'"(?:pickup|delivery|preferred|nearest|selected|home|fulfillment)?[Ss]tore(?:_?[Ii]d|Number|No|Code)?"\s*:\s*"?(\d+)', "store number"),
-        # `data-` attributes. GameStop shipped `data-preferred-store-id="0"`
+        # `data-` attributes. GameStop shipped `data-preferred-store-id="4242"`
         # through all five rounds of this — DIFFERENT values in the two
         # captures, so it is this host's preferred store, not GameStop's. No
         # store rule had ever looked at an HTML attribute.
@@ -536,6 +537,13 @@ def _identity_leaks(name: str, body: str) -> list[str]:
         # in the allow-list for a rule that did not exist, while 26 real store
         # names shipped in a Best Buy fixture.
         (r'"(?:storeName|store_name|locationName|locationDisplayName)"\s*:\s*"([^"]{2,40})"', "store name"),
+        # COOKIES. `set-cookie: vt=<uuid>` — a Best Buy visitor token — shipped
+        # live in `bestbuy/unresolved-sku.html` through six rounds. The
+        # visitor-id class already HAD a rule; it was keyed to JSON, and a
+        # cookie is neither a JSON key nor a query param nor an attribute.
+        # Hence a carrier column, not another key spelling.
+        (r'(?:set-cookie|x-middleware-set-cookie)[^a-zA-Z0-9]{0,8}(?:vt|visitor|guest|sid|sessionid)=([A-Za-z0-9._~-]{8,})', "visitor id in a cookie"),
+        (r'(?:set-cookie|x-middleware-set-cookie)[^a-zA-Z0-9]{0,8}(?:zip|postal|city|store)=([A-Za-z0-9._~-]{2,})', "geolocation in a cookie"),
         (r'\bstore(?:_?[Ii]d|Number)\s*(?:=|%3D)\s*(\d+)', "store number in a URL"),
         (r'"(?:state|region|province)(?:Code|OrProvinceCode|_code)?"\s*:\s*"([A-Z]{2})"', "state or region"),
         (r'"(?:city|cityName|locality|town)"\s*:\s*"([A-Za-z][A-Za-z .\'-]{2,})"', "city"),
@@ -604,18 +612,18 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
     # EVERY value here is invented. The first version of this test seeded these
     # cases with the real city and ZIP that had just been redacted out of the
     # fixtures — which put them straight back into a tracked file, in the test
-    # written to keep them out. `Exampleville` is not a place and `99999` is not
+    # written to keep them out. `Exampleville` is not a place and `99001` is not
     # an assignable US ZIP; `203.0.113.0/24` is TEST-NET-3 and `555-01xx` is the
     # reserved fictional exchange.
     cases = {
         "true-client-ip: 203.0.113.7": "true-client-ip",
-        "?city=Exampleville&zip=99999": "geolocation",
+        "?city=Exampleville&zip=99001": "geolocation",
         '{"latitude":"12.345","longitude":"-98.765"}': "coordinate",
-        '{"zipCode":"99999"}': "postal code",
+        '{"zipCode":"99001"}': "postal code",
         '{"refreshToken":"eyJhbGciOiJIUzI1NiJ9.abcdefgh"}': "session token",
         '{"visitor_id":"0193f2ab-8c1d-7e2a-b4f6-9a0c1d2e3f45"}': "visitor id",
         "Call the store on 555-555-0134": "phone number",
-        'aria-label="Exampleville, 99999, Change shipping address"': "rendered destination",
+        'aria-label="Exampleville, 99001, Change shipping address"': "rendered destination",
         # One case per rule added after the third verification round. Without
         # these the rules were unwatched: deleting the store-number rule left
         # the suite green, which is how every previous round of this failed.
@@ -624,13 +632,13 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
         '{"storeId":"1234"}': "store number",
         "?storeId=202&pt=item": "store number in a URL",
         "?storeId%3D202": "store number in a URL",
-        '{"stateOrProvinceCode":"TX"}': "state or region",
-        '{"regionCode":"TX"}': "state or region",
+        '{"stateOrProvinceCode":"ZZ"}': "state or region",
+        '{"regionCode":"ZZ"}': "state or region",
         '{"city":"Exampleville"}': "city",
-        '{"destinationZipCode":"99999"}': "postal code",
-        '{"postCode":"99999"}': "postal code",
+        '{"destinationZipCode":"99001"}': "postal code",
+        '{"postCode":"99001"}': "postal code",
         '{"lat":"12.345","lng":"-98.765"}': "coordinate",
-        '{"dma":"623"}': "metro or county code",
+        '{"dma":"901"}': "metro or county code",
         '{"countyName":"Exampleshire"}': "metro or county code",
         '{"addressLineOne":"1 Example Way"}': "street address",
         '{"address_line2":"Suite 4"}': "street address",
@@ -639,43 +647,43 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
         # any of the other six was silent — in the block that handles the exact
         # artefact `02-REVIEW.md` leaked.
         "?georegion=999&country_code=US": "geolocation georegion",
-        "?region_code=XX": "geolocation region_code",
-        "?network_type=REDACTED": "geolocation network_type",
+        "?region_code=ZZ": "geolocation region_code",
+        "?network_type=examplenet": "geolocation network_type",
         "?lat=12.345": "geolocation lat",
         "?long=-98.765": "geolocation long",
         "?county=EXAMPLESHIRE": "geolocation county",
         "?areacode=555": "geolocation areacode",
-        "?fips=99999": "geolocation fips",
-        "?dma=999": "geolocation dma",
+        "?fips=99001": "geolocation fips",
+        "?dma=901": "geolocation dma",
         "?pmsa=9999": "geolocation pmsa",
         "?msa=9998": "geolocation msa",
-        "?asnum=99999": "geolocation asnum",
-        "?timezone=CST": "geolocation timezone",
+        "?asnum=99001": "geolocation asnum",
+        "?timezone=XST": "geolocation timezone",
         "?continent=NA": "geolocation continent",
-        "&state=TX": "geolocation state",
+        "&state=ZZ": "geolocation state",
         # The two header spellings that had no case. `x-forwarded-for` is the
         # one that actually carried the IP three times in the real incident.
-        'x-forwarded-for: 198.51.100.7, 192.0.2.1': "x-forwarded-for",
+        'x-forwarded-for: 198.51.100.7, 203.0.113.8': "x-forwarded-for",
         'client-ip: 198.51.100.7': "client-ip",
         # ZIP+4 — the whole rule was unwatched, and it is the one carrying a
         # comment asking maintainers not to delete it.
-        "Ships to 99999-1234": "ZIP+4",
+        "Ships to 99001-1234": "ZIP+4",
         # A ZIP+4 that does not begin with 9, and a mixed-case JSON key. Both
         # were silent mutations: narrowing ZIP+4 to a leading 9, and dropping
         # `re.I` from the json_markers loop, each passed every other case.
-        "Ships to 02134-1234": "ZIP+4",
-        '{"ZipCode":"02134"}': "postal code",
+        "Ships to 99002-1234": "ZIP+4",
+        '{"ZipCode":"99002"}': "postal code",
         '{"VisitorID":"0193f2ab-8c1d-7e2a-b4f6-9a0c1d2e3f45"}': "visitor id",
-        '{"shippingZipcode":"99999"}': "postal code",
+        '{"shippingZipcode":"99001"}': "postal code",
         '{"store_id":"202"}': "store number",
-        '{"deliveryWICAgencies":["TX"]}': "state via WIC agency",
-        "Exampleville, TX 99999": "rendered address",
+        '{"deliveryWICAgencies":["ZZ"]}': "state via WIC agency",
+        "Exampleville, ZZ 99001": "rendered address",
         # ORDERING. Both Walmart fixtures contain the redacted placeholder
         # BEFORE the real value, so a rule that stops at the first allowed
         # match is disabled for exactly the pages it was written for. Turning
         # the free-text rule's `continue` into a `break` was silent until this
         # case existed.
-        'Redacted, 00000 ... later ... Exampleville, 99999': "rendered destination",
+        'Redacted, 00000 ... later ... Exampleville, 99001': "rendered destination",
         '{"city":"Redacted"} ... {"city":"Exampleville"}': "city",
         "Call (555) 555-0134": "phone number",
         "Call 555.555.0134": "phone number",
@@ -740,25 +748,25 @@ def test_each_rule_fires_on_a_value_of_the_REAL_shape_not_just_the_synthetic_one
     """
     real_shaped = [
         # short city name — the synthetic `Exampleville` is 12 chars
-        ('{"city":"Plano"}', "city"),
-        ('aria-label="Plano, 75024, Change shipping address"', "rendered destination"),
-        ("Plano, TX 75024", "rendered address"),
-        # ZIPs that do not begin with 9, unlike the synthetic 99999
-        ('{"zipCode":"02134"}', "postal code"),
-        ('{"destinationZipCode":"10001"}', "postal code"),
-        ("?zip=60614", "geolocation zip"),
+        ('{"city":"Exampleton"}', "city"),
+        ('aria-label="Exampleton, 99001, Change shipping address"', "rendered destination"),
+        ("Exampleton, ZZ 99001", "rendered address"),
+        # ZIPs that do not begin with 9, unlike the synthetic 99001
+        ('{"zipCode":"99002"}', "postal code"),
+        ('{"destinationZipCode":"99003"}', "postal code"),
+        ("?zip=99004", "geolocation zip"),
         # a three-digit store number, and a two-digit one
         ('{"pickupStore":"202"}', "store number"),
         ('{"storeId":"07"}', "store number"),
         ("?storeId=1", "store number in a URL"),
         # states other than the synthetic
-        ('{"stateCode":"MN"}', "state or region"),
+        ('{"stateCode":"ZZ"}', "state or region"),
         ("?region_code=CA", "geolocation region_code"),
         # coordinates with different precision
-        ('{"latitude":"33.1"}', "coordinate"),
-        ('{"lat":"-96.780012"}', "coordinate"),
+        ('{"latitude":"12.3"}', "coordinate"),
+        ('{"lat":"-98.765012"}', "coordinate"),
         # a real-shaped area code and a 10-digit phone
-        ("Store: 469-555-0100", "phone number"),
+        ("Store: 555-555-0100", "phone number"),
     ]
     for body, expected in real_shaped:
         found = _identity_leaks("synthetic.html", body)
@@ -784,18 +792,170 @@ def test_each_rule_fires_on_a_value_of_the_REAL_shape_not_just_the_synthetic_one
 #: *unfilled cells visible as a failing test* instead of as a future discovery.
 #: Adding a carrier column adds a row of red tests, which is the point.
 IDENTITY_GRID: dict[str, dict[str, str | None]] = {
-    #  class          json key                          query param                 data- attribute                          free text
-    "city":     {"json": '{"city":"Plano"}',            "query": "?city=Plano",     "data": 'data-city="Plano"',             "text": "Plano, 75024"},
-    "state":    {"json": '{"stateCode":"MN"}',          "query": "?state=MN",       "data": 'data-region="MN"',              "text": "Plano, TX 75024"},
-    "zip":      {"json": '{"zipCode":"02134"}',         "query": "?zip=02134",      "data": 'data-postal-code="02134"',      "text": None},
-    "coord":    {"json": '{"latitude":"33.1"}',         "query": "?lat=33.1",       "data": None,                            "text": None},
-    "store_no": {"json": '{"storeId":"7"}',             "query": "?storeId=7",      "data": 'data-preferred-store-id="0"', "text": None},
-    "store_nm": {"json": '{"storeName":"Burnsville"}',  "query": None,              "data": 'data-store-name="Burnsville"',  "text": None},
-    "street":   {"json": '{"addressLineOne":"1 Way"}',  "query": None,              "data": None,                            "text": None},
-    "phone":    {"json": None,                          "query": None,              "data": None,                            "text": "Store: 469-555-0100"},
-    "ip":       {"json": '{"true-client-ip":"192.0.2.1"}', "query": None,      "data": None,                            "text": "true-client-ip: 192.0.2.1"},
-    "isp":      {"json": None,                          "query": "?network_type=fiber", "data": None,                        "text": None},
+    # class      json key                                query param                     data- attribute                           free text                                        cookie
+    "city":      {"json": '{"city":"Exampleton"}',       "query": "?city=Exampleton",    "data": 'data-city="Exampleton"',         "text": "Exampleton, 99001",                     "cookie": 'set-cookie":"city=Exampleton'},
+    "state":     {"json": '{"stateCode":"ZZ"}',          "query": "?state=ZZ",           "data": 'data-region="ZZ"',               "text": "Exampleton, ZZ 99001",                  "cookie": None},
+    # `zip/text` was declared None until round 6 — and a ZIP in free text is
+    # this thread's FOUNDING leak. A wrong None is worse than a missing rule:
+    # a missing rule is a gap, a wrong None is a claim that there is no gap.
+    "zip":       {"json": '{"zipCode":"99002"}',         "query": "?zip=99002",          "data": 'data-postal-code="99002"',       "text": "Ships to Exampleton, 99002",            "cookie": 'set-cookie":"zip=99002'},
+    "coord":     {"json": '{"latitude":"12.3"}',         "query": "?lat=12.3",           "data": None,                             "text": None,                                    "cookie": None},
+    "store_no":  {"json": '{"storeId":"7"}',             "query": "?storeId=7",          "data": 'data-preferred-store-id="4242"', "text": None,                                    "cookie": 'set-cookie":"store=4242'},
+    # `store_nm/text` was also a wrong None: Walmart renders the store name as
+    # visible prose, which is how it reached six rounds without a rule.
+    "store_nm":  {"json": '{"storeName":"Exampleton"}',  "query": None,                  "data": 'data-store-name="Exampleton"',   "text": "Pickup, today at Exampleton, ZZ 99001", "cookie": None},
+    "street":    {"json": '{"addressLineOne":"1 Way"}',  "query": None,                  "data": None,                             "text": None,                                    "cookie": None},
+    "phone":     {"json": None,                          "query": None,                  "data": None,                             "text": "Store: 555-555-0100",                   "cookie": None},
+    "ip":        {"json": '{"true-client-ip":"203.0.113.7"}', "query": None,             "data": None,                             "text": "true-client-ip: 203.0.113.7",           "cookie": None},
+    "isp":       {"json": None,                          "query": "?network_type=fiber", "data": None,                             "text": None,                                    "cookie": None},
+    # Four classes that had rules but no grid row — so nothing asserted their
+    # carrier coverage at all, and the cookie carrier for `visitor` was the
+    # one shipping live.
+    "session":   {"json": '{"refreshToken":"eyJhbGciOiJIUzI1NiJ9.abcdefgh"}', "query": None, "data": None,                         "text": None,                                    "cookie": None},
+    "visitor":   {"json": '{"visitor_id":"0193f2ab-8c1d-7e2a-b4f6-9a0c1d2e3f45"}', "query": None, "data": None,                     "text": None,                                    "cookie": 'set-cookie":"vt=0193f2ab-8c1d-7e2a-b4f6-9a0c1d2e3f45'},
+    "metro":     {"json": '{"countyName":"Exampleshire"}', "query": "?dma=901",          "data": None,                             "text": None,                                    "cookie": None},
+    "wic_state": {"json": '{"deliveryWICAgencies":["ZZ"]}', "query": None,               "data": None,                             "text": None,                                    "cookie": None},
 }
+
+
+#: SHA-256 prefixes of values this repo has had to scrub out of a capture.
+#:
+#: **Hashed, not listed, and that is the entire design.** A deny-list of real
+#: values written in plaintext is a copy of the leak wearing a safety label —
+#: which is exactly what `amazon/goplusplus.json`'s redaction note and
+#: `02-REVIEW.md`'s findings section each turned out to be. Hashes let the
+#: check compare without the file ever holding the value.
+#:
+#: Harvested mechanically from the pre-redaction blobs in git
+#: (`58e38ef`, `481d81d`, `22557af`) rather than retyped, so nobody had to
+#: handle the values to build it.
+#:
+#: WHY IT EXISTS: the fixture corpus below cannot catch a value that has
+#: ALREADY been scrubbed from the fixtures — and reusing one of those is
+#: precisely what happened three times, most seriously when the coverage grid
+#: was seeded with this host's public IP one commit after that IP was scrubbed
+#: out of `02-REVIEW.md`.
+_SCRUBBED_VALUE_HASHES = frozenset({
+    "050a5a129d528beb",
+    "075feae6c628be46",
+    "0d3a86a22038cca7",
+    "157ae3a816b8fa12",
+    "236cf465237bb69a",
+    "37fcff24bf62035b",
+    "3c50106d5a57d43d",
+    "4c6567ac41596467",
+    "4ea837ac2e51fbac",
+    "6136613447dcc6af",
+    "6aa006809ea4f9c9",
+    "6eb5f5d046d1d918",
+    "9a4c65633fd6ae66",
+    "a397e8ce3fc9fe12",
+    "a521ff61b09f2055",
+    "a53deaefbc39492b",
+    "a6a7535e3c4d1344",
+    "a9d25706623d487c",
+    "b217537a0c765b26",
+    "b4f20421d4c3c2e1",
+    "b699ec5173deecf4",
+    "ba1fe5f460fe0497",
+    "bde3e8fc954e7690",
+    "cb8199de78e1747e",
+    "d8a638e00a71663b",
+    "dc1c42d6da089f1b",
+    "e01e994b82afdcd8",
+    "eae6d77e26d53f8b",
+    "eb113c09cc387eed",
+    "f090dac4d3288093",
+    "fa495e5d27180f1d",
+    "fc8f7f487e852114",
+})
+
+
+def _is_known_real(value: str) -> bool:
+    return hashlib.sha256(value.lower().encode()).hexdigest()[:16] in _SCRUBBED_VALUE_HASHES
+
+
+def test_no_probe_value_in_this_file_appears_in_a_REAL_CAPTURE() -> None:
+    """"Invented" is a claim, and this is the check that it is true.
+
+    Three separate rounds of fixing this guard wrote a REAL value into this
+    file while asserting the opposite twelve lines above. The worst was this
+    host's public IP — the single most sensitive value in the whole thread —
+    put back into a tracked file by the commit that added the coverage grid,
+    under a docstring reading "EVERY value here is invented". It had been
+    scrubbed out of `02-REVIEW.md` one commit earlier.
+
+    Reading the file and asking "does that look invented?" has now failed three
+    times, because a plausible-looking IP or store number is exactly what a
+    real one looks like. So this asserts it mechanically instead: **every
+    literal used as a probe must appear in NO captured fixture.** If a value
+    is genuinely invented it cannot be in bytes a retailer sent us. If it is
+    in those bytes, it was copied, whatever the comment says.
+
+    Scoped to values long enough to be identifying — a two-letter state or a
+    one-digit store number will collide with real bytes by chance.
+    """
+    root = Path(__file__).parent / "fixtures"
+    corpus = "\n".join(
+        f.read_text(encoding="utf-8", errors="replace") for f in _fixture_files(root)
+    )
+
+    # Take the VALUE the rule actually captured, not every token in the probe —
+    # the KEY names (`zipCode`, `latitude`, `data-preferred-store-id`) are real
+    # by construction, and must be, or the rule would not match a real page.
+    probes: set[str] = set()
+    for row in IDENTITY_GRID.values():
+        for cell in row.values():
+            if not cell:
+                continue
+            for leak in _identity_leaks("probe", cell):
+                value = leak.rsplit(" ", 1)[-1].strip(",.\"'")
+                # 4, not 5: the real GameStop store number is four digits, and
+                # a five-char floor let it back in. The corpus check below is
+                # still gated at 5 (a four-digit number collides with real
+                # bytes by chance); the hash check is exact, so it is not.
+                if len(value) >= 4:
+                    probes.add(value)
+
+    # Whole-token match: a five-digit probe collides with the middle of a real
+    # price or product id by chance, and a guard that cries wolf gets deleted.
+    copied = sorted(
+        v for v in probes
+        if (len(v) >= 5 and re.search(rf"(?<![\w.-]){re.escape(v)}(?![\w.-])", corpus))
+        or _is_known_real(v)
+    )
+    assert not copied, (
+        "these values are used as 'invented' probes but appear verbatim in a "
+        "captured fixture, which means they were copied out of real retailer "
+        "bytes:\n  " + "\n  ".join(copied) + "\n"
+        "Invent a value that is not in any capture. A probe's SHAPE has to be "
+        "real; its VALUE must not be."
+    )
+
+
+def test_the_grid_cannot_be_shrunk_without_a_red_test() -> None:
+    """Coverage can only go up, and the floor is asserted here.
+
+    Round 6 found the grid gutted silently: downgrading a filled cell to `None`
+    was green, and deleting a whole row was green. A coverage assertion that is
+    satisfied by declaring less coverage asserts nothing — the allow-list
+    failure in a new place.
+
+    Raise these numbers when you add coverage. Lowering one has to be argued
+    for in a diff, not done by replacing a probe with `None` to go green.
+    """
+    classes = {"city", "state", "zip", "coord", "store_no", "store_nm", "street",
+               "phone", "ip", "isp", "session", "visitor", "metro", "wic_state"}
+    assert classes <= set(IDENTITY_GRID), (
+        f"identity classes dropped out of the grid: "
+        f"{sorted(classes - set(IDENTITY_GRID))}. Each has been leaked at least once."
+    )
+    filled = sum(1 for r in IDENTITY_GRID.values() for v in r.values() if v)
+    assert filled >= 30, (
+        f"grid has {filled} filled cells, floor is 30. Downgrading a cell to "
+        f"`None` claims no retailer writes that class in that carrier — make "
+        f"that claim in the diff, not by deleting a probe."
+    )
 
 
 def test_every_declared_grid_cell_is_actually_caught() -> None:
@@ -828,7 +988,7 @@ def test_the_grid_declares_every_carrier_for_every_class_it_has_leaked() -> None
     never happen is a cell simply missing, because then nobody is claiming
     anything and the gap is invisible again.
     """
-    carriers = {"json", "query", "data", "text"}
+    carriers = {"json", "query", "data", "text", "cookie"}
     for cls, row in IDENTITY_GRID.items():
         assert set(row) == carriers, (
             f"grid row {cls!r} does not declare every carrier — missing "
