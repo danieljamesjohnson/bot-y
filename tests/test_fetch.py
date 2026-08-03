@@ -28,6 +28,8 @@ down, are the honest way to pin this.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Any
 
 import curl_cffi
@@ -206,3 +208,58 @@ def test_every_block_phrase_is_lowercase() -> None:
     """
     for phrase in fetch.BLOCK_PHRASES:
         assert phrase == phrase.lower(), f"{phrase!r} can never match a lowercased body"
+
+
+# --------------------------------------------------------------------------
+# Fixtures must not carry the capturing host's identity
+# --------------------------------------------------------------------------
+
+
+def test_no_fixture_leaks_the_capturing_hosts_identity() -> None:
+    """A rung-3 capture froze this repo's own public IP and Akamai EdgeScape
+    geolocation — city, ZIP, lat/long — into a committed fixture, and it was
+    pushed to a public repo before anyone noticed.
+
+    Rung 1 does not do this: `curl_cffi` returns the response body. A *browser*
+    renders the page, and CDNs echo the client's IP and geolocation into the DOM
+    for their own edge logic. So the risk arrived with the browser rung and
+    applies to every future rung-3 capture.
+
+    Scoped to the markers that carry *client* identity rather than any
+    IP-shaped string: retailer pages are full of version numbers like `3.3.6.4`
+    and Akamai's own server addresses, and a test that cries wolf on those gets
+    disabled within a week.
+    """
+    root = Path(__file__).parent / "fixtures"
+    # Values the redaction is allowed to leave behind. 192.0.2.0/24 is
+    # TEST-NET-1 (RFC 5737), reserved for documentation.
+    allowed = {"REDACTED", "00000", "0.0000", "0.0", "0"}  # a zero DMA/FIPS is the
+    # "unknown" sentinel these fields carry when the edge could not place the
+    # client — it identifies nothing, and excluding it keeps the check honest
+    # rather than making the assertion pass by widening what counts as a leak.
+    leaks: list[str] = []
+
+    for page in sorted(root.glob("*/*.html")):
+        body = page.read_text(encoding="utf-8", errors="replace")
+
+        # A CDN echoing the client's own address back into the page.
+        for header in ("true-client-ip", "x-forwarded-for", "client-ip"):
+            for match in re.finditer(
+                rf"{re.escape(header)}[^0-9]{{0,12}}(\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}})",
+                body,
+                re.I,
+            ):
+                if not match.group(1).startswith("192.0.2."):
+                    leaks.append(f"{page.relative_to(root)}: {header} = {match.group(1)}")
+
+        # Akamai EdgeScape geolocation of the *requesting* host.
+        for marker in ("city", "zip", "lat", "long", "county", "areacode", "fips", "dma"):
+            for value in re.findall(rf"\b{marker}=([A-Za-z0-9._+-]+)", body):
+                if value.upper() not in {a.upper() for a in allowed}:
+                    leaks.append(f"{page.relative_to(root)}: geolocation {marker}={value}")
+                    break
+
+    assert not leaks, (
+        "committed fixtures carry the capturing host's identity — this repo is "
+        "public:\n  " + "\n  ".join(sorted(set(leaks)))
+    )
