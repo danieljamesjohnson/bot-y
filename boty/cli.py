@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable
 
 from .config import Config
-from .models import Availability, Health, Result, Watch
+from .models import Availability, Extraction, Health, Result, Watch
 from .monitor import State, run_once
 from .notify import send_health_warning, send_restock
 from .retailers import check_bestbuy_api, check_bestbuy_browser, check_html
@@ -65,7 +65,19 @@ def _report(results: list[Result], health: list[Health]) -> None:
         # once, and either fact alone would mislead. `SYMBOL` is deliberately
         # untouched — it is indexed unconditionally below, so it must only ever
         # be keyed by `Availability`, which still has exactly three members.
-        tags = [t for t, on in (("[control]", r.watch.control), ("[degraded]", r.degraded)) if on]
+        #
+        # `[degraded]` says discount this reading; `[dom]` says why. They are
+        # separate tags because `degraded` now has two disjuncts and a reader
+        # looking at one line has no other way to tell which one fired.
+        tags = [
+            t
+            for t, on in (
+                ("[control]", r.watch.control),
+                ("[degraded]", r.degraded),
+                ("[dom]", r.extraction is Extraction.DOM),
+            )
+            if on
+        ]
         tag = f" {' '.join(tags)}" if tags else ""
         print(f"  {SYMBOL[r.availability]} {r.watch.retailer:<9} {r.watch.name[:30]:<30}{price}  {r.detail[:56]}{tag}")
 

@@ -60,6 +60,49 @@ class Rung(str, Enum):
     BROWSER = "browser"
 
 
+class Extraction(str, Enum):
+    """What was read out of the page — the second axis, beside `Rung`.
+
+    `Rung` says how the bytes were obtained. This says what was read out of
+    them, and the two are independent. Best Buy is browser + `structured`: a
+    browser renders the page, and what is then read off it is Best Buy's own
+    schema.org feed — a machine-readable document they maintain because Google
+    Shopping depends on it. Target would be browser + `dom`: presentation
+    markup, which a reskin breaks silently, which is the exact failure mode
+    this project exists to catch. Both are "browser", and lumping them together
+    hides a real difference in what a reading is worth.
+
+    Deliberately NOT a member of `Availability`. `cli.SYMBOL` is a dict indexed
+    unconditionally by `r.availability`, and `monitor.assess_health` and
+    `monitor.transitioned_to_stock` branch on it — a fourth member would be a
+    KeyError in the middle of printing a report. What was extracted is
+    orthogonal to what the reading says.
+
+    Deliberately NOT a member of `Rung`, and nothing is renumbered. A rung is a
+    fact about the TRANSPORT — how the bytes were obtained. An extraction is a
+    fact about WHAT WAS READ OUT of them. They are independent: Best Buy is
+    browser + structured, Target is browser + dom, and a rung-1 DOM adapter is
+    perfectly possible. Folding one into the other would make the support
+    matrix, the escalation ladder and rung 4's meaning all say something they
+    do not mean, and would renumber a scale that four phases of documents refer
+    to by number.
+
+    Deliberately NOT fed into `Health`, for the same reason `Rung` records.
+    `assess_health` answers "has this detector been verified by a control", not
+    "how confident is the reading". A dom reading that flipped `Health.ok`
+    would raise a permanent health warning that is never going to change, and
+    the phase criterion "five or more retailers with no health warnings" could
+    never be met by construction.
+    """
+
+    #: The retailer's own machine-readable feed — schema.org JSON-LD, a
+    #: Next.js hydration payload, an API response. They maintain it.
+    STRUCTURED = "structured"
+    #: Presentation markup: a button's text, a class name. It works, and a
+    #: reskin breaks it silently.
+    DOM = "dom"
+
+
 @dataclass(frozen=True)
 class Watch:
     """One product at one retailer."""
@@ -94,20 +137,35 @@ class Result:
     #: every pre-existing construction site stays valid and keeps its meaning:
     #: they are all plain TLS fetches, and none of them names a rung.
     rung: Rung = Rung.TLS
+    #: What was read out of the page. Declared last, after `rung`, with a
+    #: default, for the same reason `rung` is: every pre-existing construction
+    #: site stays valid and keeps its meaning, because every one of them reads
+    #: a structured payload and none of them names an extraction.
+    extraction: Extraction = Extraction.STRUCTURED
 
     @property
     def degraded(self) -> bool:
-        """True when this reading came from a lower-confidence transport.
+        """True when this reading is lower-confidence — for either of two reasons.
+
+        There are now two independent ways to be worth discounting, and they
+        share one flag because the flag answers one question: *should a reader
+        discount this?* A page we rendered ourselves is a yes, because it is a
+        page we rendered rather than an answer the retailer gave us. A reading
+        lifted out of presentation markup is also a yes, because a reskin
+        breaks it silently. The two reasons are different, and they stay
+        separately legible: `rung` and `extraction` are both published, so a
+        reader can tell whether to expect a browser to be slow or a parser to
+        rot.
 
         Derived rather than stored so there is exactly one source of truth:
-        the support matrix's "which rung" and the runtime DEGRADED flag cannot
-        drift apart into disagreeing about the same reading.
+        the support matrix's claim and the runtime DEGRADED flag cannot drift
+        apart into disagreeing about the same reading.
 
         Note what this does NOT do: it does not touch `alertable`. A degraded
         reading is still a real reading, and suppressing alerts on it would
         defeat the point of supporting the retailer at all.
         """
-        return self.rung is Rung.BROWSER
+        return self.rung is Rung.BROWSER or self.extraction is Extraction.DOM
 
     @property
     def alertable(self) -> bool:

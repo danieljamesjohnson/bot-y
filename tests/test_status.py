@@ -21,13 +21,14 @@ from pathlib import Path
 import pytest
 
 from boty.cli import _report
-from boty.models import Availability, Health, Result, Rung, Watch
+from boty.models import Availability, Extraction, Health, Result, Rung, Watch
 from boty.status import write
 
 
 def _result(
     *,
     rung: Rung | None = None,
+    extraction: Extraction | None = None,
     control: bool = False,
     availability: Availability = Availability.IN_STOCK,
 ) -> Result:
@@ -37,9 +38,12 @@ def _result(
         target="6577129",
         control=control,
     )
-    if rung is None:
-        return Result(watch, availability, price=54.99, detail="synthetic")
-    return Result(watch, availability, price=54.99, detail="synthetic", rung=rung)
+    kwargs: dict[str, Rung | Extraction] = {}
+    if rung is not None:
+        kwargs["rung"] = rung
+    if extraction is not None:
+        kwargs["extraction"] = extraction
+    return Result(watch, availability, price=54.99, detail="synthetic", **kwargs)
 
 
 #: "this argument was not passed at all", which is a different thing from
@@ -63,12 +67,15 @@ def _payload(tmp_path: Path, results: list[Result], duration_seconds: object = _
 # --------------------------------------------------------------------------
 
 
-def test_every_watch_entry_carries_a_rung_and_a_degraded_flag(tmp_path: Path) -> None:
+def test_every_watch_entry_carries_a_rung_an_extraction_and_a_degraded_flag(
+    tmp_path: Path,
+) -> None:
     payload = _payload(tmp_path, [_result(), _result(rung=Rung.BROWSER)])
 
     assert len(payload["watches"]) == 2
     for entry in payload["watches"]:
         assert isinstance(entry["rung"], str)
+        assert isinstance(entry["extraction"], str)
         assert isinstance(entry["degraded"], bool)
 
 
@@ -79,11 +86,30 @@ def test_a_browser_reading_serialises_as_degraded(tmp_path: Path) -> None:
     assert entry["degraded"] is True
 
 
-def test_a_default_reading_serialises_as_tls_and_not_degraded(tmp_path: Path) -> None:
+def test_a_default_reading_serialises_as_tls_structured_and_not_degraded(
+    tmp_path: Path,
+) -> None:
     (entry,) = _payload(tmp_path, [_result()])["watches"]
 
     assert entry["rung"] == "tls"
+    assert entry["extraction"] == "structured"
     assert entry["degraded"] is False
+
+
+def test_a_dom_reading_serialises_as_dom_and_degraded(tmp_path: Path) -> None:
+    """The second axis, published — and published as degraded on its own.
+
+    The transport here is the default one. Nothing about `rung` says to
+    discount this reading, so if the dashboard read only `rung` it would
+    render a DOM read of a retailer's buttons identically to GameStop's
+    schema.org feed. `extraction` is what lets a reader tell them apart, and
+    `degraded` is what makes them look different without having to.
+    """
+    (entry,) = _payload(tmp_path, [_result(extraction=Extraction.DOM)])["watches"]
+
+    assert entry["rung"] == "tls"
+    assert entry["extraction"] == "dom"
+    assert entry["degraded"] is True
 
 
 def test_an_api_reading_serialises_as_api_and_not_degraded(tmp_path: Path) -> None:
@@ -151,6 +177,7 @@ def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path)
             "control",
             "alertable",
             "rung",
+            "extraction",
             "degraded",
         }
         assert entry["rung"] == "browser"
@@ -176,6 +203,21 @@ def test_report_tags_a_degraded_reading(capsys: pytest.CaptureFixture[str]) -> N
 
     assert "[degraded]" in out
     assert "[control]" not in out
+    assert "[dom]" not in out, "a browser read of a structured feed is not a DOM read"
+
+
+def test_report_marks_a_dom_reading_visibly(capsys: pytest.CaptureFixture[str]) -> None:
+    """`[degraded]` says discount this; `[dom]` says why.
+
+    Two tags rather than one because `degraded` now has two disjuncts, and a
+    reader looking at a single line of `boty check` has no other way to tell
+    which one fired — "a browser rendered this" and "a reskin will break this
+    silently" are different things to plan around.
+    """
+    out = _tags(capsys, _result(extraction=Extraction.DOM))
+
+    assert "[dom]" in out
+    assert "[degraded]" in out
 
 
 def test_report_does_not_tag_a_plain_reading(capsys: pytest.CaptureFixture[str]) -> None:
@@ -183,6 +225,7 @@ def test_report_does_not_tag_a_plain_reading(capsys: pytest.CaptureFixture[str])
 
     assert "[degraded]" not in out
     assert "[control]" not in out
+    assert "[dom]" not in out
 
 
 def test_report_still_tags_a_control(capsys: pytest.CaptureFixture[str]) -> None:

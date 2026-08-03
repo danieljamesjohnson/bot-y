@@ -1,6 +1,6 @@
 """The one surface anybody actually reads.
 
-`boty.status.write` publishes `rung` and `degraded`, and its own comment calls
+`boty.status.write` publishes `rung`, `extraction` and `degraded`, and its own comment calls
 those keys "a contract with the dashboard... the page renders it verbatim".
 `tests/test_status.py` pins the producing half of that contract. Nothing pinned
 the consuming half, so the page could — and did — quietly render neither, which
@@ -83,6 +83,30 @@ def test_the_degraded_tag_is_visually_distinct(page: str) -> None:
     assert re.search(r"\.tag\.degraded\s*\{", page), (
         "no `.tag.degraded` rule — a degraded tag styled like every other tag "
         "does not tell a reader to weigh the number differently"
+    )
+
+
+def test_the_dashboard_shows_which_half_of_degraded_fired(page: str) -> None:
+    """`degraded` has two disjuncts now, and the page has to say which one.
+
+    `Result.degraded` fires on a browser transport OR a dom extraction, so the
+    flag alone no longer identifies the problem. Those are different things to
+    plan around — a rendered page is slow and heavy, a presentation-markup read
+    is one reskin away from silently reading nothing — and a row that shows
+    only the derived flag collapses them into one word on the one surface
+    anybody actually looks at.
+
+    `status.write` publishes `extraction` for exactly this. Pinning the
+    consuming half here is the same WR-04 lesson that put the module docstring
+    above on this file: a contract asserted at one end only is a comment.
+    """
+    assert re.search(r"\bw\.extraction\b", page), (
+        "the dashboard does not read the `extraction` key that `status.write` "
+        "publishes for it, so a DOM reading is indistinguishable from a browser one"
+    )
+    assert re.search(r"\.tag\.dom\s*\{", page), (
+        "no `.tag.dom` rule — the tag that says WHY a reading is degraded is "
+        "styled like `control`, which is an ordinary label"
     )
 
 

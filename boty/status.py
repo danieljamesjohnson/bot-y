@@ -63,14 +63,23 @@ def write(
                 "control": r.watch.control,
                 "alertable": r.alertable,
                 # Public API, not an internal detail: this file is served over
-                # HTTP and the page renders it verbatim, so these two keys are
-                # a contract with the dashboard and with the support matrix,
-                # which reads them to say which rung each retailer landed on.
-                # `rung` is written rather than only `degraded` because "we
-                # reached Best Buy through its official API" and "we reached
-                # it through a browser" are both non-default and only one of
-                # them is a lower-confidence reading.
+                # HTTP and the page renders it verbatim, so these three keys
+                # are a contract with the dashboard and with the support
+                # matrix, which reads them to say which rung each retailer
+                # landed on. `rung` is written rather than only `degraded`
+                # because "we reached Best Buy through its official API" and
+                # "we reached it through a browser" are both non-default and
+                # only one of them is a lower-confidence reading.
+                #
+                # `extraction` is published beside it for the same reason one
+                # axis along. `degraded` alone cannot tell a reader WHY to
+                # discount a reading, and the two reasons need different
+                # plans: a browser transport means expect it to be slow and
+                # heavy, while a dom extraction means expect a reskin to break
+                # the parser without anything going red. Publishing only the
+                # derived flag would collapse those into one word.
                 "rung": r.rung.value,
+                "extraction": r.extraction.value,
                 "degraded": r.degraded,
             }
             for r in results

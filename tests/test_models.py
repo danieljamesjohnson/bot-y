@@ -14,11 +14,18 @@ tell", never "cheap enough".
 `Rung` is pinned here too. It answers a different question from `Availability`
 — not "is it buyable" but "how did we find out" — and the tests below exist to
 keep those two questions from collapsing into one another.
+
+`Extraction` is the second axis, and it is pinned for a third question again:
+not "how did we find out" but "what did we read". A rung and an extraction are
+independent — Best Buy is browser + structured, Target would be browser + dom,
+and a rung-1 DOM adapter is both possible and the most fragile thing anyone
+could add here. That last case is why `degraded` is asserted on each axis
+separately below rather than only where the two coincide.
 """
 
 from __future__ import annotations
 
-from boty.models import Availability, Result, Rung, Watch
+from boty.models import Availability, Extraction, Result, Rung, Watch
 from boty.monitor import assess_health
 
 
@@ -28,6 +35,7 @@ def _result(
     price: float | None = None,
     max_price: float | None = None,
     rung: Rung | None = None,
+    extraction: Extraction | None = None,
     control: bool = False,
 ) -> Result:
     watch = Watch(
@@ -37,14 +45,17 @@ def _result(
         max_price=max_price,
         control=control,
     )
-    # `rung` is omitted rather than passed-with-a-default when the caller does
-    # not ask for one, because half the point of the field is that every
-    # pre-existing construction site — which names no rung at all — keeps its
-    # meaning. A helper that always passed it would test a call shape nothing
-    # in `boty` actually uses.
-    if rung is None:
-        return Result(watch, availability, price=price, detail="synthetic")
-    return Result(watch, availability, price=price, detail="synthetic", rung=rung)
+    # `rung` and `extraction` are omitted rather than passed-with-a-default
+    # when the caller does not ask for one, because half the point of both
+    # fields is that every pre-existing construction site — which names
+    # neither — keeps its meaning. A helper that always passed them would test
+    # a call shape nothing in `boty` actually uses.
+    kwargs: dict[str, Rung | Extraction] = {}
+    if rung is not None:
+        kwargs["rung"] = rung
+    if extraction is not None:
+        kwargs["extraction"] = extraction
+    return Result(watch, availability, price=price, detail="synthetic", **kwargs)
 
 
 def test_in_stock_under_the_ceiling_is_alertable() -> None:
@@ -151,5 +162,97 @@ def test_a_degraded_control_reading_in_stock_is_still_healthy() -> None:
     met by construction.
     """
     control = _result(Availability.IN_STOCK, rung=Rung.BROWSER, control=True)
+    health = assess_health([control])
+    assert [(h.retailer, h.ok) for h in health] == [("walmart", True)]
+
+
+# --------------------------------------------------------------------------
+# Extraction — what was read out of the page, which is not how it was fetched
+# --------------------------------------------------------------------------
+
+
+def test_extraction_has_exactly_two_members() -> None:
+    """Two, and pinned literally, for the reason `Availability` is pinned.
+
+    A third member would be a new claim about how much a reading is worth, and
+    `_undeclared_degraded` in `tests/test_support_matrix.py` plus the
+    `EXTRACTIONS` vocabulary in the README both enumerate this set. Adding one
+    silently would leave the matrix able to say something the runtime cannot,
+    which is the WR-04 shape the whole degraded contract was rebuilt against.
+    """
+    assert [e.value for e in Extraction] == ["structured", "dom"]
+
+
+def test_a_result_built_without_either_axis_is_tls_structured_and_not_degraded() -> None:
+    """The default is what makes this a low-blast-radius change, twice over.
+
+    Every existing construction site in `boty.retailers` names neither a rung
+    nor an extraction, and every one of them is a plain TLS fetch of a
+    structured payload. If either default were anything else, these two fields
+    would silently relabel the whole codebase.
+    """
+    r = _result(Availability.IN_STOCK)
+    assert r.rung is Rung.TLS
+    assert r.extraction is Extraction.STRUCTURED
+    assert r.degraded is False
+
+
+def test_a_dom_reading_on_the_default_transport_is_degraded() -> None:
+    """The hole this axis was added to close, asserted directly.
+
+    `degraded` used to be derived from the rung alone. A rung-1 DOM adapter —
+    cheap to write, and the most fragile thing anyone could add to this
+    codebase — would have shipped looking fully trustworthy on the dashboard,
+    in `boty check` and in the support matrix. Nothing about the transport is
+    wrong here: the bytes came over impersonated TLS exactly as GameStop's do.
+    It is what was read out of them that a reader has to discount.
+    """
+    r = _result(Availability.IN_STOCK, extraction=Extraction.DOM)
+    assert r.rung is Rung.TLS
+    assert r.degraded is True
+
+
+def test_each_axis_degrades_a_reading_on_its_own() -> None:
+    """Both disjuncts, proved apart rather than only where they coincide.
+
+    Best Buy's shape is browser + structured: a page we rendered, carrying the
+    retailer's own schema.org feed. Target's would be browser + dom: a page we
+    rendered, read for its buttons. Both are degraded, for different reasons,
+    and a test that only ever exercised the overlap would go on passing if
+    either half of the expression were deleted.
+    """
+    bestbuy_shape = _result(
+        Availability.IN_STOCK, rung=Rung.BROWSER, extraction=Extraction.STRUCTURED
+    )
+    target_shape = _result(Availability.IN_STOCK, rung=Rung.BROWSER, extraction=Extraction.DOM)
+
+    assert bestbuy_shape.degraded is True
+    assert target_shape.degraded is True
+
+
+def test_a_dom_reading_is_still_alertable() -> None:
+    """The `rung` invariant, restated for the second axis.
+
+    Withholding the alert would defeat the point of supporting the retailer
+    through a DOM read at all — the flag labels confidence, it does not
+    suppress the thing you asked to be told about.
+    """
+    r = _result(
+        Availability.IN_STOCK, price=54.99, max_price=80, extraction=Extraction.DOM
+    )
+    assert r.degraded is True
+    assert r.alertable is True
+
+
+def test_a_dom_control_reading_in_stock_is_still_healthy() -> None:
+    """The other `rung` invariant, restated. Degradation is not ill health.
+
+    `assess_health` answers "has this detector been verified by a control",
+    not "how confident is the reading". A dom reading that flipped `Health.ok`
+    would raise a permanent health warning that is never going to change, and
+    the phase criterion "five or more retailers with no health warnings" could
+    never be met by construction.
+    """
+    control = _result(Availability.IN_STOCK, extraction=Extraction.DOM, control=True)
     health = assess_health([control])
     assert [(h.retailer, h.ok) for h in health] == [("walmart", True)]

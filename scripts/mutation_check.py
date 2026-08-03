@@ -166,9 +166,28 @@ MUTATIONS = (
     Mutation(
         ident="M6",
         target="boty/models.py",
-        search="        return self.rung is Rung.BROWSER",
+        search="        return self.rung is Rung.BROWSER or self.extraction is Extraction.DOM",
         replace="        return False",
         breaks="clears the degraded flag — a browser-read verdict is published as if it were a first-class TLS reading, in the status page and in the support matrix",
+    ),
+    # M7 is M6's second half, and it gets a mutation of its own rather than
+    # riding on M6 because they prove different things. M6 dying proves the
+    # flag EXISTS. Only M7 proves the flag's NEW disjunct is load-bearing:
+    # `degraded` used to be derived from the rung alone, so a DOM adapter on a
+    # cheap transport — the most fragile thing anyone could add to this
+    # codebase, and the easiest — would ship looking fully trustworthy.
+    # Reverting the expression to its pre-widening form is a one-token edit
+    # that changes no verdict, no price and no alert, which is precisely the
+    # kind of change a verdict-only suite cannot see.
+    #
+    # M6 and M7 share a `search` string deliberately. Each mutation is applied
+    # in its own sandbox, so there is no interaction between them.
+    Mutation(
+        ident="M7",
+        target="boty/models.py",
+        search="        return self.rung is Rung.BROWSER or self.extraction is Extraction.DOM",
+        replace="        return self.rung is Rung.BROWSER",
+        breaks="drops the dom disjunct — a DOM reading on a non-browser transport is published as a first-class structured one, in `boty check`, in the status page and in the support matrix",
     ),
 )
 
