@@ -110,9 +110,17 @@ every `make verify`** — the offline suite invokes it against this tree, so it 
 not a script somebody has to remember. It fails if a retailer outside the
 roadmap's scope is ever configured to make the count read five, and it fails if
 a retailer in scope is neither shipped nor recorded with a written refusal.
-`tests/test_support_matrix.py` holds the table above to the same standard: every
-retailer in scope needs a rung of 1–4 here, and anything on rung 3 has to say
-`degraded` in its own row.
+
+Those two rules are a **ceiling** on the count. It has a **floor** as well, and
+it needs one: a written refusal is one line, so nothing about "five or more"
+stops the number falling. A refusal cannot outrank a capture — if a retailer is
+not configured but `tests/fixtures/<retailer>/` still holds a page this repo
+really fetched, the gate fails, because a retailer we have read is not a
+retailer that refused us. `tests/test_support_matrix.py` closes the same gap in
+the table: every retailer in scope needs a rung of 1–4 here, anything on rung 3
+has to say `degraded` in its own row, and **no row may claim a working rung
+(1–3) for a retailer nothing watches**. Rung 4 — dropped, with the evidence
+written down — is the only honest rung for a retailer the monitor does not read.
 
 **A browser is not a strict upgrade.** The same headless Chrome that reads Best
 Buy is served a Cloudflare wall by gamestop.com, which rung 1 reads on every

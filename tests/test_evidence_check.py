@@ -114,6 +114,25 @@ def _write_config(tmp_path: Path, retailers: list[str]) -> Path:
     return path
 
 
+def _write_fixtures(tmp_path: Path, retailers: list[str]) -> Path:
+    """A synthetic captured-page tree: one `*.html` per named retailer.
+
+    Rule 4 reads this, and every case here passes its OWN root rather than
+    letting the real `tests/fixtures/` be inherited by default. This file states
+    as an invariant that nothing in it reads the shipped tree, and a defaulted
+    fixture root would break that silently: `check_phase` would be enforcing
+    rule 4 against this repo's four real capture directories while the test
+    believed it was describing its `tmp_path`. That is why the parameter is
+    required rather than defaulted.
+    """
+    root = tmp_path / "fixtures"
+    root.mkdir(parents=True, exist_ok=True)
+    for retailer in retailers:
+        (root / retailer).mkdir(parents=True, exist_ok=True)
+        (root / retailer / "control.html").write_text("<html></html>", encoding="utf-8")
+    return root
+
+
 #: The four retailers that actually ship today.
 _SHIPPED = ["gamestop", "walmart", "bestbuy", "nintendo"]
 
@@ -366,7 +385,7 @@ def test_a_repeated_heading_does_not_let_the_last_record_win(tmp_path: Path) -> 
         )
         config = _write_config(tmp_path / f"order{i}", _SHIPPED)
 
-        problems = evidence_check.check_phase(config, evidence)
+        problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
 
         assert len(problems) == 1, (pair, problems)
         assert "Amazon" in problems[0]
@@ -455,7 +474,15 @@ def test_a_retailer_outside_the_roadmaps_scope_fails_the_phase_gate(tmp_path: Pa
 
     assert (
         evidence_check.main(
-            ["--phase", "--config", str(config), "--evidence", str(evidence)]
+            [
+                "--phase",
+                "--config",
+                str(config),
+                "--evidence",
+                str(evidence),
+                "--fixtures",
+                str(_write_fixtures(tmp_path, [])),
+            ]
         )
         == 1
     )
@@ -465,7 +492,9 @@ def test_the_out_of_scope_message_names_the_retailer_and_points_at_the_roadmap(
     tmp_path: Path,
 ) -> None:
     config = _write_config(tmp_path, _SHIPPED + ["microcenter"])
-    problems = evidence_check.check_phase(config, _full_evidence(tmp_path))
+    problems = evidence_check.check_phase(
+        config, _full_evidence(tmp_path), _write_fixtures(tmp_path, [])
+    )
 
     assert len(problems) == 1
     assert "microcenter" in problems[0]
@@ -499,12 +528,20 @@ def test_an_unconfigured_roadmap_retailer_with_no_verdict_fails(tmp_path: Path) 
 
     assert (
         evidence_check.main(
-            ["--phase", "--config", str(config), "--evidence", str(evidence)]
+            [
+                "--phase",
+                "--config",
+                str(config),
+                "--evidence",
+                str(evidence),
+                "--fixtures",
+                str(_write_fixtures(tmp_path, [])),
+            ]
         )
         == 1
     )
 
-    problems = evidence_check.check_phase(config, evidence)
+    problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
     assert len(problems) == 1
     assert "Target" in problems[0]
     assert "rule 2" in problems[0].lower()
@@ -527,7 +564,7 @@ def test_an_unconfigured_retailer_recorded_as_REACHABLE_fails(tmp_path: Path) ->
         ],
     )
 
-    problems = evidence_check.check_phase(config, evidence)
+    problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
     assert len(problems) == 1
     assert "Target" in problems[0]
     assert "REFUSED" in problems[0]
@@ -538,7 +575,7 @@ def test_every_violation_is_reported_not_just_the_first(tmp_path: Path) -> None:
     config = _write_config(tmp_path, _SHIPPED + ["microcenter"])
     evidence = _write_evidence(tmp_path, [("Amazon (amazon.com)", _REFUSED)])
 
-    problems = evidence_check.check_phase(config, evidence)
+    problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
 
     # rule 1: microcenter out of scope. rule 2: pokemoncenter and target unrecorded.
     assert len(problems) == 3
@@ -572,12 +609,20 @@ def test_a_short_count_with_a_hard_two_retailer_configured_fails(tmp_path: Path)
 
     assert (
         evidence_check.main(
-            ["--phase", "--config", str(config), "--evidence", str(evidence)]
+            [
+                "--phase",
+                "--config",
+                str(config),
+                "--evidence",
+                str(evidence),
+                "--fixtures",
+                str(_write_fixtures(tmp_path, [])),
+            ]
         )
         == 1
     )
 
-    problems = evidence_check.check_phase(config, evidence)
+    problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
     assert len(problems) == 1
     assert "rule 3" in problems[0].lower()
     assert "amazon" in problems[0]
@@ -596,10 +641,111 @@ def test_five_retailers_including_a_hard_two_one_passes(tmp_path: Path) -> None:
 
     assert (
         evidence_check.main(
-            ["--phase", "--config", str(config), "--evidence", str(evidence)]
+            [
+                "--phase",
+                "--config",
+                str(config),
+                "--evidence",
+                str(evidence),
+                "--fixtures",
+                str(_write_fixtures(tmp_path, [])),
+            ]
         )
         == 0
     )
+
+
+# --------------------------------------------------------------------------
+# --phase rule 4: the floor. A refusal cannot outrank a page we captured
+# --------------------------------------------------------------------------
+
+
+def test_a_retailer_dropped_from_the_config_but_still_fixtured_fails(tmp_path: Path) -> None:
+    """Rules 2 and 3 are a ceiling. This is the only thing underneath.
+
+    Every rule that shipped before this one points the same way: they stop the
+    retailer count drifting UP. Down was free — any number of configured
+    retailers passed, down to zero, provided each absent one carried a written
+    REFUSED. A working retailer silently disappearing is precisely the silent
+    gap this phase is named after.
+    """
+    evidence = _write_evidence(
+        tmp_path,
+        [
+            ("GameStop (gamestop.com)", _REFUSED),
+            ("Walmart (walmart.com)", _REFUSED),
+            ("Pokémon Center (pokemoncenter.com)", _REFUSED),
+            ("Target (target.com)", _REFUSED),
+            ("Amazon (amazon.com)", _REFUSED),
+        ],
+    )
+    config = _write_config(tmp_path, ["bestbuy", "nintendo"])
+    fixtures = _write_fixtures(tmp_path, ["gamestop", "walmart", "bestbuy", "nintendo"])
+
+    problems = evidence_check.check_phase(config, evidence, fixtures)
+
+    assert len(problems) == 2, problems
+    assert all(p.startswith("rule 4") for p in problems), problems
+    assert "GameStop" in problems[0]
+    assert "Walmart" in problems[1]
+
+
+def test_the_rule_four_message_names_the_captures_and_says_which_way_it_points(
+    tmp_path: Path,
+) -> None:
+    """A failure nobody can act on gets ignored within a week.
+
+    Two facts have to be in the message: WHICH pages contradict the refusal, and
+    that this is the count's floor rather than another way of saying rule 2.
+    """
+    evidence = _write_evidence(
+        tmp_path,
+        [
+            ("GameStop (gamestop.com)", _REFUSED),
+            ("Pokémon Center (pokemoncenter.com)", _REFUSED),
+            ("Target (target.com)", _REFUSED),
+            ("Amazon (amazon.com)", _REFUSED),
+        ],
+    )
+    config = _write_config(tmp_path, ["walmart", "bestbuy", "nintendo"])
+    fixtures = _write_fixtures(tmp_path, ["gamestop"])
+
+    problems = evidence_check.check_phase(config, evidence, fixtures)
+
+    assert len(problems) == 1
+    assert "rule 4" in problems[0]
+    assert "GameStop" in problems[0]
+    assert "control.html" in problems[0]
+    assert "drifting down" in problems[0]
+
+
+def test_a_refused_retailer_with_no_captured_page_passes_rule_four(tmp_path: Path) -> None:
+    """The clean side, so this is a rule about a fact rather than about absence.
+
+    Without it, rule 4 could be satisfied by a tree that never captures anything
+    — and the three retailers this project really did refuse (Pokémon Center,
+    Amazon, Target) have no capture directory precisely because the refusal is
+    genuine.
+    """
+    evidence = _full_evidence(tmp_path)
+    config = _write_config(tmp_path, _SHIPPED)
+    fixtures = _write_fixtures(tmp_path, _SHIPPED)
+
+    assert evidence_check.check_phase(config, evidence, fixtures) == []
+
+
+def test_rule_four_ignores_a_capture_directory_holding_no_page(tmp_path: Path) -> None:
+    """An empty directory is not evidence of a fetch, and `git` cannot commit one.
+
+    Keyed on `*.html` rather than on the directory existing, so a leftover empty
+    folder in somebody's working tree cannot redden a gate about what we read.
+    """
+    evidence = _full_evidence(tmp_path)
+    config = _write_config(tmp_path, _SHIPPED)
+    fixtures = _write_fixtures(tmp_path, _SHIPPED)
+    (fixtures / "target").mkdir()
+
+    assert evidence_check.check_phase(config, evidence, fixtures) == []
 
 
 # --------------------------------------------------------------------------
@@ -627,11 +773,19 @@ def test_the_honest_shortfall_of_four_retailers_with_both_hard_two_refused_passe
 
     assert (
         evidence_check.main(
-            ["--phase", "--config", str(config), "--evidence", str(evidence)]
+            [
+                "--phase",
+                "--config",
+                str(config),
+                "--evidence",
+                str(evidence),
+                "--fixtures",
+                str(_write_fixtures(tmp_path, [])),
+            ]
         )
         == 0
     )
-    assert evidence_check.check_phase(config, evidence) == []
+    assert evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, [])) == []
 
 
 def test_the_repo_as_it_stands_after_this_plan_names_target_as_the_only_gap(
@@ -661,7 +815,7 @@ def test_the_repo_as_it_stands_after_this_plan_names_target_as_the_only_gap(
         ],
     )
 
-    problems = evidence_check.check_phase(config, evidence)
+    problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
 
     assert len(problems) == 1
     assert "Target" in problems[0]
@@ -694,7 +848,7 @@ def test_the_configured_set_comes_from_config_load_not_a_second_yaml_parse(
 
     evidence_check.Config.load = _spy  # type: ignore[method-assign]
     try:
-        evidence_check.check_phase(config, evidence)
+        evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
     finally:
         evidence_check.Config.load = real_load  # type: ignore[method-assign]
 
@@ -739,6 +893,66 @@ def test_the_shipped_tree_passes_the_whole_phase_gate() -> None:
     problems = evidence_check.check_phase(
         REPO_ROOT / "config" / "products.yaml",
         REPO_ROOT / "docs" / "retailer-evidence.md",
+        REPO_ROOT / "tests" / "fixtures",
     )
 
     assert problems == [], "the shipped tree fails its own honesty gate:\n  " + "\n  ".join(problems)
+
+
+def test_the_shipped_tree_would_fail_if_a_working_retailer_were_quietly_dropped(
+    tmp_path: Path,
+) -> None:
+    """The floor, driven against the REAL evidence log and the REAL captures.
+
+    The test above proves the shipped tree is clean; on its own that is a gate
+    nobody has watched fail, and rules 1-3 could not fail in this direction at
+    all. This is the reviewer's reproduction, run as a test: the gamestop and
+    walmart watches gone, two REFUSED sections appended so rule 2 is fully
+    satisfied, the real `tests/fixtures/` left alone.
+
+    Before rule 4 existed that tree produced:
+
+        configured retailers: ['bestbuy', 'nintendo']   watches: 3
+        253 passed in 1.07s
+        evidence check: PASS — phase
+
+    Rule 4 is the ONLY rule that fires on it — asserted below rather than
+    assumed, because a floor that only works while rule 2 happens to be broken
+    too is not a floor.
+    """
+    config = _write_config(tmp_path, ["bestbuy", "nintendo"])
+    evidence = tmp_path / "retailer-evidence.md"
+    evidence.write_text(
+        (REPO_ROOT / "docs" / "retailer-evidence.md").read_text(encoding="utf-8")
+        + "\n---\n\n## GameStop (gamestop.com)\n\nRefused.\n\n**Verdict: REFUSED**\n"
+        + "\n---\n\n## Walmart (walmart.com)\n\nRefused.\n\n**Verdict: REFUSED**\n",
+        encoding="utf-8",
+    )
+
+    problems = evidence_check.check_phase(
+        config, evidence, REPO_ROOT / "tests" / "fixtures"
+    )
+
+    assert len(problems) == 2, problems
+    assert all(p.startswith("rule 4") for p in problems), problems
+    assert "GameStop" in problems[0] and "goplusplus.html" in problems[0]
+    assert "Walmart" in problems[1] and "goplusplus.html" in problems[1]
+
+
+def test_a_refusal_for_a_retailer_we_never_captured_is_still_clean(tmp_path: Path) -> None:
+    """Rule 4 must not punish the honest refusals this phase actually produced.
+
+    Pokémon Center was walked down every rung and refused; Amazon and Target
+    were never fetched at all. None of the three has a capture directory, so
+    none of them trips this rule — which is the whole point of keying it on a
+    page we really read rather than on the count.
+    """
+    config = _write_config(tmp_path, _SHIPPED)
+
+    problems = evidence_check.check_phase(
+        config,
+        REPO_ROOT / "docs" / "retailer-evidence.md",
+        REPO_ROOT / "tests" / "fixtures",
+    )
+
+    assert problems == [], problems

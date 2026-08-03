@@ -49,11 +49,35 @@ MODES
 exist exactly once, and carry exactly one well-formed verdict line?
 
 `--phase` asks whether the tree as a whole is telling the truth about its own
-retailer count, via the three rules in `check_phase`.
+retailer count, via the four rules in `check_phase`.
 
-`--config` and `--evidence` exist so the tests can point either mode at a
-synthetic tree and watch it go red. A gate nobody has watched fail is not a
-gate; the watching is `tests/test_evidence_check.py`.
+`--config`, `--evidence` and `--fixtures` exist so the tests can point either
+mode at a synthetic tree and watch it go red. A gate nobody has watched fail is
+not a gate; the watching is `tests/test_evidence_check.py`.
+
+THE COUNT NEEDS A FLOOR AS WELL AS A CEILING
+--------------------------------------------
+Rules 1-3 shipped first and they all point the same way: they stop the retailer
+count drifting UP, by refusing a padded retailer and refusing a short count that
+contradicts itself. Nothing stopped it drifting DOWN. Any number of configured
+retailers passed, down to zero, provided each absent one carried a written
+REFUSED — and `README.md` would go on advertising the removed ones as working,
+because the support matrix only checked `configured ⊆ documented`.
+
+Reproduced end to end before rule 4 existed: delete the gamestop and walmart
+watch blocks, append two REFUSED sections, leave the README alone.
+
+    configured retailers: ['bestbuy', 'nintendo']   watches: 3
+    README still shows: | GameStop | 1 | ... | ✅ Working |
+                        | Walmart  | 1 | ... | ✅ Working |
+    253 passed in 1.07s
+    evidence check: PASS — phase
+
+Half the shipped detectors gone, every gate green, and the surface this phase
+built specifically to be trustworthy still telling a reader both are watched. A
+working retailer silently disappearing is precisely the silent gap the phase is
+named after. Rule 4 is the floor, and `tests/test_support_matrix.py`'s
+overstatement rule is the other half of it.
 """
 
 from __future__ import annotations
@@ -111,6 +135,20 @@ HARD_TWO: tuple[str, ...] = ("target", "amazon")
 
 #: The count `.planning/ROADMAP.md` Phase 3 criterion 5 asks for.
 TARGET_RETAILER_COUNT = 5
+
+#: Where `boty.fixtures.capture` writes a page, one directory per retailer key.
+#:
+#: Rule 4 treats a `*.html` file here as DURABLE PROOF that this repo once read
+#: that retailer, because that is exactly what it is: `capture` only writes one
+#: after a live fetch that was not blocked, which is why
+#: `test_no_retailer_is_configured_without_a_page_we_have_actually_read` already
+#: trusts the same artefact in the opposite direction. A retailer we have read
+#: is not a retailer that refused us.
+#:
+#: Script-relative rather than CWD-relative because it is evidence about THIS
+#: checkout. The `--fixtures` flag overrides it so the tests can point rule 4 at
+#: a synthetic tree; nothing in this module reaches for the real one implicitly.
+FIXTURE_ROOT = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
 
 #: A verdict line, anchored to a whole line.
 #:
@@ -256,15 +294,28 @@ def check_retailer(display_name: str, evidence_path: str | Path) -> list[str]:
     return problems
 
 
-def check_phase(config_path: str | Path, evidence_path: str | Path) -> list[str]:
+def check_phase(
+    config_path: str | Path,
+    evidence_path: str | Path,
+    fixture_root: str | Path,
+) -> list[str]:
     """Is this tree telling the truth about its own retailer count?
 
-    Three rules, applied in order, reporting EVERY violation rather than
-    stopping at the first — being told about one gap, fixing it, and being told
-    about the next is how a gate gets muted.
+    Four rules, applied in order, reporting EVERY violation rather than stopping
+    at the first — being told about one gap, fixing it, and being told about the
+    next is how a gate gets muted.
+
+    `fixture_root` is REQUIRED rather than defaulted, deliberately. A default
+    would be inherited silently by every synthetic-tree test in
+    `tests/test_evidence_check.py`, which states as an invariant that nothing in
+    it reads the shipped tree — and rule 4 would then be enforced against this
+    repo's real fixtures while the test believed it was describing its own
+    `tmp_path`. Making it explicit costs one argument per call site and means
+    every caller has said which tree it means.
     """
     config_path = Path(config_path)
     evidence_path = Path(evidence_path)
+    fixture_root = Path(fixture_root)
     problems: list[str] = []
 
     # Read the configured set through Config.load rather than parsing the YAML
@@ -314,6 +365,29 @@ def check_phase(config_path: str | Path, evidence_path: str | Path) -> list[str]
                 "rounded."
             )
 
+    # RULE 4 — a refusal cannot outrank a capture. THE FLOOR.
+    #
+    # Rules 2 and 3 are a ceiling on the count. This is the only thing under it:
+    # a roadmap retailer that is not configured, but whose page this repo
+    # demonstrably fetched, is not a retailer that refused us — it is a watch
+    # that was dropped without saying so. Checked against evidence already on
+    # disk, offline, with no request to anybody.
+    for retailer, display in sorted(ROADMAP_RETAILERS.items()):
+        if retailer in configured:
+            continue
+        captures = sorted(path.name for path in (fixture_root / retailer).glob("*.html"))
+        if captures:
+            problems.append(
+                f"rule 4 (a refusal cannot outrank a capture): {display} is not configured in "
+                f"{config_path}, yet {fixture_root / retailer} holds {captures} — pages this "
+                "repo really fetched. `boty.fixtures.capture` only writes one after a live "
+                "fetch that was not blocked, so a retailer we have read is not a retailer that "
+                "refused us: either the verdict is wrong, or a working watch was dropped and "
+                "nothing in the tree says so. Rules 2 and 3 stop the retailer count drifting "
+                "UP; this is what stops it drifting down. If the retailer is genuinely gone, "
+                "delete its fixtures in the same commit and say why in the evidence log."
+            )
+
     return problems
 
 
@@ -331,16 +405,32 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument(
         "--phase",
         action="store_true",
-        help="check the whole tree: scope, configured-or-refused, count consistency",
+        help=(
+            "check the whole tree: scope, configured-or-refused, count consistency, "
+            "and that no refusal contradicts a page we captured"
+        ),
     )
     ap.add_argument("-c", "--config", default="config/products.yaml")
     ap.add_argument("-e", "--evidence", default="docs/retailer-evidence.md")
+    ap.add_argument(
+        "-f",
+        "--fixtures",
+        default=None,
+        help=(
+            "root of the captured-page tree rule 4 reads "
+            f"(default: {FIXTURE_ROOT}, resolved relative to this script)"
+        ),
+    )
     args = ap.parse_args(argv)
 
     if args.retailer is not None:
         problems = check_retailer(args.retailer, args.evidence)
     else:
-        problems = check_phase(args.config, args.evidence)
+        problems = check_phase(
+            args.config,
+            args.evidence,
+            FIXTURE_ROOT if args.fixtures is None else args.fixtures,
+        )
 
     for problem in problems:
         print(problem, file=sys.stderr)

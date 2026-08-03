@@ -70,6 +70,11 @@ RETAILER, RUNG, METHOD, STATUS = 0, 1, 2, 3
 #: a retailer in scope to have `—`, `Planned` or nothing here.
 RUNGS = {"1", "2", "3", "4"}
 
+#: The rungs that claim the monitor CAN read this retailer. Rung 4 is the only
+#: honest rung for a retailer nothing watches, so these three are exactly the
+#: cells that must be backed by a configured watch.
+WORKING_RUNGS = {"1", "2", "3"}
+
 
 def _load_evidence_check() -> Any:
     """Import `scripts/evidence_check.py` by path — `scripts/` is not a package.
@@ -140,6 +145,30 @@ def _rungless(rows: dict[str, list[str]]) -> dict[str, str]:
         for name in ROADMAP_RETAILERS.values()
         if name in rows and rows[name][RUNG][:1] not in RUNGS
     }
+
+
+def _overstated(rows: dict[str, list[str]], configured: set[str]) -> list[str]:
+    """Retailers the table claims a working rung for while nothing watches them.
+
+    The direction `test_every_configured_retailer_is_documented_in_the_matrix`
+    does NOT cover, and the more dangerous of the two. That rule checks
+    `configured ⊆ documented` — the table understating what the monitor does.
+    This checks the reverse: the table OVERSTATING it.
+
+    Nothing enforced it before. `_rungless` only wants a digit 1-4 and
+    `_undeclared_degraded` only looks at rung-3 rows, so
+    `| GameStop | 1 | curl_cffi + schema.org JSON-LD | ✅ Working |` passed every
+    rule whether or not a gamestop watch existed. Reproduced: with the gamestop
+    and walmart watch blocks deleted and two REFUSED sections appended, 253
+    tests passed, `evidence_check --phase` returned `[]`, and the table went on
+    telling a reader both were watched at rung 1 and working. That reader is the
+    person this whole phase built the matrix for.
+    """
+    return sorted(
+        name
+        for key, name in ROADMAP_RETAILERS.items()
+        if name in rows and rows[name][RUNG][:1] in WORKING_RUNGS and key not in configured
+    )
 
 
 def _undeclared_degraded(rows: dict[str, list[str]]) -> list[str]:
@@ -224,6 +253,29 @@ def test_every_configured_retailer_is_documented_in_the_matrix() -> None:
     )
 
 
+def test_the_matrix_does_not_advertise_a_retailer_the_monitor_does_not_watch() -> None:
+    """The other direction, and the one a reader has no defence against.
+
+    A row claiming rung 1-3 is a claim that the monitor reads this retailer. If
+    no watch exists, that claim is false, no alert will ever arrive, and nothing
+    else in the tree noticed: `evidence_check`'s rules 1-3 impose a ceiling on
+    the retailer count and no floor, and the rule above only catches the table
+    understating. `README.md` says "`scripts/evidence_check.py` is what stops
+    that number drifting" — this test and rule 4 are what make that true in the
+    second direction.
+    """
+    rows = _matrix()
+    configured = {w.retailer for w in Config.load(CONFIG).watches}
+
+    assert not _overstated(rows, configured), (
+        f"the README matrix shows a working rung (1-3) for retailers with no watch in "
+        f"{CONFIG}: {_overstated(rows, configured)}. Rung 4 — dropped, with the evidence "
+        "written down — is the only honest rung for a retailer the monitor does not read. "
+        "If the watch was deliberately removed, move the row to rung 4 and record why in "
+        "docs/retailer-evidence.md in the same commit."
+    )
+
+
 # --------------------------------------------------------------------------
 # The same rules, watched failing on a deliberately broken copy
 # --------------------------------------------------------------------------
@@ -265,6 +317,50 @@ def test_a_rung_three_row_stripped_of_degraded_fails_the_degraded_rule() -> None
 
     assert rows["Best Buy"][RUNG].startswith("3"), "the corruption must leave the rung alone"
     assert _undeclared_degraded(rows) == ["Best Buy"]
+
+
+def test_a_watch_dropped_while_the_row_still_says_working_fails_the_overstatement_rule() -> None:
+    """The reviewer's reproduction, as a rule run against the real table.
+
+    The README is untouched — that is the point. Somebody deletes the gamestop
+    watch during a config rewrite, or "cleans up" a retailer that has been
+    failing, and the matrix goes on advertising `| GameStop | 1 | ... | ✅
+    Working |`. Rung 1 with nothing watching it is a false claim, and this is
+    what turns it red.
+    """
+    rows = _matrix()
+    configured = {w.retailer for w in Config.load(CONFIG).watches} - {"gamestop"}
+
+    assert _overstated(rows, configured) == ["GameStop"]
+
+
+def test_a_rung_four_row_promoted_to_rung_one_fails_the_overstatement_rule() -> None:
+    """The same rule from the other side: the table moving without the config.
+
+    Target is settled at rung 4 with no watch. Editing its rung cell to `1` —
+    the one-character version of claiming a retailer works — is caught by the
+    same predicate, so this is a rule about the disagreement rather than a rule
+    about `config/products.yaml` alone.
+    """
+    rows = _matrix(_corrupt("Target", RUNG, "1"))
+    configured = {w.retailer for w in Config.load(CONFIG).watches}
+
+    assert _overstated(rows, configured) == ["Target"]
+
+
+def test_the_shipped_rung_four_rows_are_not_flagged_as_overstatement() -> None:
+    """The clean side. Rung 4 for an unwatched retailer is the honest answer.
+
+    Without this, the rule could be satisfied by flagging every unconfigured
+    retailer, which would make the honest shortfall this phase recorded — three
+    retailers dropped with the evidence written down — unrepresentable.
+    """
+    rows = _matrix()
+    configured = {w.retailer for w in Config.load(CONFIG).watches}
+
+    for name in ("Pokémon Center", "Amazon", "Target"):
+        assert rows[name][RUNG].startswith("4"), (name, rows[name][RUNG])
+    assert _overstated(rows, configured) == []
 
 
 def test_a_deleted_row_fails_the_presence_rule() -> None:
