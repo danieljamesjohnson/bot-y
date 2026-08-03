@@ -3002,6 +3002,40 @@ again at 14:30:43Z — still the same four zombies, still zero children under
 `boty.service`, still 23 profiles, across roughly **ten renders** since the
 restart (two per service cycle, two per manual pass).
 
+**One health warning fired during the verification window, and it was our own
+fault.** The service cycle at **2026-08-03T14:32:05Z** published
+`healthy: false`:
+
+```
+gamestop  ok: False
+  reason: control product is not reading IN_STOCK — the detector is probably broken,
+          so real restocks would be missed silently
+  failing_controls: ['CONTROL — PS5 console: unknown (fetch failed: HTTP 403)']
+```
+
+**GameStop carries six of the thirteen watches**, and this plan's own gates put
+roughly **36 GameStop requests through in fifteen minutes** — three `make verify`
+runs, three `boty check` passes and three service cycles, all stacked. A 403 at
+that cadence is GameStop declining the volume, not a broken detector. It is
+recorded rather than smoothed over, and three things about it are worth reading:
+
+- **It read `unknown`, not `out_of_stock`.** A fetch that never completed did not
+  become a stock verdict. That is the core promise of this project holding under
+  exactly the condition that breaks it in other monitors, and it is the second
+  time this evidence log has been able to say so.
+- **The health warning fired, correctly.** Criterion 3's health half is not
+  decorative — it caught a retailer that a count alone would have kept counting.
+- **It recovered on the very next cycle without intervention:** `updated`
+  2026-08-03T14:37:55Z, **45.59 s**, `healthy: true`, all six retailer entries
+  `ok`, **6/6 controls IN_STOCK**.
+
+The criterion-3 and criterion-6 readings above were all taken **before** this,
+between 14:19Z and 14:26Z, and three separate `make verify` runs reported 6/6
+live controls in that window. The measurement stands; so does the 403.
+**Politeness is a constraint on this project's own verification too, and this is
+what forgetting that costs** — the fix is not to re-run until the number is
+clean, it is to stack fewer passes.
+
 ## Phase 3.1 closing record (2026-08-03) — two conclusions revised, no observation retracted
 
 The Phase 3 closing record above is left exactly as it was written. This one sits
