@@ -382,6 +382,33 @@ two different WAF vendors. This is not rate limiting and not a one-off: the
 homepage passed rung 1 **twice**, before and between the refusals, so this host
 is not IP-banned. The wall is on `/product/*` and it is deliberate.
 
+### The decisive reason is the Terms of Use, not the wall
+
+Added 2026-08-02 after a desk review of prior art. This supersedes the technical
+argument below as the *primary* reason, because a wall can fall and a written
+prohibition does not.
+
+Pokémon Center's Terms of Use prohibit "any data mining, robots or similar data
+gathering or extraction methods designed to scrape or extract data from our
+Service," and separately prohibit developing or using "any applications that
+interact with our Services without our prior written consent." That language is
+identical across the US, Canadian and Australian storefronts.
+
+It is **broader than the robots.txt finding below.** robots.txt closes `/cortex`,
+`/availabilities`, `/prices`, `/offers` and `/items` — which leaves the implicit
+reading that `/product/` and `/category/` are fair game because they are not
+disallowed. The ToU says otherwise, and read plainly it also covers the homepage
+GET performed during this ladder walk.
+
+So Pokémon Center is not "a wall we could not get past." It is a retailer that
+has said no in writing. For a project whose entire positioning is that its
+readings can be trusted, that distinction is the one that matters: a README
+claiming we respect robots.txt while the code works around the ToU would be
+worse than not supporting the retailer at all.
+
+bot-y makes **no requests to pokemoncenter.com** — there is no watch, no
+`FIRST_PARTY` entry, and no dispatch branch. The name survives only in comments.
+
 ### Why there is no rung 2
 
 Pokémon Center publishes no documented public API, and its internal Elastic Path
@@ -441,16 +468,52 @@ misclassification. So it gets fixed rather than noted: `pardon our interruption`
 and `incapsula incident` join `boty.fetch.BLOCK_PHRASES` in 02-04 task 2, pinned
 by `tests/test_fetch.py` against the bytes recorded above.
 
-### If somebody retries this later
+### If somebody revisits this later
 
-Worth retrying, and here is what would make it worth retrying: the homepage is
-readable at rung 1 today, so whatever Imperva rule covers `/product/*` is
-narrower than a site-wide policy and could be relaxed or re-scoped. Re-run the
-two cheap probes at the top of this table before assuming anything — a cold
-rung-1 GET of any `/product/` URL, and one rung-3 render. If either comes back
-with `ld+json` or a `__NEXT_DATA__` product node, this section is stale and
-Pokémon Center is a one-line `FIRST_PARTY` entry away from working, the same as
-Nintendo turned out to be.
+**Do not re-probe to see whether the wall weakened.** The technical observation
+still stands — the homepage reads at rung 1, so the Imperva rule on `/product/*`
+is narrower than a site-wide policy and could be re-scoped — but the ToU makes
+that irrelevant. Periodically retrying a site whose terms forbid automated
+interaction, waiting for enforcement to lapse, is exactly the behaviour this
+project should not have. A clean 200 would no longer be sufficient on its own.
+
+**What would actually change this: Pokémon Center publishing a signal.** An API,
+a partner or affiliate product feed, or a per-SKU back-in-stock notification.
+Any of those is a genuine rung 2 and would be worth wiring up the same
+afternoon. None exists today.
+
+### Prior art, reviewed 2026-08-02
+
+~17 public projects claim to read Pokémon Center. Exactly **one** has a written
+record of reading a per-product stock value, and it did so from a
+**human-attended, non-headless Chrome session** where a person cleared the
+DataDome challenge by hand before the profile could be reused — which is not a
+thing an unattended monitor can do. Everything else reads the *catalog* (new
+products, no availability), reads the *homepage* to detect a Queue-it waiting
+room, or is abandoned with an empty state file.
+
+The most heavily-resourced project found — 100 residential proxies, Bézier mouse
+paths, up to 50 proxy rotations per check — reads strictly **less** than bot-y
+already reads for free: it only determines whether a queue is live.
+
+Two findings worth keeping:
+
+- **Bloomreach (`core.dxpapi.com`) is a real, unwalled endpoint that returns
+  catalog only** — no availability field, per its own docs and per the one
+  project polling it every 5 minutes. It answers "a new product appeared,"
+  never "this is back in stock." Wrong signal, and the ToU covers the data
+  regardless of which host serves it.
+- **Do not add `datadome` to `BLOCK_PHRASES`.** Real Pokémon Center product
+  pages reference DataDome assets while serving genuine content; a project that
+  tried it had to revert a false-positive block classification. If a DataDome
+  tell is ever wanted, `captcha-delivery.com` together with the `var dd={`
+  marker is the safer pair.
+
+The strongest negative signal: four actively-maintained multi-retailer Pokémon
+TCG monitors from 2026 were checked. Their configs cover Fantasia Cards, Card
+Corner, Smyths, Argos, ASDA, pokemonstore.co.kr, Lazada and Norli. **None
+includes pokemoncenter.com.** People building this exact thing, who want that
+data most of all, are shipping without it.
 
 ---
 
