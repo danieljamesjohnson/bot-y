@@ -41,6 +41,16 @@ def write(path: Path, results: list[Result], health: list[Health]) -> None:
                 "url": r.url,
                 "control": r.watch.control,
                 "alertable": r.alertable,
+                # Public API, not an internal detail: this file is served over
+                # HTTP and the page renders it verbatim, so these two keys are
+                # a contract with the dashboard and with the support matrix,
+                # which reads them to say which rung each retailer landed on.
+                # `rung` is written rather than only `degraded` because "we
+                # reached Best Buy through its official API" and "we reached
+                # it through a browser" are both non-default and only one of
+                # them is a lower-confidence reading.
+                "rung": r.rung.value,
+                "degraded": r.degraded,
             }
             for r in results
         ],

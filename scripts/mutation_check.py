@@ -137,6 +137,22 @@ MUTATIONS = (
         replace="    transitions = [r.alertable and state.transitioned_to_stock(r) for r in results]",
         breaks="restores the CR-01 short-circuit — state is only recorded when alertable, so every restock after the first is silently missed",
     ),
+    # M6 guards a claim rather than a verdict. `Result.degraded` is the whole
+    # of what makes "documented, not faked" mean anything: it is what the
+    # status page and the support matrix use to distinguish a reading we trust
+    # from one we got by driving a browser at a site that does not want us
+    # there. Nothing about the stock verdict changes when it is dropped — every
+    # availability, price and alert stays byte-identical — so a suite that only
+    # asserts on verdicts would go on passing while every degraded reading was
+    # published as a first-class one. A flag nothing asserts on is a flag that
+    # can be silently cleared.
+    Mutation(
+        ident="M6",
+        target="boty/models.py",
+        search="        return self.rung is Rung.BROWSER",
+        replace="        return False",
+        breaks="clears the degraded flag — a browser-read verdict is published as if it were a first-class TLS reading, in the status page and in the support matrix",
+    ),
 )
 
 

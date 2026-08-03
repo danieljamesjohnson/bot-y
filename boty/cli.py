@@ -42,7 +42,12 @@ def _make_checker(cfg: Config) -> Callable[[Watch], Result]:
 def _report(results: list[Result], health: list[Health]) -> None:
     for r in results:
         price = f"${r.price:>8.2f}" if r.price is not None else " " * 9
-        tag = " [control]" if r.watch.control else ""
+        # Composed rather than chosen: a browser-read control is both things at
+        # once, and either fact alone would mislead. `SYMBOL` is deliberately
+        # untouched — it is indexed unconditionally below, so it must only ever
+        # be keyed by `Availability`, which still has exactly three members.
+        tags = [t for t, on in (("[control]", r.watch.control), ("[degraded]", r.degraded)) if on]
+        tag = f" {' '.join(tags)}" if tags else ""
         print(f"  {SYMBOL[r.availability]} {r.watch.retailer:<9} {r.watch.name[:30]:<30}{price}  {r.detail[:56]}{tag}")
 
     for h in health:
