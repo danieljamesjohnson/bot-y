@@ -17,7 +17,7 @@ import logging
 
 from . import parse
 from .fetch import Blocked, FetchError, get
-from .models import Availability, Result, Watch
+from .models import Availability, Result, Rung, Watch
 
 log = logging.getLogger(__name__)
 
@@ -154,6 +154,13 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
     not the rare one. Every Result below therefore carries `product_url`, and
     anything derived from an exception goes through `_redact` first: curl error
     strings routinely echo the URL they were given.
+
+    Every Result below also carries `rung=Rung.API` — the error paths as much
+    as the success one. A rung is a fact about the transport, not about the
+    verdict, so an UNKNOWN produced by a 403 from the official API is still an
+    API reading. Leaving the `Rung.TLS` default in place on those paths would
+    label a key-holder's Best Buy reading as a plain page fetch, which is
+    exactly the claim the support matrix makes on this field's word.
     """
     product_url = f"https://www.bestbuy.com/site/-/{watch.target}.p"
     api_url = (
@@ -168,14 +175,30 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
         page = get(api_url)
         data = page.json
     except (Blocked, FetchError) as exc:
-        return Result(watch, Availability.UNKNOWN, detail=_redact(f"api error: {exc}"), url=product_url)
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=_redact(f"api error: {exc}"),
+            url=product_url,
+            rung=Rung.API,
+        )
     except ValueError as exc:
-        return Result(watch, Availability.UNKNOWN, detail=_redact(f"bad api json: {exc}"), url=product_url)
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=_redact(f"bad api json: {exc}"),
+            url=product_url,
+            rung=Rung.API,
+        )
 
     products = data.get("products") or []
     if not products:
         return Result(
-            watch, Availability.UNKNOWN, detail=f"sku {watch.target} not found", url=product_url
+            watch,
+            Availability.UNKNOWN,
+            detail=f"sku {watch.target} not found",
+            url=product_url,
+            rung=Rung.API,
         )
 
     p = products[0]
@@ -186,4 +209,5 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
         price=p.get("salePrice"),
         detail=f"bestbuy api: onlineAvailability={available}",
         url=product_url,
+        rung=Rung.API,
     )

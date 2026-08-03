@@ -24,6 +24,42 @@ class Availability(str, Enum):
     UNKNOWN = "unknown"
 
 
+class Rung(str, Enum):
+    """How a reading was obtained — which rung of the escalation ladder it took.
+
+    `Availability` says what the retailer's page claimed. This says how much
+    that claim is worth. They are separate questions, and this exists because
+    "we can read this retailer" and "we can read this retailer *confidently*"
+    are different claims that the support matrix has to be able to tell apart
+    without a human remembering which retailer needed a browser.
+
+    Deliberately NOT a fourth `Availability` member. `monitor.assess_health`
+    and `monitor.transitioned_to_stock` branch on `Availability`, and
+    `cli.SYMBOL` is a dict indexed unconditionally — a fourth member would be
+    a KeyError in the middle of printing a report. Degradation is orthogonal
+    to what the stock reading says.
+
+    Deliberately NOT fed into `Health` either. `assess_health` answers "has
+    this detector been verified by a control", not "how confident is the
+    transport". If a degraded reading flipped `Health.ok`, a browser-read
+    retailer would raise a permanent health warning and the phase criterion
+    "five or more retailers with no health warnings" could never be met by
+    construction — the warning channel would be full of a fact that is never
+    going to change. So `boty.monitor` does not import this enum at all.
+
+    There is no member for rung 4 ("dropped"): a dropped retailer produces no
+    readings, so a `Rung` for it would be a value that can never appear on a
+    `Result`.
+    """
+
+    #: Impersonated TLS against the public product page — the default path.
+    TLS = "tls"
+    #: The retailer's own sanctioned API. Strictly more reliable than TLS.
+    API = "api"
+    #: A real browser rendering the page. Works, but slowly and fragilely.
+    BROWSER = "browser"
+
+
 @dataclass(frozen=True)
 class Watch:
     """One product at one retailer."""
@@ -54,6 +90,24 @@ class Result:
     #: wrong verdict can be diagnosed without re-running.
     detail: str = ""
     url: str = ""
+    #: Which rung produced this reading. Declared last, with a default, so
+    #: every pre-existing construction site stays valid and keeps its meaning:
+    #: they are all plain TLS fetches, and none of them names a rung.
+    rung: Rung = Rung.TLS
+
+    @property
+    def degraded(self) -> bool:
+        """True when this reading came from a lower-confidence transport.
+
+        Derived rather than stored so there is exactly one source of truth:
+        the support matrix's "which rung" and the runtime DEGRADED flag cannot
+        drift apart into disagreeing about the same reading.
+
+        Note what this does NOT do: it does not touch `alertable`. A degraded
+        reading is still a real reading, and suppressing alerts on it would
+        defeat the point of supporting the retailer at all.
+        """
+        return self.rung is Rung.BROWSER
 
     @property
     def alertable(self) -> bool:
