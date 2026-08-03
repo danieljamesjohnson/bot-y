@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: In progress
-stopped_at: Completed 03.1-01-PLAN.md
-last_updated: "2026-08-03T11:18:00.000Z"
+status: Ready to execute
+stopped_at: Completed 03.1-02-PLAN.md (Task 1 of 3; Tasks 2–3 blocked, escalated to Dan)
+last_updated: "2026-08-03T11:23:58.983Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 19
+  total_plans: 15
   completed_plans: 13
-  percent: 68
+  percent: 87
 ---
 
 # State: bot-y
@@ -27,13 +27,13 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Milestone:** v1.0
 **Phase:** 03.1 of 5 (Target and Amazon, supported) — INSERTED, reverses a Phase 3 decision
-**Plan:** 1 of 4 complete
-**Last session:** 2026-08-03T11:18:00.000Z
-**Stopped At:** Completed 03.1-01-PLAN.md
+**Plan:** 2 of 4 complete
+**Last session:** 2026-08-03T11:22:27.555Z
+**Stopped At:** Completed 03.1-02-PLAN.md (Task 1 of 3; Tasks 2–3 blocked, escalated to Dan)
 **Last Activity:** 2026-08-03
-**Last Activity Description:** Rule 5 closes W-02; REQ-13 shipped as six machine-checked matrix columns; robots/terms positions recorded for all seven roadmap retailers
+**Last Activity Description:** Target probed for the first time — three pages, all HTTP 200, no challenge, no block phrase, `"isBot": false` — and ZERO price/availability/seller on any of them. Target renders stock from `redsky.target.com` (`Disallow: /` for every agent), so there is no permitted rung that can read it. NOT registered: a control would read UNKNOWN forever. Also a disproof — Target no longer lists the GO Plus + (TCIN 88714054 was HTTP 200 in 2025-05, now 404s). Retailer count stays at four.
 **Resume File:** None
-**Next command:** `/gsd-execute-phase 03.1` for plan 02 — Target on the robots-clean path. Both gates are now in place: registering Target requires flipping its evidence verdict in the same commit (rule 5) and its matrix row already states `permits /p/` + `forbids extraction` + `⚠ disagree`
+**Next command:** `/gsd-execute-phase 03.1` for plan 03 — Amazon. **Blocked on Dan for Target only** (`QUESTIONS.md` 0d): his 2026-08-03 reversal settled the Terms of Use, not `robots.txt`, and rung 3 reaches Target's numbers only by making the disallowed RedSky requests through a browser. Two options are written up for him; option 2 would buy a fifth retailer and a control but NOT another GO Plus + source. **Carry into 03.1-03:** "HTTP 200, no challenge, no structured data" is now a known Amazon-plausible outcome — check for `application/ld+json` and a server-side-render flag before calling it a parser bug or a wall.
 
 ## What Exists
 
@@ -56,7 +56,7 @@ Working and deployed on danserver before this roadmap was written:
 ## Known Risks
 
 - ~~**Amazon may be unreachable** without a browser or paid residential proxies.~~ **Settled 2026-08-03 by 03-01, and not for the expected reason.** Reachability was never tested: Amazon's Conditions of Use forbid "any collection and use of any product listings, descriptions, or prices", so it is rung 4 with zero product-page requests ever made. No browser, no proxies, no transport work. Evidence in `docs/retailer-evidence.md` under `## Amazon`.
-- ~~**Target is unresolved.**~~ **Settled 2026-08-03 by 03-02, and not for a technical reason.** Target's Terms & Conditions forbid "any use of data extraction, scraping, mining or other data gathering tools" and "otherwise scrape, collect, store or use any Content … product listings, descriptions, prices or images" with no commercial-use qualifier, so it is rung 4 with zero product-page requests ever made. The old RedSky/TCIN notes are superseded: RedSky is closed by `redsky.target.com/robots.txt` (`Disallow: /`, every agent) before the CAPTCHA matters, and TCIN discovery was never attempted even though `www.target.com/robots.txt` publishes a PDP sitemap. Evidence in `docs/retailer-evidence.md` under `## Target`.
+- ~~**Target is unresolved.**~~ ~~**Settled 2026-08-03 by 03-02, and not for a technical reason.**~~ **Re-settled 2026-08-03 by 03.1-02, and now it IS a technical reason.** Dan reversed the Terms-of-Use call, Target was probed on the path its own `robots.txt` publishes, and it **did not refuse us**: three pages, all HTTP 200, no challenge, no `BLOCK_PHRASES` match, `"isBot": false`. It also gave us nothing — **zero** `application/ld+json`, `"price"`, `availability` or `"seller"` anywhere in ~315 KB, because Target ships the price module empty (`isProductDetailServerSideRenderPriceEnabled: false`) and renders stock from `redsky.target.com`, which is `Disallow: /` for every agent. Rung 1 is open and empty; rung 2 is closed in writing; rung 3 reaches the data only by making the rung-2 requests through a browser. Still rung 4, but the reason is now an observation. **Target also no longer lists the GO Plus +** — TCIN `88714054` served HTTP 200 as late as 2025-05 and now 404s. Not registered: a control would read UNKNOWN forever. Evidence under `## Target`, 2026-08-03 heading; the open decision is `QUESTIONS.md` 0d.
 - **Fixtures go stale.** Saved HTML is a snapshot; a retailer can change its page and the fixtures will keep passing. Control products cover the live case, fixtures cover regression — neither substitutes for the other, and Phase 1 should make that split explicit.
 
 ## Decisions Pending Evaluation
@@ -84,6 +84,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 03 P02 | 19min | 3 tasks | 4 files |
 | Phase 03 P03 | 47min | 3 tasks | 10 files |
 | Phase 03.1 P01 | 62min | 3 tasks | 5 files |
+| Phase 03.1 P02 | 78min | 1 tasks | 3 files |
 
 ## Decisions
 
@@ -124,7 +125,12 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 03.1]: `unread` is a fourth position vocabulary word, pinned to five named cells — Three of four retailers refused their own policy documents on 2026-08-03; writing `permits` for an unread file would be inventing evidence, and `silent` on the robots side actively means permission
 - [Phase 03.1]: No escalation to `curl_cffi` after plain `curl` was refused — GameStop's and Best Buy's positions stay `unread` rather than being obtained through the impersonating transport; that is a later plan's decision to take deliberately
 - [Phase 03.1]: Nintendo is marked `⚠ disagree` although it ships — Its robots.txt is `Allow: /` with a published store sitemap while § 6 of its Terms of Use bars "any robot … spider, crawler, scraper or other automated means"; REQ-13 states the disagreement rather than resolving it by dropping a working retailer
+- [Phase 03.1]: Target reached at rung 1 and NOT registered — its pages carry no price, availability or seller at all, so a control would read UNKNOWN forever and the detector could never detect
+- [Phase 03.1]: Rung 3 not walked for Target — it reaches the stock data only by making the browser call redsky.target.com (Disallow:/ for every agent); Dan's reversal settled the Terms of Use, not robots.txt, so the question was escalated rather than answered
+- [Phase 03.1]: FIRST_PARTY['target'] stays a guess because it is unverifiable, not unverified — Target's product pages carry no offers.seller.name at any permitted rung
+- [Phase 03.1]: Target no longer lists the Pokemon GO Plus + — TCIN 88714054 was HTTP 200 as late as 2025-05 and now 404s; a disproof in the Best Buy shape, found via the Internet Archive CDX index after every general search engine refused us
 
 ### Blockers
 
 - Some Best Buy product pages (the Best Buy essentials house brand) are reproducibly refused while others render — mechanism unexplained, so 02-03 control selection needs a fallback candidate
+- Target: rung 3 is the only remaining route to its stock data, and it reaches that data only by making requests to redsky.target.com, which is Disallow:/ for every agent. Dan's 2026-08-03 reversal settled the Terms of Use, not robots.txt. Two options in QUESTIONS.md 0d; notify-dan sent.

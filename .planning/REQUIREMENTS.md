@@ -107,5 +107,5 @@ Maintained by `gsd-tools`; a requirement flips to Complete when its phase comple
 | REQ-10 | Phase 4 | Pending |
 | REQ-11 | Phase 4 | Pending |
 | REQ-12 | Phase 1 | Complete |
-| REQ-07a | Phase 3.1 | Pending — plans 02/03 register Target and Amazon; 03.1-01 built the gates only |
+| REQ-07a | Phase 3.1 | Pending — **Target half done, and it landed on the drop side for the right reason.** 03.1-02 probed Target (11 requests, 3 live pages, all HTTP 200, no challenge) and found it *reachable but empty*: no price, availability or seller anywhere in the HTML, because Target renders stock from `redsky.target.com`, which is `Disallow: /` for every agent. So Target stays dropped, but the recorded reason is now an **observation** rather than a policy reading, which is what this requirement asks for. Not registered — a control would read UNKNOWN forever. The remaining route is rung 3 via the disallowed host: a `robots.txt` decision raised in `QUESTIONS.md` 0d. Amazon still unprobed (03.1-03) |
 | REQ-13 | Phase 3.1 | Complete — 03.1-01, six matrix columns with a two-directional `⚠ disagree` rule |
