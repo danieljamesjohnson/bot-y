@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: Ready to plan
-stopped_at: Phase 1 complete — verified 6/6, make verify PASS
-last_updated: "2026-08-02T18:28:08.908Z"
+stopped_at: "Completed 02-01-PLAN.md — Best Buy verdict: REACHABLE (rung 3)"
+last_updated: "2026-08-03T00:13:18.808Z"
 last_activity: 2026-08-02
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 8
+  completed_plans: 5
   percent: 25
 ---
 
@@ -21,17 +21,17 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 01 — Detector Safety Net
+**Current focus:** Phase 02 — Five Retailers Green
 
 ## Status
 
 **Milestone:** v1.0
 **Phase:** 2 of 4 (five retailers green)
-**Plan:** Not started
-**Last session:** 2026-08-02T17:20:12.548Z
-**Stopped At:** Phase 1 complete — verified 6/6, make verify PASS
+**Plan:** 1 of 4 complete (02-01 done; 02-02, 02-03, 02-04 remain)
+**Last session:** 2026-08-03T00:12:03.466Z
+**Stopped At:** Completed 02-01-PLAN.md — Best Buy verdict: REACHABLE (rung 3)
 **Last Activity:** 2026-08-02
-**Last Activity Description:** Phase 01 complete, transitioned to Phase 2
+**Last Activity Description:** 02-01 complete — rung-3 browser transport, offline guard extended to cover it, Best Buy spike answered
 **Resume File:** None
 **Next command:** `/gsd-plan-phase 2` — running autonomously through Phase 3, halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
 
@@ -48,7 +48,10 @@ Working and deployed on danserver before this roadmap was written:
 
 ## Blocked
 
-- **Best Buy API key** — needed for REQ-04. Free from developer.bestbuy.com. Adapter written and waiting. `boty-secret bestbuy` sets it. See `QUESTIONS.md`.
+- ~~**Best Buy API key** — needed for REQ-04.~~ **No longer blocking.** 02-01 proved
+  the credential-free rung-3 path works (`docs/retailer-evidence.md`), and REQ-04 is
+  satisfied without a key. A key remains an optional upgrade: set `BESTBUY_API_KEY`
+  and Best Buy prefers the API and drops the DEGRADED flag. Nothing waits on it.
 
 ## Known Risks
 
@@ -73,6 +76,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 01 P02 | 4min | 6 tasks | 5 files |
 | Phase 01 P03 | 5min | 3 tasks tasks | 10 files files |
 | Phase 01 P04 | 25min | 6 tasks | 5 files |
+| Phase 02 P01 | 62min | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -86,3 +90,13 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 01]: The type check was proved to bite by deleting the offer-is-None branch and confirming mypy flags it — A Success line over an unannotated codebase asserts nothing
 - [Phase 01]: dev extra mypy floor raised 1.8 -> 2.0 — mypy 2.x is meaningfully stricter by default, so a contributor resolving 1.x would run a weaker check than the one this config was verified against
 - [Phase 01]: Any confined to the JSON boundary in boty — _as_float, _dig, Page.json and _expand sit where a retailer payload shape is not ours to promise; every one of boty's own types is named
+- [Phase 02]: Best Buy is REACHABLE on rung 3 — A headless browser reads its product pages and they carry complete schema.org data — availability, price and a first-party seller
+- [Phase 02]: Best Buy's legacy /site/<slug>/<sku>.p scheme is uniformly refused with ERR_HTTP2_PROTOCOL_ERROR — The live scheme is /product/<slug>/<ID> where <ID> is not the SKU, so an adapter cannot construct product URLs from a SKU
+- [Phase 02]: MARKETPLACES needs no change for Best Buy — Best Buy sets offers[].seller.name to 'Best Buy', already in FIRST_PARTY, so its offers never fall into the unattributed-on-a-marketplace UNKNOWN path and a control can go green
+- [Phase 02]: No evidence Best Buy carries the GO Plus + at all — Two searches returned only gift cards and unrelated titles; SKU 6577129 in test_retailers.py:316 appears nowhere in Best Buy results and is an unverified fixture value
+- [Phase 02]: nodriver installed as an OPTIONAL extra only, after a supply-chain audit — It is AGPL-3.0 to this project's MIT, and a contributor working on the HTTP retailers must never be forced to pull a browser stack
+- [Phase 02]: Chrome's sandbox stays on by default; BOTY_BROWSER_NO_SANDBOX is opt-in per host and logs a warning — Rung 3 executes attacker-controlled retailer JavaScript, so an isolation downgrade must be something a person chose rather than a silent default
+
+### Blockers
+
+- Some Best Buy product pages (the Best Buy essentials house brand) are reproducibly refused while others render — mechanism unexplained, so 02-03 control selection needs a fallback candidate
