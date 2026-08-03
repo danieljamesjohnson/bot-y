@@ -28,8 +28,13 @@ WorkingDirectory=/home/dan/CodeProjects/pokemongoplusplus
 # The test for this before deploying is to run the control check the way the
 # service will, not the way your shell does:
 #
-#   env -i HOME="$HOME" PATH=/usr/bin:/bin \
+#   sudo systemd-run --pipe --quiet --uid=dan \
+#     --property=EnvironmentFile=/home/dan/.config/boty/env \
+#     --property=WorkingDirectory=/home/dan/CodeProjects/pokemongoplusplus \
 #     .venv/bin/python scripts/control_check.py
+#
+# Not `env -i` — that strips the EnvironmentFile too and fails for a reason
+# systemd would not.
 EnvironmentFile=/home/dan/.config/boty/env
 
 ExecStart=/home/dan/CodeProjects/pokemongoplusplus/.venv/bin/boty watch -c config/products.yaml

@@ -119,8 +119,14 @@ IN_STOCK — the detector is probably broken"*. Check it the way the service see
 it before you trust a green:
 
 ```bash
-env -i HOME="$HOME" PATH=/usr/bin:/bin .venv/bin/python scripts/control_check.py
+sudo systemd-run --pipe --quiet --uid="$USER" \
+  --property=EnvironmentFile=/home/$USER/.config/boty/env \
+  --property=WorkingDirectory="$PWD" \
+  "$PWD/.venv/bin/python" scripts/control_check.py
 ```
+
+(`env -i` is *not* the right check here — it strips the `EnvironmentFile` too,
+so it fails for a reason systemd would not.)
 
 ## Use
 
