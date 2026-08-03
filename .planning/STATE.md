@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-08-03T06:05:23.078Z"
+status: In progress
+stopped_at: Completed 03.1-01-PLAN.md
+last_updated: "2026-08-03T11:18:00.000Z"
 last_activity: 2026-08-03
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
-  percent: 75
+  total_plans: 19
+  completed_plans: 13
+  percent: 68
 ---
 
 # State: bot-y
@@ -21,19 +21,19 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 03 — The Hard Two
+**Current focus:** Phase 03.1 — Target and Amazon, Supported
 
 ## Status
 
 **Milestone:** v1.0
-**Phase:** 4 of 4 (open source ready)
-**Plan:** Not started
-**Last session:** 2026-08-03T05:18:41.420Z
-**Stopped At:** Completed 03-03-PLAN.md
+**Phase:** 03.1 of 5 (Target and Amazon, supported) — INSERTED, reverses a Phase 3 decision
+**Plan:** 1 of 4 complete
+**Last session:** 2026-08-03T11:18:00.000Z
+**Stopped At:** Completed 03.1-01-PLAN.md
 **Last Activity:** 2026-08-03
-**Last Activity Description:** Phase 03 complete, transitioned to Phase 4
+**Last Activity Description:** Rule 5 closes W-02; REQ-13 shipped as six machine-checked matrix columns; robots/terms positions recorded for all seven roadmap retailers
 **Resume File:** None
-**Next command:** `/gsd-verify-phase 3` — every Phase 3 criterion now has an answer (5 is honestly unmet, the rest are met) and `02-VERIFICATION.md`'s open CR-01 human item can be marked answered. Then **halt before Phase 4**: the PyPI publish and the v1.0.0 tag are outward-facing and Dan's to trigger
+**Next command:** `/gsd-execute-phase 03.1` for plan 02 — Target on the robots-clean path. Both gates are now in place: registering Target requires flipping its evidence verdict in the same commit (rule 5) and its matrix row already states `permits /p/` + `forbids extraction` + `⚠ disagree`
 
 ## What Exists
 
@@ -83,6 +83,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 03 P01 | 34min | 3 tasks | 6 files |
 | Phase 03 P02 | 19min | 3 tasks | 4 files |
 | Phase 03 P03 | 47min | 3 tasks | 10 files |
+| Phase 03.1 P01 | 62min | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -117,6 +118,12 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 03]: Phase 3 criterion 5 recorded UNMET at four retailers, final: both hard-two retailers are rung 4 by written prohibition and nothing was added to config/products.yaml — Amazon and Target each refused in writing with zero product-page requests; there is no sixth US retailer stocking the GO Plus +, and a control-only fifth was declined in Phase 2
 - [Phase 03]: REQ-08 measured rather than asserted: duration_seconds is published by every pass, 61.4s manual and 35.0s service-published against a 120s budget at 10 watches / 4 retailers — The only prior figure was hand-timed; a published key means the budget can be read after any pass instead of re-measured, and None distinguishes an untimed pass from a zero-length one
 - [Phase 03]: CR-01 durability closed by elapsed time: zero zombie children and zero leaked browser profiles, flat across 41 minutes and 7 completed cycles — 02-VERIFICATION.md left it open because the teardown tests drive a fake nodriver and a one-shot make verify cannot measure a daemon-lifetime property
+
+- [Phase 03.1]: W-02 closed by rule 5 (a configuration cannot outrank a refusal) — Rules 2 and 4 both `continue` on `retailer in configured`, so a tree shipping a detector for a retailer its own log records as REFUSED returned `PASS — phase` exit 0; `make verify` caught it only by accident of Imperva blocking a fixture capture, which is a property of one vendor rather than of any rule
+- [Phase 03.1]: Rule 5 stays silent for a configured retailer with no evidence section at all — GameStop and Walmart have never had one, and demanding one would redden the shipped tree with the fastest green being invented records
+- [Phase 03.1]: `unread` is a fourth position vocabulary word, pinned to five named cells — Three of four retailers refused their own policy documents on 2026-08-03; writing `permits` for an unread file would be inventing evidence, and `silent` on the robots side actively means permission
+- [Phase 03.1]: No escalation to `curl_cffi` after plain `curl` was refused — GameStop's and Best Buy's positions stay `unread` rather than being obtained through the impersonating transport; that is a later plan's decision to take deliberately
+- [Phase 03.1]: Nintendo is marked `⚠ disagree` although it ships — Its robots.txt is `Allow: /` with a published store sitemap while § 6 of its Terms of Use bars "any robot … spider, crawler, scraper or other automated means"; REQ-13 states the disagreement rather than resolving it by dropping a working retailer
 
 ### Blockers
 
