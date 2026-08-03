@@ -1,76 +1,32 @@
 # Blocked on Dan
 
-One decision I should not take on your behalf, plus two credentials I cannot
-obtain myself. Everything else in the MVP is proceeding without them.
+Two credentials I cannot obtain myself. The one open decision (0d, Target/RedSky)
+was answered 2026-08-03 and is kept below as the record. Everything else in the
+MVP is proceeding without them.
 
-## 0d. Target: your terms decision worked, and a *different* wall is behind it — one `robots.txt` call to make
+## 0d. Target / RedSky robots.txt — ANSWERED 2026-08-03 (Dan)
 
-**This is a real decision and I have deliberately not taken it.** 2026-08-03.
+**Decision: proceed.** bot-y renders Target's product page with a browser and reads the
+add-to-cart control. Rendering that page necessarily causes the browser to fetch
+`redsky.target.com`, whose `robots.txt` is `Disallow: /` for every agent. We do not issue
+that request directly, but our browser does, at our instruction — recorded plainly rather
+than framed as an accident.
 
-You reversed Phase 3's Terms-of-Use call — *"bot-y is a bot for humans. To take
-the power back from other bots."* — and I walked the path you asked for, on the
-route Target's own `robots.txt` publishes. **The terms reasoning is gone and it
-is not coming back.** What stopped this is not the terms.
+This is a *separate* decision from the Terms-of-Use reversal earlier the same day. That one
+covered `www.target.com`; this one covers RedSky, and Dan was asked and answered it
+explicitly after the distinction was pointed out.
 
-**What I found, in one line: Target serves the product page and withholds the
-product data.**
+Dan's stated position for both: *"bot-y is a bot for humans. To take the power back from
+other bots."*
 
-Two live Target product pages, fetched at rung 1 through `boty.fetch.get`:
+Recorded in the open because the alternative — a browser quietly fetching a disallowed host
+while the support matrix says nothing — is the kind of omission this project exists to
+refuse. The support matrix row and `docs/retailer-evidence.md` carry the same statement,
+and the executing plan measures which hosts the render actually contacted rather than
+assuming.
 
-- **HTTP 200**, ~315 KB each, correct titles, **no challenge, no CAPTCHA, no
-  block phrase matched** — not even the Akamai markers this repo added
-  *specifically because Akamai fronts Target*. Target's own page data says
-  `"isBot": false`. We were not refused and were not treated as a bot.
-- And on the page: **zero** `application/ld+json`, **zero** `"price"`, **zero**
-  `availability`, **zero** `"seller"`. The price module ships as an empty
-  placeholder and Target's own flag reads
-  `isProductDetailServerSideRenderPriceEnabled: false`.
-
-All of the stock data is fetched by JavaScript from `redsky.target.com` — whose
-`robots.txt` is 41 bytes of `Disallow: /` **for every agent**. I made no request
-to that host.
-
-**So the one route left is rung 3: a headless browser.** It would work — it
-reaches the numbers by executing Target's JavaScript, which means *causing the
-browser to make exactly the `redsky.target.com` requests that host closes to
-everyone*. That is a `robots.txt` question, not a Terms-of-Use question. Your
-decision settled the second one; it did not settle the first, and this project
-has held the `robots.txt` line before (it is why Pokémon Center's `/cortex`
-endpoints were refused). **The two are genuinely different and I did not want to
-quietly extend one ruling onto the other.**
-
-**What I need from you — pick one:**
-
-1. **Hold the line.** `robots.txt` stays absolute. Target remains rung 4 with a
-   *technical* refusal on the record instead of a written one. Nothing to do; the
-   tree is already in this state and green.
-2. **Extend the reversal to this case** — a browser rendering a page a human
-   would render is not a crawler, so rung 3 is allowed even though the XHRs it
-   triggers land on a disallowed host. I would then wire Target on rung 3
-   (`DEGRADED`, the Best Buy shape) in a follow-up plan.
-
-**Two things worth knowing before you choose:**
-
-- **Target no longer lists the Pokémon GO Plus + anyway.** TCIN `88714054` served
-  HTTP 200 as recently as 2025-05 and now **404s**; the 2016 device's TCIN 404s
-  too. So option 2 buys a fifth *retailer* and a control watch — it does **not**
-  buy another place watching for the actual product. The five-retailer bar would
-  be met; the thing you want alerts on would not gain a source.
-- **The seller-string hazard could not be closed and it is not closeable this
-  way.** `FIRST_PARTY["target"] = {"target"}` has always been a guess. I went to
-  read the real `offers.seller.name` off a live page and **Target's pages carry
-  no seller name at all**. It stays dormant and harmless (nothing dispatches a
-  Target watch), but it is now known to be *unverifiable* from `/p/` HTML rather
-  than merely unverified.
-
-**Status: the retailer count stays at four, `make verify` is green, and no watch,
-control or fixture was added for Target.** Adding one would have shipped a
-detector that reads UNKNOWN forever. Full record, including the 11-request
-budget and every byte count, is in `docs/retailer-evidence.md` § Target under the
-2026-08-03 heading.
-
-*(This supersedes 0b below, which dropped Target on the Terms of Use. Its
-observations stand; its conclusion does not.)*
+Two things it does **not** license: calling RedSky directly (declined in favour of reading
+the rendered page), and extending this ruling to any other retailer. Each is its own call.
 
 ## 0b. Target is rung 4 too — so the five-retailer bar is UNMET, at four
 
