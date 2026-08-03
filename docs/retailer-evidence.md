@@ -55,6 +55,249 @@ naming the *data* and once by naming the *method*. No wall was ever reached
 because none needed to be, and no transport work was spent on a retailer that
 should not ship regardless of which transport won.
 
+### 2026-08-03, 03.1-03 — the request Phase 3 never made
+
+**The conclusion above is being revised at Dan's direction.** His words, the
+same ones that reversed the Target reading earlier the same day:
+
+> bot-y is a bot for humans. To take the power back from other bots.
+
+**Everything Phase 3 observed stands, and none of it is retracted.** The six
+policy reads and their byte counts, the LICENSE AND ACCESS clause quoted in
+full, the whole `robots.txt` analysis and the PA-API deprecation are all exactly
+as written above and below. What changed is not an observation; it is which
+document decides. The Conditions of Use reading was the *decisive* reason for
+rung 4 and it no longer is, which left a question nobody in Phase 3 had asked:
+**can we read the page at all?**
+
+**This subsection is the answer, and it is the first time this repository has
+ever requested an Amazon product page.** That matters for reading the rest of
+this section, because four passages elsewhere in it state the opposite, and they
+were true when they were written:
+
+1. the **Probed** header at the top — *"`boty.fetch.get` was never pointed at
+   amazon.com and no product page was requested at any point in this phase"*;
+2. *"**Six requests in total** … **Zero to a product page. Zero from bot-y.**"*
+   under **What was retrieved**;
+3. the first two bullets of **What was NOT done, and why** — *"No product page
+   was ever requested. Not at rung 1, not at rung 3, not once"* and *"No
+   transport work at all"*;
+4. **If somebody revisits this later** — *"Do not re-probe … A clean HTTP 200
+   from `/dp/<ASIN>` would prove only that we had been rude successfully."*
+
+**All four are historical as of 2026-08-03 and none of them is current.** They
+describe Phase 3's conduct accurately and are left standing for that reason; the
+live figures are in this subsection.
+
+#### Step 1 — the ASIN, from a public source that is not amazon.com
+
+The Pokémon GO Plus + is **ASIN `B0BX2P43PX`**, found through the Internet
+Archive's CDX index — the same route that worked for Target in 03.1-02, and the
+one that costs Amazon nothing:
+
+```
+https://web.archive.org/cdx/search/cdx?url=www.amazon.com/Pokemon-GO-Plus
+    &matchType=prefix&collapse=urlkey&limit=400&fl=original,timestamp,statuscode
+```
+
+Five `/dp/` ASINs came back under that slug prefix and four more under the
+`Pok%C3%A9mon-GO-Plus` one. The candidate was settled without asking Amazon
+either: the archived capture `20240303065820` of
+`www.amazon.com/Pokemon-Go-Plus/dp/B0BX2P43PX`, served by **web.archive.org**,
+carries `<title>Amazon.com: Pokemon Go Plus + : Electronics</title>` and
+`id="productTitle"` → `Pokemon Go Plus +`. Two CDX queries and one archived page
+read, all to `web.archive.org`, none to `amazon.com`.
+
+Two notes worth keeping. A CDX `url=` value must not contain a trailing `*` when
+`matchType=prefix` is given — the asterisk is matched literally and the query
+returns nothing, which reads exactly like "the product was never archived". And
+a domain-wide `matchType=domain` scan of `amazon.com` with a `filter=urlkey`
+regex is refused: **HTTP 504 from the CDX front end after 60 s**. Prefix queries
+on a guessed slug are the route that works.
+
+#### Step 2 — the control candidate
+
+**`B00NTCH52W` — Amazon Basics 20-Pack AA Alkaline Batteries**, chosen and
+recorded before it was fetched. The rule is unchanged from every other control
+in this project: first-party, evergreen, never a buy-box fight. Amazon-owned
+brands are the safe class here specifically because Amazon's buy box rotates
+between sellers — an Amazon Basics line is sold by Amazon's own entity by
+construction, so there is no rotation to lose to. A household consumable rather
+than an electronics item, for the same reason the Walmart control is a gallon of
+milk.
+
+The first candidate was **`B014I8SIJY`** (Amazon Basics HDMI Cable, 3 ft) and it
+was fetched and then **rejected**, which is recorded rather than hidden: its
+`#availability` region reads *"Only 2 left in stock - order soon."* A control
+that can plausibly sell out is a control that reddens `make verify` for a reason
+that is not a defect. The batteries read a flat *"In Stock"*.
+
+What would make either a bad control later: Amazon delisting the pack size, or
+the buy box moving to a third-party seller, both of which the control itself
+detects within a cycle by reading UNKNOWN or a foreign seller string.
+
+#### Step 3 — what came back
+
+Every request below was made by **`boty.fetch.get`** — the real curl_cffi Chrome
+impersonation and the real `BLOCK_PHRASES` check — not by `curl`. `requests.get`
+inside `boty.fetch` was wrapped only so the raw response survived a `Blocked` or
+a `FetchError` for the record; the fetch itself is unmodified, one request per
+row.
+
+| Requested | Result |
+|---|---|
+| `https://www.amazon.com/dp/B0BX2P43PX` — Pokémon GO Plus + | **HTTP 200**, **1,893,079 B**, `text/html;charset=UTF-8`, no redirect. **No `BLOCK_PHRASES` entry matched.** `<title>` = `Amazon.com: Pokemon Go Plus + : Electronics`; `id="productTitle"` = `Pokemon Go Plus +` |
+| `https://www.amazon.com/dp/B014I8SIJY` — Amazon Basics HDMI cable (rejected control candidate) | **HTTP 200**, **3,189,747 B**, `text/html;charset=UTF-8`, no redirect, **no `BLOCK_PHRASES` match** |
+| `https://www.amazon.com/dp/B00NTCH52W` — Amazon Basics 20-pack AA (the control) | **HTTP 200**, **3,223,370 B**, `text/html;charset=UTF-8`, no redirect, **no `BLOCK_PHRASES` match** |
+
+**Three requests, all to `www.amazon.com/dp/<ASIN>`, all HTTP 200, none
+refused.** No `/gp/product/product-availability`, no `/dp/product-availability/`
+and no `/gp/offer-listing/` — the three paths Amazon's `robots.txt` disallows
+were not touched, then or now.
+
+**What the readers found — and did not.**
+
+| Reader | GO Plus + `B0BX2P43PX` | Control `B00NTCH52W` |
+|---|---|---|
+| `parse.ldjson_offers` | `None` | `None` |
+| `parse.nextdata_offers` | `None` | `None` |
+| `application/ld+json` blocks | **0** | **0** |
+| `schema.org` occurrences | 1 (a CSS/JS mention, no Product node) | 0 |
+
+**Amazon publishes no structured stock data on a `/dp/` page.** Every
+`<script>` carrying JSON is session or layout state — `a-wlab-states`,
+`detail-page-device-type`, `atc-page-state` (`{"shouldUseNatcUsed":true}`),
+`acState` (`{"acAsin":"B0BX2P43PX"}`), `oas-offer-refresh-page-state` (which
+carries a **`csrfToken`**) — and none of them carries a price, an availability
+or a seller. The one genuinely interesting blob is
+`<script type="application/agent+json" id="agent-semantic-map">`, an
+`https://agent.schema.org` `AgentInterfaceMap` declaring `"pageType":
+"product-listing"` and a single `search_agent` primary action pointing at
+`#nav-search-submit-button-agent`. It describes how Amazon would like an agent
+to *search*; it publishes no offer.
+
+**The add-to-cart control is in the served HTML at rung 1, with no browser.**
+Verbatim, from the GO Plus + page:
+
+```html
+<input id="add-to-cart-button-ubb" name="submit.add-to-cart-ubb"
+       title="Add to Shopping Cart" data-ref="" class="a-button-input"
+       type="submit" formaction="/cart/add-to-cart/ref=dp_start-ubbf_1_glance"
+       value="Add to cart" aria-labelledby="submit.add-to-cart-ubb-announce"/>
+```
+
+and from the control page:
+
+```html
+<input id="add-to-cart-button" name="submit.add-to-cart"
+       title="Add to Shopping Cart" data-ref="" class="a-button-input"
+       type="submit" formaction="/cart/add-to-cart/ref=dp_start-bbf_1_glance"
+       value="Add to cart" aria-labelledby="submit.add-to-cart-announce"/>
+```
+
+Three differences from Target's control matter and all three are structural:
+the element is a **void `<input>`** rather than a `<button>`, its label lives in
+the **`value` attribute** rather than in child text, and its `id` is an **exact
+string** rather than a per-product prefix — with a second form, `-ubb`, for a
+used buy box. Neither carried `disabled` or `aria-disabled`.
+
+**The strings the ladder asked about:**
+
+| String | GO Plus + | Control |
+|---|---|---|
+| `In Stock` | 0 | 8 |
+| `Currently unavailable` | 2 | 2 — **both inside JavaScript string tables** (`"currentlyUnavailableMessage"`, `"currentlyUnavailablePopOverStringValue"`), neither rendered |
+| `Ships from` | 0 | 2 — in the *frequently-bought-together* module, not the buy box |
+| `Sold by` | 1 — the used buy box | 1 — likewise a related-items module |
+
+`#availability` is the region that actually answers the question, and both pages
+render it server-side:
+
+- GO Plus +: `Only 10 left in stock - order soon.`
+- control: `In Stock`
+- rejected HDMI candidate: `Only 2 left in stock - order soon.`
+
+**No explicit unavailable marker was observed on any of the three**, because all
+three were available. That is recorded as a gap rather than papered over: this
+plan never saw an unavailable Amazon page, so absence of the control is read as
+UNKNOWN, never as out-of-stock. Amazon's `#availability` blob also carries
+`"isRobot":false` — the same self-report Target's page makes.
+
+**The buy-box seller string, verbatim, and it is the whole reason the seller
+filter exists.** The control page states it through the offer-display feature
+`odf-feature-text-desktop-merchant-info`, labelled `Shipper / Seller`:
+
+> Amazon.com
+
+The GO Plus + page states it through a **used** buy box instead:
+
+```html
+Sold by <a id="sellerProfileTriggerId" data-is-ubb="true" class="a-link-normal"
+   href="/gp/help/seller/at-a-glance.html?ie=UTF8&seller=A1N4D4JHZX5QJK"
+>LO Store (We Record Serial Numbers To avoid FRAUD)</a>
+```
+
+with `id="usedbuyBox"`, `usedMerchantID` `A1N4D4JHZX5QJK`, and a `priceToPay` of
+**$219**. The Pokémon GO Plus + has an MSRP of **$54.99**. So the only offer
+Amazon currently shows for the product this project exists to watch is a
+**used unit from a third-party reseller at four times MSRP** — verbatim, the
+alert this project exists not to send, and the reason `amazon` is in
+`MARKETPLACES` and the `max_price: 80` ceiling is not decorative.
+
+The control page's price is **$8.49**; the rejected HDMI candidate's was $4.40.
+
+#### Step 4 — the classification
+
+**Shape (C): REACHABLE, dom — at rung 1.**
+
+The four shapes 03.1-03 defines are exhaustive, and the observations pick one:
+
+- **not (A) REFUSED.** Nothing refused anything. Three `/dp/` requests, three
+  HTTP 200s, zero `BLOCK_PHRASES` matches, correct product titles on all three.
+  There is no wall to record and no rung-3 attempt is warranted: the refusal
+  branch requires an observed refusal at rung 1 before a browser is reached for,
+  and there was none.
+- **not (B) REACHABLE, structured.** Both structured readers returned `None` on
+  both pages, and there are zero `ld+json` blocks. The page embeds no offer
+  payload in any form.
+- **(C) REACHABLE, dom.** HTTP 200, readable product HTML, no structured data,
+  and an add-to-cart control that can be read **out of the rung-1 bytes**. This
+  is Target's shape, and since 03.1-05 and 03.1-02 it is a supported outcome
+  rather than a failure.
+- **not (D) REACHABLE, no signal.** There *is* a signal: the control, the
+  `#availability` text and a named buy-box seller, all server-rendered.
+
+**The rung is 1, and it stays 1.** The ladder says stop at the first rung that
+works, and rung 1 works: the control is in the impersonated-HTTP response with
+no browser started. Reaching for rung 3 to make Amazon look more like Target
+would be spending a Chrome process to obtain bytes we already have. Amazon is
+therefore **rung 1 + `dom`** — the cheapest transport with the most fragile
+extraction, which is precisely the combination 03.1-05 widened `degraded` to
+catch, three days before anything needed it.
+
+#### The politeness budget
+
+| | Cap | Spent |
+|---|---|---|
+| `*.amazon.com` requests | 6 | **3** in this task — 13:31:16Z, 13:32:48Z, 13:34:13Z |
+| of which rendered | 2 | **0** |
+| Spacing | ≥ 20 s | 89 s and 85 s |
+| Retries | none | **none** — nothing failed, so nothing was retried |
+
+Requests to `web.archive.org` (two CDX queries and one archived page) and the
+timed-out domain-wide CDX scan are not counted against it: none of them reaches
+amazon.com.
+
+**Controls, bracketing the whole task.** `scripts/control_check.py` run under
+the service `EnvironmentFile` before the first Amazon request and again after
+the last:
+
+- **before**, 13:24Z — `PASS — 5/5 controls in stock`, exit **0**
+- **after**, 13:35:42Z — `PASS — 5/5 controls in stock`, exit **0**
+
+Both runs read all five live, browser rung included; neither was an
+`INCOMPLETE` (exit 4) green.
+
 ### What was retrieved
 
 | Target | Result |
