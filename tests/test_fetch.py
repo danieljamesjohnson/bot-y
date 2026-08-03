@@ -430,7 +430,7 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     # `test_the_allow_list_cannot_absorb_a_real_value`.
     allowed = {"REDACTED", "00000", "0.0000", "0.0", "0", "XX",
                "REDACTED SUPERCENTER", "REDACTED STORE", "REDACTED-CITY",
-               "NOT-AVAILABLE", "NULL"}
+               "NOT-AVAILABLE", "NULL", "192.0.2.1"}
     leaks: list[str] = []
 
     # A CDN echoing the client's own address back into the page.
@@ -544,6 +544,10 @@ def _identity_leaks(name: str, body: str) -> list[str]:
         # Hence a carrier column, not another key spelling.
         (r'(?:set-cookie|x-middleware-set-cookie)[^a-zA-Z0-9]{0,8}(?:vt|visitor|guest|sid|sessionid)=([A-Za-z0-9._~-]{8,})', "visitor id in a cookie"),
         (r'(?:set-cookie|x-middleware-set-cookie)[^a-zA-Z0-9]{0,8}(?:zip|postal|city|store)=([A-Za-z0-9._~-]{2,})', "geolocation in a cookie"),
+        # camelCase header names inside JSON. Best Buy writes `"xForwardedFor"`,
+        # which the kebab-case header loop cannot see — two real Akamai hops
+        # shipped in a fixture through seven rounds because of it.
+        (r'"(?:xForwardedFor|trueClientIp|clientIp|xRealIp)"\s*:\s*"([^"]+)"', "client IP in a camelCase header"),
         (r'\bstore(?:_?[Ii]d|Number)\s*(?:=|%3D)\s*(\d+)', "store number in a URL"),
         (r'"(?:state|region|province)(?:Code|OrProvinceCode|_code)?"\s*:\s*"([A-Z]{2})"', "state or region"),
         (r'"(?:city|cityName|locality|town)"\s*:\s*"([A-Za-z][A-Za-z .\'-]{2,})"', "city"),
@@ -553,8 +557,10 @@ def _identity_leaks(name: str, body: str) -> list[str]:
         (r'"(?:address_?[Ll]ine(?:One|Two|[12])?|streetAddress|street1)"\s*:\s*"([^"]+)"', "street address"),
         (r'(?:WICAgencies|wicAgencies)"\s*:\s*\[\s*"([A-Z]{2})"', "state via WIC agency"),
     )
+    # `re.I` here too: `Set-Cookie:` Title-Case is a real spelling, and
+    # without the flag it is a free pass through every cookie rule.
     for pattern, what in keyed:
-        for match in re.finditer(pattern, body):
+        for match in re.finditer(pattern, body, re.I):
             value = match.group(1)
             # Only `break` on a REPORTED leak. Falling through on an allowed
             # value is deliberate: the redacted placeholder appears before the
@@ -717,7 +723,7 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
         '{"price":12345.00,"currency":"USD"}',
         '{"gtin13":"0819338020563"}',
         '"sku":"6577129"',
-        '{"itemId":"00000000"}',              # a ZIP-shaped substring inside a longer id
+        '{"itemId":"10111000"}',              # a ZIP-shaped substring inside a longer id
         "Customer service: 1-800-925-6278",   # toll-free — a corporate number, not a store
         '"releaseDate":"2026-08-04"',
         '<path d="M12.345,67.89 L98.765,43.21"/>',
@@ -787,6 +793,14 @@ def test_each_rule_fires_on_a_value_of_the_REAL_shape_not_just_the_synthetic_one
         ('{"lat":"12.3"}', "coordinate"),
         # a city name shorter than 8 characters
         ('{"city":"Quay"}', "city"),
+        # FREE-TEXT ZIPs that do not begin with 9. Every free-text probe in
+        # this file started with 9, so narrowing the free-text rule to
+        # `(9\d{4})` was free — and that rule is the one that catches this
+        # thread's founding leak, `aria-label="<city>, <zip>, Change shipping
+        # address"`. Same for the `City, ST ZIP` form.
+        ('aria-label="Quay, 10111, Change shipping address"', "rendered destination"),
+        ("Quay, ZZ 10222", "rendered address"),
+        ("Pickup, today at Onyx, ZZ 11333", "rendered address"),
         # an IP whose first octet is not three digits
         ("true-client-ip: 98.51.100.9", "true-client-ip"),
         ("client-ip: 8.51.100.9", "client-ip"),
@@ -947,7 +961,13 @@ def test_no_probe_value_in_this_file_appears_in_a_REAL_CAPTURE() -> None:
             if not cell:
                 continue
             for leak in _identity_leaks("probe", cell):
-                value = leak.rsplit(" ", 1)[-1].strip(",.\"'")
+                # The EdgeScape rule reports `geolocation <marker>=<value>`,
+                # so a plain rsplit yields `marker=value` and never the value
+                # — which silently exempted EVERY query-carrier cell from both
+                # this check and the deny-list. The query carrier is the one
+                # that leaked the whole EdgeScape record in `02-REVIEW.md`.
+                tail = leak.rsplit(" ", 1)[-1].strip(",.\"'")
+                value = tail.split("=", 1)[-1] if "=" in tail else tail
                 # 4, not 5: the real GameStop store number is four digits, and
                 # a five-char floor let it back in. The corpus check below is
                 # still gated at 5 (a four-digit number collides with real
@@ -1063,6 +1083,7 @@ def test_the_allow_list_cannot_absorb_a_real_value() -> None:
             or entry.upper() == "XX"                           # not a state
             or "REDACTED" in entry.upper()                     # a placeholder word
             or entry.upper() in {"NOT-AVAILABLE", "NULL"}      # CDN / JS sentinels
+            or entry.startswith("192.0.2.")                    # RFC 5737 TEST-NET-1
         ), (
             f"{entry!r} is in the identity guard's allow-list but is not a "
             f"placeholder. Allow-listing a real value silently disables this "
