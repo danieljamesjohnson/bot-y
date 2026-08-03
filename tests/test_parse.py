@@ -97,6 +97,64 @@ def test_ldjson_empty_input_is_none() -> None:
 
 
 # --------------------------------------------------------------------------
+# ldjson_offers — a compound @type is still a Product (IN-03)
+# --------------------------------------------------------------------------
+
+
+def test_ldjson_reads_a_compound_type_as_a_product() -> None:
+    """`"@type": ["Product", "ProductModel"]` is valid schema.org.
+
+    An exact `!= "Product"` comparison skips it, and the failure is quiet: the
+    page has no product as far as the extractor is concerned, so the caller
+    reports UNKNOWN. That costs coverage rather than correctness, which is
+    precisely why it survived unnoticed — and it presents as a mysterious
+    UNKNOWN on the first-party sites Phase 2 is adding.
+    """
+    offers = ldjson_offers(
+        _ldjson_page(
+            {
+                "@type": ["Product", "ProductModel"],
+                "name": "Pokémon GO Plus +",
+                "offers": {
+                    "availability": "https://schema.org/InStock",
+                    "price": str(MSRP),
+                },
+            }
+        )
+    )
+
+    assert offers is not None
+    assert len(offers) == 1
+    assert offers[0].available is True
+    assert offers[0].price == MSRP
+
+
+def test_ldjson_compound_type_without_product_is_still_none() -> None:
+    """A list is not a free pass — membership is what is tested.
+
+    `["Thing"]` has no Product in it, so this must stay "nothing here" rather
+    than becoming "a product with no offers".
+    """
+    assert ldjson_offers(_ldjson_page({"@type": ["Thing"], "name": "x"})) is None
+
+
+def test_ldjson_node_with_no_type_at_all_is_still_none() -> None:
+    """The None case has to survive the list-wrapping.
+
+    A missing `@type` wraps to `[None]`, which does not contain "Product", so
+    `saw_product` stays False and the extractor returns None. If it wrapped to
+    something truthy the page would come back as `[]` — a confident "this
+    product has no offers" about a page with no product in it.
+    """
+    assert ldjson_offers(_ldjson_page({"name": "no type here"})) is None
+
+
+def test_ldjson_compound_type_product_with_no_offers_is_an_empty_list() -> None:
+    """The None-vs-[] distinction applies to compound types too."""
+    assert ldjson_offers(_ldjson_page({"@type": ["Product", "ProductModel"]})) == []
+
+
+# --------------------------------------------------------------------------
 # nextdata_offers — Walmart
 # --------------------------------------------------------------------------
 
