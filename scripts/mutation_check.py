@@ -72,9 +72,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: because tests/test_dashboard.py reads served/boty/index.html: the status page
 #: is the consuming half of `status.write`'s published contract, and asserting
 #: that contract at only one end is what let the page quietly stop rendering
-#: `degraded` at all.
+#: `degraded` at all. `docs` is here because tests/test_evidence_check.py checks
+#: the real docs/retailer-evidence.md through scripts/evidence_check.py — the
+#: retailer count and the written verdicts are a claim the suite is supposed to
+#: police, and a sandbox without the document turns that test into a
+#: FileNotFoundError that reads exactly like a caught mutation.
 SANDBOX_CONTENTS = (
-    "boty", "tests", "scripts", "config", "served", "pyproject.toml", "Makefile",
+    "boty", "tests", "scripts", "config", "served", "docs", "pyproject.toml", "Makefile",
 )
 
 _IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "*.egg-info")

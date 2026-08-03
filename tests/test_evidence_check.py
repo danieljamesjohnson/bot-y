@@ -83,6 +83,7 @@ _REACHABLE = "Probed 2026-08-03. Reads clean.\n\n**Verdict: REACHABLE (rung 1)**
 def _write_evidence(tmp_path: Path, sections: list[tuple[str, str]]) -> Path:
     """Build an evidence document from (heading, body) pairs."""
     body = "".join(f"## {heading}\n\n{text}\n---\n\n" for heading, text in sections)
+    tmp_path.mkdir(parents=True, exist_ok=True)  # several cases want a second tree
     path = tmp_path / "retailer-evidence.md"
     path.write_text(_PREAMBLE + body, encoding="utf-8")
     return path
