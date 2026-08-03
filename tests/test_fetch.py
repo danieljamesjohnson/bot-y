@@ -391,6 +391,132 @@ def test_every_block_phrase_is_lowercase() -> None:
 # --------------------------------------------------------------------------
 
 
+def _identity_leaks(name: str, body: str) -> list[str]:
+    """The rule, extracted so it can be watched failing.
+
+    It was a test body until 2026-08-03, which meant the only way to know it
+    worked was to read it. That is precisely the gate this repo does not accept
+    anywhere else — and it was not academic: this rule PASSED a Target capture
+    carrying a session token, an OAuth-shaped `refreshToken`, a vendor API key,
+    Akamai's geolocation of this host and five store addresses with phone
+    numbers. It was widened afterwards, and one turn later it passed a Walmart
+    fixture rendering `Redacted, 00000` as visible markup, because every pattern
+    it had learned was keyed on a JSON key name or a query parameter.
+
+    So: one function, two callers. The real tree must be clean, and a synthetic
+    body carrying each leak class must be caught. A rule nobody has watched fail
+    is not a gate.
+    """
+    # Values the redaction is allowed to leave behind. 192.0.2.0/24 is
+    # TEST-NET-1 (RFC 5737), reserved for documentation.
+    allowed = {"REDACTED", "00000", "0.0000", "0.0", "0", "REDACTED SUPERCENTER"}
+    leaks: list[str] = []
+
+    # A CDN echoing the client's own address back into the page.
+    for header in ("true-client-ip", "x-forwarded-for", "client-ip"):
+        for match in re.finditer(
+            rf"{re.escape(header)}[^0-9]{{0,12}}(\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}})",
+            body,
+            re.I,
+        ):
+            if not match.group(1).startswith("192.0.2."):
+                leaks.append(f"{name}: {header} = {match.group(1)}")
+
+    # Akamai EdgeScape geolocation of the *requesting* host.
+    for marker in ("city", "zip", "lat", "long", "county", "areacode", "fips", "dma"):
+        for value in re.findall(rf"\b{marker}=([A-Za-z0-9._+-]+)", body):
+            if value.upper() not in {a.upper() for a in allowed}:
+                leaks.append(f"{name}: geolocation {marker}={value}")
+                break
+
+    # The same geolocation written as JSON, which is how Target's renderer
+    # emits it. Anchored on the semantics (a coordinate, a postal code, a
+    # street address, a phone number, a session token) rather than on one CDN's
+    # spelling.
+    json_markers = (
+        (r'"(?:latitude|longitude)"\s*:\s*"?(-?\d+\.\d+)', "coordinate"),
+        (r'"(?:zip|zipCode|postal_code|postalCode)"\s*:\s*"?(\d{4,})', "postal code"),
+        (r'"(address_line1|address_line2)"\s*:\s*"([^"]+)"', "street address"),
+        (r'"(?:refreshToken|accessToken|sessionId|session_id|deviceId)"\s*:\s*"([^"]{8,})"', "session token"),
+        (r'"(?:visitor_id|visitorId|guest_id|guestId)"\s*:\s*"([^"]{8,})"', "visitor id"),
+    )
+    for pattern, what in json_markers:
+        for match in re.finditer(pattern, body, re.I):
+            value = match.group(match.lastindex or 0)
+            if value.strip("0.-") and value.upper() not in {a.upper() for a in allowed}:
+                leaks.append(f"{name}: {what} {value[:40]}")
+                break
+
+    # A US phone number or a ZIP+4 in a fixture is a geolocation of the
+    # capturing host by another name: retailers render the *nearest stores*.
+    for pattern, what in ((r"\b\d{3}-\d{3}-\d{4}\b", "phone number"),
+                          (r"\b\d{5}-\d{4}\b", "ZIP+4")):
+        found = re.search(pattern, body)
+        if found:
+            leaks.append(f"{name}: {what} {found.group(0)}")
+
+    # FREE TEXT, and this is the class that got through after the widening.
+    #
+    # Walmart does not write the shipping destination as JSON. It renders it,
+    # as `aria-label="Redacted, 00000, Change shipping address"` and as a button
+    # label — visible markup, no key name anywhere near it. Every rule above is
+    # keyed on a key name or a query parameter, so all of them were blind to it,
+    # and two fixtures carrying it had been public since Phase 1.
+    #
+    # `City, 12345` is the shape a US destination takes when a retailer prints
+    # it for a human. It is deliberately narrow: a capitalised word or two, a
+    # comma, exactly five digits.
+    for match in re.finditer(r"\b([A-Z][a-z]{2,}(?: [A-Z][a-z]+){0,2}), (\d{5})\b", body):
+        place, code = match.group(1), match.group(2)
+        if place.upper() in {a.upper() for a in allowed} or code in allowed:
+            continue
+        leaks.append(f"{name}: rendered destination {place}, {code}")
+        break
+
+    return leaks
+
+
+def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
+    """The gate, watched failing — one synthetic body per class.
+
+    Added because the guard had no such test and twice shipped a fixture it
+    should have stopped. Each case is a leak that actually occurred in this
+    repo, not an invented one.
+    """
+    cases = {
+        "true-client-ip: 203.0.113.7": "true-client-ip",
+        "?city=Redacted&zip=00000": "geolocation",
+        '{"latitude":"33.170","longitude":"-96.780"}': "coordinate",
+        '{"zipCode":"00000"}': "postal code",
+        '{"refreshToken":"eyJhbGciOiJIUzI1NiJ9.abcdefgh"}': "session token",
+        '{"visitor_id":"0193f2ab-8c1d-7e2a-b4f6-9a0c1d2e3f45"}': "visitor id",
+        "Call the store on 972-555-0134": "phone number",
+        'aria-label="Redacted, 00000, Change shipping address"': "rendered destination",
+    }
+    for body, expected in cases.items():
+        found = _identity_leaks("synthetic.html", body)
+        assert found, f"the guard does not catch {expected!r}: {body!r} passed clean"
+        assert any(expected in f for f in found), (
+            f"{body!r} was caught but classified as {found!r}, not {expected!r}"
+        )
+
+    # And it must stay quiet on what redaction legitimately leaves behind,
+    # or it gets disabled within a week.
+    for benign in (
+        '{"zipCode":"00000"}',
+        '{"visitor_id":"00000000-0000-0000-0000-000000000000"}',
+        "true-client-ip: 192.0.2.1",
+        "?city=REDACTED&zip=00000",
+        "Redacted, 00000",
+        "jQuery 3.3.6.4 loaded",
+        '"city":"Redacted"',
+    ):
+        assert not _identity_leaks("synthetic.html", benign), (
+            f"the guard cries wolf on {benign!r} — a guard that fires on redacted "
+            f"output is one nobody keeps"
+        )
+
+
 def test_no_fixture_leaks_the_capturing_hosts_identity() -> None:
     """A rung-3 capture froze this repo's own public IP and Akamai EdgeScape
     geolocation — city, ZIP, lat/long — into a committed fixture, and it was
@@ -401,73 +527,24 @@ def test_no_fixture_leaks_the_capturing_hosts_identity() -> None:
     for their own edge logic. So the risk arrived with the browser rung and
     applies to every future rung-3 capture.
 
-    Scoped to the markers that carry *client* identity rather than any
-    IP-shaped string: retailer pages are full of version numbers like `3.3.6.4`
-    and Akamai's own server addresses, and a test that cries wolf on those gets
-    disabled within a week.
+    The rule itself lives in `_identity_leaks`, which
+    `test_the_fixture_identity_guard_catches_every_leak_class` watches failing
+    on one synthetic body per class. It was a test body until 2026-08-03, which
+    meant nobody had ever seen it go red.
+
+    **`.json` notes are scanned too, and that is not incidental.** Only
+    `*/*.html` was checked until 2026-08-03, and in that window a fixture's own
+    provenance note recorded its redaction by *naming the values it removed* —
+    republishing, in the file documenting the removal, the city and ZIP just
+    stripped from the page beside it. A redaction note that spells out what it
+    redacted is not a note, it is a copy.
     """
     root = Path(__file__).parent / "fixtures"
-    # Values the redaction is allowed to leave behind. 192.0.2.0/24 is
-    # TEST-NET-1 (RFC 5737), reserved for documentation.
-    allowed = {"REDACTED", "00000", "0.0000", "0.0", "0"}  # a zero DMA/FIPS is the
-    # "unknown" sentinel these fields carry when the edge could not place the
-    # client — it identifies nothing, and excluding it keeps the check honest
-    # rather than making the assertion pass by widening what counts as a leak.
     leaks: list[str] = []
 
-    for page in sorted(root.glob("*/*.html")):
+    for page in sorted([*root.glob("*/*.html"), *root.glob("*/*.json")]):
         body = page.read_text(encoding="utf-8", errors="replace")
-
-        # A CDN echoing the client's own address back into the page.
-        for header in ("true-client-ip", "x-forwarded-for", "client-ip"):
-            for match in re.finditer(
-                rf"{re.escape(header)}[^0-9]{{0,12}}(\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}})",
-                body,
-                re.I,
-            ):
-                if not match.group(1).startswith("192.0.2."):
-                    leaks.append(f"{page.relative_to(root)}: {header} = {match.group(1)}")
-
-        # Akamai EdgeScape geolocation of the *requesting* host.
-        for marker in ("city", "zip", "lat", "long", "county", "areacode", "fips", "dma"):
-            for value in re.findall(rf"\b{marker}=([A-Za-z0-9._+-]+)", body):
-                if value.upper() not in {a.upper() for a in allowed}:
-                    leaks.append(f"{page.relative_to(root)}: geolocation {marker}={value}")
-                    break
-
-        # The same geolocation written as JSON, which is how Target's renderer
-        # emits it — and the reason this block exists.
-        #
-        # The check above knew only EdgeScape's `key=value` query form, so it
-        # passed cleanly on a Target capture carrying `"zipCode":"00000"`,
-        # `"latitude":"33.170"`, `"longitude":"-96.780"` and a list of the five
-        # nearest stores with their street addresses and phone numbers. A guard
-        # that only knows the markers it was taught will keep passing right up
-        # until the next capture, in whatever shape THAT retailer writes — which
-        # is precisely how the first leak reached a public repo. Anchored on the
-        # semantics (a coordinate, a postal code, a street address, a phone
-        # number, a session token) rather than on one CDN's spelling.
-        json_markers = (
-            (r'"(?:latitude|longitude)"\s*:\s*"?(-?\d+\.\d+)', "coordinate"),
-            (r'"(?:zip|zipCode|postal_code|postalCode)"\s*:\s*"?(\d{4,})', "postal code"),
-            (r'"(address_line1|address_line2)"\s*:\s*"([^"]+)"', "street address"),
-            (r'"(?:refreshToken|accessToken|sessionId|session_id|deviceId)"\s*:\s*"([^"]{8,})"', "session token"),
-            (r'"(?:visitor_id|visitorId|guest_id|guestId)"\s*:\s*"([^"]{8,})"', "visitor id"),
-        )
-        for pattern, what in json_markers:
-            for match in re.finditer(pattern, body, re.I):
-                value = match.group(match.lastindex or 0)
-                if value.strip("0.-") and value.upper() not in {a.upper() for a in allowed}:
-                    leaks.append(f"{page.relative_to(root)}: {what} {value[:40]}")
-                    break
-
-        # A US phone number or a ZIP+4 in a fixture is a geolocation of the
-        # capturing host by another name: retailers render the *nearest stores*.
-        for pattern, what in ((r"\b\d{3}-\d{3}-\d{4}\b", "phone number"),
-                              (r"\b\d{5}-\d{4}\b", "ZIP+4")):
-            found = re.search(pattern, body)
-            if found:
-                leaks.append(f"{page.relative_to(root)}: {what} {found.group(0)}")
+        leaks.extend(_identity_leaks(str(page.relative_to(root)), body))
 
     assert not leaks, (
         "committed fixtures carry the capturing host's identity — this repo is "

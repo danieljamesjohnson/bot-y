@@ -2,7 +2,10 @@
 
 Two credentials I cannot obtain myself. The one open decision (0d, Target/RedSky)
 was answered 2026-08-03 and is kept below as the record. **One new open decision:
-0e, below — the working tree is clean but the pushed public history is not.**
+0e, below — the working tree is clean *now*, but the pushed public history is
+not.** (0e's first version claimed the tree was already clean; it was not, the
+phase verifier caught it, and the correction is recorded inside 0e rather than
+overwritten.)
 Everything else in the MVP is proceeding without them.
 
 **§ 0b is closed as of 2026-08-03 and needs nothing from you.** It asked what
@@ -48,10 +51,46 @@ edge geolocated this host to. It is coarser than the public IP that caused the
 first incident, but it is the same kind of fact about where danserver sits, and
 it is on a public repo under your own name.
 
-**What is already true:** every one of these is redacted in the working tree as
-of `a4f2847`, the fixtures still drive their tests, and the widened guard now
-fails on the semantic markers rather than on a list of eleven literals — so this
-class cannot be re-committed silently.
+**CORRECTION, 2026-08-03, after the phase verifier caught me.** The paragraph
+that stood here said "every one of these is redacted in the working tree … so
+this class cannot be re-committed silently." **Both halves were false when I
+wrote them, and you were being asked to choose on that premise.** What had
+actually happened:
+
+- The Walmart redaction reached `"postalCode":"00000"` → `"00000"` and stopped.
+  `Redacted, 00000` was still rendered as visible markup six times in
+  `goplusplus.html` and twice in `milk-control.html`, including
+  `aria-label="Redacted, 00000, Change shipping address"`. So was the city on its
+  own, and the named store (`Redacted Supercenter`, `storeId 202`),
+  which locates this host just as well as the ZIP does.
+- **The widened guard could not see any of it.** Every pattern it had learned
+  was keyed on a JSON key name or a query parameter, because those were the
+  shapes of the two leaks it was written against. Walmart prints the
+  destination for a human to read. That is the same defect the widening was
+  written to fix, arriving one turn later in a different spelling.
+- **Worse, and separate:** the guard only ever scanned `*/*.html`. The `.json`
+  provenance notes were never checked — and `amazon/goplusplus.json`'s note
+  recorded its own redaction by *naming the values it removed*
+  (``(`Redacted` x3, `00000` x3)``). The file documenting the removal was
+  republishing the thing removed.
+
+**What is true now.** `grep -rE '\bRedacted\b|\b7503[0-9]\b' tests/fixtures/`
+returns nothing. The city, the ZIP, the store name and the store id are gone
+from both Walmart fixtures; both Amazon notes describe what was redacted
+without naming it. The guard scans `.json` as well as `.html`, has a free-text
+`City, 12345` rule, and — the part that was missing — the rule is now an
+extracted function with a test that watches it fail on one synthetic body per
+leak class, plus a benign set so it cannot be satisfied by crying wolf. I also
+watched the real-tree test go red on an injected `.json` note before trusting
+it. Best Buy's `visitorId`s were already zeroed and its `55113`/`55423` are
+Best Buy's own Minnesota region, not this host; `75039` in `unresolved-sku.html`
+is a 1worldsync URL path, not a ZIP.
+
+**None of that changes the decision below.** The blobs are still in pushed
+history exactly as described. What changed is that the working tree really is
+clean now, and — because this phase's commits are **unpushed** — the next push
+would otherwise have carried the ZIP forward as live content rather than merely
+leaving it in history.
 
 **What is NOT true:** redacting a file does not remove it from git history.
 `git show origin/main:tests/fixtures/walmart/goplusplus.html | grep 00000` still

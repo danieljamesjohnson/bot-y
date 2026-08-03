@@ -2539,3 +2539,33 @@ def test_rule_six_is_silent_on_the_real_shipped_tree() -> None:
     )[0]
     assert len(evidence_check.refusal_observations(body)) >= 2
     assert "3" in evidence_check.refusal_rungs(body)
+
+
+def test_the_retailer_count_target_is_pinned_at_five_in_both_directions() -> None:
+    """`TARGET_RETAILER_COUNT` is 5, and BOTH ways of moving it are defects.
+
+    Six retailers ship as of Phase 3.1, so the obvious tidy-up is to raise the
+    constant to 6 "to reflect reality". The ROADMAP forbids exactly that, in
+    writing, and the reason is worth restating where someone editing the
+    constant will see it: **five was chosen as the honest ceiling for the case
+    where Amazon turns out to be unreachable.** Amazon landing is a fact about
+    Amazon, not a promise about next month — if it walls us tomorrow the honest
+    outcome is five again, and a gate set at six would fire on that. That is
+    the Phase 2 rot in the opposite sign: a check that goes red when the truth
+    is inconvenient teaches people to edit the check.
+
+    Lowering it is the other failure and the more familiar one: at 4 the rule
+    is satisfied by the tree that shipped before this phase, which is a gate
+    that can no longer fail.
+
+    Nothing pinned the constant until 2026-08-03; the phase verifier flagged
+    that the rule was watched biting but the number it bites at was free to
+    move. This is that pin.
+    """
+    assert evidence_check.TARGET_RETAILER_COUNT == 5, (
+        "TARGET_RETAILER_COUNT moved. Raising it to match the six retailers that "
+        "currently ship makes the gate fire on the honest five-retailer outcome "
+        "the ROADMAP explicitly preserves; lowering it makes the gate satisfiable "
+        "by the pre-Phase-3.1 tree. If this is a deliberate change, change the "
+        "ROADMAP criterion first and say why here."
+    )
