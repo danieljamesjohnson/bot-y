@@ -29,7 +29,7 @@ has not worked.
 ### Phase 2 — Five Retailers Green
 
 - [x] **REQ-04**: Best Buy's primary path must work without credentials. Impersonated HTTP is refused at the connection layer (verified: HTTP/2 stream reset, HTTP/1.1 timeout, across chrome and safari fingerprints), so rung 2 was the plan — but the official API requires manual approval AND a non-free email domain, which most people cloning this repo cannot satisfy. Best Buy therefore escalates to rung 3 (browser, flagged DEGRADED). The official API remains supported as an OPTIONAL enhancement for anyone who has a key: when `BESTBUY_API_KEY` is set, prefer it and drop the DEGRADED flag, since it is strictly more reliable.
-- [ ] **REQ-05**: Pokémon Center and the Nintendo store each report stock for a real product, or are documented as unreachable with the evidence that established it.
+- [x] **REQ-05**: Pokémon Center and the Nintendo store each report stock for a real product, or are documented as unreachable with the evidence that established it.
 - [x] **REQ-06**: Every configured retailer has at least one control watch. A retailer without one is reported unhealthy — an unverified detector is treated as a broken one.
 
 ### Phase 3 — The Hard Two
@@ -85,7 +85,7 @@ Maintained by `gsd-tools`; a requirement flips to Complete when its phase comple
 | REQ-02 | Phase 1 | Complete |
 | REQ-03 | Phase 1 | Complete |
 | REQ-04 | Phase 2 | Complete |
-| REQ-05 | Phase 2 | Pending |
+| REQ-05 | Phase 2 | Complete |
 | REQ-06 | Phase 2 | Complete |
 | REQ-07 | Phase 3 | Pending |
 | REQ-08 | Phase 3 | Pending |

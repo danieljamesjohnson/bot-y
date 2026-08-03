@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-08-03T00:40:10.927Z"
+status: Phase 2 complete (4 retailers, not 5 — documented)
+stopped_at: Completed 02-04-PLAN.md — Phase 2 done
+last_updated: "2026-08-03T01:14:47.295Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 25
+  completed_plans: 8
+  percent: 50
 ---
 
 # State: bot-y
@@ -27,13 +27,13 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Milestone:** v1.0
 **Phase:** 2 of 4 (five retailers green)
-**Plan:** 3 of 4 complete (02-01, 02-02 done; 02-03, 02-04 remain)
-**Last session:** 2026-08-03T00:40:06.716Z
-**Stopped At:** Completed 02-02-PLAN.md
+**Plan:** 4 of 4 complete — Phase 2 closed
+**Last session:** 2026-08-03T01:14:47.291Z
+**Stopped At:** Completed 02-04-PLAN.md
 **Last Activity:** 2026-08-03
-**Last Activity Description:** 02-02 complete — Result.rung/degraded, published in status.json and `boty check`, mutation M6 caught, IN-03 compound-@type fix
+**Last Activity Description:** 02-04 complete — Nintendo green on rung 1 with no adapter code; Pokémon Center refused at every rung and documented as rung 4. Phase 2 closes at FOUR control-verified retailers, not five. `make verify` PASS under systemd-run.
 **Resume File:** None
-**Next command:** `/gsd-plan-phase 2` — running autonomously through Phase 3, halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
+**Next command:** `/gsd-plan-phase 3` — running autonomously through Phase 3, halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
 
 ## What Exists
 
@@ -79,6 +79,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 02 P01 | 62min | 3 tasks | 6 files |
 | Phase 02 P02 | 34min | 3 tasks | 10 files |
 | Phase 02 P03 | 71min | 3 tasks | 12 files |
+| Phase 02 P04 | 35min | 3 tasks | 15 files |
 
 ## Decisions
 
