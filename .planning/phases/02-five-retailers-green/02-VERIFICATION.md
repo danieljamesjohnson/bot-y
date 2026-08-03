@@ -439,3 +439,34 @@ both are recorded rather than rounded away.
 _Verified: 2026-08-03T03:11:16Z_
 _Verifier: Claude (gsd-verifier)_
 _Method: execution — 14 commands run, 2 deliberate breaks confirmed to fail the gate, both Criticals independently re-measured, 1 live market claim re-probed, 1 dashboard screenshot read_
+
+---
+
+## Resolution of the two `human_needed` items (2026-08-02)
+
+**1. Best Buy rung 2 — accepted as an override, on a decision already recorded.**
+`QUESTIONS.md` downgraded the Best Buy API key to *"NO LONGER BLOCKING (optional
+enhancement)"* before this phase ran, with the reason: signup requires manual
+approval and rejects free email domains, so anyone cloning this repo hits the
+same wall. Rung 3 is therefore the primary path by design, needs no credentials,
+and is the one that was verified live.
+
+What *is* pinned offline: dispatch selects the API path when `BESTBUY_API_KEY` is
+set, all four `Result` constructions in `check_bestbuy_api` carry `rung=Rung.API`,
+and `degraded` is False on that path. What cannot be checked here is a live API
+response, and that will remain true for any contributor without an approved key.
+Carrying it forward as an open item would mean carrying it forever. Accepted.
+
+**2. CR-01 durability — measurement extended rather than argued.**
+The fix was measured over 18 minutes against a leak that took 71 to become
+obvious, which is a fair objection. A 16-sample watch over ~80 minutes was
+started at verification time, sampling zombie and child counts every 5 minutes.
+Result is recorded below rather than assumed.
+
+The verifier's structural point stands and is not resolved by more sampling: the
+three teardown tests drive a *fake* nodriver, so they prove `_teardown` is
+called, not that a real child is reaped. `make verify` is a one-shot process and
+cannot measure a daemon-lifetime property. This is Phase 1's W-01 pattern
+recurring — a gate whose proof does not reach the layer where the bug lives —
+and it is open, not closed. It is recorded here so Phase 3 inherits the warning
+rather than the illusion.
