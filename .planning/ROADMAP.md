@@ -20,6 +20,7 @@ can contribute to.
 - [x] **Phase 1: Detector Safety Net** - Tests, fixtures and types, so new adapters can't silently break each other (completed 2026-08-02)
 - [x] **Phase 2: Five Retailers Green** - Best Buy, Pokémon Center, Nintendo — the tractable ones; hits the MVP bar (completed 2026-08-03)
 - [x] **Phase 3: The Hard Two** - Target and Amazon, both known to resist; escalate or document honestly (completed 2026-08-03)
+- [ ] **Phase 3.1: Target and Amazon, Supported** - INSERTED 2026-08-03. Reverses Phase 3's drop-on-terms decision at Dan's direction
 - [ ] **Phase 4: Open Source Ready** - Contributor docs, CI, packaging, release
 
 ## Retailer Scope
@@ -168,6 +169,42 @@ Plans:
 - [x] 03-01-PLAN.md — Amazon: read the Conditions of Use before touching the transport; build the unpaddable-count gate; settle Amazon's rung (wave 1)
 - [x] 03-02-PLAN.md — Target: read the Terms first, then walk the ladder politely; register it or record rung 4 with per-rung evidence (wave 2)
 - [x] 03-03-PLAN.md — Close the phase: publish and measure the pass duration (REQ-08), complete and gate the support matrix, prove it live under the service's own environment (wave 3)
+
+### Phase 3.1: Target and Amazon, Supported — INSERTED 2026-08-03
+
+**Goal**: Target and Amazon reporting trustworthy stock for the GO Plus +, control-verified, on whatever rung reaches them.
+**Depends on**: Phase 3
+**Requirements**: REQ-07 (revised), REQ-13
+
+**Why this reverses Phase 3.** Phase 3 dropped both retailers on a reading of their
+Terms of Use, and recorded criterion 5 as permanently unmet. Dan's decision, 2026-08-03:
+support them. His reasoning, recorded because it is the premise the phase rests on —
+*"bot-y is a bot for humans. To take the power back from other bots."* The product is
+bought out by resellers running exactly this kind of software; a person's own agent
+reading the same public product pages, once every five minutes, is the counterweight.
+
+The evidence Phase 3 gathered stays — it is real observation and none of it was wrong.
+What changes is the conclusion drawn from it. Phase 3's own Target section already
+recorded that the two signals disagree: `www.target.com/robots.txt` does **not** disallow
+`/p/`, and Target publishes `sitemap_pdp-index.xml.gz`, a product-detail sitemap that
+exists to be crawled. That is the path this phase takes.
+
+**Success Criteria** (what must be TRUE):
+
+  1. Target reports stock for the GO Plus + from a `www.target.com/p/` product page, with a control watch green
+  2. Amazon reports stock for the GO Plus + if it carries it, with a control watch green; or the *technical* outcome is recorded with evidence, having actually been attempted
+  3. `boty check` reports six or more retailers with no health warnings
+  4. Every retailer's row in the support matrix states its rung, its robots.txt position and its terms position — a reader can see the disagreement rather than only the verdict
+  5. No regression: the four Phase 2 retailers still green, `make verify` exits 0
+  6. A single `boty check` still completes in under 2 minutes
+
+**Politeness is now the only constraint, and it is a hard one.** Not as ToU compliance —
+as self-interest and basic decency. A blocked IP costs a working monitor, and hammering
+someone's origin is how a hobby project becomes a nuisance. 5-minute cadence with jitter,
+unchanged. Probing budgets during development stay capped as in Phase 3.
+
+**Plans**: TBD by the planner. Target first — it has a robots-clean path and a published
+sitemap that solves the TCIN discovery problem Phase 2 gave up on.
 
 ### Phase 4: Open Source Ready
 

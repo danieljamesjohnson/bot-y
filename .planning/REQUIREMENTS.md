@@ -4,7 +4,7 @@
 
 v1.0 ships when **both** are true:
 
-1. Five or more retailers report stock with all control products green (of ~7 targeted: GameStop, Walmart, Best Buy, Pokémon Center, Nintendo, Target, Amazon)
+1. Five or more retailers report stock with all control products green (of ~7 targeted: GameStop, Walmart, Best Buy, Pokémon Center, Nintendo, Target, Amazon). *Standing at four after Phase 3; Phase 3.1 adds Target and Amazon, which clears this.*
 2. Dan has successfully bought a Pokémon GO Plus +
 
 The second is not a joke requirement. The tool exists to solve one concrete
@@ -35,6 +35,8 @@ has not worked.
 ### Phase 3 — The Hard Two
 
 - [x] **REQ-07**: Target and Amazon are each either working or documented as unreachable with evidence. Any retailer reached via a browser is flagged DEGRADED in the support matrix and in `boty check` output.
+- [ ] **REQ-07a** *(revises REQ-07, Phase 3.1)*: Target and Amazon are **supported**, not dropped. Phase 3 satisfied REQ-07 by documenting both as refused on a reading of their Terms of Use; that decision was reversed 2026-08-03. The evidence Phase 3 gathered stands — only the conclusion changes. A retailer is dropped only when it is technically unreachable, and the reason recorded is the observation, not a policy reading.
+- [ ] **REQ-13**: Every row of the support matrix states three things a reader can check independently: the escalation rung reached, the retailer's `robots.txt` position on the path used, and its terms position. Where those disagree — as they do at Target, whose robots.txt permits `/p/` and publishes a product sitemap while its terms forbid extraction — the matrix shows the disagreement rather than only the verdict it resolved to. A reader should be able to reach their own conclusion from the same facts.
 - [x] **REQ-08**: A full `boty check` completes in under two minutes at ~7 retailers, sequentially.
   **Measured at four retailers, not seven, and that is not a shortfall in the
   measurement — it is the shipped configuration.** Three of the roadmap's seven
