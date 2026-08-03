@@ -14,8 +14,11 @@ to ignore the notifications.
 from __future__ import annotations
 
 import logging
+import os
+from urllib.parse import quote_plus
 
 from . import parse
+from .browser import BROWSER_PATH_ENV, fetch_rendered
 from .fetch import Blocked, FetchError, get
 from .models import Availability, Result, Rung, Watch
 
@@ -59,19 +62,34 @@ def _pick(offers: list[parse.Offer], retailer: str, first_party_only: bool) -> p
     return min(pool, key=lambda o: (o.price is None, o.price or 0))
 
 
-def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
-    """Generic checker: fetch the product page and read its structured data."""
-    try:
-        page = get(watch.target)
-    except Blocked as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target)
-    except FetchError as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target)
+def _verdict_from_html(
+    watch: Watch,
+    html: str,
+    *,
+    url: str,
+    first_party_only: bool,
+    rung: Rung,
+) -> Result:
+    """Turn one page's markup into a verdict. Does no I/O whatsoever.
 
-    offers = parse.ldjson_offers(page.text)
+    Split out of `check_html` so that every transport — impersonated HTTP,
+    a rendered browser, and whatever rung 3 grows into next — reaches the same
+    UNKNOWN logic instead of each reimplementing it. The two escape hatches
+    below (a retailer with no first-party allow-list, and an unattributed offer
+    on a marketplace) are the most load-bearing behaviour in this module: a
+    second copy of them would be a second place to get them subtly wrong, and
+    the failure would be silent by construction, because a wrong UNKNOWN and a
+    wrong OUT_OF_STOCK look identical on a dashboard until a drop is missed.
+
+    `url` and `rung` are passed in rather than derived, because only the caller
+    knows them: `watch.target` is a URL for some retailers and a SKU for
+    others, and how a page was obtained is a fact about the transport that no
+    amount of reading the markup can recover.
+    """
+    offers = parse.ldjson_offers(html)
     source = "ld+json"
     if not offers:
-        offers = parse.nextdata_offers(page.text)
+        offers = parse.nextdata_offers(html)
         source = "__NEXT_DATA__"
 
     if not offers:
@@ -82,7 +100,8 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
             watch,
             Availability.UNKNOWN,
             detail="no structured stock data found (page shape changed?)",
-            url=watch.target,
+            url=url,
+            rung=rung,
         )
 
     offer = _pick(offers, watch.retailer, first_party_only)
@@ -101,7 +120,8 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
                     f"{len(offers)} offer(s) via {source}, but no first-party seller list "
                     f"is configured for '{watch.retailer}' — cannot tell whose they are"
                 ),
-                url=watch.target,
+                url=url,
+                rung=rung,
             )
         if first_party_only and watch.retailer in MARKETPLACES and any(o.seller is None for o in offers):
             # The page says something is buyable but does not say by whom, on a
@@ -114,13 +134,15 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
                     f"{len(offers)} offer(s) via {source} with no seller recorded, and "
                     f"{watch.retailer} is a marketplace — cannot tell whose offer this is"
                 ),
-                url=watch.target,
+                url=url,
+                rung=rung,
             )
         return Result(
             watch,
             Availability.OUT_OF_STOCK,
             detail=f"{len(offers)} offer(s) via {source}, none first-party",
-            url=watch.target,
+            url=url,
+            rung=rung,
         )
 
     state = Availability.IN_STOCK if offer.available else Availability.OUT_OF_STOCK
@@ -130,19 +152,158 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
         state,
         price=offer.price,
         detail=f"{source}: {offer.raw_availability} from {seller}",
+        url=url,
+        rung=rung,
+    )
+
+
+def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
+    """Generic checker: fetch the product page and read its structured data."""
+    try:
+        page = get(watch.target)
+    except Blocked as exc:
+        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target)
+    except FetchError as exc:
+        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target)
+
+    return _verdict_from_html(
+        watch,
+        page.text,
         url=watch.target,
+        first_party_only=first_party_only,
+        rung=Rung.TLS,
+    )
+
+
+def bestbuy_product_url(sku: str) -> str:
+    """The URL that reaches Best Buy's page for `sku`. Shared by both rungs.
+
+    Best Buy has no stable SKU-shaped product URL any more, and this function
+    exists because that is not obvious and cost a whole spike to establish:
+
+    - The legacy `/site/<slug>/<sku>.p` form is *uniformly refused* — HTTP/2
+      stream reset, three attempts across two unrelated SKUs, browser and
+      impersonated HTTP alike. It is a dead link, so publishing it as
+      `Result.url` on a status page anybody clicks was a small lie.
+    - The live form is `/product/<slug>/<ID>`, where `<ID>` is an opaque token
+      (`J7GSL4G7GQ`) that is **not** the SKU and cannot be derived from it.
+
+    What does work is Best Buy's own search: a bare SKU matches exactly one
+    product and the site redirects to that product's page. Verified against SKU
+    6216393 — the rendered result carries a single schema.org Product with
+    `price: 59.99` and `seller.name: "Best Buy"`, and its canonical is
+    `/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393`.
+
+    The miss path is the reason to prefer this over a guessed URL template, and
+    it was verified too: when a SKU matches nothing, the search page that comes
+    back carries **no** schema.org Product markup at all — no offers, from a
+    page listing a dozen products — so `_verdict_from_html` says UNKNOWN rather
+    than reading somebody's accessory as your restock. Both branches of this
+    are evidence, not assumption; see `docs/retailer-evidence.md`.
+
+    `watch.target` therefore stays the SKU for `bestbuy` on both rungs, which
+    is what lets one YAML entry serve the browser path and the API path
+    without the reader having to know which one is running.
+    """
+    return f"https://www.bestbuy.com/site/searchpage.jsp?st={quote_plus(sku)}"
+
+
+def _redact_host_paths(text: str) -> str:
+    """Strip local filesystem paths out of text destined for a Result.
+
+    The browser rung handles no credential, so it has nothing of that kind to
+    leak — but it is the only transport that reports failures in terms of *this
+    machine*: a missing binary, a Chrome that would not start, a nodriver
+    traceback naming the executable and its throwaway profile directory. Those
+    strings land in `Result.detail`, which `boty.status.write` copies verbatim
+    into `served/boty/status.json`, and that file is served over HTTP. A stock
+    monitor has no business publishing somebody's home directory layout to
+    anyone who can reach the dashboard.
+    """
+    home = os.path.expanduser("~")
+    configured = os.environ.get(BROWSER_PATH_ENV)
+    if configured:
+        text = text.replace(configured, "<browser>")
+    if home and home != "/":
+        text = text.replace(home, "~")
+    return text
+
+
+def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Result:
+    """Best Buy via a real browser — rung 3, and every reading is DEGRADED.
+
+    Not because a browser is better. It is slower, heavier, drags a Chrome
+    process onto the box, and is the *worse* transport for at least one
+    retailer we already support (headless Chrome is served a Cloudflare wall by
+    gamestop.com, which rung 1 reads on every `make verify`). This exists for
+    the narrower reason `boty.browser` was built for: Best Buy refuses
+    impersonated HTTP at the connection layer regardless of TLS fingerprint, so
+    the choice here is not "cheap or heavy" but "heavy or nothing".
+
+    It is the *documented* path anyway, ahead of the official API, because a
+    path that needs a credential most people cannot get is a footnote rather
+    than support: Best Buy's developer signup needs manual approval and rejects
+    free email domains. `boty.cli._make_checker` prefers `check_bestbuy_api`
+    when a key happens to exist — it is strictly more reliable and not degraded
+    — and falls back here when one does not, which is the ordinary case.
+
+    Everything returned carries `rung=Rung.BROWSER`, error paths included, and
+    `Result.degraded` follows from that. A rung is a fact about the transport,
+    not about the verdict: an UNKNOWN from a browser that could not start is
+    still a browser reading, and labelling it a plain TLS fetch would make the
+    support matrix quietly wrong about the one retailer it is most careful
+    about.
+    """
+    product_url = bestbuy_product_url(watch.target)
+
+    try:
+        page = fetch_rendered(product_url)
+    except Blocked as exc:
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=_redact_host_paths(f"blocked: {exc}"),
+            url=product_url,
+            rung=Rung.BROWSER,
+        )
+    except FetchError as exc:
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=_redact_host_paths(f"fetch failed: {exc}"),
+            url=product_url,
+            rung=Rung.BROWSER,
+        )
+
+    return _verdict_from_html(
+        watch,
+        page.text,
+        url=product_url,
+        first_party_only=first_party_only,
+        rung=Rung.BROWSER,
     )
 
 
 def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
-    """Best Buy via the official Products API.
+    """Best Buy via the official Products API — the upgrade, not the default.
 
     Best Buy rejects impersonated HTTP at the connection layer (HTTP/2 stream
-    reset, HTTP/1.1 timeout) regardless of TLS fingerprint, so scraping it is
-    a losing game. The official API is free, sanctioned, and returns exactly
-    the field we want — no adversarial relationship at all.
+    reset, HTTP/1.1 timeout) regardless of TLS fingerprint, so rung 1 is out.
+    This path is sanctioned, returns exactly the field we want, and has no
+    adversarial relationship at all — it is strictly better than driving a
+    browser at the site, which is why `boty.cli._make_checker` prefers it.
 
-    `watch.target` is the SKU.
+    It is nonetheless *not* the documented path, and that is a deliberate
+    reversal: the developer signup needs manual approval and rejects free email
+    domains, so most people cannot get a key, and a path most people cannot
+    take is a footnote rather than support. `check_bestbuy_browser` is what a
+    fresh clone runs. Where this one runs, the reading is not degraded.
+
+    `watch.target` is the SKU, the same value `check_bestbuy_browser` takes, so
+    one YAML entry serves both rungs. `Result.url` comes from the shared
+    `bestbuy_product_url` for the same reason it exists at all: the legacy
+    `/site/-/<sku>.p` link this used to publish is refused by Best Buy now, so
+    every Result here carried a URL that 404s for whoever clicked it.
 
     The API key is interpolated into the request URL, which makes it a secret
     that must never reach the returned Result. `boty.status.write` copies both
@@ -162,7 +323,7 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
     label a key-holder's Best Buy reading as a plain page fetch, which is
     exactly the claim the support matrix makes on this field's word.
     """
-    product_url = f"https://www.bestbuy.com/site/-/{watch.target}.p"
+    product_url = bestbuy_product_url(watch.target)
     api_url = (
         f"https://api.bestbuy.com/v1/products(sku={watch.target})"
         f"?apiKey={api_key}&format=json&show=sku,name,salePrice,onlineAvailability"

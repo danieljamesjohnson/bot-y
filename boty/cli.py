@@ -18,7 +18,7 @@ from .config import Config
 from .models import Availability, Health, Result, Watch
 from .monitor import State, run_once
 from .notify import send_health_warning, send_restock
-from .retailers import check_bestbuy_api, check_html
+from .retailers import check_bestbuy_api, check_bestbuy_browser, check_html
 from .status import write as write_status
 
 log = logging.getLogger(__name__)
@@ -31,9 +31,28 @@ SYMBOL = {
 
 
 def _make_checker(cfg: Config) -> Callable[[Watch], Result]:
+    """The one place a watch is matched to a transport.
+
+    `scripts/control_check.py` deliberately builds its checker with this same
+    function rather than its own: a gate that routed requests differently from
+    the running monitor would prove something about a code path nobody runs.
+    So this stays one function with one `if`, and there is no registry to fall
+    out of sync with it.
+
+    Best Buy has two rungs and the fallback direction is the interesting part.
+    With a key, the official API wins — sanctioned, more reliable, not degraded.
+    Without one, the browser reads the page anyway, flagged degraded, and Best
+    Buy still works. That ordering is what makes `BESTBUY_API_KEY` an upgrade
+    rather than a requirement, which matters because the key needs manual
+    approval and rejects free email domains: gating a retailer on it would mean
+    a fresh clone of this repo simply cannot watch Best Buy.
+    """
+
     def check(watch: Watch) -> Result:
-        if watch.retailer == "bestbuy" and cfg.bestbuy_api_key:
-            return check_bestbuy_api(watch, cfg.bestbuy_api_key)
+        if watch.retailer == "bestbuy":
+            if cfg.bestbuy_api_key:
+                return check_bestbuy_api(watch, cfg.bestbuy_api_key)
+            return check_bestbuy_browser(watch, first_party_only=cfg.first_party_only)
         return check_html(watch, first_party_only=cfg.first_party_only)
 
     return check

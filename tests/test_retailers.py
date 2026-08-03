@@ -312,8 +312,18 @@ def test_fetch_error_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
 API_KEY = "SUPERSECRETKEY123abcdefghijklmnop"
 
 
+#: A SKU somebody has actually seen resolve. The value here used to be
+#: `6577129`, introduced as Best Buy's GO Plus + SKU — but it appears nowhere in
+#: Best Buy's own search results, its legacy URL is refused, and no probe has
+#: ever resolved it to a product page. Best Buy does not appear to carry the
+#: GO Plus + at all (`docs/retailer-evidence.md`), so that string was a fixture
+#: value dressed as a fact. `6216393` is Pokémon: Let's Go, Pikachu! — read live
+#: at $59.99, InStock, sold by Best Buy.
+BESTBUY_SKU = "6216393"
+
+
 def _bestbuy_watch() -> Watch:
-    return Watch(name="GO Plus +", retailer="bestbuy", target="6577129")
+    return Watch(name="Let's Go, Pikachu!", retailer="bestbuy", target=BESTBUY_SKU)
 
 
 @pytest.mark.parametrize(
@@ -347,7 +357,13 @@ def test_bestbuy_api_key_never_reaches_the_result(
     assert API_KEY not in result.url, f"{name}: api key leaked into Result.url"
     assert API_KEY not in result.detail, f"{name}: api key leaked into Result.detail"
     assert "apiKey" not in result.url
-    assert result.url == "https://www.bestbuy.com/site/-/6577129.p"
+    # Not the legacy `/site/-/<sku>.p` form this used to publish. That link is
+    # refused by Best Buy now (HTTP/2 stream reset, reproducibly, across
+    # unrelated SKUs), so every error Result here carried a dead URL onto a
+    # status page somebody is meant to click. Both rungs share one helper so
+    # they cannot drift into publishing different links for the same watch.
+    assert result.url == f"https://www.bestbuy.com/site/searchpage.jsp?st={BESTBUY_SKU}"
+    assert result.url == retailers.bestbuy_product_url(BESTBUY_SKU)
     assert result.availability is Availability.UNKNOWN
     assert result.detail, "a UNKNOWN verdict must still say why"
     # An error from the official API is still a rung-2 reading. Leaving the
@@ -361,7 +377,7 @@ def test_bestbuy_api_key_never_reaches_the_result(
 
 def _bestbuy_url() -> str:
     return (
-        f"https://api.bestbuy.com/v1/products(sku=6577129)?apiKey={API_KEY}"
+        f"https://api.bestbuy.com/v1/products(sku={BESTBUY_SKU})?apiKey={API_KEY}"
         "&format=json&show=sku,name,salePrice,onlineAvailability"
     )
 
