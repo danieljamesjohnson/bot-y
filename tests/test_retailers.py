@@ -27,7 +27,7 @@ from boty import parse, retailers
 from boty.cli import _make_checker
 from boty.config import Config
 from boty.fetch import Blocked, FetchError, Page
-from boty.models import Availability, Rung, Watch
+from boty.models import Availability, Extraction, Rung, Watch
 from boty.parse import Offer
 
 GAMESTOP_URL = "https://www.gamestop.com/example"
@@ -1542,3 +1542,176 @@ def test_the_network_guard_covers_transports_that_bypass_curl_cffi() -> None:
 
     with pytest.raises(BaseException, match="test attempted a live network request"):
         socket.socket().connect(("1.1.1.1", 443))
+
+
+# --------------------------------------------------------------------------
+# Target — the dom extraction axis, on synthetic markup
+# --------------------------------------------------------------------------
+#
+# The fixture-driven half lives further down. What is pinned here is the
+# LABELLING: which reader ran, said on every path including the ones that found
+# nothing. A verdict-only suite cannot see any of this, which is exactly why
+# `degraded` needed M6 and M7 in the first place.
+
+_TARGET_URL = "https://www.target.com/p/x/-/A-90377926"
+
+
+def _target_watch(**kw: object) -> Watch:
+    return Watch(name="probe", retailer="target", target=_TARGET_URL, **kw)  # type: ignore[arg-type]
+
+
+def _target_control_html(*, disabled: str = "", partner: str = "") -> str:
+    return (
+        "<html><body>"
+        '<div data-test="@web/Price/PriceFull"><span data-test="product-price">$12.59</span></div>'
+        f'<button type="button" {disabled} id="addToCartButtonOrTextIdFor90377926">'
+        "Add to cart</button>"
+        f"{partner}</body></html>"
+    )
+
+
+def test_a_target_dom_reading_is_labelled_dom_and_degraded() -> None:
+    r = retailers._verdict_from_html(
+        _target_watch(),
+        _target_control_html(),
+        url=_TARGET_URL,
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        allow_dom=True,
+    )
+    assert r.availability is Availability.IN_STOCK
+    assert r.price == 12.59
+    assert r.extraction is Extraction.DOM
+    assert r.rung is Rung.BROWSER
+    assert r.degraded
+
+
+def test_a_target_dom_reading_that_found_nothing_is_still_a_dom_reading() -> None:
+    """The path a broken render takes, and the one that would mislabel silently.
+
+    With `allow_dom=True` and every reader empty, the verdict is produced by
+    `_verdict_from_html`'s no-offers return rather than by the adapter — so the
+    adapter's own `Extraction.DOM` never touches it. Labelling it `structured`
+    would tell a reader the DOM path was not involved in precisely the situation
+    where it is the thing that failed.
+    """
+    r = retailers._verdict_from_html(
+        _target_watch(),
+        "<html><body>nothing here</body></html>",
+        url=_TARGET_URL,
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        allow_dom=True,
+    )
+    assert r.availability is Availability.UNKNOWN
+    assert r.extraction is Extraction.DOM
+    assert r.degraded
+
+
+def test_a_disabled_target_button_is_out_of_stock_not_unknown() -> None:
+    r = retailers._verdict_from_html(
+        _target_watch(),
+        _target_control_html(disabled='disabled=""'),
+        url=_TARGET_URL,
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        allow_dom=True,
+    )
+    assert r.availability is Availability.OUT_OF_STOCK
+    assert r.extraction is Extraction.DOM
+
+
+def test_a_target_plus_partner_listing_never_reads_as_first_party() -> None:
+    """T-03.1-26. A reseller holding the listing must not be able to alert."""
+    partner = (
+        '<a data-test="targetPlusExtraInfoSection" href="/sp/joyin/-/N-10006960">'
+        "<span>Sold &amp; shipped by </span><span>Joyin</span></a>"
+    )
+    r = retailers._verdict_from_html(
+        _target_watch(max_price=80),
+        _target_control_html(partner=partner),
+        url=_TARGET_URL,
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        allow_dom=True,
+    )
+    assert r.availability is not Availability.IN_STOCK
+    assert not r.alertable
+    assert r.extraction is Extraction.DOM
+
+
+def test_allow_dom_leaves_a_structured_page_labelled_structured(
+    gamestop_goplusplus: str,
+) -> None:
+    """The opt-in only adds a fallback; it does not relabel what ld+json read."""
+    r = retailers._verdict_from_html(
+        Watch(name="probe", retailer="gamestop", target="https://www.gamestop.com/x"),
+        gamestop_goplusplus,
+        url="https://www.gamestop.com/x",
+        first_party_only=True,
+        rung=Rung.TLS,
+        allow_dom=True,
+    )
+    assert r.extraction is Extraction.STRUCTURED
+
+
+def test_the_dom_reader_is_opt_in_so_existing_adapters_are_unchanged() -> None:
+    """Without `allow_dom`, a Target-shaped page reads UNKNOWN and structured.
+
+    A GameStop page that lost its `ld+json` must not silently start being read
+    off its buttons — that is a behaviour change to a shipped retailer that
+    nobody decided to make.
+    """
+    r = retailers._verdict_from_html(
+        _target_watch(),
+        _target_control_html(),
+        url=_TARGET_URL,
+        first_party_only=True,
+        rung=Rung.TLS,
+    )
+    assert r.availability is Availability.UNKNOWN
+    assert r.extraction is Extraction.STRUCTURED
+
+
+def test_check_target_browser_labels_both_axes_when_the_browser_will_not_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rung and an extraction are facts about the attempt, not about the verdict."""
+
+    def boom(url: str, **kw: object) -> Page:
+        raise FetchError("no Chrome/Chromium binary found — set BOTY_BROWSER_PATH to one")
+
+    monkeypatch.setattr(retailers, "fetch_rendered", boom)
+    r = retailers.check_target_browser(_target_watch())
+    assert r.availability is Availability.UNKNOWN
+    assert r.rung is Rung.BROWSER
+    assert r.extraction is Extraction.DOM
+    assert r.degraded
+
+
+def test_check_target_browser_labels_both_axes_when_target_serves_a_challenge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def blocked(url: str, **kw: object) -> Page:
+        raise Blocked("rendered challenge page matched 'sec-if-cpt-container'")
+
+    monkeypatch.setattr(retailers, "fetch_rendered", blocked)
+    r = retailers.check_target_browser(_target_watch())
+    assert r.availability is Availability.UNKNOWN
+    assert r.rung is Rung.BROWSER
+    assert r.extraction is Extraction.DOM
+
+
+def test_check_target_browser_redacts_this_machines_paths_from_detail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`status.write` copies `detail` into a file served over HTTP."""
+    home = os.path.expanduser("~")
+
+    def boom(url: str, **kw: object) -> Page:
+        raise FetchError(f"could not start {home}/.cache/ms-playwright/chrome")
+
+    monkeypatch.setattr(retailers, "fetch_rendered", boom)
+    r = retailers.check_target_browser(_target_watch())
+    assert home not in r.detail
+    assert "~" in r.detail

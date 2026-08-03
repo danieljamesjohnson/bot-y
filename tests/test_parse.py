@@ -15,7 +15,13 @@ from __future__ import annotations
 
 import json
 
-from boty.parse import _LDJSON_RE, ldjson_offers, nextdata_offers
+from boty.parse import (
+    _LDJSON_RE,
+    TARGET_FIRST_PARTY_SELLER,
+    add_to_cart_offers,
+    ldjson_offers,
+    nextdata_offers,
+)
 
 #: MSRP of the Pokémon GO Plus +. Anything far above this is a flipper.
 MSRP = 54.99
@@ -269,3 +275,146 @@ def test_nextdata_empty_input_is_none() -> None:
 def test_walmart_fixture_has_no_ldjson_product(walmart_goplusplus: str) -> None:
     """Why check_html's fallback chain exists: ld+json finds nothing here."""
     assert ldjson_offers(walmart_goplusplus) is None
+
+
+# --------------------------------------------------------------------------
+# add_to_cart_offers — Target's DOM reader
+# --------------------------------------------------------------------------
+#
+# Synthetic fragments rather than the captured page, and deliberately so. A
+# fragment is readable in a diff, states exactly one thing, and leaks nothing —
+# the captured Target fixture is exercised in tests/test_retailers.py, where
+# what is being pinned is the whole verdict path rather than the reader.
+#
+# The markup below is copied from live renders (docs/retailer-evidence.md
+# § Target), down to the `id` prefix, the `disabled=""` form and the ampersand
+# in "Sold & shipped by".
+
+
+def _target_pdp(control: str, *, price: str = "$12.59", partner: str = "") -> str:
+    price_block = (
+        '<div data-test="@web/Price/PriceFull"><div><span>'
+        f'<span data-test="product-price">{price}</span>'
+        "</span></div></div>"
+        if price
+        else ""
+    )
+    return f"<html><body><main>{price_block}{control}{partner}</main></body></html>"
+
+
+_ENABLED = (
+    '<button class="styles_btn__1hjpW" type="button" '
+    'aria-label="Add to cart for Microfiber Dust Cloths - 6pk" '
+    'data-test="orderPickupButton" '
+    'id="addToCartButtonOrTextIdFor90377926">Add to cart</button>'
+)
+
+_DISABLED = (
+    '<button class="styles_btn__1hjpW" type="button" '
+    'aria-label="Add to cart for Joyfy 200 Pcs Easter Eggs" disabled="" '
+    'id="addToCartButtonOrTextIdFor90984792">Add to cart</button>'
+)
+
+_PARTNER_BLOCK = (
+    '<a aria-label="Sold &amp; shipped by Joyin. View partner details" '
+    'data-test="targetPlusExtraInfoSection" href="/sp/joyin/-/N-10006960">'
+    "<div><div>"
+    '<span class="primary">Sold &amp; shipped by </span>'
+    '<span class="subtext">Joyin</span>'
+    "</div></div></a>"
+)
+
+
+def test_target_enabled_add_to_cart_is_available_with_its_price() -> None:
+    offers = add_to_cart_offers(_target_pdp(_ENABLED))
+    assert offers is not None
+    assert len(offers) == 1
+    assert offers[0].available is True
+    assert offers[0].price == 12.59
+
+
+def test_target_preorder_button_is_available() -> None:
+    """One of the three phrases from Dan's original script, matched case-blind."""
+    control = _ENABLED.replace(">Add to cart<", ">Preorder<")
+    offers = add_to_cart_offers(_target_pdp(control))
+    assert offers is not None
+    assert offers[0].available is True
+
+
+def test_target_hyphenated_pre_order_button_is_available() -> None:
+    control = _ENABLED.replace(">Add to cart<", ">Pre-Order<")
+    offers = add_to_cart_offers(_target_pdp(control))
+    assert offers is not None
+    assert offers[0].available is True
+
+
+def test_target_disabled_button_is_not_available() -> None:
+    """The observed out-of-stock shape: same tag, same text, plus `disabled`."""
+    offers = add_to_cart_offers(_target_pdp(_DISABLED, price="$25.99"))
+    assert offers is not None
+    assert offers[0].available is False
+    assert offers[0].price == 25.99
+
+
+def test_target_aria_disabled_button_is_not_available() -> None:
+    """A React rewrite to the ARIA form must not read as buyable."""
+    control = _DISABLED.replace('disabled=""', 'aria-disabled="true"')
+    offers = add_to_cart_offers(_target_pdp(control))
+    assert offers is not None
+    assert offers[0].available is False
+
+
+def test_target_missing_control_is_none_not_an_empty_list() -> None:
+    """`is None`, not falsy: `[]` would mean "a product here with no offers".
+
+    Target keeps the button and disables it when an item is out of stock, so a
+    page with no control at all is a render that failed — UNKNOWN, never
+    OUT_OF_STOCK. Asserted as identity because the caller branches on the
+    difference and `assert not offers` would pass for both.
+    """
+    assert add_to_cart_offers(_target_pdp("<div>no control here</div>")) is None
+
+
+def test_target_unrecognised_control_text_is_none() -> None:
+    """`addToCartButtonOrText` — Target's own name says the slot can render text.
+
+    If it ever does, this reader does not know what it is looking at, and "the
+    page changed and I got lost" is UNKNOWN rather than out-of-stock.
+    """
+    control = _ENABLED.replace(">Add to cart<", ">Only at your store<")
+    assert add_to_cart_offers(_target_pdp(control)) is None
+
+
+def test_target_partner_block_names_the_partner_as_the_seller() -> None:
+    offers = add_to_cart_offers(_target_pdp(_ENABLED, partner=_PARTNER_BLOCK))
+    assert offers is not None
+    assert offers[0].seller == "Joyin"
+
+
+def test_target_page_with_no_partner_block_is_sold_by_target() -> None:
+    """Absence is the first-party signal, and it is an observation not a guess."""
+    offers = add_to_cart_offers(_target_pdp(_ENABLED))
+    assert offers is not None
+    assert offers[0].seller == TARGET_FIRST_PARTY_SELLER
+
+
+def test_target_partner_block_with_an_unreadable_name_is_not_first_party() -> None:
+    """Fails toward UNKNOWN, never toward Target: `None` on a marketplace is UNKNOWN."""
+    partner = _PARTNER_BLOCK.replace(">Joyin<", "><")
+    offers = add_to_cart_offers(_target_pdp(_ENABLED, partner=partner))
+    assert offers is not None
+    assert offers[0].seller is None
+    assert offers[0].seller != TARGET_FIRST_PARTY_SELLER
+
+
+def test_target_unreadable_price_still_yields_an_availability() -> None:
+    """A missing price does not block the verdict — `Result.alertable` holds the ceiling."""
+    offers = add_to_cart_offers(_target_pdp(_ENABLED, price="Price not available"))
+    assert offers is not None
+    assert offers[0].price is None
+    assert offers[0].available is True
+
+
+def test_target_reader_finds_nothing_on_a_structured_page(gamestop_goplusplus: str) -> None:
+    """It is Target's reader, not a universal fallback — no control, no offers."""
+    assert add_to_cart_offers(gamestop_goplusplus) is None

@@ -189,6 +189,30 @@ MUTATIONS = (
         replace="        return self.rung is Rung.BROWSER",
         breaks="drops the dom disjunct — a DOM reading on a non-browser transport is published as a first-class structured one, in `boty check`, in the status page and in the support matrix",
     ),
+    # M8 is M1 pointed at the other extractor, and it is here because the DOM
+    # reader is the most fragile thing in this codebase by some distance.
+    #
+    # M1 guards `BUYABLE`, which decides availability for four retailers off
+    # schema.org strings that are commercially load-bearing and change rarely.
+    # `add_to_cart_offers` decides it for Target off whether a rendered button
+    # carries `disabled` — presentation markup, a CSS-framework decision, and one
+    # a reskin can invert without anybody at Target noticing they broke us. The
+    # mutation is a one-token edit that produces a page-perfect reading of the
+    # exact opposite of the truth: every out-of-stock item reads buyable, which
+    # on a monitor whose ceiling is $80 means a push notification for something
+    # nobody can buy, and every restock reads sold out, which means silence
+    # during the only event this project exists to catch.
+    #
+    # Target is registered control-only, so the live half of this guard is a
+    # single always-in-stock watch. M8 is the offline half: it proves the suite
+    # would go red before anyone had to notice the control had.
+    Mutation(
+        ident="M8",
+        target="boty/parse.py",
+        search="    available = not disabled",
+        replace="    available = disabled",
+        breaks="inverts the add-to-cart availability decision — a disabled (out-of-stock) Target button reads as buyable and an enabled one reads as sold out",
+    ),
 )
 
 

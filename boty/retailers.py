@@ -20,7 +20,7 @@ from urllib.parse import quote_plus
 from . import parse
 from .browser import BROWSER_PATH_ENV, fetch_rendered
 from .fetch import Blocked, FetchError, get
-from .models import Availability, Result, Rung, Watch
+from .models import Availability, Extraction, Result, Rung, Watch
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +28,28 @@ log = logging.getLogger(__name__)
 FIRST_PARTY = {
     "walmart": {"walmart.com", "walmart"},
     "gamestop": {"gamestop", "gamestop.com"},
-    "target": {"target"},
+    # `target` is the only entry here that is NOT a retailer's own string, and
+    # the difference is the whole reason this comment exists.
+    #
+    # Every other value is an `offers.seller.name` read verbatim off a live page.
+    # Target publishes no seller name anywhere, at any rung — not "we have not
+    # looked", but measured and structural (docs/retailer-evidence.md § Target).
+    # This entry was therefore an unverifiable guess for as long as it existed,
+    # and it could not be fixed by looking harder.
+    #
+    # It is now a statement about OUR OWN READER'S OUTPUT.
+    # `parse.add_to_cart_offers` emits the literal `parse.TARGET_FIRST_PARTY_SELLER`
+    # when a PDP carries no Target Plus partner block, and this entry is the
+    # matching half of that. The claim underneath it is checkable and checked:
+    # *absence of a "Sold & shipped by" block on a Target PDP means Target is the
+    # seller*. Zero occurrences of that block, or any wording of it, on the
+    # first-party control page; unmissable on a partner-sold one.
+    #
+    # `target` stays in MARKETPLACES below, and that is not redundant. Removing
+    # it would re-enable `_pick`'s unattributed-offer fallback, which is what
+    # lets a Target Plus reseller listing alert — the flipper case the whole
+    # first-party filter exists for.
+    "target": {parse.TARGET_FIRST_PARTY_SELLER},
     "bestbuy": {"best buy", "bestbuy.com"},
     # `Nintendo of America Inc.` is the literal `offers.seller.name` on every
     # nintendo.com/us/store product page seen (docs/retailer-evidence.md); the
@@ -82,6 +103,7 @@ def _verdict_from_html(
     first_party_only: bool,
     rung: Rung,
     sku: str | None = None,
+    allow_dom: bool = False,
 ) -> Result:
     """Turn one page's markup into a verdict. Does no I/O whatsoever.
 
@@ -105,12 +127,36 @@ def _verdict_from_html(
     Buy, which has no SKU-shaped product URL — those are two different claims,
     and passing the SKU here is what makes the second one checkable. See
     `parse.ldjson_offers`.
+
+    `allow_dom` opts an adapter into `parse.add_to_cart_offers`, the presentation
+    reader, after both structured sources have come back empty. Opt-in and not
+    universal, deliberately: a GameStop page that lost its `ld+json` would
+    otherwise fall through to a DOM read and change an existing retailer's
+    behaviour without anybody deciding to. Every adapter that does not pass it
+    behaves byte-identically to before.
+
+    The label follows the reader that actually produced the answer, and the case
+    worth stating is the one where nothing did. With `allow_dom=True` and all
+    three readers empty, execution reaches the no-offers UNKNOWN below — and that
+    is still a DOM reading, because the DOM reader is what ran and found nothing.
+    It is also the single most likely path in production, since it is what a
+    broken render looks like. Labelling it `structured` would tell a reader the
+    DOM path was never involved in exactly the situation where it is the thing
+    that failed.
     """
     offers = parse.ldjson_offers(html, sku=sku)
     source = "ld+json"
     if not offers:
         offers = parse.nextdata_offers(html)
         source = "__NEXT_DATA__"
+
+    # `extraction` tracks which reader spoke, not whether it liked what it saw.
+    extraction = Extraction.DOM if allow_dom else Extraction.STRUCTURED
+    if not offers and allow_dom:
+        offers = parse.add_to_cart_offers(html)
+        source = "add-to-cart control"
+    elif offers:
+        extraction = Extraction.STRUCTURED
 
     if not offers:
         if sku is not None:
@@ -129,6 +175,7 @@ def _verdict_from_html(
                 ),
                 url=url,
                 rung=rung,
+                extraction=extraction,
             )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way
@@ -139,6 +186,7 @@ def _verdict_from_html(
             detail="no structured stock data found (page shape changed?)",
             url=url,
             rung=rung,
+            extraction=extraction,
         )
 
     offer = _pick(offers, watch.retailer, first_party_only)
@@ -159,6 +207,7 @@ def _verdict_from_html(
                 ),
                 url=url,
                 rung=rung,
+                extraction=extraction,
             )
         if first_party_only and watch.retailer in MARKETPLACES and any(o.seller is None for o in offers):
             # The page says something is buyable but does not say by whom, on a
@@ -173,6 +222,7 @@ def _verdict_from_html(
                 ),
                 url=url,
                 rung=rung,
+                extraction=extraction,
             )
         return Result(
             watch,
@@ -180,6 +230,7 @@ def _verdict_from_html(
             detail=f"{len(offers)} offer(s) via {source}, none first-party",
             url=url,
             rung=rung,
+            extraction=extraction,
         )
 
     state = Availability.IN_STOCK if offer.available else Availability.OUT_OF_STOCK
@@ -191,6 +242,7 @@ def _verdict_from_html(
         detail=f"{source}: {offer.raw_availability} from {seller}",
         url=url,
         rung=rung,
+        extraction=extraction,
     )
 
 
@@ -337,6 +389,83 @@ def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Res
         # search-results template happens to carry no Product markup, which is
         # a third party's SEO decision and not a property of this code.
         sku=watch.target,
+    )
+
+
+def check_target_browser(watch: Watch, *, first_party_only: bool = True) -> Result:
+    """Target via a real browser, reading the add-to-cart control — rung 3 + dom.
+
+    The fifth retailer, and the least trustworthy reading this project publishes.
+    Both facts are stated on every Result it returns rather than left for someone
+    to infer from the retailer's name.
+
+    Target is the one retailer here whose page carries **no structured data at
+    all**. Not "we could not find it" — measured: zero `application/ld+json`,
+    zero `schema.org`, zero `"price"`, zero `"seller"`, an empty
+    `ProductDetailPrice` module, and Target's own flag saying so
+    (`isProductDetailServerSideRenderPriceEnabled: false`), on two unrelated PDPs
+    and two archive snapshots. The numbers are rendered client-side from
+    `redsky.target.com`. So `check_html` reads this page perfectly and returns
+    UNKNOWN forever, and the only thing left to read is the button.
+
+    That makes this adapter **rung 3 AND dom**, which is a different thing from
+    Best Buy's rung 3. Best Buy needs a browser because it refuses impersonated
+    HTTP at the connection layer, but what gets read off the rendered page is Best
+    Buy's own schema.org feed — commercially load-bearing markup that a redesign
+    does not casually break. Here it is presentation markup, and a Target reskin
+    breaks this silently. `Result.degraded` fires on either disjunct; `rung` and
+    `extraction` are both published so a reader can tell which.
+
+    **Rendering this page causes the browser to fetch three Target-owned hosts
+    that publish `Disallow: /`** — `redsky.target.com`, `api.target.com` and
+    `sapphire-api.target.com` — measured with
+    `performance.getEntriesByType('resource')` inside the page, not assumed.
+    Dan's recorded decision (`QUESTIONS.md` § 0d) is that a browser rendering a
+    page a human would render is not a crawler. It does **not** license
+    addressing those hosts directly, and no code here does: this module reaches
+    `www.target.com` and nothing else.
+
+    Every Result below carries `rung=Rung.BROWSER` and `extraction=Extraction.DOM`,
+    the error paths included, for the reason `check_bestbuy_browser` gives about
+    its rung: both are facts about how a reading was obtained, not about the
+    verdict. An UNKNOWN from a browser that would not start is still a
+    browser-and-dom reading, and the support matrix makes its claim on these two
+    fields' word.
+
+    Failure strings go through `_redact_host_paths` for the same reason they do
+    there — `status.write` copies `detail` into a file served over HTTP.
+    """
+    try:
+        page = fetch_rendered(watch.target)
+    except Blocked as exc:
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=_redact_host_paths(f"blocked: {exc}"),
+            url=watch.target,
+            rung=Rung.BROWSER,
+            extraction=Extraction.DOM,
+        )
+    except FetchError as exc:
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=_redact_host_paths(f"fetch failed: {exc}"),
+            url=watch.target,
+            rung=Rung.BROWSER,
+            extraction=Extraction.DOM,
+        )
+
+    return _verdict_from_html(
+        watch,
+        page.text,
+        url=watch.target,
+        first_party_only=first_party_only,
+        rung=Rung.BROWSER,
+        # No `sku=`: Target is addressed by URL, so the page that came back is
+        # self-evidently the product asked for. Best Buy's SKU binding is a
+        # workaround for a search redirect this retailer does not have.
+        allow_dom=True,
     )
 
 
