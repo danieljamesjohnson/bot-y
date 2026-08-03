@@ -1017,6 +1017,162 @@ not "just to record an observation". Rung 1 is closed by the Terms; rung 2 is
 closed four ways above; rung 3 is closed by the same Terms as rung 1 and adds
 nothing a prohibition can be argued out of. There is no rung left to walk.
 
+### The ladder walk, and the fact that it did not happen
+
+That branch was taken. **No rung was walked, because the branch above closed all
+three of them before any transport work began.**
+
+The request count for this retailer across the whole of Phase 3 is therefore
+**4**, every one of them a policy document or a `robots.txt`, all listed in the
+table at the top of this section. The plan's politeness budget was 12 requests at
+≥15 s spacing with a 120 s backoff before any single retry and a hard stop after
+two consecutive refusals. None of the retry machinery was reached: there were no
+refusals, because there was nothing to be refused from. **`boty.fetch.get` was
+never called with a target.com URL, `boty.browser.fetch_rendered` was never
+called at all, and `boty capture-fixture` was never run.**
+
+**Controls before and after.** There was no probing to bracket — the REFUSED
+branch makes no product requests — but both runs are recorded anyway, the same
+way `03-01` recorded them, because "we would have noticed" is not a control:
+
+```
+control check: PASS — 4/4 controls in stock
+  in_stock      gamestop  CONTROL — PS5 console                $549.99  ld+json: InStock from GameStop
+  in_stock      walmart   CONTROL — Great Value whole milk       $2.42  __NEXT_DATA__: IN_STOCK from Walmart.com
+  in_stock      bestbuy   CONTROL — Pokémon Let's Go, Pikach    $59.99  ld+json: InStock from Best Buy
+  in_stock      nintendo  CONTROL — Nintendo HDMI cable          $7.99  ld+json: InStock from Nintendo of America Inc.
+```
+
+Byte-identical before and after — two standalone runs under the service's own
+`EnvironmentFile`, and a third inside `make verify` at the close of this plan.
+The GameStop control needed one retry on the *first* run only
+(`fetch failed: HTTP 403`, retried automatically and read `InStock`), which is
+the script's ordinary backoff behaviour and not a Target finding; the second run
+needed none. Dan's monitor was never at risk: no defended endpoint was touched.
+
+**`BLOCK_PHRASES` was not exercised, and that is worth saying out loud.** Phase 2
+added `sec-if-cpt-container` and `scf-akamai-protected-by` to
+`boty.fetch.BLOCK_PHRASES` *specifically* because Akamai fronts Target and a
+Target refusal at HTTP 200 would otherwise have surfaced as "no structured stock
+data found (page shape changed?)". Those markers were re-verified against live
+Kohl's bytes on 2026-08-03 and they remain correct — but this section provides
+**no** evidence for or against them, because no Target page was ever fetched to
+put them in front of. Their justification is still the Kohl's re-probe recorded
+at the bottom of this file, and nothing here strengthens or weakens it.
+
+### What was NOT done, and why
+
+- **No product page was ever requested.** Not at rung 1, not at rung 3, not
+  once. The Terms were read first precisely so this sentence could be written:
+  **bot-y makes no requests to target.com.** Four `curl` requests to policy
+  documents and `robots.txt`, and nothing else, ever.
+- **No TCIN discovery was attempted**, even though robots.txt publishes the PDP
+  sitemap that would have made it easy and even though this is the exact problem
+  `.planning/STATE.md` records Phase 2 giving up on. Finding the GO Plus +'s TCIN
+  would have been a satisfying answer to a question that stopped mattering the
+  moment the Terms were read. Whether Target stocks the product is therefore
+  **not established here** — and it does not need to be, because a watch could
+  not ship either way. This is a deliberate non-finding, unlike Best Buy's, which
+  is a disproof.
+- **`FIRST_PARTY["target"]` was NOT widened**, and the live `offers.seller.name`
+  string was not observed, because observing it would have required fetching a
+  product page. See the note below on what that leaves in the code.
+- **No fixture was captured**, so `tests/fixtures/target/` does not exist and the
+  CR-02 identity-leak guard had nothing new to inspect. Target is Akamai-fronted,
+  the same echo shape that froze this repo's public IP and EdgeScape geolocation
+  into a committed fixture in Phase 2, so the safest number of rung-3 Target
+  captures in a public repo is the one this plan produced.
+- **No watch is in `config/products.yaml`.** No `retailer: target` entry, no
+  control, no `check_html_browser`, and no new arm in `boty.cli._make_checker`.
+- **`target` remains in `boty.retailers.MARKETPLACES`.** Target Plus is a real
+  third-party marketplace; that entry is a statement about the retailer, not a
+  claim to support it — the same call `03-01` made for `amazon`.
+
+### The sharp edge left in the code, and why it is safe to leave
+
+`boty/retailers.py:31` carries `"target": {"target"}` in `FIRST_PARTY` and
+`:54` lists `target` in `MARKETPLACES`. That combination has a real hazard: if
+Target's markup names its seller anything other than exactly `target` once
+lowercased — `"Target Corporation"`, `"Target.com"` — then `_pick`'s `named` list
+is empty, `unattributed` is forced empty by the `MARKETPLACES` membership, and
+`_verdict_from_html` falls through to `:177` and returns a **confident
+OUT_OF_STOCK** with detail `"N offer(s) via ld+json, none first-party"` on a page
+it read perfectly.
+
+That hazard is **unreachable in this tree**, because nothing dispatches a Target
+watch: `Config.load` yields no watch with `retailer == 'target'`, so no code path
+ever passes `"target"` to `_pick`. The entry is dormant, not live. It was left in
+place rather than deleted for the same reason `amazon` stays in `MARKETPLACES` —
+it records a true fact about the retailer — and removing it would have been a
+change to `boty/retailers.py` in a plan whose whole finding is that no code
+change is warranted.
+
+If somebody ever does register Target, **that allow-list entry is a guess**,
+never observed on a live page, and it must be replaced with the real
+`offers.seller.name` string before a control can go green. Note that the failure
+would be loud rather than silent: `boty.monitor.assess_health:78` fails any
+retailer whose control does not read IN_STOCK, so seller-string drift on a Target
+control reddens the `controls` stage and takes `make verify` non-zero within a
+cycle. The control path is the drift detector, and it already works.
+
+### Was Target reachable? — unknown, and deliberately so
+
+This section records no HTTP status from a product page, no byte count from one,
+and no observation about Akamai, because none was collected. The two policy pages
+and both `robots.txt` files returned clean HTTP 200s from `curl` with no
+challenge, which says something about `www.target.com`'s posture toward a plain
+document fetch and **nothing** about `/p/`. `.planning/STATE.md`'s note that
+"product pages fetch clean but no valid `www` TCIN was ever found" is prior work,
+not an observation from this phase, and it is not promoted to one here.
+
+That gap is the correct shape for a rung-4-by-terms finding, and it is the same
+shape as Amazon's. A REACHABLE verdict needs observations; a REFUSED-by-written-
+prohibition verdict needs the prohibition, and manufacturing transport evidence
+to make the section look fuller would mean making exactly the requests the
+section's own conclusion says we should not make.
+
+### If somebody revisits this later
+
+**Do not re-probe.** There is nothing to re-probe: no wall was measured, so there
+is no wall that could weaken. A clean HTTP 200 from `/p/<slug>/-/A-<TCIN>` would
+prove only that we had been rude successfully. This is the same instruction the
+Amazon section carries, for the same reason.
+
+**What would actually change this** is Target saying something different: a
+product-availability signal a non-commercial user can subscribe to; a RedSky tier
+with published terms and an issued key; an "approved Agentic Commerce Agent"
+programme that a personal restock monitor can join; or a revision of the
+`Unlawful or Prohibited Uses` section that stops naming prices and data-gathering
+tools. Any of those is a genuine rung 2 and would be worth wiring up the same
+afternoon. The retrieval date and the `LAST UPDATED: April 15, 2026` header are
+recorded so a future reader can tell at a glance whether the document they are
+looking at is the one this verdict was based on.
+
+**The `Agentic Commerce` section is the one to watch.** It is the newest text in
+the document and it is the only place Target contemplates an automated agent
+acting for a person at all. Today it is scoped to authenticated account actions —
+carts, orders, returns — and it explicitly prohibits everything else. If that
+scope ever widens to reading a public product page on a person's behalf, this
+verdict should be revisited on purpose rather than by accident.
+
+### Why this is the plan succeeding
+
+The roadmap's criterion for this retailer is "Target reports stock, **or** the
+support matrix records what was tried and why it failed." This is the second
+branch. It is the branch that was under the most pressure to be the first one:
+`03-01` settled Amazon at rung 4 the same day, so criterion 5 — five working
+retailers — rested on Target alone, and a REACHABLE here was the only thing that
+would have met it.
+
+It is met by not being met. **The count stays at four** — gamestop, walmart,
+bestbuy, nintendo — and phase criterion 5 is recorded unmet in `QUESTIONS.md`
+rather than padded with a retailer whose own terms forbid the reading.
+`scripts/evidence_check.py`, shipped by `03-01` for exactly this moment, is what
+makes that shortfall mechanically impossible to hide later: rule 2 requires every
+roadmap retailer to be configured *or* to carry `**Verdict: REFUSED**` in this
+file, and rule 3 requires a short count to be consistent with the verdicts behind
+it.
+
 ---
 
 ## What was built on both of these (2026-08-02, 02-04 tasks 2 and 3)
