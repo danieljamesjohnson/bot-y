@@ -241,6 +241,108 @@ def test_the_chrome_sandbox_is_on_unless_explicitly_disabled(monkeypatch: pytest
     assert seen["sandbox"] is False, "the opt-out did not reach the launch"
 
 
+@pytest.mark.parametrize(
+    ("value", "sandbox"),
+    [
+        # The four ways a person writes "I do not want this". Every one of them
+        # used to turn the sandbox OFF, because the check was `not
+        # os.environ.get(...)` and any non-empty string is truthy.
+        ("0", True),
+        ("false", True),
+        ("no", True),
+        ("off", True),
+        ("False", True),
+        ("OFF", True),
+        ("", True),
+        ("   ", True),
+        # Not a boolean at all. Ambiguity resolves toward the sandbox staying on.
+        ("banana", True),
+        # Explicit opt-in, the only thing that may downgrade isolation.
+        ("1", False),
+        ("true", False),
+        ("TRUE", False),
+        ("yes", False),
+        ("on", False),
+        (" on ", False),
+    ],
+)
+def test_only_an_explicit_yes_disables_the_chrome_sandbox(
+    monkeypatch: pytest.MonkeyPatch, value: str, sandbox: bool
+) -> None:
+    """`BOTY_BROWSER_NO_SANDBOX=0` must not disable the sandbox.
+
+    The module's own argument for this variable is that "a security downgrade
+    that happens silently is not one anybody reviewed" — and the truthiness
+    check it shipped with was precisely a silent downgrade in the worst
+    direction. Somebody editing `~/.config/boty/env` to turn the workaround
+    *off*, the obvious way, by writing `=0`, turned it on instead and got a
+    warning line telling them it was on that they had every reason to read as
+    stale. On a transport whose entire job is executing a retailer's JavaScript,
+    that is the sandbox gone for a typo.
+
+    Parametrised over the wordings rather than over `bool()`'s behaviour,
+    because the finding is about what a *person* writes, not about Python.
+    """
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen)
+    monkeypatch.setenv(browser.NO_SANDBOX_ENV, value)
+
+    _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+
+    assert seen["sandbox"] is sandbox, (
+        f"{browser.NO_SANDBOX_ENV}={value!r} produced sandbox={seen['sandbox']}; "
+        "only an explicit yes may downgrade isolation"
+    )
+
+
+def test_an_unrecognised_sandbox_value_says_so(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Falling back to the safe answer silently is how the next one hides.
+
+    Refusing to guess is right; refusing to guess *quietly* leaves somebody
+    convinced they set a flag that is doing nothing. Say which value was not
+    understood and which way it was resolved.
+    """
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen)
+    monkeypatch.setenv(browser.NO_SANDBOX_ENV, "maybe")
+
+    with caplog.at_level("WARNING", logger=browser.log.name):
+        _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+
+    assert seen["sandbox"] is True
+    assert any("maybe" in r.getMessage() for r in caplog.records), (
+        "an unrecognised value was ignored without a word"
+    )
+
+
+def test_running_as_root_warns_that_chrome_drops_its_own_sandbox(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The narrower hole in the same claim, and it is not hypothetical here.
+
+    nodriver's `Config.__init__` auto-disables the sandbox when `is_root()`,
+    logging at INFO — below boty's default WARNING level. Run boty as root (a
+    container, or a systemd unit with no `User=`; this repo's own
+    docker-compose.yml runs its browser as root) and retailer JavaScript
+    executes unsandboxed as root, with `sandbox=True` in the launch call and
+    boty's own warning line never firing. Whoever reads the log sees a sandbox
+    that is not there.
+    """
+    seen: dict = {}
+    _fake_nodriver(monkeypatch, seen)
+    monkeypatch.delenv(browser.NO_SANDBOX_ENV, raising=False)
+    monkeypatch.setattr(browser.os, "geteuid", lambda: 0)
+
+    with caplog.at_level("WARNING", logger=browser.log.name):
+        _REAL_RENDER("https://example.com/", None, 5.0, 0.0)
+
+    assert any("root" in r.getMessage().lower() for r in caplog.records), (
+        "running as root disables Chrome's sandbox and nothing said so"
+    )
+
+
 def test_the_browser_is_stopped_even_when_the_page_explodes(monkeypatch: pytest.MonkeyPatch) -> None:
     """A wedged or hostile page must not leak a Chrome process onto the box."""
     seen: dict = {}

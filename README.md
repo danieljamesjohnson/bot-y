@@ -124,6 +124,17 @@ user namespaces to binaries with no AppArmor profile — and aborts on startup;
 real reduction in isolation because this transport executes retailer JavaScript.
 A distro Chrome package is the better fix.
 
+It accepts `1`, `true`, `yes` or `on` — and nothing else. `0`, `false`, `no`,
+`off` and an empty value all mean *keep the sandbox*, and anything unrecognised
+is treated as "no" with a warning naming the value. This is the one setting here
+where guessing wrong removes a security boundary, so merely being set is
+deliberately not enough to disable it.
+
+Note that Chrome disables its own sandbox when it runs as **root**, whatever
+this variable says. Run bot-y as an unprivileged user; if you do not, it warns
+on every render, because a log that reports `sandbox=True` while Chrome quietly
+dropped it is worse than no log line at all.
+
 **If you run bot-y under systemd, put both variables in the unit's
 `EnvironmentFile`, not just your shell.** Exporting them interactively makes
 `make verify` pass while the deployed monitor still cannot find a browser — the

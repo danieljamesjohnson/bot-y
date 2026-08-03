@@ -48,7 +48,12 @@ log = logging.getLogger(__name__)
 #: stay honest for a fresh clone on someone else's machine.
 BROWSER_PATH_ENV = "BOTY_BROWSER_PATH"
 
-#: Set to a truthy value to launch Chrome with `--no-sandbox`.
+#: Set to `1`, `true`, `yes` or `on` to launch Chrome with `--no-sandbox`.
+#:
+#: Those four and nothing else — see `_sandbox_wanted`. `0`, `false`, `no` and
+#: `off` mean what they say, and an unrecognised value is treated as no *and
+#: warned about*. Merely being set is not enough, deliberately: this is the one
+#: setting in the project where guessing wrong removes a security boundary.
 #:
 #: Off by default and it should stay that way: this transport *executes*
 #: attacker-controlled JavaScript from a retailer, and Chrome's sandbox is the
@@ -93,6 +98,63 @@ def find_browser() -> str | None:
         if found:
             return found
     return None
+
+
+#: The only values that mean "yes, disable the sandbox".
+#:
+#: An allow-list rather than a truthiness test, and the distinction is the whole
+#: point. `not os.environ.get(...)` treats *any* non-empty string as yes —
+#: including `0`, `false`, `no` and `off`, which are the four ways somebody
+#: writes "I do not want this". Editing `~/.config/boty/env` to turn the
+#: workaround off the obvious way used to turn it on.
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+#: Recognised as "no". Listed separately from "unrecognised" so that a value
+#: nobody anticipated gets a warning while an ordinary `0` does not.
+_FALSY = frozenset({"0", "false", "no", "off", ""})
+
+
+def _sandbox_wanted() -> bool:
+    """Whether to launch Chrome with its sandbox, and say so out loud if not.
+
+    Chrome's sandbox is the boundary between a renderer exploit and this host,
+    and this transport exists to execute a retailer's JavaScript. So the default
+    is on, the opt-out is explicit, and anything ambiguous resolves toward on.
+    """
+    raw = os.environ.get(NO_SANDBOX_ENV, "").strip().lower()
+
+    if raw and raw not in _TRUTHY and raw not in _FALSY:
+        log.warning(
+            "%s=%r is not a recognised yes/no value — treating it as NO and "
+            "leaving Chrome's sandbox ON. Use 1/true/yes/on to disable it.",
+            NO_SANDBOX_ENV,
+            raw,
+        )
+
+    sandbox = raw not in _TRUTHY
+    if not sandbox:
+        log.warning(
+            "%s is set — Chrome's sandbox is OFF and retailer JavaScript runs "
+            "with this process's privileges",
+            NO_SANDBOX_ENV,
+        )
+
+    # Independent of the variable, and the reason it is checked here rather than
+    # trusted to the launch keyword: nodriver's `Config.__init__` silently
+    # disables the sandbox when `is_root()` and logs it at INFO, below boty's
+    # default WARNING level. As root — a container, or a unit with no `User=`,
+    # and this repo's own docker-compose.yml runs its browser that way — we pass
+    # `sandbox=True`, nodriver ignores it, and nothing above says a word. Whoever
+    # reads the log would see a sandbox that is not there.
+    if os.geteuid() == 0:
+        log.warning(
+            "running as root — Chrome disables its own sandbox in that case "
+            "regardless of %s, so retailer JavaScript is executing unsandboxed "
+            "as root. Run boty as an unprivileged user.",
+            NO_SANDBOX_ENV,
+        )
+
+    return sandbox
 
 
 #: How long the teardown waits for a terminated Chrome to actually die.
@@ -186,13 +248,7 @@ def _render(url: str, executable: str | None, timeout: float, settle_seconds: fl
     # actionable message rather than a traceback.
     import nodriver
 
-    sandbox = not os.environ.get(NO_SANDBOX_ENV)
-    if not sandbox:
-        log.warning(
-            "%s is set — Chrome's sandbox is OFF and retailer JavaScript runs "
-            "with this process's privileges",
-            NO_SANDBOX_ENV,
-        )
+    sandbox = _sandbox_wanted()
 
     def _registered() -> set[Any]:
         """nodriver's own registry of live Browser instances, defensively.
