@@ -146,6 +146,93 @@ Best candidate observed, and it satisfies the same rule:
 candidate in reserve: given finding 3 above, "this product page renders" is not
 currently predictable from any property we understand.
 
+### What was built on it (2026-08-02, second session)
+
+The verdict above left one thing unresolved that the adapter could not be built
+without: **`bestbuy_product_url(sku)` has no template to use.** The legacy `.p`
+form is refused, and the live `/product/<slug>/<ID>` form's `<ID>` cannot be
+derived from a SKU. Two more probes settled it.
+
+| Target | Result |
+|---|---|
+| `/site/searchpage.jsp?st=6216393` (a bare SKU) | **Redirected to the product page.** 1,109,548 B, title `Pokémon: Let's Go, Pikachu! Nintendo Switch HACPADW2A - Best Buy`, canonical `https://www.bestbuy.com/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393`, `ldjson_offers` → exactly **one** offer: `available=True, price=59.99, seller='Best Buy'` |
+| `/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ` | Rendered, 1,160,922 B, identical single offer — the control still renders four hours after the first spike |
+
+So **Best Buy's own search is the SKU-to-URL resolver**, and that is what
+`boty.retailers.bestbuy_product_url` returns. It is preferred over guessing a
+URL template for a reason that is about the *miss* path rather than the hit
+path, and the miss path was checked too:
+
+- A search that matches nothing (SKU `6577129`, and the two GO Plus + searches
+  from the first session) returns a search page carrying **no schema.org
+  Product markup at all** — `ldjson_offers` → `None` — despite listing a dozen
+  products with prices on screen. So a SKU that stops resolving reads UNKNOWN,
+  loudly, instead of reporting an unrelated accessory as a restock. A guessed
+  product-URL template had no such guarantee: Best Buy's own 404 page is a
+  fully rendered 597 KB Best Buy page, and what it carries in `ld+json` was
+  never established.
+
+Both pages are frozen as fixtures with capture sidecars —
+`tests/fixtures/bestbuy/pikachu-control.html` and
+`tests/fixtures/bestbuy/unresolved-sku.html` — so the hit and the miss are both
+regression-tested offline.
+
+`Result.url` moved to this form as well, on **both** rungs. `check_bestbuy_api`
+previously published `https://www.bestbuy.com/site/-/<sku>.p`, which is the form
+this spike proved is refused: every Best Buy row on the served status page
+carried a link that does not load.
+
+### Does Best Buy sell the GO Plus +? — settled: no watch shipped
+
+Re-checked against the two saved search pages from the first session. Every
+product link they contain:
+
+```
+/product/go-50-gift-card-7000-pokecoins/JJG34YWLH6
+/product/pokemon-go-50-gift-card-7000-pokecoins-digital/JJG34YWLWJ
+/product/nintendo-switch-online-12-month-individual-membership-card/JJG34YK66Q
+/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ   (+ -digital)
+/product/pokemon-lets-go-eevee-nintendo-switch/J7GSL4G7L4     (+ -digital)
+```
+
+Gift cards, a membership card, and four Let's Go titles. **No GO Plus +
+hardware.** And SKU `6577129`, which this repo used as Best Buy's GO Plus + SKU,
+now has a direct disproof rather than an absence of evidence: searched on the
+path that redirects a real SKU straight to its product page, it redirects
+nowhere and matches nothing.
+
+So **`config/products.yaml` ships a Best Buy control and no Best Buy GO Plus +
+watch.** A watch on a product the retailer does not carry would sit at UNKNOWN
+forever and raise a permanent health warning — the monitor reporting itself
+broken for correctly observing that something is not there. The unverified SKU
+was removed from `tests/test_retailers.py` at the same time; a fixture value
+nobody has seen resolve should not be sitting in a test looking like a fact.
+
+This does **not** cost the phase its retailer count: Best Buy is supported and
+verified by a live control, which is what "supported" is defined as here. It
+does mean Best Buy will never alert on the product this project was built for.
+
+### Control product — confirmed and wired in
+
+- **`Pokémon: Let's Go, Pikachu! - Nintendo Switch`**, SKU `6216393`
+- Reached as `https://www.bestbuy.com/site/searchpage.jsp?st=6216393`
+- Read live as `InStock`, `$59.99`, `seller: "Best Buy"` — twice, four hours
+  apart, on two different URL forms.
+
+It satisfies `config/products.yaml`'s control rule: first-party, an evergreen
+catalogue title restocked routinely, not a console, and not subject to a
+marketplace buy-box fight. `seller.name` is `"Best Buy"`, which is already in
+`FIRST_PARTY["bestbuy"]`, so `_pick` finds it through the `named` branch and
+`MARKETPLACES` needed no change.
+
+The house-brand cable the rule would ordinarily point at is one of the
+reproducibly-refused pages, and the mechanism behind that refusal is still
+unexplained — so if this control starts reading UNKNOWN with a transport
+failure rather than a parse failure, suspect the refusal before suspecting the
+extractor. Reserve candidate: `Pokémon: Let's Go, Eevee! - Nintendo Switch`
+(`/product/pokemon-lets-go-eevee-nintendo-switch/J7GSL4G7L4`), observed in the
+same search results.
+
 ### Host facts, not repo facts
 
 danserver has no system Chrome. These probes used the Chrome for Testing binary

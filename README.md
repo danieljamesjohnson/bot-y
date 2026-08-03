@@ -57,13 +57,28 @@ names.
 
 ## Retailer status
 
-| Retailer | Method | Status |
-|---|---|---|
-| GameStop | `curl_cffi` + schema.org JSON-LD | ✅ Working |
-| Walmart | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ✅ Working |
-| Best Buy | Official API (free key) | ⚠️ Needs a key — Best Buy refuses impersonated HTTP at the connection layer, so scraping it is a losing game |
-| Target | RedSky API | 🚧 Planned |
-| Pokémon Center | — | 🚧 Planned |
+Every retailer lands on a **rung** of an escalation ladder, and bot-y says which
+one rather than presenting them all as equally trustworthy. Rung 1 is
+impersonated HTTP, rung 2 a retailer's own sanctioned API, rung 3 a real
+browser, rung 4 "dropped, with the evidence written down". Anything read on rung
+3 is flagged `[degraded]` in `boty check` and in the status JSON — it works, and
+it is a page we rendered rather than an answer the retailer gave us. What was
+actually tried against each one, and what came back, is in
+[`docs/retailer-evidence.md`](docs/retailer-evidence.md).
+
+| Retailer | Rung | Method | Status |
+|---|---|---|---|
+| GameStop | 1 | `curl_cffi` + schema.org JSON-LD | ✅ Working |
+| Walmart | 1 | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ✅ Working |
+| Best Buy | 3 (2 with a key) | Headless browser + schema.org JSON-LD, reached by SKU search redirect. Official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]` — needs no credentials; a free-but-manually-approved API key upgrades it to rung 2 and drops the flag. Best Buy does not appear to stock the GO Plus + itself, so only a control is configured |
+| Target | — | RedSky API | 🚧 Planned |
+| Pokémon Center | — | — | 🚧 Planned |
+
+**A browser is not a strict upgrade.** The same headless Chrome that reads Best
+Buy is served a Cloudflare wall by gamestop.com, which rung 1 reads on every
+`make verify`. Rung 3 fixes the JavaScript fingerprint and leaves the TLS one
+untouched, so it is for a retailer that refuses HTTP *at the connection layer* —
+not something to reach for because a fetch failed once.
 
 ## Install
 
@@ -72,6 +87,26 @@ git clone https://github.com/danieljamesjohnson/bot-y
 cd bot-y
 python3 -m venv .venv && .venv/bin/pip install -e .
 ```
+
+### The browser rung (only if you want Best Buy)
+
+Rung 3 needs an extra and a browser binary. Both are optional — every rung-1
+retailer works without them, and the extra is kept separate so contributors on
+those retailers never pull a browser stack:
+
+```bash
+.venv/bin/pip install -e '.[browser]'
+export BOTY_BROWSER_PATH=/path/to/chrome    # only if none is on PATH
+```
+
+`BOTY_BROWSER_PATH` is read from the environment rather than the config file
+because which browser a machine has is a property of the *machine*. Discovery
+tries `google-chrome`, `chromium` and friends on `PATH` first. On Ubuntu 24.04 an
+*unpackaged* Chrome cannot build its sandbox — the kernel denies unprivileged
+user namespaces to binaries with no AppArmor profile — and aborts on startup;
+`BOTY_BROWSER_NO_SANDBOX=1` works around that, opt-in and per host, but it is a
+real reduction in isolation because this transport executes retailer JavaScript.
+A distro Chrome package is the better fix.
 
 ## Use
 
@@ -120,7 +155,7 @@ exits **0** only if every check below passed, and prints `VERIFY: PASS` or
 
 | Stage | Proves |
 |---|---|
-| `test` | The 36 offline tests still pass — no network touched |
+| `test` | The offline suite still passes — no network touched, no browser started |
 | `types` | `mypy` is clean over `boty/` and `scripts/` |
 | `fixtures` | Warns about fixtures older than 90 days or missing a capture note. Never fails |
 | `controls` | Live control products still read in stock |
@@ -135,11 +170,11 @@ in stock, the detector is broken, because a control is chosen precisely because
 it is always available.
 
 `mutation` exists because a green suite is not evidence that it detects
-anything. It corrupts three specific things in a throwaway copy of the package —
-inverting the buyable check, turning "I could not read this page" into
-out-of-stock, disabling the seller filter — and requires the tests to go red for
-each. A survivor names a real hole: that breakage could ship with every test
-green.
+anything. It corrupts specific things in a throwaway copy of the package — the
+buyable check, "I could not read this page" becoming out-of-stock, the seller
+filter, the price ceiling, the restock edge detector, the degraded flag — and
+requires the tests to go red for each. A survivor names a real hole: that
+breakage could ship with every test green.
 
 If you have no internet, the live check **skips** and says so rather than
 failing. A verify that goes red because someone's wifi dropped gets ignored
