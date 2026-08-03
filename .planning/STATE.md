@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-08-03T04:05:11.794Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-08-03T04:28:14.150Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 50
 ---
 
@@ -27,13 +27,13 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Milestone:** v1.0
 **Phase:** 3 of 4 (the hard two)
-**Plan:** 2 of 3
-**Last session:** 2026-08-03T04:05:11.790Z
-**Stopped At:** Completed 03-01-PLAN.md
+**Plan:** 3 of 3
+**Last session:** 2026-08-03T04:28:14.146Z
+**Stopped At:** Completed 03-02-PLAN.md
 **Last Activity:** 2026-08-03
-**Last Activity Description:** 03-01 complete — Amazon is rung 4 by its Conditions of Use (zero product-page requests), and `scripts/evidence_check.py` replaces Phase 2's vacuous count clause
+**Last Activity Description:** 03-02 complete — Target is rung 4 by its Terms & Conditions (zero product-page requests, 4 policy reads), so BOTH of the hard two refused in writing and the five-retailer criterion is recorded unmet at four
 **Resume File:** None
-**Next command:** `/gsd-execute-phase 3` — 03-02 (Target) is next and now carries the whole weight of phase criterion 5. Still halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
+**Next command:** `/gsd-execute-phase 3` — 03-03 closes the phase. `evidence_check.py --phase` now exits 0 on the real tree for the first time, so the gate can be wired into `make verify`; note there is NO registered Target and no 03-04. Still halting before Phase 4 (PyPI publish and v1.0.0 tag are outward-facing and Dan's to trigger)
 
 ## What Exists
 
@@ -56,7 +56,7 @@ Working and deployed on danserver before this roadmap was written:
 ## Known Risks
 
 - ~~**Amazon may be unreachable** without a browser or paid residential proxies.~~ **Settled 2026-08-03 by 03-01, and not for the expected reason.** Reachability was never tested: Amazon's Conditions of Use forbid "any collection and use of any product listings, descriptions, or prices", so it is rung 4 with zero product-page requests ever made. No browser, no proxies, no transport work. Evidence in `docs/retailer-evidence.md` under `## Amazon`.
-- **Target is unresolved.** RedSky is CAPTCHA-gated even with a warmed cookie session; product pages fetch clean but we could not find a valid `www` TCIN. Stopped at three strikes.
+- ~~**Target is unresolved.**~~ **Settled 2026-08-03 by 03-02, and not for a technical reason.** Target's Terms & Conditions forbid "any use of data extraction, scraping, mining or other data gathering tools" and "otherwise scrape, collect, store or use any Content … product listings, descriptions, prices or images" with no commercial-use qualifier, so it is rung 4 with zero product-page requests ever made. The old RedSky/TCIN notes are superseded: RedSky is closed by `redsky.target.com/robots.txt` (`Disallow: /`, every agent) before the CAPTCHA matters, and TCIN discovery was never attempted even though `www.target.com/robots.txt` publishes a PDP sitemap. Evidence in `docs/retailer-evidence.md` under `## Target`.
 - **Fixtures go stale.** Saved HTML is a snapshot; a retailer can change its page and the fixtures will keep passing. Control products cover the live case, fixtures cover regression — neither substitutes for the other, and Phase 1 should make that split explicit.
 
 ## Decisions Pending Evaluation
@@ -81,6 +81,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 02 P03 | 71min | 3 tasks | 12 files |
 | Phase 02 P04 | 35min | 3 tasks | 15 files |
 | Phase 03 P01 | 34min | 3 tasks | 6 files |
+| Phase 03 P02 | 19min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -106,6 +107,12 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 02]: Best Buy is supported credential-free on rung 3 (browser, DEGRADED); an API key upgrades the same watch to rung 2
 - [Phase 02]: bestbuy_product_url resolves a SKU via Best Buy search — chosen because its MISS path was verified to carry no Product markup
 - [Phase 02]: No Best Buy GO Plus + watch ships: Best Buy does not carry the product; SKU 6577129 disproved and removed from tests
+- [Phase 03]: Target is rung 4, settled by its Terms & Conditions — The Unlawful or Prohibited Uses bullet forbidding data-gathering tools and storing prices carries NO commercial-use qualifier, unlike the bullet above it which does
+- [Phase 03]: Zero requests were made to any Target product page — 4 curl requests total, all policy documents and robots.txt, so the evidence log states as a fact rather than a policy that bot-y makes no requests to target.com
+- [Phase 03]: Target's robots.txt is BROADER than its ToU, the opposite direction to Amazon's — /p/ carries no Disallow and sitemap_pdp-index.xml.gz is published, so a naive reading would have been encouraging; the broader written document still governs
+- [Phase 03]: Rung 2 (RedSky) closed four ways — redsky.target.com/robots.txt is Disallow: / for every agent; the key is Target's internal front-end constant not an issuable credential; the terms cover all hosts; and it is CAPTCHA-gated
+- [Phase 03]: FIRST_PARTY['target'] stays a guarded guess, neither widened nor deleted — Widening needs a live page the terms forbid fetching; deleting would edit boty/retailers.py in a plan whose finding is that no code change is warranted. An offline test now fails the moment a target watch makes it live
+- [Phase 03]: The five-retailer criterion is UNMET at four, and now final — Both Phase 3 candidates refused in writing and Phase 2's fifth-retailer search established no other US retailer stocks the GO Plus +, so there is no honest path to five
 
 ### Blockers
 
