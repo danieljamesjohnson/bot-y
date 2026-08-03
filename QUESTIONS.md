@@ -227,11 +227,49 @@ each round the class was wider than the instances. It only stopped being true
 when deleting *any* rule, weakening *any* pattern, or narrowing the scope
 started turning the suite red — which is where it is now.
 
+**FIFTH CORRECTION — and then I stopped writing status claims and built the
+thing that makes them unnecessary.** The fourth correction retracted the state
+and left standing *"the fixtures are clean of the store name and the store id"*.
+Both were untrue:
+
+- **`data-preferred-store-id="0"` and `"0606"` shipped live in the two
+  GameStop fixtures through all five rounds.** Different values in the two
+  captures, so it is this host's preferred store, not GameStop's. No store rule
+  had ever looked at an HTML **attribute** — every one was keyed to a JSON key
+  or a query parameter.
+- **The store-NAME class had no rule at all.** `REDACTED SUPERCENTER` sat in the
+  allow-list for a rule that did not exist, while 26 real store names shipped
+  in a Best Buy fixture under `"storeName"`.
+- And `?network_type=REDACTED` — your ISP — was sitting in the guard's own test
+  file, under a comment reading *"EVERY value here is invented."*
+
+**So the fix this time is not another rule.** It is a **coverage grid**:
+10 identity classes × 4 carriers (JSON key, query parameter, `data-` attribute,
+free text). 23 cells are filled with a probe whose value is invented but whose
+*shape* is real; 17 are an explicit `None` meaning "no retailer has been
+observed writing this class in this carrier". Two tests hold it: every filled
+cell must produce a leak, and **every row must declare all four carriers** — a
+missing cell is a failure, because an absent cell is an invisible gap, which is
+what all five rounds actually were. Adding a carrier column adds a row of red
+tests.
+
+28 mutations run this round; **zero silent**. That includes the nine that
+survived last round — the ZIP+4 leading digit, `re.I` on the JSON loop, the
+JSON-quoted `"true-client-ip"` form that is the one that actually leaked, and
+narrowing the scan to one page per directory.
+
+**This does not mean there is no seventh spelling.** There probably is. What
+changed is that finding one now means filling a cell that is currently `None`
+and watching a test go red — rather than a verifier reading a megabyte of
+fixture and noticing.
+
 **What this means for your decision.** Everything above is in **unpushed**
 commits, so all of it is fixable at zero history cost. What is live and public
 right now is unchanged by any of it: the IP and full EdgeScape record in
 `02-REVIEW.md`, the ZIP in both Walmart fixtures, the store id and state in the
-Best Buy fixtures.
+Best Buy fixtures, and the GameStop preferred-store id. **That list is the thing
+to price, and it has only grown across five rounds — which is itself an argument
+for option 2 rather than option 1.**
 
 **None of that changes the decision below.** The blobs are still in pushed
 history exactly as described. What changed is that the working tree really is

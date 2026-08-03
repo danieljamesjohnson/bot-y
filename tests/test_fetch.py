@@ -428,12 +428,18 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     # gets quietly satisfied, and a mutation that does exactly that is pinned in
     # `test_the_allow_list_cannot_absorb_a_real_value`.
     allowed = {"REDACTED", "00000", "0.0000", "0.0", "0", "XX",
-               "REDACTED SUPERCENTER", "REDACTED-CITY", "NOT-AVAILABLE"}
+               "REDACTED SUPERCENTER", "REDACTED STORE", "REDACTED-CITY",
+               "NOT-AVAILABLE", "NULL"}
     leaks: list[str] = []
 
     # A CDN echoing the client's own address back into the page.
     for header in ("true-client-ip", "x-forwarded-for", "client-ip"):
         for match in re.finditer(
+            # The gap allows `"true-client-ip":"1.2.3.4"` — the JSON-quoted
+            # form is the one that actually leaked in `02-REVIEW.md`, and both
+            # synthetic cases used the bare `header: ip` form, so narrowing the
+            # gap was silent. First octet is 1-3 digits: a 3-digit octet is the
+            # commonest shape of a real address.
             rf"{re.escape(header)}[^0-9]{{0,12}}(\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}})",
             body,
             re.I,
@@ -475,6 +481,10 @@ def _identity_leaks(name: str, body: str) -> list[str]:
         (r'"(?:refreshToken|accessToken|sessionId|session_id|deviceId)"\s*:\s*"([^"]{8,})"', "session token"),
         (r'"(?:visitor_id|visitorId|guest_id|guestId)"\s*:\s*"([^"]{8,})"', "visitor id"),
     )
+    # `re.I` is load-bearing: `{"ZipCode":"…"}` is a real spelling, and
+    # dropping the flag was a silent mutation. The loop falls through on an
+    # allowed value rather than breaking, for the same ordering reason as the
+    # two loops above — the Walmart fixtures put the placeholder first.
     for pattern, what in json_markers:
         for match in re.finditer(pattern, body, re.I):
             value = match.group(match.lastindex or 0)
@@ -516,6 +526,16 @@ def _identity_leaks(name: str, body: str) -> list[str]:
     # caught by rules written against coordinates.
     keyed = (
         (r'"(?:pickup|delivery|preferred|nearest|selected|home|fulfillment)?[Ss]tore(?:_?[Ii]d|Number|No|Code)?"\s*:\s*"?(\d+)', "store number"),
+        # `data-` attributes. GameStop shipped `data-preferred-store-id="0"`
+        # through all five rounds of this — DIFFERENT values in the two
+        # captures, so it is this host's preferred store, not GameStop's. No
+        # store rule had ever looked at an HTML attribute.
+        (r'data-[a-z-]*store[a-z-]*(?:-id|-number)?="(\d+)"', "store number in a data- attribute"),
+        (r'data-[a-z-]*(?:city|zip|postal|state|region|store-name)[a-z-]*="([A-Za-z0-9][^"]{1,40})"', "geolocation in a data- attribute"),
+        # The store NAME class had no rule at all — `REDACTED SUPERCENTER` sat
+        # in the allow-list for a rule that did not exist, while 26 real store
+        # names shipped in a Best Buy fixture.
+        (r'"(?:storeName|store_name|locationName|locationDisplayName)"\s*:\s*"([^"]{2,40})"', "store name"),
         (r'\bstore(?:_?[Ii]d|Number)\s*(?:=|%3D)\s*(\d+)', "store number in a URL"),
         (r'"(?:state|region|province)(?:Code|OrProvinceCode|_code)?"\s*:\s*"([A-Z]{2})"', "state or region"),
         (r'"(?:city|cityName|locality|town)"\s*:\s*"([A-Za-z][A-Za-z .\'-]{2,})"', "city"),
@@ -640,6 +660,12 @@ def test_the_fixture_identity_guard_catches_every_leak_class() -> None:
         # ZIP+4 — the whole rule was unwatched, and it is the one carrying a
         # comment asking maintainers not to delete it.
         "Ships to 99999-1234": "ZIP+4",
+        # A ZIP+4 that does not begin with 9, and a mixed-case JSON key. Both
+        # were silent mutations: narrowing ZIP+4 to a leading 9, and dropping
+        # `re.I` from the json_markers loop, each passed every other case.
+        "Ships to 02134-1234": "ZIP+4",
+        '{"ZipCode":"02134"}': "postal code",
+        '{"VisitorID":"0193f2ab-8c1d-7e2a-b4f6-9a0c1d2e3f45"}': "visitor id",
         '{"shippingZipcode":"99999"}': "postal code",
         '{"store_id":"202"}': "store number",
         '{"deliveryWICAgencies":["TX"]}': "state via WIC agency",
@@ -744,6 +770,74 @@ def test_each_rule_fires_on_a_value_of_the_REAL_shape_not_just_the_synthetic_one
         )
 
 
+#: The coverage grid: every identity CLASS this repo has ever leaked, against
+#: every CARRIER a retailer has ever written one in. A cell is a probe whose
+#: value is invented but whose *shape* is real; `None` means "no retailer has
+#: been observed writing this class in this carrier, and no rule is claimed".
+#:
+#: WHY THIS EXISTS, AND IT IS THE ONLY REASON. Five verification rounds each
+#: found a leak keyed to a spelling nobody had been shown yet: a free-text
+#: `City, ZIP` after the JSON rules; a query-form `region_code=` after the JSON
+#: `regionCode`; a `data-preferred-store-id` attribute after both. Every round
+#: fixed the instances it was handed, and the class was always wider than the
+#: instances. A grid does not stop that — nothing does — but it makes the
+#: *unfilled cells visible as a failing test* instead of as a future discovery.
+#: Adding a carrier column adds a row of red tests, which is the point.
+IDENTITY_GRID: dict[str, dict[str, str | None]] = {
+    #  class          json key                          query param                 data- attribute                          free text
+    "city":     {"json": '{"city":"Plano"}',            "query": "?city=Plano",     "data": 'data-city="Plano"',             "text": "Plano, 75024"},
+    "state":    {"json": '{"stateCode":"MN"}',          "query": "?state=MN",       "data": 'data-region="MN"',              "text": "Plano, TX 75024"},
+    "zip":      {"json": '{"zipCode":"02134"}',         "query": "?zip=02134",      "data": 'data-postal-code="02134"',      "text": None},
+    "coord":    {"json": '{"latitude":"33.1"}',         "query": "?lat=33.1",       "data": None,                            "text": None},
+    "store_no": {"json": '{"storeId":"7"}',             "query": "?storeId=7",      "data": 'data-preferred-store-id="0"', "text": None},
+    "store_nm": {"json": '{"storeName":"Burnsville"}',  "query": None,              "data": 'data-store-name="Burnsville"',  "text": None},
+    "street":   {"json": '{"addressLineOne":"1 Way"}',  "query": None,              "data": None,                            "text": None},
+    "phone":    {"json": None,                          "query": None,              "data": None,                            "text": "Store: 469-555-0100"},
+    "ip":       {"json": '{"true-client-ip":"192.0.2.1"}', "query": None,      "data": None,                            "text": "true-client-ip: 192.0.2.1"},
+    "isp":      {"json": None,                          "query": "?network_type=fiber", "data": None,                        "text": None},
+}
+
+
+def test_every_declared_grid_cell_is_actually_caught() -> None:
+    """Each filled cell of `IDENTITY_GRID` must produce a leak. No exceptions.
+
+    This is the assertion that turns "we fixed the spellings we were shown"
+    into "the class is covered in every carrier we have declared". A cell that
+    a maintainer fills in optimistically fails here until a rule exists.
+    """
+    misses = []
+    for cls, carriers in IDENTITY_GRID.items():
+        for carrier, probe in carriers.items():
+            if probe is None:
+                continue
+            if not _identity_leaks("grid.html", probe):
+                misses.append(f"{cls} / {carrier}: {probe!r}")
+    assert not misses, (
+        "the identity guard declares these class/carrier cells covered and "
+        "catches none of them:\n  " + "\n  ".join(misses)
+    )
+
+
+def test_the_grid_declares_every_carrier_for_every_class_it_has_leaked() -> None:
+    """An unfilled cell must be a deliberate `None`, never an omission.
+
+    Every class here has been leaked by this repo at least once. The `None`s
+    are claims — "no retailer has been observed writing this class in this
+    carrier" — and a claim that turns out to be wrong shows up as a new leak,
+    at which point the cell gets filled and a rule gets written. What must
+    never happen is a cell simply missing, because then nobody is claiming
+    anything and the gap is invisible again.
+    """
+    carriers = {"json", "query", "data", "text"}
+    for cls, row in IDENTITY_GRID.items():
+        assert set(row) == carriers, (
+            f"grid row {cls!r} does not declare every carrier — missing "
+            f"{sorted(carriers - set(row))}. Write `None` with a reason rather "
+            f"than leaving the cell out; an absent cell is an invisible gap, "
+            f"which is what five rounds of this were."
+        )
+
+
 def test_the_allow_list_cannot_absorb_a_real_value() -> None:
     """`allowed` is a redaction vocabulary, not an exemption list.
 
@@ -770,7 +864,7 @@ def test_the_allow_list_cannot_absorb_a_real_value() -> None:
             or bare.isdigit() and set(bare) <= {"0"}          # 00000, 0, 0.0
             or entry.upper() == "XX"                           # not a state
             or "REDACTED" in entry.upper()                     # a placeholder word
-            or entry.upper() == "NOT-AVAILABLE"                # a CDN's own sentinel
+            or entry.upper() in {"NOT-AVAILABLE", "NULL"}      # CDN / JS sentinels
         ), (
             f"{entry!r} is in the identity guard's allow-list but is not a "
             f"placeholder. Allow-listing a real value silently disables this "
