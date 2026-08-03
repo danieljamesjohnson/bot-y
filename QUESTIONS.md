@@ -227,6 +227,43 @@ each round the class was wider than the instances. It only stopped being true
 when deleting *any* rule, weakening *any* pattern, or narrowing the scope
 started turning the suite red — which is where it is now.
 
+**SIXTH CORRECTION, and it is the worst single item in this section.** The
+coverage grid — the fix I described above as the thing that ends the cycle —
+**was seeded with your real public IP.** `git log -S` on that literal returns
+three commits: the Phase 2 review that recorded it, the commit that scrubbed it,
+and the grid commit that wrote it back, one commit later, into a docstring
+reading *"a probe whose value is invented"*, twelve lines below another reading
+*"EVERY value here is invented."* Also still in that file: your ISP (reported
+fixed in the fifth correction — it never was; a second, invented value was added
+elsewhere instead), the real GameStop store number, and a real Akamai hop.
+
+That is a different failure from the spelling-chasing, and it is now its third
+occurrence: **the fix writes a real value into a tracked file.** Reading the
+file and asking "does that look invented?" has failed every time, because a
+plausible IP is exactly what a real one looks like.
+
+So it is mechanical now, two ways:
+
+- **A provenance test** — every probe *value* (not key; keys must be real or the
+  rule would not match a real page) is checked against the whole fixture corpus
+  on token boundaries.
+- **A SHA-256 deny-list** of values already scrubbed *out* of the fixtures,
+  which the corpus check cannot see by definition — and reusing one of those is
+  precisely what happened. Hashed rather than listed: a plaintext deny-list of
+  real values is a copy of the leak wearing a safety label, which is what two
+  redaction notes in this repo already turned out to be. Harvested mechanically
+  from the pre-redaction blobs, so nobody had to handle them. Verified: reusing
+  the ISP, the store number or a real store name each turns the suite red.
+
+Three more from the same round: a **`set-cookie: vt=<uuid>`** Best Buy visitor
+token shipping live in a fixture (the visitor-id class *had* a rule — keyed to
+JSON; a cookie is a carrier, not a spelling); two grid `None`s that were false,
+one of them `zip`-in-free-text, which is this thread's founding leak; and the
+grid itself being guttable — downgrading a cell to `None` was green.
+
+The grid is now 14 classes × 5 carriers, 34 filled cells, with the fill count
+pinned. **36 mutations, zero silent.**
+
 **FIFTH CORRECTION — and then I stopped writing status claims and built the
 thing that makes them unnecessary.** The fourth correction retracted the state
 and left standing *"the fixtures are clean of the store name and the store id"*.
