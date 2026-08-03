@@ -23,7 +23,7 @@ import json
 
 from boty import retailers
 from boty.fetch import Blocked, FetchError, Page
-from boty.models import Availability, Watch
+from boty.models import Availability, Rung, Watch
 from boty.parse import Offer
 
 GAMESTOP_URL = "https://www.gamestop.com/example"
@@ -350,6 +350,13 @@ def test_bestbuy_api_key_never_reaches_the_result(
     assert result.url == "https://www.bestbuy.com/site/-/6577129.p"
     assert result.availability is Availability.UNKNOWN
     assert result.detail, "a UNKNOWN verdict must still say why"
+    # An error from the official API is still a rung-2 reading. Leaving the
+    # default in place here would label a key-holder's UNKNOWN as a plain TLS
+    # fetch, and the support matrix reads exactly this field to say which rung
+    # Best Buy landed on — so the error paths have to carry it too, not just
+    # the happy one.
+    assert result.rung is Rung.API, f"{name}: an api error is still an api reading"
+    assert result.degraded is False
 
 
 def _bestbuy_url() -> str:
@@ -369,6 +376,8 @@ def test_bestbuy_success_reports_the_public_product_url(
     assert result.availability is Availability.IN_STOCK
     assert result.price == 54.99
     assert API_KEY not in result.url and API_KEY not in result.detail
+    assert result.rung is Rung.API
+    assert result.degraded is False, "the sanctioned API is not a degraded transport"
 
 
 # --------------------------------------------------------------------------
