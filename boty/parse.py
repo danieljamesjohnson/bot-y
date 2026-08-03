@@ -68,7 +68,21 @@ def ldjson_offers(html: str) -> list[Offer] | None:
         except json.JSONDecodeError:
             continue
         for node in _iter_nodes(doc):
-            if node.get("@type") != "Product":
+            # schema.org allows a node to declare several types at once, and
+            # `["Product", "ProductModel"]` is ordinary first-party markup. An
+            # exact comparison skips it, and the skip is quiet: `saw_product`
+            # stays False, so the page reads as "no product here" and the
+            # caller says UNKNOWN. That fails safe — it costs coverage, not
+            # correctness — which is exactly why nobody noticed, and why it
+            # would present as a mysterious UNKNOWN on a retailer whose page
+            # is otherwise perfectly readable.
+            #
+            # Membership, not attribute access: a `@type` that is a dict, an
+            # int or a nested list simply fails the test and the node is
+            # skipped, rather than raising on retailer-controlled JSON.
+            types = node.get("@type")
+            types = types if isinstance(types, list) else [types]
+            if "Product" not in types:
                 continue
             saw_product = True
             offers = node.get("offers") or []
