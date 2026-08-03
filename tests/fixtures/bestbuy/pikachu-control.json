@@ -1,0 +1,10 @@
+{
+  "url": "https://www.bestbuy.com/site/searchpage.jsp?st=6216393",
+  "retailer": "bestbuy",
+  "name": "pikachu-control",
+  "captured_at": "2026-08-03T00:31:57Z",
+  "status": 200,
+  "bytes": 1138732,
+  "note": "IN_STOCK at $59.99, sold by Best Buy \u2014 SKU 6216393 (Pokemon: Let's Go, Pikachu!, Switch), reached by SKU search redirect",
+  "transport": "browser"
+}

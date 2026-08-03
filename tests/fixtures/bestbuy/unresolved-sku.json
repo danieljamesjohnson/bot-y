@@ -1,0 +1,10 @@
+{
+  "url": "https://www.bestbuy.com/site/searchpage.jsp?st=6577129",
+  "retailer": "bestbuy",
+  "name": "unresolved-sku",
+  "captured_at": "2026-08-03T00:32:50Z",
+  "status": 200,
+  "bytes": 921981,
+  "note": "SKU 6577129 resolves to no product: Best Buy returns a search page with no schema.org Product markup, which must read UNKNOWN and never OUT_OF_STOCK",
+  "transport": "browser"
+}

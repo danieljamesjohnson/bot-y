@@ -20,8 +20,12 @@ from __future__ import annotations
 import pytest
 
 import json
+import os
+from pathlib import Path
 
 from boty import retailers
+from boty.cli import _make_checker
+from boty.config import Config
 from boty.fetch import Blocked, FetchError, Page
 from boty.models import Availability, Rung, Watch
 from boty.parse import Offer
@@ -394,6 +398,332 @@ def test_bestbuy_success_reports_the_public_product_url(
     assert API_KEY not in result.url and API_KEY not in result.detail
     assert result.rung is Rung.API
     assert result.degraded is False, "the sanctioned API is not a degraded transport"
+
+
+# --------------------------------------------------------------------------
+# Best Buy on rung 3: the browser adapter
+# --------------------------------------------------------------------------
+
+
+def _serve_rendered(monkeypatch: pytest.MonkeyPatch, html: str) -> None:
+    """Make `check_bestbuy_browser`'s render return this HTML.
+
+    Patches the module attribute rather than `boty.browser.fetch_rendered`, the
+    same shape `_serve` uses for `get`, because that is the name
+    `boty.retailers` actually looks up at call time — and because conftest's
+    guard patches the layer below, so a test that got this wrong fails loudly
+    instead of launching Chrome at bestbuy.com.
+    """
+
+    def _rendered(target: str, **kwargs: object) -> Page:
+        return Page(url=target, status=200, text=html)
+
+    monkeypatch.setattr(retailers, "fetch_rendered", _rendered)
+
+
+def _raise_rendered(monkeypatch: pytest.MonkeyPatch, exc: Exception) -> None:
+    def _rendered(target: str, **kwargs: object) -> Page:
+        raise exc
+
+    monkeypatch.setattr(retailers, "fetch_rendered", _rendered)
+
+
+def test_bestbuy_sku_becomes_the_url_that_actually_resolves() -> None:
+    """Both rungs build the link from one helper, and it is not the dead one.
+
+    `/site/-/<sku>.p` is refused by Best Buy (HTTP/2 stream reset, reproducibly),
+    so a Result carrying it published a link that does not load. Search on a
+    bare SKU redirects to the product page instead — see
+    `docs/retailer-evidence.md`.
+    """
+    url = retailers.bestbuy_product_url("6216393")
+
+    assert url == "https://www.bestbuy.com/site/searchpage.jsp?st=6216393"
+    assert ".p" not in url.rsplit("/", 1)[-1], "the legacy refused URL form is back"
+
+
+def test_bestbuy_control_fixture_is_in_stock_priced_and_alertable(
+    monkeypatch: pytest.MonkeyPatch, bestbuy_pikachu: str
+) -> None:
+    """The control has to be able to go green, and a price has to come with it.
+
+    Price is not decoration here. `Result.alertable` returns False when a
+    ceiling is configured and `price is None`, so an adapter that read
+    availability and skipped price could never alert on a real product watch —
+    it would look like it worked right up until the drop it was bought for.
+    """
+    _serve_rendered(monkeypatch, bestbuy_pikachu)
+    watch = Watch(name="Let's Go, Pikachu!", retailer="bestbuy", target="6216393", control=True)
+
+    result = retailers.check_bestbuy_browser(watch)
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.price == 59.99
+    assert result.alertable is True
+    assert "Best Buy" in result.detail
+
+
+def test_bestbuy_price_ceiling_still_bites_on_the_browser_rung(
+    monkeypatch: pytest.MonkeyPatch, bestbuy_pikachu: str
+) -> None:
+    """A degraded reading is still subject to both flipper defences.
+
+    Rung 3 changes how confident we are in the reading, not what counts as a
+    restock — so the ceiling has to be applied to the price this path extracts,
+    not merely to the ones rung 1 does.
+    """
+    _serve_rendered(monkeypatch, bestbuy_pikachu)
+    watch = Watch(name="cheap thing", retailer="bestbuy", target="6216393", max_price=20)
+
+    result = retailers.check_bestbuy_browser(watch)
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.alertable is False, "$59.99 cleared a $20 ceiling"
+
+
+def test_every_browser_reading_is_tagged_browser_and_degraded(
+    monkeypatch: pytest.MonkeyPatch, bestbuy_pikachu: str
+) -> None:
+    """The success path and both failure paths, because a rung is a transport fact.
+
+    An UNKNOWN produced by a browser that could not start is still a browser
+    reading. Leaving the `Rung.TLS` default on the error paths would label it a
+    plain page fetch, and the support matrix makes its claim on exactly this
+    field.
+    """
+    watch = Watch(name="Let's Go, Pikachu!", retailer="bestbuy", target="6216393")
+
+    _serve_rendered(monkeypatch, bestbuy_pikachu)
+    ok = retailers.check_bestbuy_browser(watch)
+
+    _raise_rendered(monkeypatch, Blocked("rendered challenge page matched 'robot or human'"))
+    blocked = retailers.check_bestbuy_browser(watch)
+
+    _raise_rendered(monkeypatch, FetchError("browser did not finish rendering within 45.0s"))
+    failed = retailers.check_bestbuy_browser(watch)
+
+    for result in (ok, blocked, failed):
+        assert result.rung is Rung.BROWSER
+        assert result.degraded is True
+        assert result.url == "https://www.bestbuy.com/site/searchpage.jsp?st=6216393"
+
+
+def test_bestbuy_page_with_no_product_markup_is_unknown_not_out_of_stock(
+    monkeypatch: pytest.MonkeyPatch, bestbuy_unresolved_sku: str
+) -> None:
+    """Restated for this adapter deliberately, on a real page, not a synthetic one.
+
+    The suite's most important assertion is repeated per adapter rather than
+    assumed to carry over from GameStop's — every transport has its own way of
+    getting lost. This fixture is the genuine article: Best Buy's response to a
+    SKU that resolves to nothing is a search page listing a dozen other
+    products with no schema.org Product markup on any of them. Reading that as
+    OUT_OF_STOCK would be a confident wrong answer forever; reading one of
+    those other products as the answer would be worse still.
+    """
+    _serve_rendered(monkeypatch, bestbuy_unresolved_sku)
+    watch = Watch(name="not a real sku", retailer="bestbuy", target="6577129")
+
+    result = retailers.check_bestbuy_browser(watch)
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.availability is not Availability.OUT_OF_STOCK, (
+        "an unreadable Best Buy page must never be reported as out-of-stock — "
+        "that is the silent failure mode this project exists to prevent"
+    )
+    assert result.alertable is False
+    assert result.price is None, "a page with no offers must not carry a price from somewhere else"
+    assert result.detail
+
+
+def test_blocked_browser_render_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bot wall that renders is still a bot wall, not an out-of-stock reading."""
+    _raise_rendered(monkeypatch, Blocked("rendered challenge page matched 'robot or human'"))
+
+    result = retailers.check_bestbuy_browser(_bestbuy_watch())
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.availability is not Availability.OUT_OF_STOCK
+    assert "blocked" in result.detail
+    assert result.url == retailers.bestbuy_product_url(BESTBUY_SKU)
+
+
+def test_failed_browser_render_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    _raise_rendered(monkeypatch, FetchError("chrome exited with status 127"))
+
+    result = retailers.check_bestbuy_browser(_bestbuy_watch())
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.availability is not Availability.OUT_OF_STOCK
+    assert "fetch failed" in result.detail
+    assert "127" in result.detail
+
+
+def test_browser_failures_do_not_publish_this_machines_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`Result.detail` is served over HTTP, and only this rung talks about the host.
+
+    The browser transport reports failures in terms of the local machine — a
+    missing binary, a Chrome that would not start, a profile directory. Those
+    strings go straight into `served/boty/status.json`. A restock monitor has
+    no business telling whoever can reach the dashboard where this user's home
+    directory is.
+    """
+    home = os.path.expanduser("~")
+    monkeypatch.setenv(retailers.BROWSER_PATH_ENV, f"{home}/.cache/secretdir/chrome")
+    _raise_rendered(
+        monkeypatch,
+        FetchError(f"could not launch {home}/.cache/secretdir/chrome from {home}/projects"),
+    )
+
+    result = retailers.check_bestbuy_browser(_bestbuy_watch())
+
+    assert result.availability is Availability.UNKNOWN
+    assert home not in result.detail, "the browser path leaked a host filesystem path"
+    assert "secretdir" not in result.detail
+    assert result.detail, "a redacted UNKNOWN must still say why"
+
+
+def test_the_browser_rung_is_never_reached_without_being_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No browser starts in this suite, with or without BOTY_BROWSER_PATH set.
+
+    The offline guarantee is the reason these tests are worth anything, and rung
+    3 is the one transport that could break it without tripping a single socket
+    patch — Chrome does the fetching in a subprocess. So this deliberately does
+    NOT patch `retailers.fetch_rendered`: what must happen is conftest's guard
+    firing, un-downgraded, rather than a live render or a bland UNKNOWN.
+    """
+    monkeypatch.delenv(retailers.BROWSER_PATH_ENV, raising=False)
+
+    with pytest.raises(BaseException, match="test attempted a live network request") as caught:
+        retailers.check_bestbuy_browser(_bestbuy_watch())
+
+    assert not isinstance(caught.value, Exception), (
+        "the guard was downgraded into an ordinary exception, so check_bestbuy_browser "
+        "would have turned a live-network attempt into a quiet UNKNOWN verdict"
+    )
+
+
+# --------------------------------------------------------------------------
+# The dispatch seam: same watch, two rungs
+# --------------------------------------------------------------------------
+
+
+def _bestbuy_config(api_key: str) -> Config:
+    return Config(watches=[_bestbuy_watch()], bestbuy_api_key=api_key)
+
+
+def test_a_key_upgrades_the_same_watch_from_browser_to_api(
+    monkeypatch: pytest.MonkeyPatch, bestbuy_pikachu: str
+) -> None:
+    """One YAML entry, two rungs, and the flag follows the transport.
+
+    `scripts/control_check.py` builds its checker with this same function, so
+    this is the routing the live gate exercises too. The point of the assertion
+    pair is that nothing about the *watch* changes: the SKU, the name and the
+    config entry are identical, and only the presence of a credential decides
+    whether the reading is degraded.
+    """
+    watch = _bestbuy_watch()
+
+    _serve_rendered(monkeypatch, bestbuy_pikachu)
+    without_key = _make_checker(_bestbuy_config(""))(watch)
+
+    _serve(monkeypatch, '{"products": [{"salePrice": 59.99, "onlineAvailability": true}]}')
+    with_key = _make_checker(_bestbuy_config(API_KEY))(watch)
+
+    assert without_key.rung is Rung.BROWSER
+    assert without_key.degraded is True
+
+    assert with_key.rung is Rung.API
+    assert with_key.degraded is False, "the sanctioned API is not a degraded transport"
+
+    # Same product, same verdict — the rung is the only thing that moved.
+    assert without_key.availability is with_key.availability is Availability.IN_STOCK
+    assert without_key.price == with_key.price == 59.99
+
+
+def test_no_key_does_not_mean_no_best_buy(monkeypatch: pytest.MonkeyPatch, bestbuy_pikachu: str) -> None:
+    """The regression this whole plan exists to prevent.
+
+    Best Buy used to be gated on a credential that needs manual approval and
+    rejects free email domains, which made it a footnote rather than a
+    supported retailer. A fresh clone with nothing configured must get a real
+    stock verdict.
+    """
+    _serve_rendered(monkeypatch, bestbuy_pikachu)
+
+    result = _make_checker(_bestbuy_config(""))(_bestbuy_watch())
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.detail and "key" not in result.detail.lower()
+
+
+def test_non_bestbuy_watches_are_untouched_by_the_bestbuy_branch(
+    monkeypatch: pytest.MonkeyPatch, gamestop_ps5: str
+) -> None:
+    """A browser is not a strict upgrade — headless Chrome is walled by GameStop.
+
+    So the new arm must be exactly that, an arm. If `_make_checker` ever
+    started routing everything through rung 3, GameStop and Walmart would break
+    while Best Buy looked fine.
+    """
+    _serve(monkeypatch, gamestop_ps5)
+    _raise_rendered(monkeypatch, AssertionError("a GameStop watch was routed through the browser"))
+
+    result = _make_checker(_bestbuy_config(""))(
+        Watch(name="PS5", retailer="gamestop", target=GAMESTOP_URL, control=True)
+    )
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.rung is Rung.TLS
+    assert result.degraded is False
+
+
+# --------------------------------------------------------------------------
+# The shipped config: every retailer answers for itself
+# --------------------------------------------------------------------------
+
+
+def test_every_configured_retailer_has_a_control_watch() -> None:
+    """REQ-06, pinned offline as well as in `make verify`.
+
+    `scripts/control_check.py` fails the live gate on this, but only where
+    there is a network. A retailer added with no control is a detector nothing
+    can verify — a silent regression in it would look exactly like a drought —
+    and that is a fact about the config file, knowable without asking anybody.
+    """
+    cfg = Config.load(Path(__file__).resolve().parent.parent / "config" / "products.yaml")
+
+    configured = {w.retailer for w in cfg.watches}
+    verified = {w.retailer for w in cfg.watches if w.control}
+
+    assert configured, "the shipped config configures no retailers at all"
+    assert sorted(configured - verified) == []
+
+
+def test_the_shipped_bestbuy_watches_are_skus_with_no_ceiling_on_the_control() -> None:
+    """Both rungs read `target` as a SKU, and a ceiling on a control is meaningless.
+
+    A `max_price` on a control would make `alertable` depend on the market
+    rather than on the detector, which is the one thing a control is chosen to
+    be independent of.
+    """
+    cfg = Config.load(Path(__file__).resolve().parent.parent / "config" / "products.yaml")
+    bestbuy = [w for w in cfg.watches if w.retailer == "bestbuy"]
+
+    assert bestbuy, "Best Buy is supported but not configured"
+    controls = [w for w in bestbuy if w.control]
+    assert controls, "Best Buy has no control watch"
+
+    for w in bestbuy:
+        assert not w.target.startswith("http"), f"{w.name}: target must be a SKU, not a URL"
+        assert w.target.isdigit(), f"{w.name}: {w.target!r} is not a Best Buy SKU"
+    for w in controls:
+        assert w.max_price is None, f"{w.name}: a control must not carry a price ceiling"
 
 
 # --------------------------------------------------------------------------
