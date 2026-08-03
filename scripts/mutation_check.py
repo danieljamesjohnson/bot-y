@@ -76,9 +76,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: the real docs/retailer-evidence.md through scripts/evidence_check.py — the
 #: retailer count and the written verdicts are a claim the suite is supposed to
 #: police, and a sandbox without the document turns that test into a
-#: FileNotFoundError that reads exactly like a caught mutation.
+#: FileNotFoundError that reads exactly like a caught mutation. `README.md` is
+#: here for the same reason one layer along: tests/test_support_matrix.py parses
+#: the README's retailer table, because phase criterion 3 requires a rung-3
+#: retailer to be flagged DEGRADED in the support matrix as well as at runtime,
+#: and the matrix is prose in that file. M6 is precisely the mutation that
+#: clears the runtime flag, so a sandbox without the README would break the
+#: matrix half of that pair inside the run meant to score the runtime half.
 SANDBOX_CONTENTS = (
     "boty", "tests", "scripts", "config", "served", "docs", "pyproject.toml", "Makefile",
+    "README.md",
 )
 
 _IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "*.egg-info")
