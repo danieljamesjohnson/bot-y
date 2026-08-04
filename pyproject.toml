@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,38 @@ version = "0.1.0"
 description = "Self-hosted restock monitor for big retailers — TLS-impersonation fetching, structured stock data, and control products that catch broken detectors instead of failing silently."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+# PEP 639, and every clause of it measured against setuptools 83.0.0 rather
+# than taken from the PEP.
+#
+# The old form here was `license = { text = "MIT" }`. Preparing metadata with
+# it printed `SetuptoolsDeprecationWarning: `project.license` as a TOML table
+# is deprecated`, naming the replacement — a plain SPDX expression string, plus
+# `project.license-files` — and a removal date: 2027-02-18, after which builds
+# using the table form stop being supported.
+#
+# The string form emits `License-Expression: MIT` and `License-File: LICENSE`,
+# places the file at `bot_y-<v>.dist-info/licenses/LICENSE`, and prints no
+# warning at all. Both keys need setuptools 77.0.0 or newer, which is why the
+# `[build-system]` floor above moved 68 -> 77. That widens nothing: build
+# isolation already resolved the newest setuptools under `>=68` — 83.0.0 today
+# — so the floor now states what actually builds.
+#
+# There is deliberately no `License :: OSI Approved :: MIT License` entry in
+# `classifiers` below. Alongside an SPDX expression it is not a style warning:
+# setuptools raises `InvalidConfigError: License classifiers have been
+# superseded by license expressions (see PEP 639)` and the build fails outright.
+#
+# AND THE PART THAT MATTERS MOST: setuptools does NOT check that a
+# `license-files` target exists. With this key declared and no `LICENSE` on
+# disk the build succeeds silently, still emits `License-Expression: MIT`,
+# emits no `License-File`, and writes no `licenses/` directory. The build is
+# not the gate. That is exactly how this repository stayed public for three
+# phases declaring MIT here and in README.md while `git ls-files` matched
+# nothing for `licen*` and the GitHub API reported `license: None`. The gate is
+# `tests/test_packaging_metadata.py`, which reads this declaration and that
+# file and fails when they disagree in either direction.
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Dan Johnson" }]
 keywords = ["restock", "monitor", "stock", "scraping", "notifications"]
 
