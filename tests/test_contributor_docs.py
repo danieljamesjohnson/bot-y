@@ -192,6 +192,12 @@ def _looks_like_a_repo_path(token: str) -> bool:
         return False
     if "://" in token or token.startswith("-"):
         return False
+    # A leading `/` makes it a URL path, not a repo-relative one. Both documents
+    # quote the paths a retailer serves — `/us/store/products/` on Nintendo, the
+    # three Amazon paths robots.txt disallows — and resolving those against the
+    # tree root would resolve them against the filesystem root instead.
+    if token.startswith("/"):
+        return False
     if any(ch in _NOT_IN_A_PATH for ch in token):
         return False
     if "/" in token:
@@ -476,6 +482,8 @@ def test_the_path_extractor_skips_what_it_cannot_be_sure_about() -> None:
     assert not _looks_like_a_repo_path("MARKETPLACES")
     assert not _looks_like_a_repo_path("https://schema.org/InStock")
     assert not _looks_like_a_repo_path("nintendo.com/us/store/products/")
+    assert not _looks_like_a_repo_path("/us/store/products/")
+    assert not _looks_like_a_repo_path("/gp/offer-listing/")
     assert not _looks_like_a_repo_path("boty.fetch.BLOCK_PHRASES")
 
     assert _looks_like_a_repo_path("boty/retailers.py")
