@@ -1,0 +1,40 @@
+# What a published sdist contains, decided rather than inherited.
+#
+# `[tool.setuptools.packages.find] include = ["boty*"]` in pyproject.toml decides
+# what goes in the WHEEL. It constrains the sdist not at all. Measured: an sdist
+# built from this tree with no manifest contained `boty/*.py`, `README.md`,
+# `pyproject.toml`, `PKG-INFO`, a generated `setup.cfg`, `bot_y.egg-info/*` — and
+# every single `tests/test_*.py`, while shipping neither `tests/conftest.py`, nor
+# `tests/fixtures/`, nor `config/products.yaml`, nor `scripts/`. That is a test
+# suite published to PyPI that cannot possibly run: worse than shipping none,
+# because it looks like coverage.
+#
+# PRUNE RATHER THAN GRAFT, and that is the decision. The graft-it-all fix would
+# make the suite runnable from an sdist, and it would also put captured retailer
+# HTML into a public artifact. This repo redacts fixtures by CLASS rather than by
+# value precisely because a by-value guard passed on a Target capture carrying a
+# session token, a visitor id, Akamai's geolocation of this host and five nearby
+# store addresses. A file set that never leaves the repository is the stronger
+# guarantee, and `pip install` does not need the tests.
+#
+# Only `prune tests` removes anything today. The other seven are guards, and they
+# are here rather than omitted because the failure mode is silent: a future
+# `graft`, an `include_package_data` flip or a `data_files` entry can pull any of
+# these directories into a published artifact with nothing printed. Adding a
+# top-level directory to this repo now forces a decision about whether it ships —
+# `tests/test_packaging_metadata.py::test_every_unpackaged_top_level_directory_is_pruned_from_the_sdist`
+# goes red until a line appears here.
+#
+# There are deliberately NO `exclude` lines for `Makefile`, `docker-compose.yml`,
+# `QUESTIONS.md` or `state.json`. Measured: `prune` naming a directory that never
+# entered is silent, but `exclude` naming a file that never entered prints
+# `warning: no previously-included files found matching '...'` on every build,
+# forever. A permanent warning trains everyone to stop reading build output.
+prune tests
+prune config
+prune docs
+prune scripts
+prune deploy
+prune hooks
+prune served
+prune .planning

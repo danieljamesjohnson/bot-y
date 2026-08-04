@@ -43,6 +43,47 @@ license-files = ["LICENSE"]
 authors = [{ name = "Dan Johnson" }]
 keywords = ["restock", "monitor", "stock", "scraping", "notifications"]
 
+# Every classifier is a claim made to everyone who installs this, so each one
+# here is backed by something in the tree and the backing is named. The
+# temptation with this list is to pad it; a padded list is a list of things
+# nobody checked.
+#
+#   Environment :: Console          <- [project.scripts] boty = "boty.cli:main"
+#   Intended Audience :: End Users  <- README.md:3 — a self-hosted tool a person
+#                                      runs, not a library for other code
+#   Operating System :: POSIX ::    <- deploy/boty.service and
+#     Linux                            deploy/boty-web.service are the only
+#                                      install instructions this repo ships.
+#                                      Narrower than the truth may be, and
+#                                      deliberately so: `OS Independent` would
+#                                      claim Windows and macOS, and nothing here
+#                                      has ever run on either.
+#   Programming Language :: 3       <- requires-python = ">=3.10"
+#   Programming Language :: 3.10    <- the declared floor, which CI pins. 3.11,
+#                                      3.12 and 3.13 are absent because nothing
+#                                      in this tree tests them, and a version
+#                                      classifier is a claim that something did.
+#   Topic :: System :: Monitoring   <- what the thing is
+#
+# THREE ABSENCES, each deliberate:
+#   * No `License ::` classifier. Measured, not stylistic: alongside the SPDX
+#     expression above setuptools raises InvalidConfigError and the build fails.
+#   * No `Development Status ::`. Development status is a statement about the
+#     version, and the version is still 0.1.0. It lands with the 1.0.0 bump.
+#   * No `Typing :: Typed`. There is no `boty/py.typed` marker in the tree, so
+#     the classifier would advertise a typing contract no installed consumer can
+#     act on — mypy downstream would still treat `boty` as untyped. Adding the
+#     marker is a real change with real consequences and it belongs in its own
+#     commit.
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: System :: Monitoring",
+]
+
 dependencies = [
     "curl_cffi>=0.7",   # browser TLS/JA3 impersonation — the load-bearing dep
     "PyYAML>=6.0",
@@ -80,7 +121,14 @@ dev = [
 browser = ["nodriver>=0.38"]
 
 [project.urls]
+# No `Changelog` key: CHANGELOG.md does not exist yet. A metadata URL that 404s
+# is a false claim shipped to every installer — the same class of thing the
+# LICENSE work above closed. The file and the URL land together in the release
+# commit that bumps to 1.0.0.
 Homepage = "https://github.com/danieljamesjohnson/bot-y"
+Source = "https://github.com/danieljamesjohnson/bot-y"
+Issues = "https://github.com/danieljamesjohnson/bot-y/issues"
+Documentation = "https://github.com/danieljamesjohnson/bot-y#readme"
 
 [project.scripts]
 boty = "boty.cli:main"
