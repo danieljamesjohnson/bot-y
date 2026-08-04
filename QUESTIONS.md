@@ -18,7 +18,36 @@ number was your reversal of a written-terms reading, not a new technical
 finding, and a record that quietly agrees with itself afterwards is worth less
 than one that shows the turn.
 
-## 0e. Public history carries host geolocation **and this host's public IP** — history rewrite? — OPEN 2026-08-03
+## 0e. Public history carried host geolocation and this host's public IP — ANSWERED 2026-08-03, EXECUTED 2026-08-04
+
+> ### RESOLVED — nothing here needs Dan. Kept for the record.
+>
+> **Dan's decision: option 2 — rewrite history, before Phase 4.** Executed
+> 2026-08-04.
+>
+> - `git filter-repo` over all 170 commits, two passes. The first missed bare
+>   mentions in prose, because the rules were full `key=value` strings and the
+>   audit records name values in sentences.
+> - Verified against a **fresh clone from GitHub**, not the local copy: none of
+>   the values appears in any commit. Force-pushed; local and remote in sync.
+> - Every SHA changed. There is precedent — `22557af`'s own subject was
+>   "remap SHAs after the PII purge".
+> - Backup at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle`. **It is the
+>   only remaining copy of the old values.** Local, outside the repo,
+>   deliberate. Delete it when satisfied.
+> - Not done, and Dan's call if he wants it: GitHub keeps unreferenced objects
+>   reachable by old SHA until they GC. That is a support request.
+>
+> **Prevention shipped the same day** — see `scripts/identity_check.py`. The
+> rule was never the problem; it was pointed at `tests/fixtures/**` and ran only
+> in the test suite. It now scans every tracked file and runs at commit time via
+> a tracked `hooks/pre-commit` (`make hooks`), plus `make verify`.
+>
+> The exposure window was ~13 hours on a repo with 0 stars and 0 forks — not
+> months, which is what I claimed twice before checking the dates.
+
+### The original question, as it stood
+
 
 > ### READ THIS FIRST — the third round changed what is being asked
 >
