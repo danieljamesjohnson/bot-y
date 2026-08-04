@@ -953,6 +953,53 @@ JavaScript and turning the sandbox off is a real reduction in isolation. The
 better fixes, in order: a distro Chrome package, an AppArmor profile for the
 binary, or a setuid `chrome_sandbox` helper.
 
+### 2026-08-04 — Best Buy served JavaScript-escaped JSON-LD, and the control caught it
+
+The control watch went UNKNOWN at ~16:35 with:
+
+> `sku 6216393 did not resolve to a product page — no schema.org Product on it
+> carries that sku`
+
+That message was true and pointed at the wrong thing. The SKU resolved fine.
+Measured against a page captured at 17:37 and compared to
+`tests/fixtures/bestbuy/pikachu-control.html`, same SKU:
+
+| | fixture (Phase 2) | live, 2026-08-04 |
+|---|---|---|
+| `ld+json` blocks found | 3 | 3 |
+| blocks that **parse** | 3 | **0** |
+| contains `\'` | no | **yes** |
+| `ldjson_offers(sku=6216393)` | `InStock, 59.99, Best Buy` | **`None`** |
+
+Two defect shapes, and no *valid* escape anywhere in any block — no `\"`, no
+`\\`, no `\uXXXX`:
+
+- **Inside strings:** 8 × `\'` (`Pokémon: Let\'s Go, Pikachu!`). Legal in a
+  JavaScript string literal, illegal in JSON.
+- **Outside strings:** 34 × a literal `\n` where a real newline belongs. A
+  backslash outside a JSON string is never valid, which is why the breadcrumb
+  block failed at *column 2* rather than at an escape.
+
+`json.loads` was right to refuse all three. `parse.ldjson_offers` then skipped
+them silently — a deliberate fail-safe that costs coverage, not correctness —
+so the page read as "no Product here".
+
+**Resolution:** `parse.ldjson_read` tries strict parsing first and only offers
+an already-failed block to `_repair_ldjson`, which tracks string state rather
+than doing a blind replace. It reports `blocks` / `unparseable` / `repaired`,
+and a repaired read is published as `ld+json (repaired)` so it can never look
+ordinary. The healthy string stays byte-identical to the one 03.1-04 verified.
+
+**Not claimed:** that the repair is what restored the live reading. By 17:45
+Best Buy was serving valid markup again and the live read carried **no**
+`(repaired)` marker. What is proven is that the repair reads the captured
+broken block correctly, offline, to the same offer the fixture yields. Whether
+the escaping was a bad deploy or an A/B variant is unknown; if it returns, the
+repair handles it and says so.
+
+**Note for whoever sees this again:** the escaping is intermittent, so a probe
+that comes back clean does not disprove it. Compare against the fixture.
+
 ---
 
 ## Nintendo (store.nintendo.com / nintendo.com/us/store)
@@ -2307,6 +2354,42 @@ six leaks. **Applied to the fixtures already in the repo it found four more** �
 and both Best Buy fixtures carried session visitor ids. All four were redacted in
 the same commit. Those are Walmart and Best Buy fixtures, found by a Target
 change; the leak class is the browser rung's, not any one retailer's.
+
+### 2026-08-04 — Target's UNKNOWN was our render race, not their page
+
+The control went UNKNOWN at 16:24 with `no structured stock data found (page
+shape changed?)`. Target's page had not changed. Measured on the live page,
+same URL, minutes apart, varying only `fetch_rendered(settle_seconds=…)`:
+
+| settle | bytes | `add to cart` occurrences | `add_to_cart_offers` |
+|---|---|---|---|
+| 1.0 s | 317,597 | 1 | **`None` → UNKNOWN** |
+| 1.0 s | 317,597 | 1 | **`None` → UNKNOWN** |
+| 3.0 s | 352,344 | 3 | `add-to-cart enabled` |
+| 3.0 s | 352,320 | 3 | `add-to-cart enabled` |
+| 6.0 s | 351,772 | 3 | `add-to-cart enabled` |
+
+**≈35 KB of markup, containing the control, arrives between one second and
+three** — and `fetch_rendered`'s default is exactly `3.0`, sitting on the edge.
+The box was under sustained load that afternoon; the beat ran out.
+
+The reader behaved correctly throughout. It found no control and said "the page
+changed and I got lost" rather than guessing OUT_OF_STOCK — the UNKNOWN
+contract doing precisely its job. What was wrong was being handed a
+half-rendered page.
+
+**Resolution:** `check_target_browser` re-renders once at
+`_TARGET_RETRY_SETTLE = 10.0` when `add_to_cart_offers` returns `None`, then
+concludes. In the **adapter**, not the transport: this is a layout question
+("the thing I know how to read was not there yet"), and `boty/browser.py` is
+deliberately ignorant of layout — that ignorance is what lets one transport
+serve two retailers reading completely different things. It costs one extra
+render only on the failure path, and a page that genuinely has no control still
+returns `None` twice and still reads UNKNOWN.
+
+**Best Buy is not exposed to this** despite sharing the rung: what it reads is
+schema.org JSON-LD present in the server-rendered HTML. Its own failure the
+same evening was unrelated — see § Best Buy, 2026-08-04.
 
 #### Registration
 
