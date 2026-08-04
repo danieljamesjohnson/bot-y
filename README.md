@@ -343,6 +343,26 @@ daily, never contested. Don't use a console: on Walmart those are often held by
 marketplace sellers, so an out-of-stock reading would be *correct* and you'd
 chase a bug that isn't there.
 
+## Adding a retailer
+
+Adding a *product* is editing `config/products.yaml`. Adding a *retailer* is
+usually not much more than that: three of the six stores here — GameStop,
+Walmart and Nintendo — have **no adapter code at all**, because their pages
+publish structured data the generic checker already reads. Nintendo, the most
+recent of the three, took one allow-list line and two watches, one of which is
+its control.
+
+[docs/adding-a-retailer.md](docs/adding-a-retailer.md) walks Nintendo end to end
+on that basis, and then walks Amazon as the opposite case — the retailer that
+serves the page perfectly and publishes nothing machine-readable on it, so a
+reader genuinely has to be written. It also covers why a control product is
+mandatory, what makes a bad one, and the rule that an absence is never reported
+as out of stock.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) is the shorter one: setup, the commit hook to
+install before your first commit, what each verdict means, and what a pull
+request has to carry.
+
 ## Verifying it works
 
 ```bash
@@ -410,4 +430,5 @@ shopping.
 
 ## License
 
-MIT
+MIT — the full text is in [LICENSE](LICENSE). Contributions are accepted under
+the same licence; see [CONTRIBUTING.md](CONTRIBUTING.md).

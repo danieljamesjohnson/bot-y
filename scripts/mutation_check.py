@@ -83,9 +83,23 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: and the matrix is prose in that file. M6 is precisely the mutation that
 #: clears the runtime flag, so a sandbox without the README would break the
 #: matrix half of that pair inside the run meant to score the runtime half.
+#: `CONTRIBUTING.md` is here because tests/test_contributor_docs.py reads it off
+#: disk and applies four of its six rules to it. Inside the sandbox the tree
+#: root is the temp directory, not the repository, so without this entry that
+#: read raises FileNotFoundError, pytest exits 1, and `run_baseline` turns a
+#: missing file into a HarnessError — killing `make verify` for a reason that
+#: has nothing to do with any mutation, and proving nothing about the suite in
+#: either direction.
+#: `hooks` is here because rule 1 of that same file resolves every backticked
+#: path the contributor docs cite against that same root, and
+#: docs/adding-a-retailer.md cites hooks/pre-commit — installing the commit hook
+#: is the security-critical instruction in the document. A sandbox without the
+#: directory makes this repository's own tracked hook look like a fabricated
+#: citation, which turns the strongest line in the doc into the thing that
+#: reddens the harness.
 SANDBOX_CONTENTS = (
-    "boty", "tests", "scripts", "config", "served", "docs", "pyproject.toml", "Makefile",
-    "README.md",
+    "boty", "tests", "scripts", "config", "served", "docs", "hooks", "pyproject.toml",
+    "Makefile", "README.md", "CONTRIBUTING.md",
 )
 
 _IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "*.egg-info")
