@@ -17,6 +17,7 @@ from collections.abc import Callable
 from .config import Config
 from .models import Availability, Extraction, Health, Result, Watch
 from .monitor import State, run_once
+from .pacing import Pacer
 from .notify import send_health_warning, send_restock
 from .retailers import (
     check_amazon,
@@ -180,11 +181,27 @@ def _warn_monitor_is_stuck(cfg: Config, failures: int) -> None:
         log.exception("could not send the stuck-monitor warning either")
 
 
+#: How many consecutive refusals before a refusal is treated as a real problem.
+#: Below this, backing off is the whole response. At it, the backoff has already
+#: stretched the interval by 2**N and the retailer is still saying no, which is
+#: no longer a rate-limit story.
+REFUSALS_BEFORE_PAGING = 5
+
+
+def _refusal_is_entrenched(health: Health, pacer: Pacer | None) -> bool:
+    """True when a refusal has outlasted the backoff and deserves a human."""
+    if pacer is None:
+        return True
+    return pacer._for(health.retailer).refusals >= REFUSALS_BEFORE_PAGING
+
+
 def watch_cycle(
     cfg: Config,
     checker: Callable[[Watch], Result],
     state: State,
     warned: set[str],
+    pacer: Pacer | None = None,
+    now: float = 0.0,
 ) -> set[str]:
     """One poll: check every watch, publish the status, send what is due.
 
@@ -201,8 +218,27 @@ def watch_cycle(
     # monotonic, not time.time(): an NTP correction mid-pass would otherwise
     # publish a negative duration into a file served over HTTP.
     started = time.monotonic()
-    results, health, alerts = run_once(cfg.watches, checker, state)
-    write_status(cfg.status_path, results, health, duration_seconds=time.monotonic() - started)
+    results, health, alerts = run_once(
+        cfg.watches, checker, state, pacer=pacer, now=now
+    )
+    # Retailers that exist in the config but were not asked this cycle. Named
+    # explicitly so the status page shows six retailers with two paced, rather
+    # than four retailers and a silent gap.
+    paced = (
+        {
+            r: pacer.skipped_reason(r, now)
+            for r in sorted({w.retailer for w in cfg.watches} - {x.watch.retailer for x in results})
+        }
+        if pacer is not None
+        else None
+    )
+    write_status(
+        cfg.status_path,
+        results,
+        health,
+        duration_seconds=time.monotonic() - started,
+        paced=paced,
+    )
 
     # Alerts are edge-triggered, and `run_once` has already committed the
     # transition to `state.seen` and saved it. So a send that does not arrive
@@ -220,10 +256,27 @@ def watch_cycle(
             state.seen.pop(r.watch.key, None)
         state.save()
 
-    # Warn once per retailer per failure episode, not every cycle.
+    # Warn once per retailer per failure episode, not every cycle — and not at
+    # all for a retailer that is merely refusing us.
+    #
+    # A refusal is `ok=False` and belongs on the status page, because we do not
+    # know the stock. It is not a page, because nothing is broken and the
+    # monitor is already fixing it by asking less often. On 2026-08-04 that
+    # distinction was missing and Dan got 20 notifications in 24 hours for two
+    # retailers whose detectors were fine — which is how an alert channel stops
+    # being read, and this project's whole value is that its alerts mean
+    # something.
+    #
+    # A refusal that OUTLASTS the backoff is a different thing and does page:
+    # at that point the retailer is not rate-limiting us, it is refusing us,
+    # and that is a fact about reachability somebody should hear.
     unhealthy = [h for h in health if not h.ok]
-    fresh = [h for h in unhealthy if h.retailer not in warned]
-    still_unhealthy = {h.retailer for h in unhealthy}
+    pageable = [h for h in unhealthy if not h.refused or _refusal_is_entrenched(h, pacer)]
+    for h in unhealthy:
+        if h not in pageable:
+            log.info("%s unhealthy but refusing, not broken — not paging: %s", h.retailer, h.reason)
+    fresh = [h for h in pageable if h.retailer not in warned]
+    still_unhealthy = {h.retailer for h in pageable}
     if fresh and not send_health_warning(cfg.notify_urls, fresh):
         # Same defect, same fix: marking a retailer as warned on the strength
         # of an attempt rather than a delivery means a broken detector gets
@@ -251,11 +304,19 @@ def watch_loop(
     tests assert on what a *sequence* of cycles does.
     """
     warned: set[str] = set()
+    # One pacer for the life of the loop: the backoff is memory, and a pacer
+    # rebuilt each cycle would forget every refusal and hammer at full rate.
+    pacer = Pacer(default_interval=cfg.interval_seconds, overrides=dict(cfg.retailer_intervals))
     consecutive_failures = 0
     completed = 0
+    # The pacer's clock. Advanced by the delay we ASK for rather than read from
+    # time.monotonic(), which is both accurate in production (sleep really does
+    # pass that long) and deterministic under a fake sleep in tests — where a
+    # wall clock would stay frozen and make every retailer look never-due.
+    scheduled_now = 0.0
     while cycles is None or completed < cycles:
         try:
-            warned = watch_cycle(cfg, checker, state, warned)
+            warned = watch_cycle(cfg, checker, state, warned, pacer=pacer, now=scheduled_now)
             consecutive_failures = 0
         except Exception:
             # Tolerating a transient failure is right — a timeout should not
@@ -281,7 +342,9 @@ def watch_loop(
 
         completed += 1
         # Jitter so we do not hammer on a fixed cadence, which is itself a signal.
-        sleep(cfg.interval_seconds * random.uniform(0.85, 1.15))
+        delay = cfg.interval_seconds * random.uniform(0.85, 1.15)
+        sleep(delay)
+        scheduled_now += delay
     return 0
 
 

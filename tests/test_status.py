@@ -183,8 +183,20 @@ def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path)
         assert entry["rung"] == "browser"
         assert entry["degraded"] is True
         assert payload["healthy"] is True
+        # Additive, deliberately. `refused` and `checked` were added 2026-08-04
+        # because "ok: false" had been carrying three different meanings —
+        # the detector is broken, the retailer is refusing us, and we did not
+        # ask this cycle. The dashboard cannot distinguish them from `ok`
+        # alone, and the first two produced 20 false pages in 24 hours.
         assert payload["retailers"] == [
-            {"retailer": "bestbuy", "ok": True, "reason": "", "failing_controls": []}
+            {
+                "retailer": "bestbuy",
+                "ok": True,
+                "refused": False,
+                "checked": True,
+                "reason": "",
+                "failing_controls": [],
+            }
         ]
 
 

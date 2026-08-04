@@ -24,9 +24,26 @@ def write(
     health: list[Health],
     *,
     duration_seconds: float | None = None,
+    paced: dict[str, str] | None = None,
 ) -> None:
+    """Publish the current reading.
+
+    `paced` maps a retailer that was NOT checked this cycle to the reason. It
+    exists because pacing introduced a third state and neither of the first two
+    describes it: the retailer is not healthy (nothing was verified) and not
+    unhealthy (nothing failed) — it simply was not asked.
+
+    Without this the retailer vanishes from the file entirely, and a reader
+    counting rows sees five retailers where there are six and concludes one was
+    dropped. Publishing it as `checked: false` with a reason is the same
+    three-valued honesty `Availability` is built on, applied to a schedule.
+    """
     payload: dict[str, Any] = {
         "updated": int(time.time()),
+        # Only over retailers actually CHECKED. A paced retailer has not
+        # failed anything; letting it flip this false would put the dashboard
+        # permanently red and make the flag useless — the same "a gate that
+        # fires on the honest outcome" defect the roadmap names.
         "healthy": all(h.ok for h in health),
         # How long the pass that produced this file took, in seconds. Published
         # so REQ-08's two-minute budget can be READ rather than re-measured by
@@ -47,10 +64,28 @@ def write(
             {
                 "retailer": h.retailer,
                 "ok": h.ok,
+                # `refused` distinguishes "the retailer is turning us away"
+                # from "our detector stopped working". Both are ok=False; only
+                # the second one wants a human.
+                "refused": h.refused,
+                "checked": True,
                 "reason": h.reason,
                 "failing_controls": h.failing_controls,
             }
             for h in health
+        ]
+        + [
+            {
+                "retailer": retailer,
+                # NOT ok: nothing was verified this cycle, and claiming
+                # otherwise is the green-dashboard failure one level up.
+                "ok": False,
+                "refused": False,
+                "checked": False,
+                "reason": reason,
+                "failing_controls": [],
+            }
+            for retailer, reason in sorted((paced or {}).items())
         ],
         "watches": [
             {

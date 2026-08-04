@@ -12,6 +12,24 @@ settings:
   # buys nothing and is what gets an IP blocked.
   interval_seconds: 300
 
+  # Per-retailer overrides, for retailers that refuse us at the global cadence.
+  #
+  # Set 2026-08-04 after Amazon and GameStop had both been failing for a day
+  # with nothing wrong with either detector. The arithmetic nobody had done:
+  # interval_seconds is per PASS, not per request, so a retailer's real load is
+  # (watches x 288) per day. Amazon carried 2 watches (576/day) and GameStop 5
+  # (1,440/day), and those are exactly the two that started refusing.
+  #
+  # The proof it was rate and not reachability: a single manual `make verify`
+  # read all six controls green while the daemon was failing. One request after
+  # a gap works. Hundreds a day does not.
+  #
+  # These are floors, not schedules — boty.pacing backs off further, on its own,
+  # whenever a retailer actually refuses, and resets when it answers again.
+  retailer_intervals:
+    amazon: 1800     # 30 min -> ~96 requests/day, from 576
+    gamestop: 900    # 15 min -> ~480 requests/day, from 1,440
+
   state_path: state.json
 
   # OPTIONAL, and genuinely optional: leave it unset and Best Buy still works.

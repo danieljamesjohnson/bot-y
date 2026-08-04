@@ -116,7 +116,30 @@ class Blocked(Exception):
 
 
 class FetchError(Exception):
-    """The request did not complete."""
+    """The request did not complete.
+
+    `status` is the HTTP status when there was one, and None for a transport
+    failure. It exists so a caller can tell a REFUSAL (403, 429) from a fault
+    (a timeout, a 500) without parsing this exception's message — the message
+    is for humans and is free to change.
+    """
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+#: Statuses that mean "we are being refused", not "something went wrong".
+#: 403 is the wall GameStop serves under load; 429 is the polite version of
+#: the same thing. Both call for backing off, not for waking anybody.
+REFUSAL_STATUSES = frozenset({401, 403, 429})
+
+
+def is_refusal(exc: BaseException) -> bool:
+    """True when this exception is a retailer turning us away."""
+    if isinstance(exc, Blocked):
+        return True
+    return isinstance(exc, FetchError) and exc.status in REFUSAL_STATUSES
 
 
 @dataclass(frozen=True)
@@ -162,7 +185,7 @@ def get(
             raise Blocked(f"challenge page matched {phrase!r} (HTTP {r.status_code})")
 
     if r.status_code >= 400:
-        raise FetchError(f"HTTP {r.status_code}")
+        raise FetchError(f"HTTP {r.status_code}", status=r.status_code)
 
     log.debug("fetched %s (%d bytes)", url, len(body))
     return Page(url=url, status=r.status_code, text=body)

@@ -18,10 +18,14 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
 
 from .models import Availability, Health, Result, Watch
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .pacing import Pacer
 
 log = logging.getLogger(__name__)
 
@@ -77,11 +81,27 @@ def assess_health(results: list[Result]) -> list[Health]:
             continue
         broken = [c for c in controls if c.availability is not Availability.IN_STOCK]
         if broken:
+            # A wall and a rotted extractor both land here, and until 2026-08-04
+            # both were reported as "the detector is probably broken". For a
+            # refusal that sentence is false: the extractor was never reached.
+            # Saying it anyway cost 20 pages in 24 hours for a retailer that
+            # was simply being asked too often, which is the fastest way to
+            # teach somebody to ignore this channel.
+            #
+            # `all`, not `any`: if even one control failed for a reason that is
+            # NOT a refusal, something may really be broken and the louder
+            # reading is the safe one.
+            refused = bool(broken) and all(c.refused for c in broken)
             health.append(
                 Health(
                     retailer,
                     ok=False,
+                    refused=refused,
                     reason=(
+                        "the retailer is refusing us — a challenge page or a 403. The "
+                        "detector is probably fine; we are asking too often. Backing "
+                        "off, and no action is needed unless this persists"
+                        if refused else
                         "control product is not reading IN_STOCK — the detector is "
                         "probably broken, so real restocks would be missed silently"
                     ),
@@ -97,9 +117,33 @@ def run_once(
     watches: list[Watch],
     checker: Callable[[Watch], Result],
     state: State,
+    pacer: "Pacer | None" = None,
+    now: float = 0.0,
 ) -> tuple[list[Result], list[Health], list[Result]]:
-    """Check every watch once. Returns (results, health, alerts)."""
+    """Check every watch once. Returns (results, health, alerts).
+
+    With a `pacer`, a retailer that is not due is SKIPPED — no request, and no
+    result. It is deliberately not a synthetic UNKNOWN: a fabricated reading
+    for a question nobody asked would flow into `assess_health`, report the
+    detector as broken, and page somebody about a check we chose not to make.
+    Skipping means `assess_health` never sees the retailer, so it stays silent
+    about it, and `status.write` publishes it as paced rather than as green.
+    """
+    if pacer is not None:
+        due = [w for w in watches if pacer.due(w.retailer, now)]
+        skipped = {w.retailer for w in watches} - {w.retailer for w in due}
+        for retailer in sorted(skipped):
+            log.info("%-9s skipped — %s", retailer, pacer.skipped_reason(retailer, now))
+        watches = due
+
     results = [checker(w) for w in watches]
+
+    if pacer is not None:
+        by_retailer: dict[str, list[Result]] = {}
+        for r in results:
+            by_retailer.setdefault(r.watch.retailer, []).append(r)
+        for retailer, group in by_retailer.items():
+            pacer.record(retailer, refused=any(x.refused for x in group), now=now)
     for r in results:
         log.info(
             "%-9s %-26s %-13s %s",

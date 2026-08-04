@@ -19,7 +19,7 @@ from urllib.parse import quote_plus
 
 from . import parse
 from .browser import BROWSER_PATH_ENV, fetch_rendered
-from .fetch import Blocked, FetchError, get
+from .fetch import Blocked, FetchError, get, is_refusal
 from .models import Availability, Extraction, Result, Rung, Watch
 
 log = logging.getLogger(__name__)
@@ -270,9 +270,9 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
     try:
         page = get(watch.target)
     except Blocked as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target)
+        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target, refused=True)
     except FetchError as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target)
+        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc))
 
     return _verdict_from_html(
         watch,
@@ -324,6 +324,7 @@ def check_amazon(watch: Watch, *, first_party_only: bool = True) -> Result:
             detail=_redact_host_paths(f"blocked: {exc}"),
             url=watch.target,
             extraction=Extraction.DOM,
+            refused=True,
         )
     except FetchError as exc:
         return Result(
@@ -332,6 +333,7 @@ def check_amazon(watch: Watch, *, first_party_only: bool = True) -> Result:
             detail=_redact_host_paths(f"fetch failed: {exc}"),
             url=watch.target,
             extraction=Extraction.DOM,
+            refused=is_refusal(exc),
         )
 
     return _verdict_from_html(
@@ -447,6 +449,7 @@ def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Res
             detail=_redact_host_paths(f"blocked: {exc}"),
             url=product_url,
             rung=Rung.BROWSER,
+            refused=True,
         )
     except FetchError as exc:
         return Result(
@@ -455,6 +458,7 @@ def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Res
             detail=_redact_host_paths(f"fetch failed: {exc}"),
             url=product_url,
             rung=Rung.BROWSER,
+            refused=is_refusal(exc),
         )
 
     return _verdict_from_html(
@@ -528,6 +532,7 @@ def check_target_browser(watch: Watch, *, first_party_only: bool = True) -> Resu
             url=watch.target,
             rung=Rung.BROWSER,
             extraction=Extraction.DOM,
+            refused=True,
         )
     except FetchError as exc:
         return Result(
@@ -537,6 +542,7 @@ def check_target_browser(watch: Watch, *, first_party_only: bool = True) -> Resu
             url=watch.target,
             rung=Rung.BROWSER,
             extraction=Extraction.DOM,
+            refused=is_refusal(exc),
         )
 
     return _verdict_from_html(
@@ -610,6 +616,7 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
             detail=_redact(f"api error: {exc}"),
             url=product_url,
             rung=Rung.API,
+            refused=is_refusal(exc),
         )
     except ValueError as exc:
         return Result(

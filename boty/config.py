@@ -92,6 +92,33 @@ def _interval(settings: dict[str, Any]) -> int:
     return interval
 
 
+def _retailer_intervals(settings: dict[str, object]) -> dict[str, int]:
+    """Parse `retailer_intervals:` — a mapping of retailer to seconds.
+
+    Held to the same floor as the global interval. A per-retailer override is
+    for asking LESS often; letting it undercut the floor would turn a politeness
+    setting into its opposite, one typo at a time.
+    """
+    raw = settings.get("retailer_intervals") or {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"retailer_intervals must be a mapping, got {type(raw).__name__}")
+    out: dict[str, int] = {}
+    for retailer, value in raw.items():
+        try:
+            seconds = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"retailer_intervals[{retailer!r}] must be a whole number of seconds, got {value!r}"
+            ) from exc
+        if seconds < MIN_INTERVAL_SECONDS:
+            raise ValueError(
+                f"retailer_intervals[{retailer!r}] must be >= {MIN_INTERVAL_SECONDS} "
+                f"(polite polling), got {seconds}"
+            )
+        out[str(retailer)] = seconds
+    return out
+
+
 @dataclass
 class Config:
     watches: list[Watch]
@@ -99,6 +126,11 @@ class Config:
     bestbuy_api_key: str = ""
     first_party_only: bool = True
     interval_seconds: int = 300
+    #: Per-retailer overrides, e.g. {"amazon": 1800}. A retailer with real bot
+    #: protection and several watches costs far more requests per day than the
+    #: global cadence suggests, and 2026-08-04 established that Amazon and
+    #: GameStop both refuse us at 300 s while answering fine at a lower rate.
+    retailer_intervals: dict[str, int] = field(default_factory=dict)
     state_path: Path = Path("state.json")
     #: Snapshot for the dashboard. Written every cycle; served as a static file.
     status_path: Path = Path("served/boty/status.json")
@@ -126,6 +158,7 @@ class Config:
             bestbuy_api_key=settings.get("bestbuy_api_key", ""),
             first_party_only=bool(settings.get("first_party_only", True)),
             interval_seconds=_interval(settings),
+            retailer_intervals=_retailer_intervals(settings),
             state_path=Path(settings.get("state_path", "state.json")),
             status_path=Path(settings.get("status_path", "served/boty/status.json")),
         )

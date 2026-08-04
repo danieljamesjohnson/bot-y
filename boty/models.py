@@ -142,6 +142,23 @@ class Result:
     #: site stays valid and keeps its meaning, because every one of them reads
     #: a structured payload and none of them names an extraction.
     extraction: Extraction = Extraction.STRUCTURED
+    #: True when the retailer REFUSED us — a challenge page, a 403, a 429 —
+    #: rather than served us something we could not read.
+    #:
+    #: The distinction is the whole point and it was missing until 2026-08-04,
+    #: when it cost 20 pages in 24 hours. Both cases produce
+    #: `Availability.UNKNOWN`, which is correct: we do not know the stock. But
+    #: they mean opposite things about the CODE. A page we cannot parse means
+    #: the extractor has rotted and a human must look. A refusal means the
+    #: extractor is very likely fine and we are asking too often — nobody needs
+    #: waking, and the right response is to back off, which is something the
+    #: monitor can do by itself.
+    #:
+    #: Reporting a refusal as "the detector is probably broken, so real
+    #: restocks would be missed silently" is not just noisy, it is false, and
+    #: it trains the reader to ignore the one alert this project exists to
+    #: send.
+    refused: bool = False
 
     @property
     def degraded(self) -> bool:
@@ -195,3 +212,12 @@ class Health:
     ok: bool
     reason: str = ""
     failing_controls: list[str] = field(default_factory=list)
+    #: True when the controls failed because the retailer REFUSED us, not
+    #: because the detector stopped working.
+    #:
+    #: Both are `ok=False` — in neither case do we know the stock, and the
+    #: status page should say so. What differs is whether a human is needed.
+    #: A refusal is the monitor's own problem to solve, by asking less often;
+    #: waking somebody for it is a false alarm, and 20 of them in 24 hours is
+    #: how an alert channel stops being read.
+    refused: bool = False
