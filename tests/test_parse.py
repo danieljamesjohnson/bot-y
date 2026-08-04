@@ -20,6 +20,7 @@ from boty.parse import (
     TARGET_FIRST_PARTY_SELLER,
     add_to_cart_offers,
     ldjson_offers,
+    ldjson_read,
     nextdata_offers,
 )
 
@@ -418,3 +419,97 @@ def test_target_unreadable_price_still_yields_an_availability() -> None:
 def test_target_reader_finds_nothing_on_a_structured_page(gamestop_goplusplus: str) -> None:
     """It is Target's reader, not a universal fallback — no control, no offers."""
     assert add_to_cart_offers(gamestop_goplusplus) is None
+
+
+# --------------------------------------------------------------------------
+# JavaScript-escaped JSON-LD — Best Buy, observed live 2026-08-04
+# --------------------------------------------------------------------------
+#
+# Best Buy began serving its JSON-LD JavaScript-escaped on 2026-08-04: the same
+# three blocks on the same SKU that `tests/fixtures/bestbuy/pikachu-control.html`
+# parses 3/3 with no backslashes at all. `json.loads` refused every one, the
+# blocks were skipped silently, and the control read UNKNOWN with a detail that
+# named the wrong cause ("no schema.org Product on it carries that sku").
+#
+# The markup below is the real thing, copied verbatim from the live page and
+# trimmed — the same treatment the Amazon captcha wall got, and for the same
+# reason: a hand-written approximation of a third party's breakage tests the
+# approximation. Two defect shapes are present and both are load-bearing:
+#
+#   * `Let\'s`      — an invalid escape INSIDE a string. Legal JavaScript,
+#                     illegal JSON.
+#   * `{\n  "@ctx"` — a literal backslash-n OUTSIDE a string, where a real
+#                     newline belongs. This is why the breadcrumb block failed
+#                     at column 2 rather than at an escape.
+#
+# Neither carried a single VALID escape — no \", no \\, no \uXXXX — which is
+# what made an exact repair possible rather than a heuristic one.
+_BESTBUY_ESCAPED_PRODUCT = (
+    '<script type="application/ld+json">'
+    '{"@context":"http://schema.org/","@type":"Product",'
+    "\"name\":\"Pokémon: Let\\'s Go, Pikachu! - Nintendo Switch\","
+    '"sku":"6216393",'
+    '"offers":[{"@type":"Offer","priceCurrency":"USD","price":59.99,'
+    '"availability":"https://schema.org/InStock","sku":"6216393",'
+    '"seller":{"@type":"Organization","name":"Best Buy"}}]}'
+    "</script>"
+)
+
+#: The outside-a-string defect, on its own: structural `\n` between tokens.
+_BESTBUY_ESCAPED_BREADCRUMB = (
+    '<script type="application/ld+json">'
+    '{\\n  "@context": "http://schema.org",\\n  "@type": "BreadcrumbList"\\n}'
+    "</script>"
+)
+
+
+def test_js_escaped_ldjson_is_repaired_and_reads_the_real_offer() -> None:
+    """The live 2026-08-04 breakage, read correctly — same offer the fixture gives."""
+    read = ldjson_read(_BESTBUY_ESCAPED_PRODUCT, sku="6216393")
+    assert read.offers is not None
+    assert read.offers[0].available is True
+    assert read.offers[0].price == 59.99
+    assert read.offers[0].seller == "Best Buy"
+    assert read.repaired == 1
+    assert read.unparseable == 0
+
+
+def test_a_repaired_read_is_never_silent() -> None:
+    """Repair is recorded, so a reading that depended on it cannot look ordinary."""
+    read = ldjson_read(_BESTBUY_ESCAPED_PRODUCT, sku="6216393")
+    assert read.repaired == 1
+    assert "repair" in read.summary
+
+
+def test_backslash_outside_a_string_is_repaired_too() -> None:
+    """The breadcrumb shape — a backslash where JSON allows none at all."""
+    read = ldjson_read(_BESTBUY_ESCAPED_BREADCRUMB)
+    assert read.blocks == 1
+    assert read.unparseable == 0
+    assert read.repaired == 1
+
+
+def test_repair_does_not_invent_a_product_that_is_not_there() -> None:
+    """A repaired block still has to carry the requested sku. Binding survives repair."""
+    assert ldjson_read(_BESTBUY_ESCAPED_PRODUCT, sku="9999999").offers is None
+
+
+def test_genuinely_unparseable_markup_stays_unknown_and_is_counted() -> None:
+    """Repair is a second chance, not a guarantee — and failure is reported, not swallowed."""
+    junk = '<script type="application/ld+json">{"@type":"Product", NOPE</script>'
+    read = ldjson_read(junk, sku="6216393")
+    assert read.offers is None
+    assert read.blocks == 1
+    assert read.unparseable == 1
+    assert read.repaired == 0
+    assert "unparseable" in read.summary
+
+
+def test_healthy_markup_is_never_touched_by_the_repair(bestbuy_pikachu: str) -> None:
+    """Strict first. A page that parses today must not take the repair path at all."""
+    read = ldjson_read(bestbuy_pikachu, sku="6216393")
+    assert read.repaired == 0
+    assert read.unparseable == 0
+    assert read.summary == ""
+    assert read.offers is not None
+    assert read.offers[0].available is True

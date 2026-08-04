@@ -122,8 +122,14 @@ MUTATIONS = (
     Mutation(
         ident="M2",
         target="boty/retailers.py",
-        search='Availability.UNKNOWN,\n            detail="no structured stock data found',
-        replace='Availability.OUT_OF_STOCK,\n            detail="no structured stock data found',
+        # Re-anchored 2026-08-04: the `detail=` on this branch became a
+        # parenthesised expression when it gained the ld+json block counts, so
+        # the old one-line anchor drifted and this check refused to run rather
+        # than quietly dropping to seven mutations. The anchor deliberately
+        # stops at `detail=(` — matching the message text would tie a mutation
+        # to prose that is edited far more often than the verdict is.
+        search='Availability.UNKNOWN,\n            detail=(\n                "no structured stock data found',
+        replace='Availability.OUT_OF_STOCK,\n            detail=(\n                "no structured stock data found',
         breaks="an unreadable page becomes OUT_OF_STOCK instead of UNKNOWN — the silent-failure bug itself",
     ),
     Mutation(

@@ -54,6 +54,105 @@ def _as_float(v: Any) -> float | None:
         return None
 
 
+#: The only characters JSON allows after a backslash (RFC 8259 §7). Anything
+#: else is not a "lenient" escape — it is malformed, and `json.loads` is right
+#: to refuse it.
+_JSON_ESCAPES = frozenset('"\\/bfnrtu')
+
+
+def _repair_ldjson(block: str) -> str | None:
+    """Undo JavaScript string escaping in a JSON-LD block, or None if there is none.
+
+    Runs **only** on a block that already failed `json.loads`, so it cannot
+    change the reading of any page that parses today. That ordering is the
+    whole safety argument: strict first, repair second, and the caller is told
+    which one produced the answer.
+
+    Best Buy started serving its JSON-LD JavaScript-escaped on 2026-08-04 —
+    same three blocks, same SKU, previously valid. Measured on the live page
+    against `tests/fixtures/bestbuy/pikachu-control.html`, which parses 3/3
+    with no backslashes at all:
+
+    - **Outside a string**, 34 occurrences of `\\n` where real newlines belong.
+      A backslash outside a JSON string is never valid, which is why the
+      breadcrumb block failed at column 2 rather than at the escape.
+    - **Inside a string**, 8 occurrences of `\\'` (`Let\\'s Go, Pikachu!`).
+      Legal in a JavaScript string literal, illegal in JSON.
+
+    Neither block contained a single *valid* escape — no `\\"`, no `\\\\`, no
+    `\\uXXXX` — so there was nothing for a repair to confuse. This function
+    still tracks string state rather than running a blind replace, because the
+    next retailer to break this way will not be so tidy, and a blind
+    `\\n`-to-newline would corrupt a legitimately escaped newline inside a
+    string into a raw one, which JSON also forbids.
+
+    Returns None when nothing was changed, so "unparseable and unrepairable"
+    stays distinguishable from "repaired".
+    """
+    out: list[str] = []
+    in_string = False
+    changed = False
+    i, n = 0, len(block)
+
+    while i < n:
+        ch = block[i]
+        nxt = block[i + 1] if i + 1 < n else ""
+
+        if ch == "\\":
+            if in_string and nxt in _JSON_ESCAPES:
+                out.append(ch)
+                out.append(nxt)
+            elif in_string:
+                # Invalid escape inside a string: drop the backslash, keep the
+                # character. `\'` becomes `'`.
+                out.append(nxt)
+                changed = True
+            else:
+                # A backslash outside a string is structural damage. `\n`, `\t`
+                # and `\r` stood in for real whitespace; anything else loses
+                # only the backslash.
+                out.append({"n": "\n", "t": "\t", "r": "\r"}.get(nxt, nxt))
+                changed = True
+            i += 2
+            continue
+
+        if ch == '"':
+            in_string = not in_string
+        out.append(ch)
+        i += 1
+
+    return "".join(out) if changed else None
+
+
+@dataclass(frozen=True)
+class LdJsonRead:
+    """What a JSON-LD read *saw*, not only what it extracted.
+
+    `ldjson_offers` returns `list[Offer] | None` and that is all a caller needs
+    to decide a verdict. It is not enough to diagnose one. On 2026-08-04 Best
+    Buy's control went UNKNOWN with the detail "no schema.org Product on it
+    carries that sku", which was true and pointed at the wrong thing entirely:
+    three blocks were present and all three were unparseable. "The markup is
+    absent", "the markup is malformed" and "the markup is fine but describes a
+    different product" demand different responses, and the first message cost
+    real time before the second was found.
+    """
+
+    offers: list[Offer] | None
+    blocks: int = 0
+    unparseable: int = 0
+    repaired: int = 0
+
+    @property
+    def summary(self) -> str:
+        """A phrase for `Result.detail`. Empty when there is nothing worth saying."""
+        if self.repaired:
+            return f"{self.repaired} of {self.blocks} ld+json block(s) needed escape repair"
+        if self.unparseable:
+            return f"{self.blocks} ld+json block(s) present, {self.unparseable} unparseable"
+        return ""
+
+
 def _iter_nodes(doc: Any) -> Iterator[dict[str, Any]]:
     """Walk a JSON-LD document, which may be a node, a list, or an @graph."""
     stack: list[Any] = [doc]
@@ -96,15 +195,37 @@ def ldjson_offers(html: str, *, sku: str | None = None) -> list[Offer] | None:
     carries no `sku` field at all. That costs coverage rather than correctness,
     and Best Buy's control watch turns it into a loud failure within a cycle.
     """
+    return ldjson_read(html, sku=sku).offers
+
+
+def ldjson_read(html: str, *, sku: str | None = None) -> LdJsonRead:
+    """`ldjson_offers`, plus what was seen on the way. See `LdJsonRead`.
+
+    The verdict logic is identical — this is where it lives, and
+    `ldjson_offers` is the thin wrapper for callers that only want offers.
+    """
     found: list[Offer] = []
     saw_product = False
     wanted = sku.strip() if sku else None
+    blocks = unparseable = repaired = 0
 
     for block in _LDJSON_RE.findall(html):
+        blocks += 1
         try:
             doc = json.loads(block.strip())
         except json.JSONDecodeError:
-            continue
+            # Strict first. Only a block that has already failed is offered to
+            # the repair, so no page that parses today can change its reading.
+            patched = _repair_ldjson(block.strip())
+            if patched is None:
+                unparseable += 1
+                continue
+            try:
+                doc = json.loads(patched)
+            except json.JSONDecodeError:
+                unparseable += 1
+                continue
+            repaired += 1
         for node in _iter_nodes(doc):
             # schema.org allows a node to declare several types at once, and
             # `["Product", "ProductModel"]` is ordinary first-party markup. An
@@ -143,9 +264,12 @@ def ldjson_offers(html: str, *, sku: str | None = None) -> list[Offer] | None:
                     )
                 )
 
-    if not saw_product:
-        return None
-    return found
+    return LdJsonRead(
+        offers=None if not saw_product else found,
+        blocks=blocks,
+        unparseable=unparseable,
+        repaired=repaired,
+    )
 
 
 #: Walmart's primary product node. Addressed explicitly rather than by

@@ -93,6 +93,18 @@ FIRST_PARTY = {
 #: any future page that drops the seller node into a permanent UNKNOWN.
 MARKETPLACES = {"walmart", "target", "amazon", "bestbuy"}
 
+#: Settle time for `check_target_browser`'s single retry, in seconds.
+#:
+#: Not a tuned number — a deliberately unambitious one. The control was measured
+#: absent at 1.0s and present at 3.0s and 6.0s on the live page, and the default
+#: 3.0 is what raced under load. Retrying at 3.0 would just re-run the coin
+#: toss, so this sits far enough past the observed boundary that the retry is
+#: answering a different question than the first attempt did. It is bounded by
+#: `fetch_rendered`'s own 45s timeout, and REQ-08 has budget: a full pass with
+#: two browser renders measures 37-49s against 120s, and this only runs when
+#: the first read already failed.
+_TARGET_RETRY_SETTLE = 10.0
+
 
 def _pick(offers: list[parse.Offer], retailer: str, first_party_only: bool) -> parse.Offer | None:
     """Choose the offer we care about, preferring first-party and cheapest."""
@@ -163,8 +175,19 @@ def _verdict_from_html(
     DOM path was never involved in exactly the situation where it is the thing
     that failed.
     """
-    offers = parse.ldjson_offers(html, sku=sku)
-    source = "ld+json"
+    # `ldjson_read` rather than `ldjson_offers`: the verdict is the same, but a
+    # malformed block and an absent one are different diagnoses and only this
+    # call can tell them apart. See `LdJsonRead` — the distinction was bought
+    # on 2026-08-04, when Best Buy served three unparseable blocks and the
+    # detail below said the SKU had not resolved.
+    ld = parse.ldjson_read(html, sku=sku)
+    offers = ld.offers
+    # A repaired read is never silent. Naming it in `source` rather than
+    # appending to `detail` keeps the healthy string byte-identical — 03.1-04
+    # verified `ld+json: InStock from Best Buy` character-for-character against
+    # live output — while every message that cites the source now says when the
+    # markup had to be repaired to be read at all.
+    source = "ld+json (repaired)" if ld.repaired else "ld+json"
     if not offers:
         offers = parse.nextdata_offers(html)
         source = "__NEXT_DATA__"
@@ -191,6 +214,7 @@ def _verdict_from_html(
                 detail=(
                     f"sku {sku} did not resolve to a product page — no "
                     f"schema.org Product on it carries that sku"
+                    + (f" ({ld.summary})" if ld.summary else "")
                 ),
                 url=url,
                 rung=rung,
@@ -202,7 +226,10 @@ def _verdict_from_html(
         return Result(
             watch,
             Availability.UNKNOWN,
-            detail="no structured stock data found (page shape changed?)",
+            detail=(
+                "no structured stock data found (page shape changed?)"
+                + (f" ({ld.summary})" if ld.summary else "")
+            ),
             url=url,
             rung=rung,
             extraction=extraction,
@@ -521,9 +548,36 @@ def check_target_browser(watch: Watch, *, first_party_only: bool = True) -> Resu
 
     Failure strings go through `_redact_host_paths` for the same reason they do
     there — `status.write` copies `detail` into a file served over HTTP.
+
+    **One retry, and why it lives here rather than in the transport.** Target
+    renders the add-to-cart control client-side, and `fetch_rendered` waits a
+    fixed beat before reading the DOM — "crude but honest", as its own comment
+    says, because the transport is deliberately ignorant of page layout and has
+    no element it can wait *for*. On 2026-08-04 that beat ran out under load and
+    this control read UNKNOWN. Measured on the live page, same URL, minutes
+    apart: at `settle_seconds=1.0` the document is 317,597 bytes and carries no
+    control, so the reader correctly returns None; at 3.0 and 6.0 it is ~352,000
+    bytes and reads `add-to-cart enabled`. Roughly 35 KB of markup, containing
+    the control, arrives between one second and three — and production runs at
+    exactly 3.0, on the edge.
+
+    So the retry is a layout question — "the thing I know how to read was not
+    there yet" — and only this module knows what it was looking for.
+    `boty/browser.py` stays ignorant, which is the property that lets one
+    transport serve two retailers that read completely different things.
+
+    It costs one extra render on the failure path and nothing on the happy one.
+    It does **not** convert an UNKNOWN into a guess: a page that genuinely has
+    no control still returns None twice and still reads UNKNOWN. It only removes
+    the case where the honest answer was "I looked too early".
     """
     try:
         page = fetch_rendered(watch.target)
+        if parse.add_to_cart_offers(page.text) is None:
+            # Re-render once, patiently, before concluding the page changed.
+            # `_TARGET_RETRY_SETTLE` is well past the 3s where the control was
+            # measured present, because the whole point is to stop racing.
+            page = fetch_rendered(watch.target, settle_seconds=_TARGET_RETRY_SETTLE)
     except Blocked as exc:
         return Result(
             watch,
