@@ -111,7 +111,9 @@ README's `## Install` gains the PyPI line here, written in a tense that is not a
 
 ## Why six plans, not the roadmap's three
 
-The roadmap sketched contributor docs / CI / packaging-and-release before two facts were established first-hand: **there is no `LICENSE` file**, and **there is no linter**. Neither is optional — one blocks a credible 1.0.0, the other is named in REQ-10's own wording — and neither fits inside a plan that was scoped without it. The sixth plan exists because the phase's two maintainer-gated criteria must not sit in the same plan as autonomous implementation work; splitting them is what lets waves 1-4 run to completion without waiting on Dan.
+The roadmap sketched contributor docs / CI / packaging-and-release before two facts were established first-hand: **there is no `LICENSE` file**, and **there is no linter**. Neither is optional — one blocks a credible 1.0.0, the other is named in REQ-10's own wording — and neither fits inside a plan that was scoped without it. The sixth plan exists because the phase's two maintainer-gated criteria must not sit in the same plan as autonomous implementation work; splitting them is what lets waves 1-5 run to completion without waiting on Dan.
+04-05 is `autonomous: true` — it prepares the release entirely locally and
+publishes nothing — so only wave 6 needs him.
 
 ## Wave structure and file ownership
 
