@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: "Phase 3.1 CLOSED. Two unplanned pieces of work landed after it, both on `main`, neither part of a phase:"
-last_updated: "2026-08-04T15:21:41.430Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-08-04T23:40:26.146Z"
 last_activity: 2026-08-04
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 17
-  completed_plans: 16
-  percent: 94
+  completed_phases: 3
+  total_plans: 23
+  completed_plans: 17
+  percent: 60
 ---
 
 # State: bot-y
@@ -21,22 +21,22 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 4 — Open Source Ready (Phase 03.1 closed 2026-08-03)
+**Current focus:** Phase 04 — open-source-ready
 
 ## Status
 
 **Milestone:** v1.0
 **Phase:** 03.1 of 5 (Target and Amazon, supported) — **COMPLETE**. INSERTED, reverses a Phase 3 decision
 **Plan:** 5 of 5 complete (01, 05, 02, 03, 04 — all waves done)
-**Last session:** 2026-08-03T14:34:17.173Z
-**Stopped At:** Phase 3.1 CLOSED. Two unplanned pieces of work landed after it, both on `main`, neither part of a phase:
+**Last session:** 2026-08-04T23:40:26.141Z
+**Stopped At:** Completed 04-01-PLAN.md
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
 
 2. **Pacing and backoff (2026-08-04), in response to a live alert.** Amazon and GameStop had been refusing us for a day. Not a detector bug: `interval_seconds` is per PASS, so load is `watches x 288/day` — Amazon 576, GameStop 1,440 — with no backoff at all. Worse, every failing control was reported as "the detector is probably broken", which is false for a refusal and sent 20 pages in 24 hours. Added `Result.refused` / `fetch.is_refusal`, split the health message, added `boty/pacing.py` (per-retailer cadence + exponential backoff, capped, reset on a good read), and stopped paging for refusals until they outlast the backoff. Verified live: 0 pages while both retailers refused, both published as `paced` rather than dropped.
 
 **Last Activity:** 2026-08-04
-**Last Activity Description:** Phase 4 planning complete — 6 plans ready. Then a third unplanned piece of work landed on `main`, outside any phase:
+**Last Activity Description:** Phase 04 execution started
 
 3. **Two live detector failures (2026-08-04 evening), both caught by control products within a cycle, neither a broken detector.** Best Buy began serving its JSON-LD **JavaScript-escaped** — `\'` inside strings, literal `\n` outside them — so `json.loads` refused all three blocks, `parse.py` skipped them silently, and the control read UNKNOWN with a detail naming the wrong cause. Proven against the shipped fixture, which parses 3/3 on the same SKU with no backslashes at all. `ldjson_read` now parses strictly first and only then offers an already-failed block to a string-state-aware repair; it reports `blocks`/`unparseable`/`repaired`, and a repaired read publishes as `ld+json (repaired)` so it cannot look ordinary. **Not claimed:** that the repair restored the live reading — Best Buy was serving valid markup again by 17:45 and the live read carried no `(repaired)` marker. The escaping is intermittent; a clean probe does not disprove it. Separately, **Target's UNKNOWN was our own render race**: ~35 KB of markup carrying the add-to-cart control arrives between 1s and 3s (measured: absent at `settle=1.0`, present at 3.0 and 6.0), and `fetch_rendered`'s default is exactly 3.0. `check_target_browser` now re-renders once at 10.0s before concluding — in the adapter, because it is a layout question and `boty/browser.py` is deliberately ignorant of layout. **M2's anchor was re-pointed** because this change moved the line it named, and the harness refused to run rather than quietly drop to seven mutations. Verified: mypy clean, 419 passed, 8/8 mutations, `VERIFY: PASS (OFFLINE)`, both new gates watched failing in both directions (removing the repair reddens 3 tests, making it over-reach reddens 22), **service restarted onto the fixed code** and publishing **6/6 retailers healthy**, 13 watches, 47.1s of REQ-08's 120s.
 
@@ -113,6 +113,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 03.1 P02 | 35min | 3 tasks | 21 files |
 | Phase 03.1 P03 | 47min | 3 tasks | 17 files |
 | Phase 03.1 P04 | 21min | 2 tasks | 5 files |
+| Phase Phase 04 PP01 | 16min | 3 tasks tasks | 5 files files |
 
 ## Decisions
 
@@ -168,6 +169,10 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 03.1]: ROADMAP criterion 1 recorded UNMET and deliberately not amended — Target delisted the GO Plus + so no work satisfies it, and Dan declined the rewrite that would have made it meetable; five-of-six with one honest failure is worth more than six-of-six with one quiet edit
 - [Phase 03.1]: boty.service was still running pre-phase code and publishing 4 retailers with no extraction key while the tree shipped 6 — restarted before the service-cycle duration was taken, because make verify runs the tree and cannot see the daemon
 - [Phase 03.1]: REQ-08 re-measured at six retailers with two browser rungs — 45.98 s manual and 44.81/42.84 s from the service's own cycles, all read off status.json duration_seconds rather than hand-timed, against a 120 s budget; healthy read in the same breath, because a permanently-UNKNOWN retailer satisfies a count while failing the criterion
+- [Phase 04]: The contributor docs say THREE of six retailers need no adapter code, not five — _make_checker has arms for bestbuy, amazon and target and falls through to check_html for the rest; the plan's five was never measured
+- [Phase 04]: A documentation gate in the shape of test_support_matrix.py — cited paths must exist, no citation may carry a line number (04-03 moves hundreds), and every pinned (file, symbol) pair holds in both directions; each rule watched failing against a corrupted copy of the real file
+- [Phase 04]: A SANDBOX_CONTENTS entry lands in the same commit as the file it names, and is proven load-bearing by removal — both 'hooks' and 'CONTRIBUTING.md' were watched producing HARNESS ERROR at the baseline, not asserted to matter
+- [Phase 04]: No test in 04-01 stats LICENSE — 04-02 creates it in wave 2, and a stat would make this gate pass or fail on another plan's completion order
 
 ### Blockers
 

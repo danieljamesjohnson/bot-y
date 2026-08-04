@@ -256,7 +256,7 @@ Plans:
 
 Plans:
 
-- [ ] 04-01: Contributor docs — adding a retailer, the control-product requirement, the UNKNOWN contract *(wave 1)*
+- [x] 04-01: Contributor docs — adding a retailer, the control-product requirement, the UNKNOWN contract *(wave 1)*
 - [ ] 04-02: The missing `LICENSE`, and packaging metadata that matches it *(wave 2, blocked on 04-01)*
 - [ ] 04-03: A linter, from zero — `ruff`, the findings resolved, a `lint` stage inside `make verify` *(wave 3, blocked on 04-01, 04-02)*
 - [ ] 04-04: GitHub Actions CI — one job per PR running `make verify-offline`, and a test that reads the workflow *(wave 4, blocked on 04-03)*
@@ -272,6 +272,7 @@ during planning, and neither is optional:
   declares MIT, but `git ls-files` matches nothing and GitHub's API reports
   `license: None`. A public 1.0.0 asserting a licence with no licence text
   arguably grants no rights at all. → 04-02.
+
 - **There is no linter at all** — no ruff, flake8, black or pylint anywhere —
   while REQ-10 names lint in its own wording. → 04-03.
 

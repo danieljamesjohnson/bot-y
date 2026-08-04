@@ -53,7 +53,7 @@ has not worked.
 
 ### Phase 4 — Open Source Ready
 
-- [ ] **REQ-09**: `docs/adding-a-retailer.md` walks a contributor through a real adapter end to end and states why a control product is mandatory.
+- [x] **REQ-09**: `docs/adding-a-retailer.md` walks a contributor through a real adapter end to end and states why a control product is mandatory.
 - [ ] **REQ-10**: CI runs lint, type check and the offline test suite on every PR.
 - [ ] **REQ-11**: `pip install bot-y` works from PyPI, and a v1.0.0 tag exists.
 
@@ -103,7 +103,7 @@ Maintained by `gsd-tools`; a requirement flips to Complete when its phase comple
 | REQ-06 | Phase 2 | Complete |
 | REQ-07 | Phase 3 | Complete |
 | REQ-08 | Phase 3 | Complete |
-| REQ-09 | Phase 4 | Pending |
+| REQ-09 | Phase 4 | Complete |
 | REQ-10 | Phase 4 | Pending |
 | REQ-11 | Phase 4 | Pending |
 | REQ-12 | Phase 1 | Complete |
