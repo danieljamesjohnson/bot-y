@@ -97,12 +97,56 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: directory makes this repository's own tracked hook look like a fabricated
 #: citation, which turns the strongest line in the doc into the thing that
 #: reddens the harness.
+#: `LICENSE` is here because tests/test_packaging_metadata.py reads it off disk
+#: relative to its own parent — which inside the sandbox is the temp directory,
+#: not the repository. That file's whole subject is a licence declared in
+#: metadata with no licence text behind it, so a sandbox that reproduces exactly
+#: that state would fail five of its tests at the BASELINE, `run_baseline` would
+#: raise a HarnessError, and `make verify` would die for a reason that has
+#: nothing to do with any mutation. The block above already states the rule: a
+#: test that fails inside it for want of a file is indistinguishable from a
+#: mutation being caught.
+#: `MANIFEST.in` is here for the same reason one file along. The sdist prune rule
+#: reads it to decide whether every tracked top-level directory has a `prune`
+#: line, and the published file surface of this project is the one thing that
+#: rule guards. A sandbox without it turns a FileNotFoundError into what looks
+#: like a caught mutation.
 SANDBOX_CONTENTS = (
     "boty", "tests", "scripts", "config", "served", "docs", "hooks", "pyproject.toml",
-    "Makefile", "README.md", "CONTRIBUTING.md",
+    "Makefile", "README.md", "CONTRIBUTING.md", "LICENSE", "MANIFEST.in",
 )
 
-_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "*.egg-info")
+#: `status.json` is ignored because the sandbox now has a git index, and
+#: `git add -A` in a directory with no `.gitignore` stages everything it finds.
+#: Measured by set difference against the real repo's `git ls-files`,
+#: `served/boty/status.json` is the ONLY file the copy loop brings in that this
+#: repository does not track — it is `.gitignore`d here, but `.gitignore` is not
+#: in SANDBOX_CONTENTS, so git inside the sandbox has never heard of it. Once the
+#: index un-skips `test_the_repo_is_clean_right_now`, the identity scan runs over
+#: it *inside the sandbox*. It is clean today, but it is a runtime artifact that
+#: every live `make verify` rewrites, and its `reason` fields carry
+#: retailer-failure exception text — the exact string class that can pick up a
+#: local path or a host. That would redden `make verify` from a file in neither
+#: the repository nor the diff, which is the least attributable failure this
+#: harness could produce. Nothing reads the sandbox's copy: every test that
+#: touches status.json writes to `tmp_path`.
+#:
+#: THE IGNORE SET AND `.gitignore` ARE ALLOWED TO DIFFER, because they answer
+#: different questions. `.gitignore` says "do not track this in the repository".
+#: `_IGNORE` says "the suite does not read this, so a faithful copy does not need
+#: it". They overlap without either containing the other. The one place they must
+#: agree is a file the copy loop reaches that the repo does not track, and that
+#: set has exactly one member today.
+#:
+#: The alternative — putting `.gitignore` into SANDBOX_CONTENTS so git honours it
+#: inside the sandbox — was considered and rejected. It works, but it leaves a
+#: nondeterministic runtime artifact sitting in a harness whose entire claim is
+#: reproducibility and merely hides it from the index; and it widens the set of
+#: paths the contributor-docs citation rule is allowed to resolve, which is that
+#: gate's decision to take, not this one's.
+_IGNORE = shutil.ignore_patterns(
+    "__pycache__", "*.pyc", ".pytest_cache", "*.egg-info", "status.json",
+)
 
 #: pytest's exit codes. Only 1 means "tests failed", which is the only thing
 #: that can count as a mutation being caught.
@@ -240,6 +284,21 @@ class HarnessError(RuntimeError):
     """The sandbox is wrong, so nothing the run reports can be believed."""
 
 
+def _git_or_harness_error(argv: list[str], tmp: Path) -> None:
+    """Run a git command in the sandbox; a failure is a broken sandbox, not a result.
+
+    The module's contract is that anything wrong with the copy raises
+    HarnessError carrying the cause, rather than surfacing as a bare
+    CalledProcessError or — worse — as a mutation score.
+    """
+    proc = subprocess.run(argv, cwd=tmp, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise HarnessError(
+            f"cannot give the sandbox a git index: {' '.join(argv)} exited "
+            f"{proc.returncode} in {tmp}.\n{proc.stderr.strip()}"
+        )
+
+
 def build_sandbox() -> Path:
     """Copy the package, the suite and pyproject.toml into a fresh temp dir."""
     tmp = Path(tempfile.mkdtemp(prefix="boty-mutation-"))
@@ -253,6 +312,30 @@ def build_sandbox() -> Path:
             shutil.copytree(src, tmp / item, ignore=_IGNORE)
         else:
             shutil.copy2(src, tmp / item)
+
+    # The suite reaches for the git INDEX, not only for files, so a copy without
+    # one is not the faithful copy this module's docstring demands. Without it,
+    # `git ls-files` exits 128 in here and
+    # tests/test_packaging_metadata.py::_tracked_top_level_dirs raises
+    # NotATrackedTree — deliberately, because the alternative is that the only
+    # gate on this project's published file surface reports success in the one
+    # place it could not run. Three tests in tests/test_identity_check.py also
+    # stop skipping once this exists, which is a strengthening: the identity
+    # guard's scope test should run wherever the suite runs. It costs ~3.3 s per
+    # sandbox, times the nine sandboxes main() builds. That is the price and it
+    # is accepted; do not buy it back by deleting these two lines.
+    #
+    # `-c` goes BEFORE `init`. Measured on git 2.43.0: `git init -q -c
+    # init.defaultBranch=main` is not valid git — it exits 129 with ``unknown
+    # switch `c` `` — so the wrong order makes every build_sandbox() call raise,
+    # and the HarnessError it produces points the reader at SANDBOX_CONTENTS,
+    # which is not the cause.
+    #
+    # No commit is made. `git ls-files` reads the index, and committing would
+    # need a user.name and user.email that no box has to have configured for a
+    # throwaway directory.
+    _git_or_harness_error(["git", "-c", "init.defaultBranch=main", "init", "-q"], tmp)
+    _git_or_harness_error(["git", "add", "-A"], tmp)
     return tmp
 
 
