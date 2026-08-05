@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-08-04T23:40:26.146Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-08-05T00:00:22.952Z"
 last_activity: 2026-08-04
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 23
-  completed_plans: 17
+  completed_plans: 18
   percent: 60
 ---
 
@@ -28,8 +28,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 03.1 of 5 (Target and Amazon, supported) — **COMPLETE**. INSERTED, reverses a Phase 3 decision
 **Plan:** 5 of 5 complete (01, 05, 02, 03, 04 — all waves done)
-**Last session:** 2026-08-04T23:40:26.141Z
-**Stopped At:** Completed 04-01-PLAN.md
+**Last session:** 2026-08-05T00:00:22.947Z
+**Stopped At:** Completed 04-02-PLAN.md
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
 
@@ -114,6 +114,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 03.1 P03 | 47min | 3 tasks | 17 files |
 | Phase 03.1 P04 | 21min | 2 tasks | 5 files |
 | Phase Phase 04 PP01 | 16min | 3 tasks tasks | 5 files files |
+| Phase 04 P02 | 30min | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -173,6 +174,11 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 04]: A documentation gate in the shape of test_support_matrix.py — cited paths must exist, no citation may carry a line number (04-03 moves hundreds), and every pinned (file, symbol) pair holds in both directions; each rule watched failing against a corrupted copy of the real file
 - [Phase 04]: A SANDBOX_CONTENTS entry lands in the same commit as the file it names, and is proven load-bearing by removal — both 'hooks' and 'CONTRIBUTING.md' were watched producing HARNESS ERROR at the baseline, not asserted to matter
 - [Phase 04]: No test in 04-01 stats LICENSE — 04-02 creates it in wave 2, and a stat would make this gate pass or fail on another plan's completion order
+- [Phase 04]: The non-repo question decided by giving the mutation sandbox a git index, not by skipping and not by returning an absence — and _tracked_top_level_dirs ALSO raises the named NotATrackedTree in both of git's failure shapes — Stripping the index out then makes make verify die naming the cause instead of going green having checked nothing; watched failing, exit 128, exactly 1 failed test and the 3 identity-check skips back
+- [Phase 04]: setuptools does NOT check that a license-files target exists — it builds, emits License-Expression, silently drops License-File and says nothing — The build is not the gate. tests/test_packaging_metadata.py is, and it was watched failing against a real license = Apache-2.0 edit to pyproject.toml, not only against a synthetic copy
+- [Phase 04]: MANIFEST.in prunes rather than grafts — eight prune lines, no exclude lines — Shipping tests/fixtures/ would put captured retailer HTML in a public artifact and this repo redacts fixtures by class rather than by value for exactly that reason; measured, the unmanifested sdist carried every tests/test_*.py and none of the fixtures or conftest they need. exclude lines are avoided because one naming a file that never entered warns on every build forever
+- [Phase 04]: No Development Status classifier, no Changelog URL and no Typing :: Typed in 04-02 — The first two are claims about a version and a file that do not exist yet and land with 04-05's 1.0.0 bump; the third would advertise a typing contract no installed consumer can act on, since there is no boty/py.typed marker
+- [Phase 04]: The sandbox git index costs make verify's mutation stage ~29s and that is accepted, not a defect — Sandbox suite 6.0s -> 9.2s across nine sandboxes, entirely from the un-skipped identity scan — git init plus git add -A are 0.09s. Recorded so 04-04 or a contributor meeting slower CI does not remove the index to get it back
 
 ### Blockers
 
