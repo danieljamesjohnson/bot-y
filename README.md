@@ -252,6 +252,34 @@ exists to prevent. `tests/test_support_matrix.py` pins which rows may say
 
 ## Install
 
+### From PyPI
+
+**The distribution name is `bot-y`, with a hyphen. That is what `pip` needs.**
+The import package and the console script are both spelled `boty`, without one,
+and the two differing matters more here than it usually would — because `boty`
+is a **different package on PyPI, published by someone else**.
+
+That is a measurement rather than a caution. `boty` on PyPI is version 0.1.1,
+summary "Time Flies", author Bart Thate, homepage on the long-dead googlecode,
+two releases, the last of them on **2012-03-10**. Someone who types `pip install
+boty` installs a stranger's fourteen-year-old code, and nothing about the
+failure will look like a failure: the install succeeds, and then nothing works
+for reasons that have nothing to do with this project.
+
+This cannot be fixed by claiming the neighbouring name. PyPI does not release a
+name that has files on it, so `boty` is not available to be taken defensively.
+The warning you are reading is the entire mitigation, which is why it sits above
+the command rather than below it.
+
+```bash
+pip install bot-y
+```
+
+Publication happens from the `v1.0.0` tag. If that command reports no matching
+distribution, the tag has not been pushed yet and the clone below is the way in.
+
+### From a clone
+
 ```bash
 git clone https://github.com/danieljamesjohnson/bot-y
 cd bot-y

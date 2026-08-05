@@ -91,6 +91,31 @@ PRIVILEGED_SCOPES = ("id-token", "packages")
 #: Trigger names through which a pull request can start a run.
 PULL_REQUEST_TRIGGERS = ("pull_request", "pull_request_target")
 
+#: THE OWNERS THIS REPOSITORY WILL RUN CODE FROM ON A RUNNER. An enumerated pin
+#: in the `UNREAD_POSITIONS` idiom from `tests/test_support_matrix.py`: this is a
+#: PIN, not a rule. Widening it is a deliberate edit to a red test, made in the
+#: same commit as the workflow that justifies it, with the justification named
+#: here — never a quiet relaxation to make a new file pass.
+#:
+#:   `actions`  GitHub's own organisation. Everything `.github/workflows/ci.yml`
+#:              uses, and the checkout/setup-python/artifact steps in
+#:              `release.yml`.
+#:   `pypa`     Added 2026-08-05 with `.github/workflows/release.yml`, for
+#:              `pypa/gh-action-pypi-publish`. The Python Packaging Authority
+#:              also publishes `setuptools`, which `[build-system] requires`
+#:              already EXECUTES on every build of this project, and `build` and
+#:              `twine`, which `scripts/release_check.py` runs. So it was already
+#:              inside this project's trust boundary rather than newly admitted
+#:              to it — and the alternative, hand-rolling the OIDC token exchange
+#:              in a shell step, means unreviewed credential-handling code in the
+#:              one job that holds an identity.
+#:
+#: The rule this constant feeds is NOT weakened by having two entries:
+#: `test_a_third_party_owner_in_the_publish_workflow_is_reported` and
+#: `test_a_third_party_action_with_a_perfectly_good_sha_is_reported` both still
+#: watch it bite on an owner that is in neither.
+TRUSTED_ACTION_OWNERS = ("actions", "pypa")
+
 _SHA = re.compile(r"[0-9a-f]{40}")
 _MAKE = re.compile(r"\bmake\s+([A-Za-z0-9_.-]+)")
 _USES = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)\s*(?:#\s*(.*?))?\s*$")
@@ -334,17 +359,26 @@ def _action_pins(raw: str) -> list[tuple[str, str, str | None]]:
 
 
 def _unpinned_actions(pins: list[tuple[str, str, str | None]]) -> list[str]:
-    """Every pin that is third-party, tag-pinned, or missing its version comment.
+    """Every pin from an untrusted owner, tag-pinned, or missing its version comment.
 
     A mutable tag is another party's pointer: in March 2025 `tj-actions/changed-files`
     had its tags repointed at a malicious commit and thousands of public
     repositories printed secrets into their build logs. A full commit SHA is
     immutable and costs one deliberate edit a year here.
+
+    The owner check reads `TRUSTED_ACTION_OWNERS` — an enumerated pin with its
+    reasoning attached — rather than a hard-coded `actions/` prefix. It was
+    widened, not deleted, when `release.yml` brought in the first non-`actions/`
+    publisher; see the constant.
     """
     bad: list[str] = []
     for action, ref, comment in pins:
-        if not action.startswith("actions/"):
-            bad.append(f"{action}: not published by GitHub's own `actions` organisation")
+        owner = action.split("/")[0]
+        if owner not in TRUSTED_ACTION_OWNERS:
+            bad.append(
+                f"{action}: owner {owner!r} is not in the trusted-publisher "
+                f"allow-list {list(TRUSTED_ACTION_OWNERS)}"
+            )
         elif _SHA.fullmatch(ref) is None:
             bad.append(f"{action}: ref {ref!r} is not a 40-character commit SHA")
         elif comment is None or not re.search(r"v[0-9]", comment):
@@ -798,7 +832,8 @@ def test_a_third_party_action_with_a_perfectly_good_sha_is_reported() -> None:
     )
     findings = _unpinned_actions(_action_pins(broken))
     assert findings == [
-        "tj-actions/changed-files: not published by GitHub's own `actions` organisation"
+        "tj-actions/changed-files: owner 'tj-actions' is not in the trusted-publisher "
+        "allow-list ['actions', 'pypa']"
     ], findings
 
 
@@ -903,3 +938,295 @@ def test_the_same_publish_workflow_is_reported_the_moment_a_pr_can_start_it() ->
     assert findings == [
         "release.yml: pull-request-triggerable and grants id-token: write (job:pypi)"
     ], findings
+
+
+# --------------------------------------------------------------------------
+# The real publish workflow — the same rules, applied rather than re-written
+# --------------------------------------------------------------------------
+#
+# This section lives in THIS file rather than a `test_release_workflow.py`
+# beside it, and that is the decision worth stating. There is one definition in
+# this repository of what a workflow may be — one YAML reader, one permission
+# flattener, one pin parser, one exit-code-flattening rule — and a second file
+# would be a second definition, free to drift from this one until the two
+# disagree about the file that holds the only privilege here. Everything below
+# calls the functions above unchanged. Exactly one rule was widened
+# (`_unpinned_actions`, via `TRUSTED_ACTION_OWNERS`), in the same commit as the
+# workflow that justified it, and it still bites on an untrusted owner.
+#
+# `PUBLISH_WORKFLOW` above stays where it is. It was 04-04's synthetic stand-in
+# for this file, and it keeps doing a job the real file cannot: asserting the
+# privilege boundary against a workflow whose text nobody is tempted to fix.
+
+
+RELEASE = WORKFLOWS / "release.yml"
+
+#: The environment the publish job declares. It must be entered VERBATIM into
+#: PyPI's trusted-publisher form; if the two strings differ the OIDC exchange
+#: fails with an error that reads like a configuration problem on the other side.
+PUBLISH_ENVIRONMENT = "pypi"
+
+
+def _release_raw() -> str:
+    """The publish workflow as written. Same two-view split as `_raw`."""
+    return RELEASE.read_text(encoding="utf-8")
+
+
+def _release() -> dict[Any, Any]:
+    return dict(yaml.safe_load(_release_raw()))
+
+
+def _publish_job(wf: dict[Any, Any]) -> tuple[str, dict[str, Any]]:
+    """The one job holding an `id-token` grant, and its name."""
+    holders = [
+        (name, job)
+        for name, job in _jobs(wf).items()
+        if "id-token" in ((job or {}).get("permissions") or {})
+    ]
+    assert len(holders) == 1, f"expected exactly one job holding id-token, found {[h[0] for h in holders]}"
+    return holders[0]
+
+
+def test_the_publish_workflow_exists_and_is_two_jobs() -> None:
+    assert RELEASE.is_file(), f"{RELEASE} is missing — this repo cannot publish itself"
+    jobs = _jobs(_release())
+    assert len(jobs) == 2, f"expected exactly two jobs, found {sorted(jobs)}"
+
+
+def test_only_a_tag_push_can_start_the_publish_workflow() -> None:
+    triggers = _triggers(_release())
+    assert set(triggers) == {"push"}, (
+        f"the publish workflow's triggers are {sorted(triggers)}. It holds id-token: write, so the "
+        "only thing that may start it is a tag push."
+    )
+    assert "tags" in (triggers["push"] or {}), triggers["push"]
+    assert triggers["push"]["tags"] == ["v*"], triggers["push"]
+
+
+def test_no_pull_request_and_no_manual_dispatch_can_reach_the_publish_workflow() -> None:
+    """The three refusals, asserted on the comment-stripped view.
+
+    Comment-stripped because the workflow's own decision record NAMES all three
+    in order to explain their absence — the same collision the two views of
+    `ci.yml` exist for, one file over.
+    """
+    triggers = _triggers(_release())
+    for trigger in (*PULL_REQUEST_TRIGGERS, "workflow_dispatch", "release"):
+        assert trigger not in triggers, trigger
+    code = _code(_release_raw())
+    for token in ("pull_request", "workflow_dispatch", "secrets."):
+        assert token not in code, f"{token!r} survives in the comment-stripped publish workflow"
+
+
+def test_the_publish_privilege_is_one_scope_on_one_job() -> None:
+    wf = _release()
+    grants = _permission_grants(wf)
+    assert ("workflow", "contents", "read") in grants, grants
+
+    name, job = _publish_job(wf)
+    perms = job["permissions"]
+    assert perms.get("id-token") == "write", perms
+    # A job-level block REPLACES the workflow-level one rather than merging, so
+    # dropping this line would leave the publish job with no repository read
+    # scope at all. Restating it is deliberate.
+    assert perms.get("contents") == "read", (
+        f"job {name!r} declares id-token but not contents: read. A job-level permissions block "
+        "replaces the workflow-level one; without this the job has no read scope."
+    )
+    assert set(perms) == {"id-token", "contents"}, perms
+
+    other = [n for n in _jobs(wf) if n != name]
+    assert len(other) == 1, other
+    assert (_jobs(wf)[other[0]] or {}).get("permissions") is None, (
+        f"the build job {other[0]!r} declares its own permissions. It runs the build backend from "
+        "the tag being released; it must inherit contents: read and hold nothing else."
+    )
+
+
+def test_the_build_job_holds_no_write_grant_of_any_kind() -> None:
+    wf = _release()
+    publish, _ = _publish_job(wf)
+    elsewhere = [g for g in _write_grants(_permission_grants(wf)) if g[0] != f"job:{publish}"]
+    assert elsewhere == [], elsewhere
+
+
+def test_nothing_in_the_publish_workflow_grants_packages_or_writes_contents() -> None:
+    code = _code(_release_raw())
+    assert "packages:" not in code
+    assert "contents: write" not in code, (
+        "a contents: write grant appeared. Creating a GitHub Release needs it on a job that "
+        "already holds an OIDC identity, for something the tag and PyPI already record."
+    )
+
+
+def test_the_publish_job_declares_an_environment() -> None:
+    _, job = _publish_job(_release())
+    assert job.get("environment") == PUBLISH_ENVIRONMENT, (
+        f"the publish job's environment is {job.get('environment')!r}. This string must match the "
+        "environment field in PyPI's trusted-publisher form exactly."
+    )
+
+
+def test_every_action_in_the_publish_workflow_is_pinned_to_a_trusted_owner() -> None:
+    pins = _action_pins(_release_raw())
+    assert len(pins) == 5, [p[0] for p in pins]
+    assert _unpinned_actions(pins) == [], _unpinned_actions(pins)
+    owners = sorted({action.split("/")[0] for action, _, _ in pins})
+    assert owners == ["actions", "pypa"], owners
+
+
+def test_no_run_block_in_the_publish_workflow_interpolates_an_expression() -> None:
+    assert _expression_interpolations(_release()) == []
+
+
+def test_nothing_in_the_publish_workflow_can_flatten_an_exit_code() -> None:
+    assert _flattening(_code(_release_raw())) == []
+
+
+def test_the_publish_workflow_runs_on_a_pinned_image_within_a_time_limit() -> None:
+    wf = _release()
+    assert _floating_runners(wf) == [], _floating_runners(wf)
+    for name, job in _jobs(wf).items():
+        timeout = (job or {}).get("timeout-minutes")
+        assert isinstance(timeout, int) and 0 < timeout <= 30, f"{name}: timeout-minutes={timeout!r}"
+
+
+def test_the_publish_workflow_builds_on_the_declared_floor() -> None:
+    versions = _python_versions(_release())
+    assert len(versions) == 1, versions
+    assert isinstance(versions[0], str), (
+        f"python-version parsed as {type(versions[0]).__name__} — unquoted, YAML reads 3.10 as 3.1"
+    )
+    assert versions[0] == _declared_floor(PYPROJECT.read_text(encoding="utf-8"))
+
+
+def test_no_workflow_in_this_directory_uploads_from_a_run_block() -> None:
+    """Publishing goes through the pinned action, never a hand-written shell line.
+
+    A `run:` block reaching pypi.org is credential handling nobody reviewed,
+    running in the one job that holds an identity.
+    """
+    for name, text in _all_workflow_texts().items():
+        for block in _run_blocks(yaml.safe_load(text)):
+            assert "twine" not in block, f"{name}: a run block invokes twine"
+            assert "gh release" not in block, f"{name}: a run block creates a GitHub release"
+
+
+def test_the_publish_workflows_comments_name_what_it_forbids() -> None:
+    """Direction one of the comment-stripping property, for the second file.
+
+    The decision record has to name `pull_request`, `workflow_dispatch` and
+    `contents: write` in order to explain their absence. The rules must report
+    nothing for it — which is the proof `_code` strips comments rather than the
+    rules having stopped looking.
+    """
+    raw = _release_raw()
+    for token in ("pull_request_target", "workflow_dispatch", "contents: write", "${{"):
+        assert token in raw, f"the publish workflow no longer explains why {token!r} is absent"
+    code = _code(raw)
+    for token in ("pull_request", "workflow_dispatch", "contents: write", "${{"):
+        assert token not in code, token
+    assert _flattening(code) == []
+    assert _pr_triggered_privilege({"release.yml": raw}) == []
+
+
+# --------------------------------------------------------------------------
+# The publish workflow, corrupted one token at a time
+# --------------------------------------------------------------------------
+
+
+def _corrupt_release(old: str, new: str) -> str:
+    """The real publish workflow with one exact substitution applied."""
+    text = _release_raw()
+    count = text.count(old)
+    assert count == 1, (
+        f"expected exactly one {old!r} in the real publish workflow, found {count} — the shipped "
+        "file moved out from under this test"
+    )
+    return text.replace(old, new)
+
+
+def test_a_pull_request_trigger_on_the_publish_workflow_is_reported() -> None:
+    """The single most important assertion in this file.
+
+    A pull-request trigger here is a fork's code running in a job that can mint a
+    PyPI credential. It must be a finding, by name, across the whole directory.
+    """
+    broken = _corrupt_release("on:\n  push:\n", "on:\n  pull_request:\n  push:\n")
+    findings = _pr_triggered_privilege({"release.yml": broken})
+    assert findings == [
+        "release.yml: pull-request-triggerable and grants id-token: write (job:publish)"
+    ], findings
+
+
+def test_a_pull_request_target_trigger_on_the_publish_workflow_is_reported() -> None:
+    broken = _corrupt_release("on:\n  push:\n", "on:\n  pull_request_target:\n  push:\n")
+    findings = _pr_triggered_privilege({"release.yml": broken})
+    assert findings and "pull_request_target" in findings[0], findings
+
+
+def test_a_workflow_dispatch_trigger_on_the_publish_workflow_is_visible() -> None:
+    """Not a security finding — a record-keeping one, and it has its own rule.
+
+    A dispatch run publishes from whatever ref the operator picked, leaving no
+    permanent name for what was published. The trigger-set assertion is what
+    catches it, so the corruption proves that assertion is not vacuous.
+    """
+    broken = _corrupt_release("on:\n  push:\n", "on:\n  workflow_dispatch:\n  push:\n")
+    assert set(_triggers(yaml.safe_load(broken))) == {"push", "workflow_dispatch"}
+
+
+def test_moving_the_id_token_grant_to_the_workflow_level_is_reported() -> None:
+    """Which would hand it to the job that runs the build backend as well."""
+    broken = _corrupt_release(
+        "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  id-token: write\n"
+    )
+    grants = _permission_grants(yaml.safe_load(broken))
+    assert ("workflow", "id-token", "write") in _write_grants(grants), grants
+
+
+def test_a_contents_write_grant_on_the_publish_workflow_is_reported() -> None:
+    broken = _corrupt_release(
+        "permissions:\n  contents: read\n", "permissions:\n  contents: write\n"
+    )
+    assert ("workflow", "contents", "write") in _write_grants(
+        _permission_grants(yaml.safe_load(broken))
+    )
+
+
+def test_a_tag_pinned_publisher_is_reported() -> None:
+    broken = _corrupt_release(
+        "uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
+        "uses: pypa/gh-action-pypi-publish@v1",
+    )
+    findings = _unpinned_actions(_action_pins(broken))
+    assert findings == [
+        "pypa/gh-action-pypi-publish: ref 'v1' is not a 40-character commit SHA"
+    ], findings
+
+
+def test_a_third_party_owner_in_the_publish_workflow_is_reported() -> None:
+    """The allow-list was WIDENED, not deleted, and this is the proof."""
+    broken = _corrupt_release(
+        "uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
+        f"uses: some-vendor/publish-to-pypi@{'0' * 40}",
+    )
+    findings = _unpinned_actions(_action_pins(broken))
+    assert findings == [
+        "some-vendor/publish-to-pypi: owner 'some-vendor' is not in the trusted-publisher "
+        "allow-list ['actions', 'pypa']"
+    ], findings
+
+
+def test_an_expression_in_a_publish_workflow_run_block_is_reported() -> None:
+    broken = _corrupt_release(
+        "\n          python -m build\n",
+        "\n          python -m build ${{ github.event.head_commit.message }}\n",
+    )
+    assert _expression_interpolations(yaml.safe_load(broken))
+
+
+def test_removing_the_environment_from_the_publish_job_is_reported() -> None:
+    broken = _corrupt_release("    environment: pypi\n", "")
+    _, job = _publish_job(yaml.safe_load(broken))
+    assert job.get("environment") is None

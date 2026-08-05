@@ -1,0 +1,166 @@
+# bot-y — publish to PyPI, from a tag, with no stored secret.
+#
+# WHY THIS FILE HOLDS THE ONLY PRIVILEGE IN THIS REPOSITORY
+#
+# `.github/workflows/ci.yml` grants `contents: read` and nothing else. This file
+# grants `id-token: write` on one job, which is an OpenID Connect identity that
+# PyPI will exchange for a short-lived upload token. That is the single largest
+# privilege anything in this repository holds, and every decision below is about
+# keeping the set of things that can reach it as small as it can be made.
+#
+# TRUSTED PUBLISHING, NEVER AN API TOKEN IN REPOSITORY SECRETS.
+# The alternative is a long-lived PyPI upload token sitting in this public
+# repository's secrets. Such a token is reachable by ANY future workflow edit —
+# including one made in a pull request by someone who has never touched this
+# file — and it outlives every person who remembers it was created. OIDC removes
+# the secret entirely: nothing to leak, nothing to rotate, nothing to forget. The
+# grant is scoped by PyPI to one repository, one workflow filename and one
+# environment, so it cannot be replayed from anywhere else. `secrets.` appears
+# nowhere below.
+#
+# THE ONLY TRIGGER IS A `v*` TAG PUSH. Four absences, each for its own reason:
+#
+#   * No `pull_request`. This workflow holds `id-token: write`, and a
+#     pull-request trigger would let a fork's code run in a job that can mint a
+#     PyPI credential. `tests/test_ci_workflow.py::_pr_triggered_privilege`
+#     enumerates every file in this directory and fails any that is
+#     pull-request-triggerable while holding a `write`, `id-token` or `packages`
+#     grant. That rule was written and exercised in BOTH directions against a
+#     synthetic copy of this file before this file existed, so adding such a
+#     trigger here goes red immediately and by name.
+#   * No `pull_request_target`. Reported unconditionally by the same rule,
+#     privilege or not: it runs the base repository's workflow with a write token
+#     and its secrets against author-controlled code.
+#   * No `workflow_dispatch`, and this one is refused for its own reason rather
+#     than for a security reason. A dispatch run publishes from whatever ref the
+#     operator picked in a web form, leaving no permanent name for what was
+#     published — the run log is the only record, and run logs expire. A tag is a
+#     record that outlives the run. A mis-tagged release is fixed by yanking the
+#     release on PyPI and tagging again, NEVER by re-running this workflow with
+#     different inputs.
+#   * No `release` event. It would mean a GitHub Release created by hand is what
+#     publishes, which puts a mouse click between the tag and the artifact.
+#
+# TWO JOBS, AND THE SPLIT IS THE POINT — STATED SMALL.
+# `python -m build` executes the build backend from the checked-out ref, which is
+# arbitrary code from the tag being released. Running that in the same job as
+# `id-token: write` would let build-time code reach a mintable PyPI credential
+# and use it for something other than this release. Splitting stops that.
+#
+# It does NOT stop a malicious tag from publishing a malicious package. Nothing
+# in a workflow can: whoever can push a `v*` tag here can publish. The claim this
+# control makes is the smaller one, and it is written down small on purpose,
+# because a control whose limits nobody knows is a control nobody maintains.
+#
+# NO GITHUB RELEASE IS CREATED HERE. Creating one needs `contents: write` on a
+# job that already holds an OIDC identity, and it would add nothing the tag and
+# the PyPI release page do not already carry. Whether to write one by hand is a
+# separate decision for a human, not a permission for this workflow.
+#
+# EVERY `uses:` IS PINNED TO A COMMIT SHA. In March 2025 `tj-actions/changed-files`
+# had its tags repointed at a malicious commit and thousands of public
+# repositories printed secrets into their build logs — the incident `ci.yml`
+# already cites, and it applies with more force here, where one job holds an
+# identity. A tag is a mutable pointer owned by somebody else; a SHA is not.
+#
+# `pypa/gh-action-pypi-publish` IS THE FIRST NON-`actions/` ACTION IN THIS
+# REPOSITORY, AND IT IS ARGUED RATHER THAN ASSUMED. `pypa` publishes
+# `setuptools`, which `[build-system] requires` already executes on every build
+# of this project, and `build` and `twine`, which `scripts/release_check.py`
+# runs — so the publisher is inside this project's trust boundary already rather
+# than newly admitted to it. The alternative is hand-rolling the OIDC token
+# exchange in a shell step: writing credential-handling code that nobody reviews,
+# against a maintained implementation that many do. The action-owner rule in
+# `tests/test_ci_workflow.py` was WIDENED to a named allow-list of two owners in
+# the same commit as this file, never deleted, and a corruption test still
+# reports a genuinely third-party owner.
+#
+# NOTHING HERE FLATTENS AN EXIT CODE and no `run:` block contains a `${{ }}`
+# expression — same rules as `ci.yml`, enforced by the same functions.
+
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+
+# Least privilege at the workflow level. The publish job widens it, deliberately
+# and by exactly one scope; the build job inherits this and nothing more.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # No `permissions:` block at all, so this job inherits `contents: read`
+    # above. That is the whole security property of splitting the jobs: the code
+    # that runs the build backend has no identity to mint anything with.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the tag being released
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Quoted, for the reason measured in ci.yml: unquoted, YAML 1.1 reads
+      # `3.10` as the float 3.1. The value is the floor `requires-python`
+      # declares — building on the floor means the metadata a release ships was
+      # produced by the oldest interpreter this package claims to support.
+      - name: Provision the interpreter this package declares as its floor
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+
+      # `build` and nothing else. This deliberately mirrors what
+      # `scripts/release_check.py` does locally — build in an environment holding
+      # only the build frontend, never in one that already has this project's
+      # runtime dependencies lying around, because the second cannot detect a
+      # missing `Requires-Dist`.
+      - name: Build the sdist and the wheel
+        run: |
+          python -m pip install build
+          python -m build
+
+      - name: Hand both artifacts to the publish job
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    # `environment:` buys two things. It is a place to attach required reviewers
+    # or a wait timer later without editing this file, and PyPI's
+    # trusted-publisher form has an environment field that scopes the grant
+    # further than repository-plus-workflow alone.
+    #
+    # It also creates a coupling that has to be stated: THIS STRING AND THE
+    # ENVIRONMENT NAME IN THE PYPI TRUSTED-PUBLISHER FORM MUST BE IDENTICAL. If
+    # they differ, the token mint fails with an error that reads like a
+    # configuration problem on the wrong side of the exchange.
+    environment: pypi
+
+    # A job-level `permissions:` block REPLACES the workflow-level one rather
+    # than merging with it. So `contents: read` is restated here deliberately:
+    # dropping it — the obvious "simplification" — would leave this job with no
+    # repository read scope at all. `id-token: write` is the OIDC identity, and
+    # it exists on this job and nowhere else in this repository.
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Collect the artifacts the build job produced
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      # No `with:` inputs at all: no repository URL override, no username, no
+      # password. The action reads `dist/`, requests an OIDC token from the
+      # runner, exchanges it with PyPI and uploads. Every input it does not take
+      # is one fewer place a credential could be introduced.
+      - name: Publish to PyPI through Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
