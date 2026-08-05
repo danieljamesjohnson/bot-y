@@ -8,6 +8,14 @@ __pycache__/
 dist/
 build/
 
+# Belt-and-braces. Ruff writes .ruff_cache/.gitignore containing `*`, so the
+# cache already self-ignores — but that is ruff's implementation detail rather
+# than a contract, and this repo's gates enumerate files THROUGH git
+# (identity_check.py --all, and the packaging test's tracked-top-level-dirs
+# rule). A change upstream would surface as a confusing red packaging test
+# rather than as an obvious cache directory.
+.ruff_cache/
+
 .env
 *.log
 state.json

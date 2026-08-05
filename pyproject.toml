@@ -99,6 +99,37 @@ dev = [
     # so a contributor resolving 1.x would run a WEAKER check than the one this
     # config was verified against and get a green that means less than ours.
     "mypy>=2.0",
+    # BOTH ends are deliberate, and that is the opposite shape to the mypy line
+    # two above it. The floor is the version every measurement in [tool.ruff.lint]
+    # below was taken against. The ceiling exists because the selection is by
+    # PREFIX: ruff lands new rules in preview and stabilises them in minor
+    # releases, so a 0.17 that stabilises one more `RUF` or `B` rule can turn a
+    # green tree red with nobody having touched a line of code — and `make verify`
+    # is the number every phase of this project states its success criteria in.
+    # Widening this range is therefore a deliberate edit made with the findings in
+    # front of you, not something a resolver does on a contributor's laptop.
+    #
+    # It belongs in `dev` because this extra's own comment above says it is
+    # everything needed to run `make verify`, which is now true of ruff.
+    #
+    # Supply-chain note (audited 2026-08-04, in the same form as the `nodriver`
+    # note under the `browser` extra below): PyPI `ruff` 0.16.1, licence MIT,
+    # publisher Astral Software Inc. — also the publisher of `uv` and `rye`.
+    # Declared Repository github.com/astral-sh/ruff, Documentation
+    # docs.astral.sh/ruff, Changelog under the same repo. That repo at audit time:
+    # 49,061 stars, created 2022-08-09, last push 2026-08-04, not archived, MIT.
+    # Cadence: 417 releases on PyPI, first 2022-08-27, latest 2026-07-30 — six
+    # continuous years, not a burst. Typosquat neighbours checked by name against
+    # the PyPI JSON API: `rufff`, `ruf`, `ruff-py`, `python-ruff`, `ruff2` and
+    # `py-ruff` all return 404; the only adjacent name that exists is `ruff-lsp`,
+    # which declares github.com/astral-sh/ruff-lsp — the same publisher.
+    # Dependency surface: `requires_dist` is null, so `pip install ruff` adds
+    # EXACTLY ONE package and no transitive tree, which is what makes it
+    # compatible with this project's small-dependency rule. Blast radius is
+    # bounded twice over: it is a `dev`-only extra and never a runtime
+    # dependency, and it is a compiled binary that runs at lint time — nothing
+    # `import boty` ever touches.
+    "ruff>=0.16,<0.17",
 ]
 
 # Rung 3 of the escalation ladder: a real browser, for the one retailer that
@@ -176,3 +207,85 @@ testpaths = ["tests"]
 # -ra surfaces skipped/xfailed tests in the summary. A test that quietly stops
 # running is the same class of silent failure this project exists to prevent.
 addopts = "-ra"
+
+[tool.ruff]
+# The direct analogue of `[tool.mypy] files` above, and committed for the same
+# reason: so a bare `ruff check` from the repo root judges the same 35 files for
+# everyone. `make lint`, a contributor's editor and CI cannot silently check
+# different sets, and a check that only passes with the right invocation flags is
+# a check that quietly stops being run.
+#
+# `tests/` is included here while mypy excludes it, on purpose. mypy's job is the
+# shipped code's type contract, so tests are outside its remit. But the gate tests
+# in `tests/` are the things `make verify` TRUSTS to tell the truth about
+# everything else — leaving them unlinted would put the verifier outside the net
+# that guards the code it judges, which is the same sentence `[tool.mypy] files`
+# already makes about `scripts/`.
+include = ["boty/**/*.py", "scripts/**/*.py", "tests/**/*.py"]
+
+# `target-version` is deliberately NOT set. Ruff infers it from
+# `requires-python = ">=3.10"` above, so the floor stays declared in exactly one
+# place; duplicating it into a second key is how the two drift. Verified: the
+# inferred run and an explicit `--target-version py310` run produce
+# byte-identical output.
+
+[tool.ruff.lint]
+# WHAT IS SELECTED, and what is deliberately not. Each exclusion below is a
+# measurement rather than a preference, recorded with its number so that widening
+# the selection is a decision someone has to argue with rather than a default.
+#
+# Selected: `F` (pyflakes), `E4`/`E7`/`E9` (ruff's own default pycodestyle
+# subset), `W`, `I` (import order), `UP` (pyupgrade), `B` (bugbear), `SIM`, `C4`,
+# `RUF`. Measured 2026-08-04 against ruff 0.16.1: this selection produced 20
+# findings over the tree, 10 safe-autofixable and 9 needing `--unsafe-fixes`. The
+# `E4`/`E7`/`E9` split rather than a bare `E` is ruff's own default, and it exists
+# precisely because `E5` — line length — is contentious. Here it is more than
+# contentious:
+#
+# * `E501` IS NOT SELECTED. Selecting `E` wholesale produced 497 findings and
+#   every single one of them was `E501`. Measured separately: 106 lines in
+#   `boty/`, `scripts/` and `tests/` exceed 100 characters and the longest is 473.
+#   They are the prose comment blocks and docstrings carrying this project's
+#   recorded decisions and its measurements — the AGPL `nodriver` audit above, the
+#   mypy-strictness rationale above that, the `MARKETPLACES` absence-is-a-claim
+#   block — several quoted verbatim from `docs/` and `.planning/`. Reflowing them
+#   to satisfy a length rule would rewrite the records, and a record that a tool
+#   rewrote is not a record. Line length here is a judgement the reviewer makes
+#   and the linter does not.
+#
+# * `ruff format` IS NOT ADOPTED, and there is deliberately no
+#   `[tool.ruff.format]` table and no `format` target in the Makefile. Measured:
+#   `ruff format --check` reports 32 of 36 files would be reformatted. Doing that
+#   immediately before a 1.0.0 tag rewrites `git blame` across the whole codebase
+#   — every line of every decision in this repo starts pointing at one formatting
+#   commit — and buys a reviewer nothing they asked for. Lint, not format.
+select = ["F", "E4", "E7", "E9", "W", "I", "UP", "B", "SIM", "C4", "RUF"]
+
+# `external` names rule codes owned by ANOTHER tool, and it is what resolves the
+# `RUF100` coupling below. Measured both directions on 2026-08-04.
+#
+# Ruff does not raise `E402` for module-level imports that follow a `sys.path`
+# mutation; flake8 and pycodestyle do. Verified against a two-file probe: a plain
+# out-of-order import is flagged by both, the same import after
+# `sys.path.insert(...)` is flagged only by flake8. So the seven `# noqa: E402`
+# directives in `scripts/control_check.py` and `scripts/evidence_check.py` are
+# CORRECT for the tool a contributor may reach for and inert under ruff — which
+# makes `RUF100` report all seven as unused, with a SAFE autofix. A plain
+# `ruff check --fix` therefore deletes them, silently re-introducing a
+# pycodestyle warning for everyone not using ruff. Deleting a directive to reach
+# zero is resolving a finding by throwing away the thing it was pointing at.
+#
+# The second half of the measurement is what makes this a scoping fix rather than
+# a suppression: with `external` set, a file containing a genuine `E402` is STILL
+# reported. `external` changes what `RUF100` considers unused; it does not switch
+# `E402` off.
+external = ["E402"]
+
+# A narrowing of RUF001/RUF002, not a deselection: every other confusable is
+# still flagged. The rule exists to catch homoglyph smuggling — Cyrillic and
+# Greek lookalikes inside identifiers and literals. All three findings it
+# produced here were EN DASHes inside docstrings and strings that quote
+# measurements, e.g. `1.9–3.2 MB each` in `check_amazon`'s docstring, which
+# records a live probe result. Allowing the two dashes this project's prose
+# actually uses keeps the rule aimed at smuggling instead of at typography.
+allowed-confusables = ["–", "—"]
