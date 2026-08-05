@@ -26,7 +26,7 @@ MAKE_Q := $(MAKE) --no-print-directory
 
 .DEFAULT_GOAL := help
 
-.PHONY: help test types controls fixtures mutation identity hooks verify verify-offline check-venv
+.PHONY: help test lint types controls fixtures mutation identity hooks verify verify-offline check-venv
 
 help:
 	@echo "bot-y — make targets"
@@ -34,6 +34,7 @@ help:
 	@echo "  verify          everything below, in order; exits non-zero if any check fails"
 	@echo "  verify-offline  same, but skips the live retailer check (for CI)"
 	@echo ""
+	@echo "  lint            ruff over boty/, scripts/ and tests/"
 	@echo "  test            offline pytest suite — catches CODE regressions"
 	@echo "  types           mypy over boty/ and scripts/"
 	@echo "  fixtures        warn about stale or unlabelled fixtures (never fails)"
@@ -52,6 +53,25 @@ check-venv:
 test: check-venv
 	@$(PYTHON) -m pytest tests/ -q
 
+# `$(PYTHON) -m ruff`, not the bare `ruff` console script, for two reasons and
+# the second is the load-bearing one. It runs under the interpreter $(PYTHON)
+# names, so `make PYTHON=... lint` stays honest and a `ruff` elsewhere on PATH
+# cannot shadow the one the venv installed. And tests/test_verify_makefile.py
+# stubs $(PYTHON) — a bare `ruff` would be unreachable from that stub, so this
+# stage could never be watched failing, which is the whole point of adding it.
+#
+# No rule flags: the selection lives in [tool.ruff.lint] in pyproject.toml, and
+# a flag here would be a second definition of it that can drift. This is a RULE
+# check only — ruff's formatter is deliberately not adopted, and there is no
+# `format` target anywhere in this file; the measurement behind that decision
+# (32 of 36 files would be rewritten) is recorded in the [tool.ruff] block.
+#
+# Written without the literal formatter subcommand on purpose: the acceptance
+# criterion for this stage greps this file AGAINST it, so naming it here would
+# defeat the check that keeps a formatter out of the build.
+lint: check-venv
+	@$(PYTHON) -m ruff check
+
 types: check-venv
 	@$(PYTHON) -m mypy
 
@@ -68,6 +88,13 @@ mutation: check-venv
 
 # Order is deliberate: cheap and offline first, so a plain syntax error is
 # reported in seconds rather than after a network round-trip.
+#
+# `lint` runs second. It is the cheapest check in this file — measured on this
+# box at 0.02s over 35 files, against mypy's 0.09s and the identity scan's
+# 3.33s — and a rule violation should be reported before a 460-test run rather
+# than after it. It goes second rather than first only because `identity`'s
+# position is justified by CONSEQUENCE and not by cost: a leak is the one
+# failure you cannot walk back after a push.
 #
 # make aborts a recipe at the first failing line, so a naive `verify` could
 # never reach a closing verdict. Each step therefore carries its own trap that
@@ -105,8 +132,9 @@ hooks:
 	@echo "installed .git/hooks/pre-commit — staged files are now identity-checked"
 
 verify:
-	@echo "=== verify: identity, tests, types, fixtures, controls, mutation ==="
+	@echo "=== verify: identity, lint, tests, types, fixtures, controls, mutation ==="
 	@$(MAKE_Q) identity || { echo "VERIFY: FAIL (host identity in a tracked file)"; exit 1; }
+	@$(MAKE_Q) lint     || { echo "VERIFY: FAIL (lint)"; exit 1; }
 	@$(MAKE_Q) test     || { echo "VERIFY: FAIL (tests)"; exit 1; }
 	@$(MAKE_Q) types    || { echo "VERIFY: FAIL (types)"; exit 1; }
 	@$(MAKE_Q) fixtures || { echo "VERIFY: FAIL (fixtures)"; exit 1; }

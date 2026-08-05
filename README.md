@@ -394,6 +394,8 @@ Install the extra if you want Best Buy covered; ignore it if you do not.
 
 | Stage | Proves |
 |---|---|
+| `identity` | No host identity — IP, coordinates, tokens — in **any** tracked file, not only the fixtures |
+| `lint` | `ruff` is clean over `boty/`, `scripts/` and `tests/`, against the rule set committed in `pyproject.toml` |
 | `test` | The offline suite still passes — no network touched, no browser started |
 | `types` | `mypy` is clean over `boty/` and `scripts/` |
 | `fixtures` | Warns about fixtures older than 90 days or missing a capture note. Never fails |
