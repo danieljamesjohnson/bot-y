@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-08-05T00:00:22.952Z"
-last_activity: 2026-08-04
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-08-05T00:23:15.994Z"
+last_activity: 2026-08-05
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 23
-  completed_plans: 18
+  completed_plans: 19
   percent: 60
 ---
 
@@ -28,14 +28,14 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 03.1 of 5 (Target and Amazon, supported) — **COMPLETE**. INSERTED, reverses a Phase 3 decision
 **Plan:** 5 of 5 complete (01, 05, 02, 03, 04 — all waves done)
-**Last session:** 2026-08-05T00:00:22.947Z
-**Stopped At:** Completed 04-02-PLAN.md
+**Last session:** 2026-08-05T00:23:15.989Z
+**Stopped At:** Completed 04-03-PLAN.md
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
 
 2. **Pacing and backoff (2026-08-04), in response to a live alert.** Amazon and GameStop had been refusing us for a day. Not a detector bug: `interval_seconds` is per PASS, so load is `watches x 288/day` — Amazon 576, GameStop 1,440 — with no backoff at all. Worse, every failing control was reported as "the detector is probably broken", which is false for a refusal and sent 20 pages in 24 hours. Added `Result.refused` / `fetch.is_refusal`, split the health message, added `boty/pacing.py` (per-retailer cadence + exponential backoff, capped, reset on a good read), and stopped paging for refusals until they outlast the backoff. Verified live: 0 pages while both retailers refused, both published as `paced` rather than dropped.
 
-**Last Activity:** 2026-08-04
+**Last Activity:** 2026-08-05
 **Last Activity Description:** Phase 04 execution started
 
 3. **Two live detector failures (2026-08-04 evening), both caught by control products within a cycle, neither a broken detector.** Best Buy began serving its JSON-LD **JavaScript-escaped** — `\'` inside strings, literal `\n` outside them — so `json.loads` refused all three blocks, `parse.py` skipped them silently, and the control read UNKNOWN with a detail naming the wrong cause. Proven against the shipped fixture, which parses 3/3 on the same SKU with no backslashes at all. `ldjson_read` now parses strictly first and only then offers an already-failed block to a string-state-aware repair; it reports `blocks`/`unparseable`/`repaired`, and a repaired read publishes as `ld+json (repaired)` so it cannot look ordinary. **Not claimed:** that the repair restored the live reading — Best Buy was serving valid markup again by 17:45 and the live read carried no `(repaired)` marker. The escaping is intermittent; a clean probe does not disprove it. Separately, **Target's UNKNOWN was our own render race**: ~35 KB of markup carrying the add-to-cart control arrives between 1s and 3s (measured: absent at `settle=1.0`, present at 3.0 and 6.0), and `fetch_rendered`'s default is exactly 3.0. `check_target_browser` now re-renders once at 10.0s before concluding — in the adapter, because it is a layout question and `boty/browser.py` is deliberately ignorant of layout. **M2's anchor was re-pointed** because this change moved the line it named, and the harness refused to run rather than quietly drop to seven mutations. Verified: mypy clean, 419 passed, 8/8 mutations, `VERIFY: PASS (OFFLINE)`, both new gates watched failing in both directions (removing the repair reddens 3 tests, making it over-reach reddens 22), **service restarted onto the fixed code** and publishing **6/6 retailers healthy**, 13 watches, 47.1s of REQ-08's 120s.
@@ -115,6 +115,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 03.1 P04 | 21min | 2 tasks | 5 files |
 | Phase Phase 04 PP01 | 16min | 3 tasks tasks | 5 files files |
 | Phase 04 P02 | 30min | 3 tasks | 5 files |
+| Phase 04 P03 | 50m | 3 tasks | 16 files |
 
 ## Decisions
 
@@ -179,6 +180,9 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 04]: MANIFEST.in prunes rather than grafts — eight prune lines, no exclude lines — Shipping tests/fixtures/ would put captured retailer HTML in a public artifact and this repo redacts fixtures by class rather than by value for exactly that reason; measured, the unmanifested sdist carried every tests/test_*.py and none of the fixtures or conftest they need. exclude lines are avoided because one naming a file that never entered warns on every build forever
 - [Phase 04]: No Development Status classifier, no Changelog URL and no Typing :: Typed in 04-02 — The first two are claims about a version and a file that do not exist yet and land with 04-05's 1.0.0 bump; the third would advertise a typing contract no installed consumer can act on, since there is no boty/py.typed marker
 - [Phase 04]: The sandbox git index costs make verify's mutation stage ~29s and that is accepted, not a defect — Sandbox suite 6.0s -> 9.2s across nine sandboxes, entirely from the un-skipped identity scan — git init plus git add -A are 0.09s. Recorded so 04-04 or a contributor meeting slower CI does not remove the index to get it back
+- [Phase 04]: B905 resolved as strict=True, against ruff's own unsafe autofix — a truncated alerts list is a missed restock that reads exactly like a quiet market — 04-03 Task 2
+- [Phase 04]: E501 not selected and ruff format not adopted: 497 findings over the comment blocks carrying this project's recorded decisions, and 32 of 36 files reformatted immediately before a 1.0.0 tag — 04-03 Task 1
+- [Phase 04]: external = [E402] rather than deleting the seven noqa directives RUF100 calls unused — ruff's own E402 enforcement stays on — 04-03 Task 1
 
 ### Blockers
 

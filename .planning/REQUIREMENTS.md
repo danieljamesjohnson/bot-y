@@ -54,7 +54,7 @@ has not worked.
 ### Phase 4 — Open Source Ready
 
 - [x] **REQ-09**: `docs/adding-a-retailer.md` walks a contributor through a real adapter end to end and states why a control product is mandatory.
-- [ ] **REQ-10**: CI runs lint, type check and the offline test suite on every PR.
+- [x] **REQ-10**: CI runs lint, type check and the offline test suite on every PR.
 - [ ] **REQ-11**: `pip install bot-y` works from PyPI, and a v1.0.0 tag exists.
 
 ## Non-Functional Requirements
@@ -104,7 +104,7 @@ Maintained by `gsd-tools`; a requirement flips to Complete when its phase comple
 | REQ-07 | Phase 3 | Complete |
 | REQ-08 | Phase 3 | Complete |
 | REQ-09 | Phase 4 | Complete |
-| REQ-10 | Phase 4 | Pending |
+| REQ-10 | Phase 4 | Complete |
 | REQ-11 | Phase 4 | Pending — 04-02 shipped the licence and the packaging metadata REQ-11 rests on, and its frontmatter claimed the requirement on landing. It does not close it. REQ-11's own text is `pip install bot-y` works **from PyPI**, and a **v1.0.0** tag exists: at the end of wave 2 the version is `0.1.0`, `git tag -l` is empty, and nothing has been published. **04-06** is the plan that closes this, by measuring what Dan actually publishes rather than by asserting it here |
 | REQ-12 | Phase 1 | Complete |
 | REQ-07a | Phase 3.1 | Complete — **both retailers registered, and both on an observation rather than a policy reading, which is the whole point of this requirement.** *(This cell described the mid-phase state until 2026-08-03: "Target stays dropped … Amazon still unprobed". Both halves were overtaken by the plans that followed and the narrative is replaced rather than appended to, because a status cell is not a log.)* **Target** — reachable at rung 1 but *empty* (no price, availability or seller anywhere in the HTML; stock renders from `redsky.target.com`, `Disallow: /`). Dan answered the `robots.txt` question in `QUESTIONS.md` 0d, so 03.1-02 registered it at **rung 3 + `dom`**, reading the add-to-cart control off the rendered page — **control-only**, because Target has delisted the GO Plus + (TCIN `88714054`, HTTP 200 as late as 2025-05, now 404). **Amazon** — 03.1-03 made this repo's first live `/dp/` requests: three, all HTTP 200, no challenge, no `BLOCK_PHRASES` match. No structured data at all, but `<input id="add-to-cart-button">` is in the rung-1 bytes, so it registered at **rung 1 + `dom`** (shape C). Phase 3 had dropped it on its Conditions of Use having never sent a request; the technical answer is that it serves us. Six retailers ship, 6/6 control-verified. The gate that makes this mechanical is `evidence_check` rule 6 — a `REFUSED` verdict must cite an observation carrying a status code, a byte count or a matched block phrase, watched failing on a prose-only body |
