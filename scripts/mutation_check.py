@@ -111,9 +111,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: line, and the published file surface of this project is the one thing that
 #: rule guards. A sandbox without it turns a FileNotFoundError into what looks
 #: like a caught mutation.
+#: `.github` is here because tests/test_ci_workflow.py reads
+#: .github/workflows/ci.yml off disk relative to its own parent — the temp
+#: directory inside the sandbox, not the repository — and because that file is
+#: the one artifact in this repo that runs on somebody else's computer holding
+#: this repository's token, so its gate is not allowed to stop running. Every
+#: shipped-file test there would raise FileNotFoundError at the BASELINE,
+#: `run_baseline` would turn that into a HarnessError, and `make verify` would
+#: die for a reason with nothing to do with any mutation. The directory also
+#: cannot be added ahead of the workflow: `build_sandbox()` raises HarnessError
+#: for an entry with no file behind it, which is why this line and
+#: .github/workflows/ci.yml landed in the same commit.
 SANDBOX_CONTENTS = (
     "boty", "tests", "scripts", "config", "served", "docs", "hooks", "pyproject.toml",
-    "Makefile", "README.md", "CONTRIBUTING.md", "LICENSE", "MANIFEST.in",
+    "Makefile", "README.md", "CONTRIBUTING.md", "LICENSE", "MANIFEST.in", ".github",
 )
 
 #: `status.json` is ignored because the sandbox now has a git index, and

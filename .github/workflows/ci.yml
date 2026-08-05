@@ -1,0 +1,186 @@
+# bot-y — the pull-request gate.
+#
+# WHY THIS FILE IS SIX LINES OF WORK AND FIFTY OF ARGUMENT
+#
+# CI here delegates to the Makefile rather than re-listing checks. The Makefile
+# header states the reason, and it applies to YAML exactly as it applies to a
+# recipe line:
+#
+#   "`make verify` is the contract. Every phase of this project states its
+#    success criteria in terms of it, so it has exactly one job: exit non-zero
+#    if ANY check fails. A verify that prints FAIL and exits 0 is worse than no
+#    verify at all, because everything downstream is built on trusting the
+#    number."
+#
+# A workflow that ran pytest, mypy and ruff as three steps would be a SECOND
+# definition of the check order and of the verdict, free to drift from the one a
+# maintainer runs on their own machine. So there is one check step, and its exit
+# code is the whole verdict.
+#
+# THE TARGET IS `verify-offline`, NEVER THE BARE `verify` TARGET.
+# `verify` makes live requests to six retailers. From GitHub's IP ranges at
+# pull-request frequency that is precisely the trade `docs/retailer-evidence.md`
+# argues against and that `boty/pacing.py` exists to avoid. `verify-offline`
+# delegates to the same recipe with CONTROL_FLAGS=--offline, `control_check.py`
+# exits 3, and the verdict reads
+#   VERIFY: PASS (OFFLINE — live controls were NOT run, ...)
+# with exit 0. That wording is honest about what was not checked and must not be
+# reworded to look unconditionally green.
+#
+# NOTHING HERE MAY FLATTEN AN EXIT CODE. No `continue-on-error`, no `|| true`,
+# no `; true`, no `set +e`, no `exit 0` inside a run block, and no pipe on the
+# check line — a pipeline takes the status of its LAST command, which is the
+# failure mode the Makefile header was written about and which is just as
+# available in YAML. `tests/test_ci_workflow.py` reads a comment-stripped view of
+# this file and reports every one of those constructs; each has been watched
+# being reported against a deliberately broken copy.
+#
+# THERE IS NO `pull_request_target` TRIGGER IN THIS REPOSITORY, AND THERE MUST
+# NOT BE ONE. It runs the BASE repository's workflow, with a write-scoped token
+# and access to repository secrets, against code the pull-request author
+# controls. That is the standard way a public repository has its secrets
+# exfiltrated. Anyone who finds an answer online recommending it for "PRs from
+# forks can't see our secrets" should meet this paragraph first: that is the
+# control working, not a defect.
+#
+# NO PATH FILTER AND NO BRANCH FILTER ON `pull_request`. REQ-10 says every pull
+# request, and a base-branch filter silently exempts some of them. A path filter
+# is worse than it looks here: the identity leak that mattered most in this
+# repo's history was in a `.planning/` markdown file, so a docs-only pull request
+# is exactly the one whose `identity` stage matters most.
+#
+# NO CACHING, DELIBERATELY — including `setup-python`'s `cache:` input, which is
+# `actions/cache` underneath. A cache restore writes content into the workspace
+# that no reviewer read, keyed by something a branch can influence, and the steps
+# after it execute that workspace. Measured against that risk: `make
+# verify-offline` is 1 m 05 s on the maintainer's machine and 2 m 08 s in a cold
+# python:3.10 container including the install, and the install itself is a
+# handful of wheels. The saving would be seconds. That is the trade here; it is
+# not a claim that caching is always wrong.
+#
+# NOTHING ECHOES HOST OR CONTEXT DATA. No `set -x`, no environment dump, and no
+# `${{ }}` expression inside any run block. The last is not hygiene, it is the
+# injection boundary: a pull-request title interpolated into a shell is arbitrary
+# code execution on the runner under this job's token. The only expression in
+# this file is in `concurrency`, where GitHub evaluates it to a value that never
+# reaches a shell.
+#
+# A NOTE ON A RISK THAT IS ACCEPTED RATHER THAN MITIGATED. `scripts/identity_check.py`
+# prints the offending value when it finds one, and an Actions log on a public
+# repository is world-readable. Suppressing it is refused: a guard whose output
+# is hidden is not a guard. The risk is bounded — CI runs against pushed commits,
+# so anything it prints is already public in this repository or in the fork that
+# pushed it, and the log is a second copy of a disclosure that has already
+# happened. The response to a red `identity` in CI is rotation and redaction of
+# the source, never quietly deleting the log.
+
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege, declared once at workflow level so every job inherits it and
+# no job needs its own block. Be accurate about what this does: for a pull
+# request FROM A FORK, GitHub already forces the token read-only and withholds
+# secrets, so this line is not what saves you there. It is what saves the
+# `push: main` run and any branch pushed inside this repository, where the
+# default token would otherwise be write-scoped. Overstating the first half is
+# how a control stops being understood.
+permissions:
+  contents: read
+
+# A superseded pull-request run is wasted compute, so cancel it. A cancelled run
+# on `main` would leave the commit everything downstream is built on with no
+# verdict at all, so do not cancel that one. This is the one place a `${{ }}`
+# expression appears in this file, and it is not inside a `run:` block — that
+# distinction is the injection rule in tests/test_ci_workflow.py.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    # A concrete image version rather than `ubuntu-latest`, for the same reason
+    # 04-03 put a `<0.17` ceiling on ruff, one layer further out: a floating
+    # alias lets the environment change under a green tree with nobody having
+    # touched the code, and `make verify` is the number every phase of this
+    # project states its success criteria in. The cost is a deliberate bump when
+    # GitHub deprecates the image — announced, and eventually loud. A cost paid
+    # on purpose beats a change nobody noticed.
+    runs-on: ubuntu-24.04
+
+    # Measured, not guessed: 1 m 05 s for `make verify-offline` on the
+    # maintainer's machine, and 2 m 08 s for a cold python:3.10 container doing
+    # the clone, the venv, the install and the whole check. Fifteen minutes is
+    # roughly seven times the slower of those. The GitHub default is SIX HOURS,
+    # and a pull request that makes the suite hang should not spend six hours of
+    # a solo maintainer's Actions minutes telling you so.
+    timeout-minutes: 15
+
+    steps:
+      # Both actions are pinned to a full 40-character commit SHA rather than to
+      # a `@v7`-style tag, with the human-readable version in a trailing comment
+      # so the line stays legible. A tag is a MUTABLE pointer owned by somebody
+      # else: in March 2025 `tj-actions/changed-files` had its tags repointed at
+      # a malicious commit and thousands of public repositories printed secrets
+      # into their build logs. A SHA costs a deliberate edit to bump and buys
+      # immutability. With two actions that is two lines a year — the trade is
+      # easy HERE, which is not the same as free everywhere.
+      #
+      # Both are published by GitHub's own `actions` organisation. No
+      # third-party action runs in this repository.
+      #
+      # Default `fetch-depth` (1) is deliberate and sufficient. Measured on
+      # 2026-08-04: a `git clone --depth 1 file://` of this repository has
+      # `git rev-list --count HEAD` = 1 and `scripts/identity_check.py --all`
+      # reports 145 files inside it — the SAME count the full host tree reports.
+      # `_tracked_files` uses `git ls-files`, which reads the INDEX and not
+      # history. Do not "fix" this to `fetch-depth: 0`; it would buy nothing and
+      # cost a full clone on every pull request.
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # `python-version` is QUOTED, and that is load-bearing rather than style.
+      # Measured with the PyYAML in this repo's venv: unquoted, `3.10` parses as
+      # the FLOAT 3.1, which asks the runner for Python 3.1. Quoted, it is the
+      # string "3.10".
+      #
+      # 3.10 is the floor `requires-python = ">=3.10"` and `[tool.mypy]
+      # python_version = "3.10"` both declare. Testing the floor is the point:
+      # every other interpreter this package might run on is above it, and a
+      # contributor's first pull request is the worst possible place to discover
+      # that the declared floor never worked. Do not raise this to make a red go
+      # away — raising it turns `requires-python` back into a claim nothing
+      # executes.
+      #
+      # No `cache:` input. See the caching decision in the header.
+      - name: Provision the interpreter this package declares as its floor
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+
+      # The exact two commands `check-venv` prints when `.venv/bin/python` is
+      # missing, so a runner and a fresh clone stay identical rather than
+      # diverging into a CI-only install path.
+      #
+      # `.[dev]` and never `.[browser]`. The browser extra pulls `nodriver`,
+      # which is AGPL-3.0 against this MIT project; keeping it optional is a
+      # maintainer decision recorded and dated 2026-08-02 in pyproject.toml. Its
+      # absence needs no handling here: under `--offline` the control check exits
+      # 3 before the browser rung is ever reached.
+      #
+      # Two lines in one block. The default shell runs with `-e`, which is what
+      # makes a failed venv creation fatal instead of leaving the next line to
+      # fail confusingly.
+      - name: Create the virtualenv and install the dev extra
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e '.[dev]'
+
+      # The whole verdict, in one command. identity, lint, tests, types,
+      # fixtures, controls (skipped offline) and mutation, in the order the
+      # Makefile defines and nowhere else.
+      - name: The verdict
+        run: make verify-offline

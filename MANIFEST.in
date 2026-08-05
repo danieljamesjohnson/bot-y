@@ -17,7 +17,7 @@
 # store addresses. A file set that never leaves the repository is the stronger
 # guarantee, and `pip install` does not need the tests.
 #
-# Only `prune tests` removes anything today. The other seven are guards, and they
+# Only `prune tests` removes anything today. The other eight are guards, and they
 # are here rather than omitted because the failure mode is silent: a future
 # `graft`, an `include_package_data` flip or a `data_files` entry can pull any of
 # these directories into a published artifact with nothing printed. Adding a
@@ -37,4 +37,11 @@ prune scripts
 prune deploy
 prune hooks
 prune served
+# `.github` arrived with the CI workflow, and it is the first new top-level
+# directory since the rule above landed. The gate fired on it exactly as
+# designed — `['.github']`, named in the assertion message — before this line was
+# written. CI configuration describes how THIS repository is checked; it is of no
+# use to anyone who ran `pip install bot-y`, and a workflow file in an sdist is
+# one more place a reader could mistake for something they are meant to run.
+prune .github
 prune .planning
