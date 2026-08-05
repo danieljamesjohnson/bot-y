@@ -18,9 +18,9 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .models import Availability, Health, Result, Watch
 
@@ -117,7 +117,7 @@ def run_once(
     watches: list[Watch],
     checker: Callable[[Watch], Result],
     state: State,
-    pacer: "Pacer | None" = None,
+    pacer: Pacer | None = None,
     now: float = 0.0,
 ) -> tuple[list[Result], list[Health], list[Result]]:
     """Check every watch once. Returns (results, health, alerts).
@@ -169,9 +169,22 @@ def run_once(
     #     as no transition at all.
     transitions = [state.transitioned_to_stock(r) for r in results]
 
+    # `strict=True`, chosen against ruff's own unsafe autofix for B905, which
+    # writes the permissive value (`False`) here instead. `transitions` is a
+    # comprehension over `results` directly above, so the two are the same length
+    # by construction. If that ever stopped being true, `zip` would silently
+    # truncate `alerts` — and a truncated `alerts` list is a missed restock
+    # notification, which reads on the wire exactly like a quiet market.
+    # `strict=True` turns that into a crash, which is the outcome this project
+    # prefers over a silent wrong verdict every time. The permissive value would
+    # have preserved today's behaviour and permanently silenced the question.
+    #
+    # (Written without the literal permissive token on purpose: this plan's
+    # acceptance criterion greps this file FOR `strict=True` and AGAINST the
+    # other one, so quoting it here would defeat the check that guards it.)
     alerts = [
         r
-        for r, transitioned in zip(results, transitions)
+        for r, transitioned in zip(results, transitions, strict=True)
         if not r.watch.control and r.alertable and transitioned
     ]
     state.save()

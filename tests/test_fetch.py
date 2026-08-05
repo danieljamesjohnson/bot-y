@@ -1079,7 +1079,7 @@ def test_the_allow_list_cannot_absorb_a_real_value() -> None:
         bare = entry.replace("-", "").replace(" ", "").replace(".", "")
         assert (
             not bare
-            or bare.isdigit() and set(bare) <= {"0"}          # 00000, 0, 0.0
+            or (bare.isdigit() and set(bare) <= {"0"})         # 00000, 0, 0.0
             or entry.upper() == "XX"                           # not a state
             or "REDACTED" in entry.upper()                     # a placeholder word
             or entry.upper() in {"NOT-AVAILABLE", "NULL"}      # CDN / JS sentinels
@@ -1139,7 +1139,7 @@ def test_the_guard_scans_the_json_provenance_notes_not_only_the_pages() -> None:
 
     # And every note on disk is actually reached — a glob that matches one
     # directory would satisfy the suffix check above while missing the rest.
-    on_disk = {p for p in root.glob("*/*.json")}
+    on_disk = set(root.glob("*/*.json"))
     assert on_disk <= set(scanned), (
         f"provenance notes exist that the guard does not scan: "
         f"{sorted(str(p.relative_to(root)) for p in on_disk - set(scanned))}"

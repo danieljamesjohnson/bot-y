@@ -491,7 +491,7 @@ def test_a_retailer_outside_the_roadmaps_scope_fails_the_phase_gate(tmp_path: Pa
     control, `assess_health` sees it go green, and the fixture test sees a page
     we really read. This rule is the only thing that catches it.
     """
-    config = _write_config(tmp_path, _SHIPPED + ["microcenter"])
+    config = _write_config(tmp_path, [*_SHIPPED, "microcenter"])
     evidence = _full_evidence(tmp_path)
 
     assert (
@@ -513,7 +513,7 @@ def test_a_retailer_outside_the_roadmaps_scope_fails_the_phase_gate(tmp_path: Pa
 def test_the_out_of_scope_message_names_the_retailer_and_points_at_the_roadmap(
     tmp_path: Path,
 ) -> None:
-    config = _write_config(tmp_path, _SHIPPED + ["microcenter"])
+    config = _write_config(tmp_path, [*_SHIPPED, "microcenter"])
     problems = evidence_check.check_phase(
         config, _full_evidence(tmp_path), _write_fixtures(tmp_path, [])
     )
@@ -594,7 +594,7 @@ def test_an_unconfigured_retailer_recorded_as_REACHABLE_fails(tmp_path: Path) ->
 
 def test_every_violation_is_reported_not_just_the_first(tmp_path: Path) -> None:
     """Fixing one gap only to be told about the next is how a gate gets muted."""
-    config = _write_config(tmp_path, _SHIPPED + ["microcenter"])
+    config = _write_config(tmp_path, [*_SHIPPED, "microcenter"])
     evidence = _write_evidence(tmp_path, [("Amazon (amazon.com)", _REFUSED)])
 
     problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
@@ -889,7 +889,7 @@ def test_a_short_count_with_a_hard_two_retailer_configured_fails(tmp_path: Path)
 
 def test_five_retailers_including_a_hard_two_one_passes(tmp_path: Path) -> None:
     """The outcome the phase is hoping for must verify clean."""
-    config = _write_config(tmp_path, _SHIPPED + ["target"])
+    config = _write_config(tmp_path, [*_SHIPPED, "target"])
     evidence = _write_evidence(
         tmp_path,
         [
@@ -1234,7 +1234,7 @@ def test_a_refusal_for_a_retailer_we_never_captured_is_still_clean(tmp_path: Pat
     it to build SYNTHETIC trees whose evidence documents have no Target or Amazon
     section at all.
     """
-    config = _write_config(tmp_path, _SHIPPED + ["target", "amazon"])
+    config = _write_config(tmp_path, [*_SHIPPED, "target", "amazon"])
 
     problems = evidence_check.check_phase(
         config,
@@ -1258,7 +1258,7 @@ def _w02_tree(tmp_path: Path, pokemoncenter_body: str) -> tuple[Path, Path, Path
     disagreement and not about the retailer — swap the body for a REACHABLE
     verdict and the same tree must come back clean.
     """
-    config = _write_config(tmp_path, _SHIPPED + ["pokemoncenter"])
+    config = _write_config(tmp_path, [*_SHIPPED, "pokemoncenter"])
     evidence = _write_evidence(
         tmp_path,
         [

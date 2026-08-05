@@ -243,11 +243,10 @@ def ldjson_read(html: str, *, sku: str | None = None) -> LdJsonRead:
             types = types if isinstance(types, list) else [types]
             if "Product" not in types:
                 continue
-            if wanted is not None:
-                # `str()` because retailers publish SKUs as both `"6216393"` and
-                # `6216393`, and the config supplies a string either way.
-                if str(node.get("sku") or "").strip() != wanted:
-                    continue
+            # `str()` because retailers publish SKUs as both `"6216393"` and
+            # `6216393`, and the config supplies a string either way.
+            if wanted is not None and str(node.get("sku") or "").strip() != wanted:
+                continue
             saw_product = True
             offers = node.get("offers") or []
             for offer in offers if isinstance(offers, list) else [offers]:

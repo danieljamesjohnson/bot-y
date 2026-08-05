@@ -56,9 +56,7 @@ def _is_reserved_ip(v: str) -> bool:
     a = v.split(".")
     if len(a) == 4 and a[0] == "192" and a[1] == "168":
         return True
-    if len(a) == 4 and a[0] == "172" and a[1].isdigit() and 16 <= int(a[1]) <= 31:
-        return True
-    return False
+    return len(a) == 4 and a[0] == "172" and a[1].isdigit() and 16 <= int(a[1]) <= 31
 
 
 def _fixture_files(root: Path) -> list[Path]:

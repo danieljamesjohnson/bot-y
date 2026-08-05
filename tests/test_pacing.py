@@ -24,7 +24,7 @@ import pytest
 from boty.fetch import Blocked, FetchError, is_refusal
 from boty.models import Availability, Health, Result, Watch
 from boty.monitor import State, assess_health, run_once
-from boty.pacing import BACKOFF_FACTOR, MAX_BACKOFF_SECONDS, Pacer
+from boty.pacing import MAX_BACKOFF_SECONDS, Pacer
 
 
 def _w(retailer: str, name: str = "ctl", *, control: bool = True) -> Watch:

@@ -17,8 +17,8 @@ from collections.abc import Callable
 from .config import Config
 from .models import Availability, Extraction, Health, Result, Watch
 from .monitor import State, run_once
-from .pacing import Pacer
 from .notify import send_health_warning, send_restock
+from .pacing import Pacer
 from .retailers import (
     check_amazon,
     check_bestbuy_api,

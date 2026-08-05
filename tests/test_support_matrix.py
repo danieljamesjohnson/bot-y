@@ -318,9 +318,11 @@ def _positionless(rows: dict[str, list[str]]) -> dict[str, tuple[str, str]]:
             continue
         robots, terms = rows[name][ROBOTS], rows[name][TERMS]
         position = _position(robots, ROBOTS_POSITIONS)
-        if position is None or (position != "unread" and "`" not in robots):
-            bad[name] = (robots, terms)
-        elif _position(terms, TERMS_POSITIONS) is None:
+        if (
+            position is None
+            or (position != "unread" and "`" not in robots)
+            or _position(terms, TERMS_POSITIONS) is None
+        ):
             bad[name] = (robots, terms)
     return bad
 
@@ -397,9 +399,9 @@ def _extraction_mismatch(rows: dict[str, list[str]]) -> dict[str, tuple[str, str
             continue
         rung, extraction = rows[name][RUNG], rows[name][EXTRACTION]
         working = rung[:1] in WORKING_RUNGS
-        if working and extraction not in EXTRACTIONS:
-            bad[name] = (rung, extraction)
-        elif not working and extraction != NO_EXTRACTION:
+        if (working and extraction not in EXTRACTIONS) or (
+            not working and extraction != NO_EXTRACTION
+        ):
             bad[name] = (rung, extraction)
     return bad
 

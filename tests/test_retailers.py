@@ -17,12 +17,12 @@ network — and conftest's guard would raise loudly if anything tried.
 
 from __future__ import annotations
 
-import pytest
-
 import json
 import os
 import re
 from pathlib import Path
+
+import pytest
 
 from boty import parse, retailers
 from boty.cli import _make_checker

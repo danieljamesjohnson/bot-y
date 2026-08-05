@@ -75,7 +75,7 @@ def test_the_probe_file_exemption_cannot_quietly_grow() -> None:
     small and deliberate. Skipping by path is what let the `.json` provenance
     notes leak in the first place.
     """
-    assert identity_check._PROBE_FILES == frozenset({"tests/test_fetch.py"}), (
+    assert frozenset({"tests/test_fetch.py"}) == identity_check._PROBE_FILES, (
         "the probe-file exemption changed. Each entry skips the pattern rules, "
         "so adding one is a real decision — make it in a diff with a reason, "
         "and confirm the file is still covered by the deny-list check."
