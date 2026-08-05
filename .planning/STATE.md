@@ -4,7 +4,7 @@ milestone: v1.0.0
 milestone_name: milestone
 status: Phase complete — ready for verification
 stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-08-05T00:23:15.994Z"
+last_updated: "2026-08-05T00:44:56.481Z"
 last_activity: 2026-08-05
 progress:
   total_phases: 5
@@ -28,7 +28,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 03.1 of 5 (Target and Amazon, supported) — **COMPLETE**. INSERTED, reverses a Phase 3 decision
 **Plan:** 5 of 5 complete (01, 05, 02, 03, 04 — all waves done)
-**Last session:** 2026-08-05T00:23:15.989Z
+**Last session:** 2026-08-05T00:42:47.687Z
 **Stopped At:** Completed 04-03-PLAN.md
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
@@ -116,6 +116,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase Phase 04 PP01 | 16min | 3 tasks tasks | 5 files files |
 | Phase 04 P02 | 30min | 3 tasks | 5 files |
 | Phase 04 P03 | 50m | 3 tasks | 16 files |
+| Phase 04 P04 | 80m | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -183,6 +184,9 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 04]: B905 resolved as strict=True, against ruff's own unsafe autofix — a truncated alerts list is a missed restock that reads exactly like a quiet market — 04-03 Task 2
 - [Phase 04]: E501 not selected and ruff format not adopted: 497 findings over the comment blocks carrying this project's recorded decisions, and 32 of 36 files reformatted immediately before a 1.0.0 tag — 04-03 Task 1
 - [Phase 04]: external = [E402] rather than deleting the seven noqa directives RUF100 calls unused — ruff's own E402 enforcement stays on — 04-03 Task 1
+- [Phase ?]: 04-04: CI delegates to the Makefile — one job, one step, make verify-offline, so there stays one definition of the check order and one of the verdict
+- [Phase ?]: 04-04: both GitHub Actions pinned to 40-char commit SHAs (actions/checkout v7.0.1 = 3d3c42e5, actions/setup-python v7.0.0 = 5fda3b95), never to a mutable tag
+- [Phase ?]: 04-04: no caching in CI, including setup-python's cache: input — the saving is seconds against a 1m05s check, and a cache restore is unreviewed content the next steps execute
 
 ### Blockers
 
