@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-08-05T00:44:56.481Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-08-05T01:18:18.751Z"
 last_activity: 2026-08-05
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 23
-  completed_plans: 19
+  completed_plans: 21
   percent: 60
 ---
 
@@ -28,8 +28,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 03.1 of 5 (Target and Amazon, supported) — **COMPLETE**. INSERTED, reverses a Phase 3 decision
 **Plan:** 5 of 5 complete (01, 05, 02, 03, 04 — all waves done)
-**Last session:** 2026-08-05T00:42:47.687Z
-**Stopped At:** Completed 04-03-PLAN.md
+**Last session:** 2026-08-05T01:18:18.187Z
+**Stopped At:** Completed 04-05-PLAN.md
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
 
@@ -117,6 +117,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 04 P02 | 30min | 3 tasks | 5 files |
 | Phase 04 P03 | 50m | 3 tasks | 16 files |
 | Phase 04 P04 | 80m | 3 tasks | 4 files |
+| Phase 04 P05 | 22m | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -187,6 +188,16 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase ?]: 04-04: CI delegates to the Makefile — one job, one step, make verify-offline, so there stays one definition of the check order and one of the verdict
 - [Phase ?]: 04-04: both GitHub Actions pinned to 40-char commit SHAs (actions/checkout v7.0.1 = 3d3c42e5, actions/setup-python v7.0.0 = 5fda3b95), never to a mutable tag
 - [Phase ?]: 04-04: no caching in CI, including setup-python's cache: input — the saving is seconds against a 1m05s check, and a cache restore is unreviewed content the next steps execute
+- [Phase 04]: 04-05: the wheel test found a real packaging bug and this plan fixed it rather than filing it — boty check on a clean-venv wheel install raised FileNotFoundError at config/products.yaml, a path only a git checkout has; make verify runs from the repo root where it resolves, so nothing else in this project would ever have seen it
+- [Phase 04]: 04-05: packaging a default config was considered and REJECTED — the watches, price ceilings and control products are the operator's decisions; shipping config/products.yaml would publish this maintainer's list to every installer and teach a new user those watches are the tool's
+- [Phase 04]: 04-05: build and twine go into an ephemeral venv, never the dev extra — building inside .venv cannot detect a missing Requires-Dist because the imports resolve anyway from packages lying around; a release extra was rejected because it publishes a Provides-Extra claim and still builds wherever the caller stands
+- [Phase 04]: 04-05: release-check is a Makefile target, not a verify stage and not a README stage-table row — it needs the network and CI runs verify-offline on every PR; a README row would break 04-03's test_the_documented_stages_are_the_stages_verify_runs, which asserts set equality with the stages verify invokes
+- [Phase 04]: 04-05: PyPI Trusted Publishing over OIDC, never an API token in repository secrets — a long-lived upload token in a public repo is reachable by any future workflow edit and outlives everyone who remembers it was created; OIDC removes the secret and scopes the grant to one repo, one workflow and one environment
+- [Phase 04]: 04-05: two jobs in release.yml, with the claim stated SMALL — splitting stops build-backend code obtaining a mintable PyPI token; it does NOT stop a malicious tag publishing a malicious package, and a control whose limits nobody knows is a control nobody maintains
+- [Phase 04]: 04-05: Development Status :: 5 - Production/Stable, with 4 - Beta rejected in writing — tagging 1.0.0 while classifying the package Beta is exactly the asserted-versus-real disagreement this phase exists to close, and leaves a reader to decide which number to believe
+- [Phase 04]: 04-05: the action-owner rule was WIDENED to TRUSTED_ACTION_OWNERS = (actions, pypa), never deleted — pypa already publishes setuptools, which build-system requires executes on every build here; two corruption tests still watch the rule bite on an owner in neither entry
+- [Phase 04]: 04-05: the boty/bot-y name confusion is ACCEPTED, with documentation as the only mitigation — PyPI does not release a name that has files, so the neighbour cannot be defensively claimed; boty is Time Flies by Bart Thate, 0.1.1, last released 2012-03-10, homepage on dead googlecode
+- [Phase 04]: 04-05: REQ-11 deliberately NOT marked complete — this plan bumped the version and proved a wheel locally; neither is a PyPI publish nor a pushed tag, and 04-06 closes REQ-11 by measuring what Dan actually publishes
 
 ### Blockers
 
