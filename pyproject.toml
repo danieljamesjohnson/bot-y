@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bot-y"
-version = "0.1.0"
+version = "1.0.0"
 description = "Self-hosted restock monitor for big retailers — TLS-impersonation fetching, structured stock data, and control products that catch broken detectors instead of failing silently."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -65,17 +65,35 @@ keywords = ["restock", "monitor", "stock", "scraping", "notifications"]
 #                                      classifier is a claim that something did.
 #   Topic :: System :: Monitoring   <- what the thing is
 #
-# THREE ABSENCES, each deliberate:
+# `Development Status :: 5 - Production/Stable` arrived with the 1.0.0 bump, and
+# it is FIRST in the list because that is where alphabetical order puts it —
+# 04-02 left this list sorted and the sort is the only thing keeping it readable.
+#
+# 04-02 deferred this entry deliberately, on the grounds that development status
+# is a statement about the version and the version was 0.1.0. There is now a
+# version to make it about, so the choice has to be made rather than deferred
+# again. `4 - Beta` was 04-02's placeholder guess and it is REJECTED in writing:
+# tagging 1.0.0 while classifying the package Beta is exactly the
+# asserted-versus-real disagreement this phase exists to close, and it leaves a
+# reader to decide which of the two numbers to believe.
+#
+# What backs `5 - Production/Stable` is in the tree rather than in ambition:
+# `make verify` has been the phase gate since Phase 1 and every phase states its
+# success criteria as its exit code; the control-product mechanism catches a
+# BROKEN DETECTOR rather than reporting a confident false verdict; `deploy/`
+# ships two systemd units; and this monitor has run as a service against six
+# live retailers, publishing per-cycle status, for the whole of Phase 3.
+#
+# TWO ABSENCES, each deliberate:
 #   * No `License ::` classifier. Measured, not stylistic: alongside the SPDX
 #     expression above setuptools raises InvalidConfigError and the build fails.
-#   * No `Development Status ::`. Development status is a statement about the
-#     version, and the version is still 0.1.0. It lands with the 1.0.0 bump.
 #   * No `Typing :: Typed`. There is no `boty/py.typed` marker in the tree, so
 #     the classifier would advertise a typing contract no installed consumer can
 #     act on — mypy downstream would still treat `boty` as untyped. Adding the
 #     marker is a real change with real consequences and it belongs in its own
 #     commit.
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: POSIX :: Linux",
@@ -152,10 +170,13 @@ dev = [
 browser = ["nodriver>=0.38"]
 
 [project.urls]
-# No `Changelog` key: CHANGELOG.md does not exist yet. A metadata URL that 404s
-# is a false claim shipped to every installer — the same class of thing the
-# LICENSE work above closed. The file and the URL land together in the release
-# commit that bumps to 1.0.0.
+# 04-02 left a note here instead of a `Changelog` key, because CHANGELOG.md did
+# not exist and a metadata URL that 404s is a false claim shipped to every
+# installer. The file lands in the same commit as this line, so the claim
+# becomes true at the moment it is made — and `scripts/release_check.py` asserts
+# that this URL's repository-relative path resolves to a file that exists, so it
+# cannot silently rot back into a 404.
+Changelog = "https://github.com/danieljamesjohnson/bot-y/blob/main/CHANGELOG.md"
 Homepage = "https://github.com/danieljamesjohnson/bot-y"
 Source = "https://github.com/danieljamesjohnson/bot-y"
 Issues = "https://github.com/danieljamesjohnson/bot-y/issues"

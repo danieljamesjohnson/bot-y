@@ -13,6 +13,7 @@ import random
 import sys
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 from .config import Config
 from .models import Availability, Extraction, Health, Result, Watch
@@ -400,6 +401,43 @@ def main(argv: list[str] | None = None) -> int:
     # nothing to say about watches, so it must not require a config file.
     if args.command == "capture-fixture":
         return _capture_fixture(args)
+
+    # The default for `-c/--config` is `config/products.yaml`, a REPO-RELATIVE
+    # path, and `[tool.setuptools.packages.find] include = ["boty*"]` means
+    # `config/` is deliberately not packaged. So on a plain `pip install bot-y`
+    # the first command README teaches used to reach `Config.load` with a path
+    # that does not exist and die with an uncaught
+    # `FileNotFoundError: [Errno 2] No such file or directory:
+    # 'config/products.yaml'` — a stack trace naming a directory inside a git
+    # checkout, printed to someone who has no checkout. Measured 2026-08-04
+    # against a wheel installed into a clean venv and run from /tmp. `make
+    # verify` could never have found it: it runs from the repo root, where that
+    # path resolves.
+    #
+    # THE FIX IS NOT TO PACKAGE A DEFAULT CONFIG, and that was considered.
+    # `config/products.yaml` is user-supplied by design: which products are
+    # watched, at what price, and which control products prove the detector
+    # still works are the operator's decisions. Shipping this file would publish
+    # this maintainer's own watch list, control choices and pacing overrides to
+    # every installer, while teaching a new user that those watches are the
+    # tool's rather than their own.
+    #
+    # The guard sits here rather than inside `Config.load` on purpose: `load`
+    # receiving a path that does not exist is a legitimate programming error for
+    # every other caller, and swallowing it in the loader would hide it from the
+    # tests that use it.
+    if not Path(args.config).is_file():
+        print(
+            f"no config file at {args.config!r} — there is nothing to watch.\n"
+            "This package ships no default config on purpose: the products, the price "
+            "ceilings and the control products are yours to choose, not this "
+            "maintainer's to publish.\n"
+            "Copy the example from "
+            "https://github.com/danieljamesjohnson/bot-y (config/products.yaml) and point "
+            "`-c`/`--config` at your copy.",
+            file=sys.stderr,
+        )
+        return 2
 
     cfg = Config.load(args.config)
     if not cfg.watches:

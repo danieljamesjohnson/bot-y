@@ -30,6 +30,14 @@
 # entered is silent, but `exclude` naming a file that never entered prints
 # `warning: no previously-included files found matching '...'` on every build,
 # forever. A permanent warning trains everyone to stop reading build output.
+# The one `include` in this file, and it is the opposite direction to everything
+# below it. setuptools' own sdist defaults already carry `README.md`, `LICENSE`
+# and `pyproject.toml`; `CHANGELOG.md` is not among them. An sdist is what a
+# distribution packager builds from, and the changelog is part of the source of
+# record — the same argument the `Changelog` URL in `[project.urls]` makes to a
+# reader of the metadata.
+include CHANGELOG.md
+
 prune tests
 prune config
 prune docs

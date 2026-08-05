@@ -396,3 +396,50 @@ def test_watch_refuses_to_start_with_nothing_to_notify(
 
     assert cli.main(["watch", "-c", str(config)]) == 2
     assert "tell nobody" in capsys.readouterr().err
+
+
+def test_a_missing_config_file_is_an_error_message_not_a_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The first command README teaches must not die at a path only a checkout has.
+
+    `[tool.setuptools.packages.find] include = ["boty*"]` means `config/` is not
+    packaged, and `-c/--config` defaults to the repo-relative
+    `config/products.yaml`. So on `pip install bot-y` — where there is no
+    checkout — `boty check` reached `Config.load` with a path that does not
+    exist and raised an uncaught `FileNotFoundError` naming a directory this
+    package deliberately does not ship. Measured 2026-08-04 against a wheel in a
+    clean venv; `make verify` could never see it, because it runs from the repo
+    root where that path resolves.
+
+    A stack trace is not an answer. This pins the answer: exit 2, the same code
+    the two neighbouring "you have not configured this yet" refusals use, and a
+    message naming the path, the flag and where to get a config.
+    """
+    missing = tmp_path / "nowhere" / "products.yaml"
+    assert not missing.exists()
+
+    assert cli.main(["check", "-c", str(missing)]) == 2
+    err = capsys.readouterr().err
+    assert str(missing) in err, err
+    assert "--config" in err, err
+
+    assert cli.main(["watch", "-c", str(missing)]) == 2
+    assert str(missing) in capsys.readouterr().err
+
+
+def test_capture_fixture_still_needs_no_config_file(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The early return above the guard is a decision with nothing under it today.
+
+    `main` returns `_capture_fixture(args)` before any config is read, and the
+    comment there says why: capturing a fixture takes a URL directly and has
+    nothing to say about watches. The missing-config guard sits below that
+    return, so adding it must not make a standalone tool start demanding a file
+    it never used. Nothing asserted that until now.
+    """
+    monkeypatch.setattr(cli, "_capture_fixture", lambda args: 7)
+
+    assert cli.main(["capture-fixture", "gamestop", "goplusplus", "https://x/1"]) == 7
+    assert capsys.readouterr().err == ""
