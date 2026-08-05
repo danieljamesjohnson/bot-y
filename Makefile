@@ -26,7 +26,7 @@ MAKE_Q := $(MAKE) --no-print-directory
 
 .DEFAULT_GOAL := help
 
-.PHONY: help test lint types controls fixtures mutation identity hooks verify verify-offline check-venv
+.PHONY: help test lint types controls fixtures mutation identity hooks verify verify-offline release-check check-venv
 
 help:
 	@echo "bot-y — make targets"
@@ -40,6 +40,11 @@ help:
 	@echo "  fixtures        warn about stale or unlabelled fixtures (never fails)"
 	@echo "  controls        live control products — catches RETAILER changes"
 	@echo "  mutation        prove the test suite would notice a broken extractor"
+	@echo ""
+	@echo "  ---"
+	@echo "  release-check   build the sdist and wheel, install the wheel into a clean"
+	@echo "                  venv and run it from outside this repo. NEEDS THE NETWORK,"
+	@echo "                  so it is not part of verify. Run it before a release."
 	@echo ""
 	@echo "  PYTHON=$(PYTHON) (override to use a different interpreter)"
 
@@ -74,6 +79,23 @@ lint: check-venv
 
 types: check-venv
 	@$(PYTHON) -m mypy
+
+# NOT a `verify` stage, and that is a decision rather than an omission.
+#
+# `verify` and `verify-offline` are network-free by contract — the test suite
+# asserts its own isolation — and .github/workflows/ci.yml runs `verify-offline`
+# on every pull request. This target creates two virtual environments and
+# downloads from PyPI, so putting it inside either would make that contract
+# false and make every contributor's every commit wait on pypi.org. It is run
+# before a release, not on every change.
+#
+# It is also deliberately ABSENT from README's `| Stage | Proves |` table.
+# `tests/test_verify_makefile.py::test_the_documented_stages_are_the_stages_verify_runs`
+# asserts set equality between the stages the `verify` recipe invokes and the
+# rows in that table, so a row here for a target `verify` never calls would turn
+# that gate red. The absence is correct; do not "fix" it.
+release-check: check-venv
+	@$(PYTHON) scripts/release_check.py
 
 fixtures: check-venv
 	@$(PYTHON) scripts/control_check.py --fixtures
