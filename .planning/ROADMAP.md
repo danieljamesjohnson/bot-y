@@ -252,6 +252,41 @@ Plans:
   4. README documents the retailer support matrix with each one's method and status
   5. A tagged v1.0.0 release exists
 
+**Outcome, recorded 2026-08-06 by 04-06 — three of five MET, two UNMET and not amended:**
+
+| # | Verdict | Measurement or reason |
+|---|---|---|
+| 1 | **MET** | `pytest tests/test_contributor_docs.py -q` → **19 passed**. `docs/adding-a-retailer.md`, 355 lines, walks **Nintendo** end to end in four numbered steps — probe and write the evidence (8 requests, 12–20 s apart, the 404-at-217,381 B and the product page at 416,346 B), one `FIRST_PARTY` line, the `MARKETPLACES` membership decision, then two YAML watches one of which is a control. The mandate is its own section: `## Why a control product is mandatory`, with `### The rule a control has to satisfy` and `### The rule biting, on a real candidate that was rejected` |
+| 2 | **MET — one half observed, one half still asserted, and the difference is written down** | Shipped `on:` block, read back from `.github/workflows/ci.yml`: `pull_request:` with no branch or path filter, plus `push: branches: [main]`. `pytest tests/test_ci_workflow.py -q` → **67 passed**. **Observed on a real runner:** run [`31066215395`](https://github.com/danieljamesjohnson/bot-y/actions/runs/31066215395) — the first live CI run this repository has ever had — event `push`, branch `main`, sha `76d4156`, one job `verify`, conclusion **success**, 02:39:05Z→02:42:22Z (3m21s incl. queue). Its log carries `identity check: PASS — 153 file(s), no host identity found`, `531 passed in 16.54s`, `mutation check: 8/8 mutations caught`, and ends `VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)`. **NOT observed:** the `pull_request` trigger. `gh run list --workflow ci.yml` returns exactly one run — that push. The optional throwaway PR (handoff step 5) was not taken, so the PR trigger remains asserted by `tests/test_ci_workflow.py` and unwitnessed in production |
+| 3 | **UNMET** | Dan deferred, 2026-08-06, verbatim: *"i don't think we need to host it yet. it's probably not quite ready for that"*. Re-measured here rather than assumed from Task 1: `https://pypi.org/pypi/bot-y/json` → **HTTP 404** and `https://pypi.org/pypi/bot-y/1.0.0/json` → **HTTP 404**. No trusted publisher was configured, no install was run and no network write was attempted. The criterion is **not amended** |
+| 4 | **MET — preserved, not achieved** | It was verified cell-by-cell against live `boty check` output by 03.1-04 *before this phase opened*; Phase 4's job was to not break it, and the measurement is that nothing moved. `pytest tests/test_support_matrix.py -q` → **31 passed**. Across the whole phase — base `b0a272f` re-derived, 44 commits — `git diff -U0 b0a272f..HEAD -- README.md` contains **zero** lines matching `^[-+]\| (GameStop\|Walmart\|Nintendo\|Best Buy\|Pokémon Center\|Amazon\|Target\|Retailer) `. The only README table lines the phase touches at all are the two `\| Stage \| Proves \|` rows 04-03 adds on purpose (`identity`, `lint`) — expected, required by 04-03's own acceptance criterion, and not a support-matrix row. `grep -c '^\| Retailer \| Rung \| Extraction \|' README.md` = **1**, so no second seven-column table exists to hijack the locator `tests/test_support_matrix.py` finds the table by |
+| 5 | **UNMET** | No tag exists, anywhere. `git tag -l` → empty (0 tags local); `git ls-remote --tags origin` → **0 refs**, so none on the remote either. No agent created one — this plan ran no `git tag`, no `git push`, no upload. `gh run list --workflow release.yml` → no runs; the publish workflow has never fired, because only a `v*` tag push starts it. Dan's reason is criterion 3's, same date. The criterion is **not amended** |
+
+**What was and was not done, because provenance matters here.** Step 1 of the handoff card
+*was* carried out — `git push -u origin main`, `b0a272f..76d4156`, upstream configured on `main`
+for the first time — but it was run by **the orchestrator agent, not by Dan**, after he answered
+"Sure go for it" to the checkpoint. Steps 2, 3 and 4 (the PyPI trusted publisher, the tag, the
+publish) were not done at all. A free consequence of that push, worth recording because it is
+GitHub's own detector agreeing with 04-02: `api.github.com/repos/danieljamesjohnson/bot-y` now
+reports `license: {"key": "mit", "spdx_id": "MIT"}`, where it read `null` before this phase.
+
+**Neither unmet criterion was reworded, shortened or merged**, and that is deliberate. Phase 3.1
+was offered a rewrite of its criterion 1 that would have made it meetable and Dan declined it;
+this plan does not get to do what that one refused. Criteria 3 and 5 stand as written, unmet,
+with the reason and the date. `.planning/phases/04-open-source-ready/04-06-HANDOFF.md` stays on
+disk, unaltered and still accurate, so publishing later needs no replanning.
+
+**The phase gate, run once, live, at close:** `make verify` → **`VERIFY: FAIL (live controls)`**,
+exit 2. Recorded verbatim rather than trimmed or re-run until green. Two distinct classes, and
+`control_check.py` separates them itself: `2/6 control(s) could not run on THIS HOST` — Best Buy
+and Target, both rung 3, `no Chrome/Chromium binary found` (nodriver 0.50.3 is installed here but
+no browser is), which the tool states "says nothing about the DETECTOR"; and `2/6 control(s) not
+reading IN_STOCK` — Walmart and Amazon, both `blocked: challenge page` at HTTP 200, which *is* a
+statement about the detector. None of this touches Phase 4's five criteria, and none of it was
+caused by this phase — no plan in Phase 4 changed a retailer, an extractor or a control. It is
+recorded here because a closing record that omitted it would be the omission this project keeps
+catching in itself. Detail in `.planning/phases/04-open-source-ready/deferred-items.md`.
+
 **Plans**: 6 plans, in 6 waves
 
 Plans:
@@ -261,7 +296,7 @@ Plans:
 - [x] 04-03: A linter, from zero — `ruff`, the findings resolved, a `lint` stage inside `make verify` *(wave 3, blocked on 04-01, 04-02)*
 - [x] 04-04: GitHub Actions CI — one job per PR running `make verify-offline`, and a test that reads the workflow *(wave 4, blocked on 04-03)*
 - [x] 04-05: Release engineering, all of it local — 1.0.0, CHANGELOG, Trusted Publishing workflow, artifacts proven by a clean-venv wheel install *(wave 5, blocked on 04-02, 04-03, 04-04)*
-- [ ] 04-06: Maintainer handoff — the PyPI Trusted Publisher, the `v1.0.0` tag push, and the five verdicts *(wave 6, blocked on 04-05, `autonomous: false`)*
+- [x] 04-06: Maintainer handoff — the PyPI Trusted Publisher, the `v1.0.0` tag push, and the five verdicts *(wave 6, blocked on 04-05, `autonomous: false`)* — **closed on a deferred publish**: the card was written and presented, Dan deferred, criteria 3 and 5 stand UNMET and unamended
 
 ### Why six plans, not the three sketched above
 
