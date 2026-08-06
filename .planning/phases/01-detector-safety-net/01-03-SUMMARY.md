@@ -259,5 +259,3 @@ All 10 claimed modified files exist on disk; all 4 task commits
 ---
 *Phase: 01-detector-safety-net*
 *Completed: 2026-08-02*
-</content>
-</invoke>

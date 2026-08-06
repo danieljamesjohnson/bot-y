@@ -404,4 +404,3 @@ changes to exactly `docs/retailer-evidence.md`, `tests/test_retailers.py`,
 ---
 *Phase: 03-the-hard-two*
 *Completed: 2026-08-03*
-</content>

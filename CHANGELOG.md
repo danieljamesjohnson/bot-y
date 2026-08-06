@@ -158,5 +158,3 @@ usable by someone who is not the maintainer.
 - **The `boty` name on PyPI is not this project.** `bot-y` — with the hyphen — is
   what `pip` needs. See the README's install section: the neighbouring name
   belongs to an unrelated package last released in 2012 and cannot be claimed.
-</content>
-</invoke>
