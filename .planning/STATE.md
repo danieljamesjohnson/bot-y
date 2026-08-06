@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-08-05T01:18:18.751Z"
-last_activity: 2026-08-05
+stopped_at: Completed 04-06-PLAN.md — Phase 4 closed, 3 of 5 criteria MET
+last_updated: "2026-08-06T14:59:22.771Z"
+last_activity: 2026-08-06
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 23
-  completed_plans: 21
-  percent: 60
+  completed_plans: 22
+  percent: 80
 ---
 
 # State: bot-y
@@ -26,17 +26,17 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 ## Status
 
 **Milestone:** v1.0
-**Phase:** 03.1 of 5 (Target and Amazon, supported) — **COMPLETE**. INSERTED, reverses a Phase 3 decision
-**Plan:** 5 of 5 complete (01, 05, 02, 03, 04 — all waves done)
-**Last session:** 2026-08-05T01:18:18.187Z
-**Stopped At:** Completed 04-05-PLAN.md
+**Phase:** 04 of 5 (Open Source Ready) — **COMPLETE 2026-08-06**, closed on three of five criteria MET; 3 and 5 UNMET and deliberately not amended (Dan deferred publishing)
+**Plan:** 6 of 6 complete (04-01 … 04-06, all waves done)
+**Last session:** 2026-08-06T14:59:15.028Z
+**Stopped At:** Completed 04-06-PLAN.md — Phase 4 closed
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
 
 2. **Pacing and backoff (2026-08-04), in response to a live alert.** Amazon and GameStop had been refusing us for a day. Not a detector bug: `interval_seconds` is per PASS, so load is `watches x 288/day` — Amazon 576, GameStop 1,440 — with no backoff at all. Worse, every failing control was reported as "the detector is probably broken", which is false for a refusal and sent 20 pages in 24 hours. Added `Result.refused` / `fetch.is_refusal`, split the health message, added `boty/pacing.py` (per-retailer cadence + exponential backoff, capped, reset on a good read), and stopped paging for refusals until they outlast the backoff. Verified live: 0 pages while both retailers refused, both published as `paced` rather than dropped.
 
-**Last Activity:** 2026-08-05
-**Last Activity Description:** Phase 04 execution started
+**Last Activity:** 2026-08-06
+**Last Activity Description:** Phase 04 closed — five verdicts recorded, REQ-11 still Pending (publish deferred)
 
 3. **Two live detector failures (2026-08-04 evening), both caught by control products within a cycle, neither a broken detector.** Best Buy began serving its JSON-LD **JavaScript-escaped** — `\'` inside strings, literal `\n` outside them — so `json.loads` refused all three blocks, `parse.py` skipped them silently, and the control read UNKNOWN with a detail naming the wrong cause. Proven against the shipped fixture, which parses 3/3 on the same SKU with no backslashes at all. `ldjson_read` now parses strictly first and only then offers an already-failed block to a string-state-aware repair; it reports `blocks`/`unparseable`/`repaired`, and a repaired read publishes as `ld+json (repaired)` so it cannot look ordinary. **Not claimed:** that the repair restored the live reading — Best Buy was serving valid markup again by 17:45 and the live read carried no `(repaired)` marker. The escaping is intermittent; a clean probe does not disprove it. Separately, **Target's UNKNOWN was our own render race**: ~35 KB of markup carrying the add-to-cart control arrives between 1s and 3s (measured: absent at `settle=1.0`, present at 3.0 and 6.0), and `fetch_rendered`'s default is exactly 3.0. `check_target_browser` now re-renders once at 10.0s before concluding — in the adapter, because it is a layout question and `boty/browser.py` is deliberately ignorant of layout. **M2's anchor was re-pointed** because this change moved the line it named, and the harness refused to run rather than quietly drop to seven mutations. Verified: mypy clean, 419 passed, 8/8 mutations, `VERIFY: PASS (OFFLINE)`, both new gates watched failing in both directions (removing the repair reddens 3 tests, making it over-reach reddens 22), **service restarted onto the fixed code** and publishing **6/6 retailers healthy**, 13 watches, 47.1s of REQ-08's 120s.
 
@@ -118,6 +118,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 04 P03 | 50m | 3 tasks | 16 files |
 | Phase 04 P04 | 80m | 3 tasks | 4 files |
 | Phase 04 P05 | 22m | 3 tasks | 10 files |
+| Phase 04 P06 | 35 | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -198,6 +199,8 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 04]: 04-05: the action-owner rule was WIDENED to TRUSTED_ACTION_OWNERS = (actions, pypa), never deleted — pypa already publishes setuptools, which build-system requires executes on every build here; two corruption tests still watch the rule bite on an owner in neither entry
 - [Phase 04]: 04-05: the boty/bot-y name confusion is ACCEPTED, with documentation as the only mitigation — PyPI does not release a name that has files, so the neighbour cannot be defensively claimed; boty is Time Flies by Bart Thate, 0.1.1, last released 2012-03-10, homepage on dead googlecode
 - [Phase 04]: 04-05: REQ-11 deliberately NOT marked complete — this plan bumped the version and proved a wheel locally; neither is a PyPI publish nor a pushed tag, and 04-06 closes REQ-11 by measuring what Dan actually publishes
+- [Phase 4]: Phase 4 closed 2026-08-06 on three of five criteria MET. Dan deferred publishing — verbatim: "i don't think we need to host it yet. it's probably not quite ready for that" — so criteria 3 (pip install from PyPI) and 5 (a tagged v1.0.0) stand UNMET and were NOT reworded, on Phase 3.1 criterion 1's precedent. REQ-11 stays Pending. 04-06-HANDOFF.md is on disk with all four publish steps and exact strings, so closing it later needs no replan.
+- [Phase 4]: The main branch WAS pushed (b0a272f..76d4156, upstream configured) but by the orchestrator agent, not by Dan. Steps 2-4 of the handoff card — trusted publisher, tag, publish — were not done. Nothing is on PyPI (HTTP 404) and zero tags exist locally or on origin.
 
 ### Blockers
 
@@ -205,3 +208,4 @@ Working and deployed on danserver before this roadmap was written:
 - ~~Target: rung 3 is the only remaining route to its stock data, and it reaches that data only by making requests to redsky.target.com, which is Disallow:/ for every agent. Dan's 2026-08-03 reversal settled the Terms of Use, not robots.txt. Two options in QUESTIONS.md 0d; notify-dan sent.~~ **Cleared 2026-08-03.** Dan answered 0d explicitly and took option 2 — render the page, read the add-to-cart control, record it in the open. The ruling was then *measured* rather than left as a forecast: `performance.getEntriesByType('resource')` inside one rendered PDP found **31 hosts**, and **three** Target-owned hosts publish `Disallow: /`, not the one 0d named. The prohibition widened to match — no code here addresses `redsky.target.com`, `api.target.com` or `sapphire-api.target.com` directly.
 
 - **No open blockers.** The only thing still waiting on Dan is `QUESTIONS.md` § 0e (public git history carrying this host's ZIP in four fixtures), which is a decision rather than a blocker — nothing is stopped by it.
+- make verify FAILS live as of 2026-08-06: 'VERIFY: FAIL (live controls)', exit 2. Two classes — Best Buy and Target cannot run at all (no Chrome/Chromium binary on this host, though nodriver 0.50.3 is installed), and Walmart and Amazon are blocked by challenge pages at HTTP 200. Both read UNKNOWN not OUT_OF_STOCK, so the fail-safe is working, but real restocks are being missed. NOT a Phase 4 regression — no plan in Phase 4 touched a retailer, extractor or control. Needs its own plan: polite probing plus fixture re-capture. Detail in .planning/phases/04-open-source-ready/deferred-items.md
