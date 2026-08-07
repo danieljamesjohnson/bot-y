@@ -20,8 +20,15 @@ awaiting: user response
 
 ### 1. Observe CI's `pull_request` trigger firing on a real pull request
 
-expected: A `verify` job appears under Actions with event `pull_request`, runs `make verify-offline`, and reports success. `gh run list --workflow ci.yml` then returns two runs, not one.
+expected: A `verify` job appears under Actions **with event `pull_request`**, runs `make verify-offline`, and reports success.
 result: [pending]
+
+correction: the original wording said "`gh run list --workflow ci.yml` then returns two
+runs, not one". That counting test was invalidated on 2026-08-07 when six pending commits
+were pushed to `main`, producing a **second `push` run** before this test was taken. The
+count no longer distinguishes anything. **Look at the `event` column, not the number of
+rows** — the check is `gh run list --workflow ci.yml --json event,conclusion` containing
+an entry with `event: "pull_request"`.
 
 why_human: The `pull_request` trigger has never fired in production — `gh run list
 --workflow ci.yml` returns exactly one run, event `push`. Criterion 2's claim that CI
