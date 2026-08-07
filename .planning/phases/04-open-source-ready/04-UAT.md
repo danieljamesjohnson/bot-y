@@ -1,43 +1,48 @@
 ---
-status: testing
+status: resolved
 phase: 04-open-source-ready
 source: [04-VERIFICATION.md]
 started: 2026-08-06T15:30:00Z
-updated: 2026-08-06T15:30:00Z
+updated: 2026-08-07T00:00:00Z
 ---
 
 ## Current Test
 
-number: 1
-name: Observe CI's `pull_request` trigger firing on a real pull request
+number: 2
+name: Decide whether to publish 1.0.0 to PyPI
 expected: |
-  A `verify` job appears under Actions with event `pull_request`, runs
-  `make verify-offline`, and reports success. `gh run list --workflow ci.yml`
-  then returns two runs, not one.
-awaiting: user response
+  Criteria 3 and 5 close.
+awaiting: deferred by Dan, 2026-08-06 — no test is pending
 
 ## Tests
 
 ### 1. Observe CI's `pull_request` trigger firing on a real pull request
 
-expected: A `verify` job appears under Actions **with event `pull_request`**, runs `make verify-offline`, and reports success.
-result: [pending]
+result: [withdrawn — not worth manufacturing]
 
-correction: the original wording said "`gh run list --workflow ci.yml` then returns two
-runs, not one". That counting test was invalidated on 2026-08-07 when six pending commits
-were pushed to `main`, producing a **second `push` run** before this test was taken. The
-count no longer distinguishes anything. **Look at the `event` column, not the number of
-rows** — the check is `gh run list --workflow ci.yml --json event,conclusion` containing
-an entry with `event: "pull_request"`.
+**Withdrawn 2026-08-07 on Dan's call.** This test does not test bot-y. It tests
+whether GitHub honours a `pull_request:` key, which is documented platform behaviour
+and is not a property of this repository. The marginal information over what is
+already observed is close to zero:
 
-why_human: The `pull_request` trigger has never fired in production — `gh run list
---workflow ci.yml` returns exactly one run, event `push`. Criterion 2's claim that CI
-runs on every PR is proven by the shipped `on:` block and by 67 machine-checked contract
-tests (the verifier falsified two of them live, watching the suite go red), but GitHub
-honouring the trigger is platform behaviour that cannot be observed without a real PR.
-This is handoff step 5, which was offered and not taken.
+- The `push` run (`31066215395`, green) already proves the workflow file parses, the
+  runner provisions, `setup-python` resolves the declared 3.10 floor, and
+  `make verify-offline` passes in CI. The only untested difference is which event key
+  GitHub matches on.
+- The specific way this could plausibly break — a branch or path filter narrowing the
+  trigger — is asserted by `tests/test_ci_workflow.py`, and the verifier proved that
+  assertion bites by adding `branches: [main]` to the real file and watching 2 tests
+  go red.
 
-how: branch it, push, `gh pr create`, then close without merging.
+So the trigger will be observed the first time anyone opens a real pull request, at
+zero cost, and staging a throwaway one to tick a box was ceremony. Recorded here
+rather than deleted, because the reasoning is the point: *a manual test whose only
+possible finding is "GitHub is broken" is not a test of this project.*
+
+The original wording also carried a defect worth noting: its success criterion was
+"`gh run list` returns two runs, not one", a row count that was silently invalidated
+the moment six pending commits were pushed to `main` and produced a second `push` run.
+A counting assertion over a shared, externally-appended log was never going to hold.
 
 ### 2. Decide whether to publish 1.0.0 to PyPI
 
@@ -59,10 +64,14 @@ the tree (card says environment `pypi`; `release.yml:143` says `environment: pyp
 total: 2
 passed: 0
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
+withdrawn: 1
 deferred: 1
+
+**No test is pending.** One was withdrawn as ceremony, one is deferred by the
+maintainer's decision. There is nothing here for a human to execute.
 
 ## Gaps
 
