@@ -248,11 +248,31 @@ Plans:
 
   1. `docs/adding-a-retailer.md` walks through a real adapter end to end, and states why a control product is mandatory
   2. CI runs the test suite on every PR, offline, against fixtures
-  3. `pip install bot-y` works from PyPI
+  3. ~~`pip install bot-y` works from PyPI~~ — **DESCOPED from v1.0 on 2026-08-07**
   4. README documents the retailer support matrix with each one's method and status
-  5. A tagged v1.0.0 release exists
+  5. ~~A tagged v1.0.0 release exists~~ — **DESCOPED from v1.0 on 2026-08-07**
 
-**Outcome, recorded 2026-08-06 by 04-06 — three of five MET, two UNMET and not amended:**
+**Criteria 3 and 5 were descoped, not met and not quietly reworded.** Dan's decision,
+2026-08-07: *"Let's kill those 2 since I wouldn't publish it without more real testing."*
+Both were downstream of the same act — publishing — which he deferred on 2026-08-06 with
+*"i don't think we need to host it yet. it's probably not quite ready for that."*
+
+They are struck through rather than deleted because **v1.0 did promise a PyPI release and
+that promise was withdrawn**, and a reader who cannot see that the promise was made cannot
+judge the milestone. This is a scope revision — the criterion was wrong for v1.0 — and is
+a different act from the one Phase 3.1 declined, which was rewording a criterion so that
+work already done would satisfy it. Nothing here is reworded to pass.
+
+**Nothing technical blocks them.** `make release-check` → 10/10: both artefacts built in a
+clean venv, `twine check` PASSED on each, the wheel installed into a venv holding nothing
+else, console script run from outside the checkout. The verifier re-ran that independently
+rather than trusting the summary. `04-06-HANDOFF.md` stays on disk and still matches the
+tree. Publishing later needs no replanning — it needs the real testing Dan named.
+
+REQ-11 moves with them: it is **descoped from v1.0**, not complete.
+
+**Outcome, recorded 2026-08-06 by 04-06 — three of five MET, two UNMET; the two unmet were
+subsequently descoped (above) rather than closed. The original verdicts stand unedited:**
 
 | # | Verdict | Measurement or reason |
 |---|---|---|
