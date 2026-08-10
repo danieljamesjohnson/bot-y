@@ -68,6 +68,27 @@ def test_the_scan_covers_every_tracked_file_not_just_the_fixtures() -> None:
         )
 
 
+@needs_repo
+def test_the_shipped_config_is_in_scope_because_it_now_carries_a_store_pin() -> None:
+    """REQ-14 puts a `store_id` key into `config/products.yaml`.
+
+    That file is tracked and public, and a store number is a geolocator: it
+    resolves to one street address. The rule that catches the key lives in
+    `_identity_leaks` and is watched going red in `tests/test_fetch.py` — this
+    asserts the other half, which is that the guard ever LOOKS at the file.
+
+    Adding `config` to `_SKIP_DIRS` or `.yaml` to `_SKIP_SUFFIXES` would take the
+    store pin out of scope without reddening anything, and this is the phase that
+    made that regression possible. Scope, not the rule, is what this module is
+    for — seven leaks in two days and the rule caught none of them.
+    """
+    scanned = {str(p.relative_to(REPO_ROOT)) for p in identity_check._tracked_files(REPO_ROOT)}
+    assert "config/products.yaml" in scanned, (
+        "the identity scan does not cover config/products.yaml, which carries "
+        "the per-watch store pin. Check _SKIP_DIRS and _SKIP_SUFFIXES."
+    )
+
+
 def test_the_probe_file_exemption_cannot_quietly_grow() -> None:
     """Files exempt from the pattern rules are held to the deny-list instead.
 

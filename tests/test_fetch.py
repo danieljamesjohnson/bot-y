@@ -1179,3 +1179,123 @@ def test_no_fixture_leaks_the_capturing_hosts_identity() -> None:
         "committed fixtures carry the capturing host's identity — this repo is "
         "public:\n  " + "\n  ".join(sorted(set(leaks)))
     )
+
+
+# --------------------------------------------------------------------------
+# The store-number-in-a-config-key rule, watched against the SHIPPED script
+# --------------------------------------------------------------------------
+
+
+def _load_shipped_identity_check() -> Any:
+    """Load `scripts/identity_check.py` — the copy that actually runs.
+
+    Copied from `tests/test_identity_check.py::_load`, and pointed at the
+    script on purpose. `_identity_leaks` exists TWICE in this repo: here, in
+    this file, and in `scripts/identity_check.py`. The pre-commit hook and
+    `make verify` run the script's copy; the one above is a test fixture that
+    has already drifted from it. A green assertion against the local copy would
+    be a claim about a rule this repo does not run.
+    """
+    import importlib.util
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "identity_check.py"
+    spec = importlib.util.spec_from_file_location("identity_check_shipped", script)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_a_store_number_cannot_enter_through_a_yaml_config_key() -> None:
+    """REQ-14 puts `store_id:` into `config/products.yaml`, which is tracked and public.
+
+    Measured 2026-08-10 against the shipped script BEFORE this rule existed:
+    all four spellings below returned `[]`. Every YAML spelling of the exact key
+    this phase introduces walked straight through the gate that exists to stop
+    store numbers entering this repo, while `store_id=12345` and
+    `"storeId":"12345"` were both caught — the rules were keyed to the carriers
+    somebody had already seen (a URL, a JSON document) rather than to the class.
+
+    A store number is a geolocator: it resolves publicly to one street address.
+    `3bd1663` force-rewrote 170 commits of history over exactly this class.
+
+    The values here are invented. `12345` and `202` are placeholders; neither is
+    in any capture in this repo, which the deny-list check in this file asserts
+    mechanically rather than by anybody's reading of them.
+    """
+    ic = _load_shipped_identity_check()
+
+    for line in (
+        "  store_id: 12345\n",
+        '  store_id: "12345"\n',
+        "    storeId: 202\n",
+        "  STORE_ID: 12345\n",
+    ):
+        leaks = ic._identity_leaks("config/products.yaml", line)
+        assert leaks, (
+            f"{line!r} passed the shipped identity guard. A real store number "
+            f"typed into config/products.yaml would be committed unopposed."
+        )
+        assert any("store number in a config key" in leak for leak in leaks), (
+            f"{line!r} was caught, but not as a config-key leak: {leaks}"
+        )
+
+
+def test_the_config_key_rule_stays_quiet_on_what_the_shipped_config_actually_says() -> None:
+    """The rule must not redden the file it guards.
+
+    `config/products.yaml` ships `store_id: ${WALMART_STORE_ID}` — the real
+    number lives in the daemon's mode-600 EnvironmentFile, outside the repo — and
+    an unset variable expands to empty, which is unpinned, which is UNKNOWN. If
+    the guard fired on that, the only way to keep the tree green would be to
+    weaken the guard.
+
+    The redaction vocabulary is checked here too. `0` and `00000` are
+    placeholders this repo writes on purpose, and every synthetic store value in
+    this phase's tests is one of them — so the rule must let them through, or the
+    tests that exercise a store pin could not be written at all.
+    """
+    ic = _load_shipped_identity_check()
+
+    for line in (
+        "  store_id: ${WALMART_STORE_ID}\n",
+        "  state_path: state.json\n",
+        "  status_path: served/boty/status.json\n",
+        '  store_id: "0"\n',
+        "  store_id: 0\n",
+        '  store_id: "00000"\n',
+        "  store_id: 00000\n",
+    ):
+        assert not ic._identity_leaks("config/products.yaml", line), (
+            f"{line!r} was reported as a leak. It is not one, and a guard that "
+            f"fires on the honest form of the value pushes people to weaken it."
+        )
+
+
+def test_the_config_key_rules_two_residuals_are_what_was_measured() -> None:
+    """A gate whose limits are not written down gets trusted past them.
+
+    Both of these were measured, and both are recorded in the rule's own comment
+    in `scripts/identity_check.py`. They are asserted here so that a later
+    widening or narrowing has to move this test deliberately rather than
+    silently:
+
+    - **A `#`-commented line is not scanned.** `^\\s*` followed by `[A-Za-z_]*`
+      cannot cross the `#`. That is the property that keeps the rule off prose,
+      and it is why the comment paragraph beside `store_id` in
+      `config/products.yaml` carries no digits at all.
+    - **`restore_id` is over-caught**, because `[A-Za-z_]*store` matches inside
+      `restore`. Fail-closed on the ZIP+4 rule's stated precedent: a false
+      positive costs one redaction, a false negative costs a public address.
+    """
+    ic = _load_shipped_identity_check()
+
+    assert not ic._identity_leaks("config/products.yaml", "# store_id: 12345 in a comment\n"), (
+        "a commented line is now scanned. That is a widening, not a bug fix — "
+        "the no-digits rule for the products.yaml comment paragraph exists "
+        "because it was NOT scanned. Update both."
+    )
+    assert ic._identity_leaks("config/products.yaml", "  restore_id: 12345\n"), (
+        "the rule no longer over-catches `restore_id`. If that was deliberate, "
+        "say so beside the pattern; if not, the class boundary just moved."
+    )

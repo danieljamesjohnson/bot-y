@@ -216,6 +216,58 @@ def _identity_leaks(name: str, body: str) -> list[str]:
         # shipped in a fixture through seven rounds because of it.
         (r'"(?:xForwardedFor|trueClientIp|clientIp|xRealIp)"\s*:\s*"([^"]+)"', "client IP in a camelCase header"),
         (r'\bstore(?:_?[Ii]d|Number)\s*(?:=|%3D)\s*(\d+)', "store number in a URL"),
+        # YAML/config keys — a carrier column, not another key spelling, the same
+        # move the cookie and `data-` attribute rules above made.
+        #
+        # Measured 2026-08-10, against this file BEFORE this line existed:
+        # `store_id: <n>`, `store_id: "<n>"`, `storeId: <n>` and `STORE_ID: <n>`
+        # ALL returned `[]`, while `store_id=<n>` and `"storeId":"<n>"` were both
+        # caught by the URL and JSON rules. So every YAML spelling of the exact
+        # key REQ-14 adds to `config/products.yaml` — tracked, public — walked
+        # straight through the gate that exists to stop store numbers entering
+        # this repo. That is the "keyed to the spelling I had just seen rather
+        # than to the class" defect `3bd1663` spent a re-verification round on,
+        # arriving at the one key that made it likely.
+        #
+        # THE CHARACTER CLASSES ARE LOAD-BEARING. Do not simplify them back to
+        # `[a-z_]*store(?:_?id|_?number|_?no|_?code)?`: that form was measured and
+        # it does NOT catch `storeId: <n>` — `[a-z_]*` matches `store`, the
+        # optional suffix group cannot match a capital `Id`, so `\s*:` is tested
+        # against `I` and fails. The loop below does pass `re.I`, which papers
+        # over it — but a pattern that is only correct because of a flag its
+        # caller happens to apply goes silently wrong the moment anybody moves or
+        # reuses it, and this file already records `re.I` being dropped as a
+        # silent mutation twice. As written the rule catches `storeId` on its
+        # own; `re.I` additionally buys the SCREAMING_CASE spelling.
+        #
+        # Measured with this line in place and `--all` over the whole tree,
+        # 2026-08-10: PASS, exit 0, zero hits on the existing corpus. It does not
+        # fire on `store_id: ${WALMART_STORE_ID}` (which is what the shipped
+        # config actually says), on `state_path:` or on `status_path:`. The
+        # `^\s*` anchor under `(?m)` is what keeps it off prose and off the JSON
+        # forms the rules above already own, and `value.strip("0.- ")` below is
+        # what keeps `0` and `00000` — this repo's own redaction vocabulary —
+        # usable as test values.
+        #
+        # TWO MEASURED RESIDUALS, recorded because a gate whose limits are not
+        # written down gets trusted past them:
+        #
+        # 1. A `#`-commented line is NOT scanned — `^\s*` followed by `[A-Za-z_]*`
+        #    cannot cross the `#`. That is exactly the property that keeps this
+        #    rule off prose, and it is also a hole: it is why the comment
+        #    paragraph beside `store_id` in `config/products.yaml` carries no
+        #    digits at all, not even an invented example.
+        # 2. It over-catches by design: `restore_id: <n>` is caught, because
+        #    `[A-Za-z_]*store` matches inside `restore`. Fail-closed, on the
+        #    stated precedent of the ZIP+4 rule above — a false positive costs one
+        #    redaction, a false negative costs a public address. If it ever fires
+        #    on real data, narrow it deliberately and say so here.
+        #
+        # Both residuals are pinned in `tests/test_fetch.py`, which is the only
+        # file that can hold a literal `store_id: <n>` probe: it is the sole
+        # member of `_PROBE_FILES`, so the pattern rules are not run over it.
+        (r'(?m)^\s*[A-Za-z_]*[Ss]tore(?:_?[Ii][Dd]|_?[Nn]umber|_?[Nn]o|_?[Cc]ode)?\s*:\s*"?(\d+)',
+         "store number in a config key"),
         (r'"(?:state|region|province)(?:Code|OrProvinceCode|_code)?"\s*:\s*"([A-Z]{2})"', "state or region"),
         (r'"(?:city|cityName|locality|town)"\s*:\s*"([A-Za-z][A-Za-z .\'-]{2,})"', "city"),
         (r'"(?:destinationZipCode|postCode|post_code|zip5|zipcode)"\s*:\s*"?(\d{4,})', "postal code"),
