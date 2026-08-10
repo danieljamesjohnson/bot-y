@@ -22,7 +22,7 @@ under *Milestone v1.0.0 — Phase Details* below. v1.0.0 remains open and untagg
 
 ### Milestone v0.2 — Say Only What You Measured (scoped 2026-08-10)
 
-- [ ] **Phase 5: A Reading Means Something** - Pin the store, name the cause, page only when it matters
+- [x] **Phase 5: A Reading Means Something** - Pin the store, name the cause, page only when it matters (completed 2026-08-10 — six criteria met in the tree, none confirmed on the deployed daemon; Dan deferred the restart)
 - [ ] **Phase 6: Claims With Gates Under Them** - Delivered-total ceiling, bind the matrix, gate what ships
 
 ## Retailer Scope
