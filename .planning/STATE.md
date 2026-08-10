@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
 status: Executing Phase 5
-stopped_at: Completed 05-01-PLAN.md — the store is a fact that exists and is published
-last_updated: "2026-08-10T15:44:52.787Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-08-10T16:14:35.643Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,18 +26,27 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 5 of 6 — *A Reading Means Something* — **EXECUTING**, 1 of 4 plans complete
-**Next command:** `/gsd-execute-phase 5` (05-02 next; 05-04 is `autonomous: false` and checkpoints for Dan)
+**Phase:** 5 of 6 — *A Reading Means Something* — **EXECUTING**, 2 of 4 plans complete
+**Next command:** `/gsd-execute-phase 5` (05-03 next; 05-04 is `autonomous: false` and checkpoints for Dan)
 
-**05-01 is done and the phase is NOT.** `gsd-tools state advance-plan` wrote
+**05-01 and 05-02 are done and the phase is NOT.** `gsd-tools state advance-plan` wrote
 `status: Phase complete — ready for verification` after the first of four plans — it read the
-"Plan: 6 of 6 complete" line left behind by Phase 4 — and that was corrected by hand.
-Recorded because a milestone about not overclaiming should not have its own state file
-claiming a phase closed after a quarter of it.
+"Plan: 6 of 6 complete" line left behind by Phase 4 — and that was corrected by hand. **It did
+it again after 05-02**, for the same reason: the stale line lives in the archived v1.0.0 block
+at the bottom of this file, which is kept verbatim and therefore cannot be edited to fix the
+tool. Corrected by hand both times. Recorded because a milestone about not overclaiming should
+not have its own state file claiming a phase closed at the halfway mark.
 
-**REQ-14 is still Pending on purpose.** 05-01 shipped the *recording* half — the pin, the
-reading, and the publication. The *verdict* half (unpinned or mismatched ⇒ UNKNOWN plus a
-health message) is 05-02, which is what closes the requirement.
+**REQ-14 and REQ-15 are CLOSED by 05-02.** 05-01 shipped REQ-14's *recording* half — the pin,
+the reading, the publication. 05-02 shipped the *verdict* half (unpinned or mismatched ⇒
+UNKNOWN, with a health message that names `store_id`) and withdrew the two alert sentences
+REQ-15 exists because of. Mutations rose 8/8 → 10/10; `make verify-offline` exits 0 at 595
+passed.
+
+**Both Walmart watches read UNKNOWN on this host until 05-04's checkpoint.** `store_id:
+${WALMART_STORE_ID}` is unset here, so the config-gap guard fires and `boty check` shows
+Walmart unhealthy with the store-gap reason. That is criterion 2 working, not a regression —
+do not "fix" it by inventing a default.
 
 **v1.0.0 is open, untagged, and stays that way.** Its definition of done includes *"Dan has
 successfully bought a Pokémon GO Plus +"* — a market condition, not a work item — and the
@@ -193,6 +202,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 04 P05 | 22m | 3 tasks | 10 files |
 | Phase 04 P06 | 35 | 3 tasks | 4 files |
 | Phase 05 P01 | 25min | 4 tasks | 19 files |
+| Phase 05 P02 | 20min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -282,6 +292,9 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase ?]: 05-01: the identity guard was measurably blind to every YAML spelling of store_id and was widened and watched going red on all four spellings BEFORE the key was written into the tracked config; the new rule's character classes must not be simplified to a lowercase-only form, which does not catch storeId without re.I doing the work
 - [Phase ?]: 05-01: REQ-14 deliberately NOT marked complete — this plan shipped the recording half; the verdict half is 05-02, which the outline's own traceability table names as the closer. Same reasoning that left REQ-11 Pending after 04-05
 - [Phase ?]: 05-01: _identity_leaks exists TWICE (scripts/identity_check.py and tests/test_fetch.py) and the copies have drifted in two behavioural ways — ZZ in the allow-list, and _is_reserved_ip vs a bare 192.0.2. prefix. Only the shipped script was widened; reconciling would redden a grid cell and is a decision of its own, flagged for a later plan
+- [Phase 05]: REQ-14 and REQ-15 close together in 05-02: the store guard and the alert-text withdrawal both rewrite the same function, so splitting them would have been contention disguised as parallelism
+- [Phase 05]: A claim about ABSENCE is gated with ast.parse (docstrings excluded by node identity), never grep — this repo's own comments quote the withdrawn sentences, so a text gate rots into a vacuous pass
+- [Phase 05]: monitor.CAUSE_UNKNOWN is carried by exactly the refusal and breakage arms and by neither the no-control nor the store-gap arm — saying 'the cause is not established' about a gap we can name is the same dishonesty pointed the other way
 
 ### Blockers
 
