@@ -25,6 +25,8 @@ separately below rather than only where the two coincide.
 
 from __future__ import annotations
 
+import pytest
+
 from boty.models import Availability, Extraction, Result, Rung, Watch
 from boty.monitor import assess_health
 
@@ -37,6 +39,7 @@ def _result(
     rung: Rung | None = None,
     extraction: Extraction | None = None,
     control: bool = False,
+    shipping: float | None = None,
 ) -> Result:
     watch = Watch(
         name="goplusplus",
@@ -50,25 +53,41 @@ def _result(
     # fields is that every pre-existing construction site — which names
     # neither — keeps its meaning. A helper that always passed them would test
     # a call shape nothing in `boty` actually uses.
-    kwargs: dict[str, Rung | Extraction] = {}
+    #
+    # `shipping` follows the same convention for the same reason, and here it
+    # is load-bearing rather than tidy: omitting it is what a reading from a
+    # retailer that published no shipping cost actually looks like, and that is
+    # the case REQ-17 turns into "not alertable".
+    kwargs: dict[str, Rung | Extraction | float] = {}
     if rung is not None:
         kwargs["rung"] = rung
     if extraction is not None:
         kwargs["extraction"] = extraction
+    if shipping is not None:
+        kwargs["shipping"] = shipping
     return Result(watch, availability, price=price, detail="synthetic", **kwargs)
 
 
 def test_in_stock_under_the_ceiling_is_alertable() -> None:
-    assert _result(Availability.IN_STOCK, price=54.99, max_price=80).alertable is True
+    assert _result(Availability.IN_STOCK, price=54.99, shipping=0.0, max_price=80).alertable is True
 
 
 def test_in_stock_exactly_at_the_ceiling_is_alertable() -> None:
-    """The ceiling is inclusive — an $80 cap means "$80 is fine"."""
-    assert _result(Availability.IN_STOCK, price=80.0, max_price=80).alertable is True
+    """The ceiling is inclusive — an $80 cap means "$80 is fine".
+
+    `shipping=0.0` and not omitted: `0.0` is the positive claim "this offer
+    ships free", which is what makes $80.00 the whole of what you would pay.
+    Omitting it would be the *absence* of a claim, and REQ-17 refuses that
+    under a ceiling — this test would then pass for a reason that has nothing
+    to do with inclusivity.
+    """
+    assert _result(Availability.IN_STOCK, price=80.0, shipping=0.0, max_price=80).alertable is True
 
 
 def test_in_stock_above_the_ceiling_is_not_alertable() -> None:
-    assert _result(Availability.IN_STOCK, price=229.99, max_price=80).alertable is False
+    assert (
+        _result(Availability.IN_STOCK, price=229.99, shipping=0.0, max_price=80).alertable is False
+    )
 
 
 def test_in_stock_with_no_ceiling_configured_is_alertable() -> None:
@@ -89,13 +108,147 @@ def test_unpriced_in_stock_offer_does_not_pass_the_ceiling() -> None:
     to show why. That is exactly the noise that trains you to ignore the
     notifications.
     """
-    assert _result(Availability.IN_STOCK, price=None, max_price=80).alertable is False
+    assert _result(Availability.IN_STOCK, price=None, shipping=0.0, max_price=80).alertable is False
 
 
 def test_not_in_stock_is_never_alertable() -> None:
     for availability in (Availability.OUT_OF_STOCK, Availability.UNKNOWN):
         assert _result(availability, price=1.0, max_price=80).alertable is False
+        assert _result(availability, price=1.0, shipping=0.0, max_price=80).alertable is False
         assert _result(availability).alertable is False
+
+
+# --------------------------------------------------------------------------
+# The delivered total — what the ceiling actually measures (REQ-17)
+# --------------------------------------------------------------------------
+#
+# The ceiling used to measure `offer.price`. A $54.99 listing with $45 shipping
+# walked straight through an $80 cap — one of only two defences against a
+# reseller alert, defeated by a number the page publishes. It now measures
+# price + shipping, and where that cannot be established it refuses to
+# authorise an alert rather than guessing.
+#
+# ARITHMETIC NOTE, and it is why `pytest.approx` appears below: `54.99 + 6.99`
+# is `61.980000000000004`, so `54.99 + 6.99 <= 61.98` is False. The delivered
+# total is deliberately NEVER rounded — rounding would invent precision no
+# retailer stated, and it would move a boundary case in the permissive
+# direction. The ceilings used here are 80 and 60, which are unambiguous either
+# way.
+
+
+def test_the_delivered_total_is_the_price_plus_the_shipping() -> None:
+    """GameStop's captured numbers: $54.99 + $6.99, under an $80 ceiling."""
+    r = _result(Availability.IN_STOCK, price=54.99, shipping=6.99, max_price=80)
+
+    assert r.delivered_total == pytest.approx(61.98)
+    assert r.alertable is True
+
+
+def test_the_ceiling_bites_on_the_delivered_total_and_on_nothing_else() -> None:
+    """The whole of REQ-17 in one assertion.
+
+    $54.99 clears a $60 ceiling comfortably. $54.99 + $6.99 does not. If this
+    ever passes, the ceiling has gone back to measuring the item price and the
+    shipping half is decorative.
+    """
+    r = _result(Availability.IN_STOCK, price=54.99, shipping=6.99, max_price=60)
+
+    assert r.delivered_total == pytest.approx(61.98)
+    assert r.alertable is False
+
+
+def test_an_unresolved_shipping_cost_under_a_ceiling_is_not_alertable() -> None:
+    """REQ-17's own sentence: an unresolvable shipping cost produces no pass.
+
+    This is the case that costs coverage, and it is accepted rather than
+    softened. Nintendo publishes `shippingDetails` as prose and Amazon's reader
+    is a button, so neither can establish a delivered total — and both stop
+    being able to page anybody, at today's `max_price: 80`, until some later
+    plan gives them a shipping cost or an operator declaration.
+
+    The rejected alternative was falling back to the item price when a retailer
+    publishes no shipping at all. It reopens exactly the hole this closes:
+    Walmart's paid-marketplace payload is unobserved, so "publishes nothing"
+    and "publishes something we did not read" are indistinguishable on the
+    retailer this defence exists for. REQUIREMENTS' own tiebreaker settles it —
+    trustworthiness over coverage.
+    """
+    assert _result(Availability.IN_STOCK, price=54.99, max_price=80).alertable is False
+
+
+def test_an_unreadable_price_under_a_ceiling_is_still_not_alertable() -> None:
+    """The pre-existing rule, kept watchable in its own right.
+
+    `delivered_total` now answers for both halves, so this and the shipping
+    case above go through one guard. They are asserted separately because they
+    are separate claims: a tree that refused an unreadable price and quietly
+    summed a missing shipping as zero would pass one and fail the other.
+    """
+    assert _result(Availability.IN_STOCK, price=None, shipping=0.0, max_price=80).alertable is False
+
+
+def test_no_ceiling_configured_still_short_circuits_before_any_of_this() -> None:
+    """An operator who configured no ceiling asked for any restock at any price.
+
+    Nothing about the delivered total is consulted, and it must not be: every
+    control watch in `config/products.yaml` carries no `max_price`, so this
+    short-circuit is what makes REQ-17's blast radius exclude the control
+    stage of `make verify` entirely.
+    """
+    assert _result(Availability.IN_STOCK, price=54.99).alertable is True
+
+
+def test_a_negative_shipping_cost_never_lowers_a_delivered_total() -> None:
+    """T-06-01: a retailer-supplied number that would turn the defence into a hole.
+
+    `54.99 + -5.0` is `49.99`, which clears a ceiling the honest total might
+    not. A negative shipping cost pulls the delivered total BELOW the item
+    price, so it is refused outright rather than subtracted — the total is
+    unestablished, and unestablished is not alertable.
+
+    Guarded in `delivered_total` and in exactly one place, not in each reader:
+    this is the single point at which a shipping number becomes a decision, and
+    N readers would be N chances to get it wrong.
+    """
+    r = _result(Availability.IN_STOCK, price=54.99, shipping=-5.0, max_price=80)
+
+    assert r.delivered_total is None
+    assert r.alertable is False
+
+
+def test_the_delivered_total_is_none_whenever_either_half_is_missing() -> None:
+    """Published as `None`, not as a partial sum, so nothing downstream can guess."""
+    assert _result(Availability.IN_STOCK, price=54.99).delivered_total is None
+    assert _result(Availability.IN_STOCK, shipping=6.99).delivered_total is None
+    assert _result(Availability.IN_STOCK).delivered_total is None
+
+
+def test_shipping_moves_no_availability() -> None:
+    """UNKNOWN is never resolved into a verdict, and nothing becomes OUT_OF_STOCK.
+
+    Where the UNKNOWN goes is `alertable`, not `Availability`, and that is a
+    decision rather than an accident. Driving availability to UNKNOWN over a
+    PRICING question would make the page's own stock statement disappear, and
+    it would strand Nintendo and Amazon at a permanent UNKNOWN with no path
+    back. `alertable is False` resolves nothing and moves in the fail-safe
+    direction.
+    """
+    for availability in Availability:
+        for shipping in (None, 0.0, 6.99, -5.0):
+            r = _result(availability, price=54.99, shipping=shipping, max_price=80)
+            assert r.availability is availability
+
+
+def test_a_result_built_without_a_shipping_cost_did_not_read_one() -> None:
+    """`None` is "no shipping cost was read". It is never `0.0`.
+
+    `0.0` is a positive claim that this offer ships free. For Amazon and for
+    both browser adapters `None` is the honest and permanent value, because
+    none of their readers touches shipping at all.
+    """
+    r = _result(Availability.IN_STOCK)
+    assert r.shipping is None
+    assert r.delivered_total is None
 
 
 # --------------------------------------------------------------------------
@@ -147,7 +300,9 @@ def test_degradation_does_not_suppress_an_alert() -> None:
     supporting the retailer through a browser at all — the flag exists to
     label confidence, not to withhold the thing you asked to be told about.
     """
-    r = _result(Availability.IN_STOCK, price=54.99, max_price=80, rung=Rung.BROWSER)
+    r = _result(
+        Availability.IN_STOCK, price=54.99, shipping=0.0, max_price=80, rung=Rung.BROWSER
+    )
     assert r.degraded is True
     assert r.alertable is True
 
@@ -238,7 +393,7 @@ def test_a_dom_reading_is_still_alertable() -> None:
     suppress the thing you asked to be told about.
     """
     r = _result(
-        Availability.IN_STOCK, price=54.99, max_price=80, extraction=Extraction.DOM
+        Availability.IN_STOCK, price=54.99, shipping=0.0, max_price=80, extraction=Extraction.DOM
     )
     assert r.degraded is True
     assert r.alertable is True
@@ -313,9 +468,20 @@ def test_the_store_is_carried_on_the_result_and_changes_no_verdict() -> None:
         max_price=80,
         store_id="0",
     )
-    pinned = Result(watch, Availability.IN_STOCK, price=54.99, detail="synthetic", store="0")
+    # `shipping=0.0` on both: the subject here is the store, and under REQ-17 a
+    # ceiling with no shipping cost read is not alertable — so without a
+    # resolved shipping these two assertions would pass for the wrong reason
+    # and stop saying anything about the store at all.
+    pinned = Result(
+        watch, Availability.IN_STOCK, price=54.99, detail="synthetic", store="0", shipping=0.0
+    )
     mismatched = Result(
-        watch, Availability.IN_STOCK, price=54.99, detail="synthetic", store="00000"
+        watch,
+        Availability.IN_STOCK,
+        price=54.99,
+        detail="synthetic",
+        store="00000",
+        shipping=0.0,
     )
 
     assert pinned.store == "0"

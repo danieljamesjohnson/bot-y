@@ -167,6 +167,130 @@ def test_walmart_first_party_offer_is_accepted(
 
 
 # --------------------------------------------------------------------------
+# What you would actually pay — the shipping thread-through (REQ-17)
+# --------------------------------------------------------------------------
+
+
+def test_the_gamestop_capture_carries_its_shipping_cost_all_the_way_to_a_result(
+    monkeypatch: pytest.MonkeyPatch, gamestop_goplusplus: str
+) -> None:
+    """The one delivered total in this repository computable from captured data.
+
+    $54.99 + $6.99 = $61.98, read off GameStop's own `OfferShippingDetails`.
+
+    THIS ASSERTS THE THREAD-THROUGH AND THE ARITHMETIC, NOT ALERTABILITY, and
+    that is deliberate rather than an omission: this fixture reads OUT_OF_STOCK,
+    so `alertable` short-circuits on availability long before any ceiling is
+    consulted. What is being pinned is that a number `boty.parse` read off the
+    page survives `_verdict_from_html` and reaches the decision layer — the
+    step where a missed site would otherwise be silent, because `None` is the
+    correct value on every other path.
+
+    `pytest.approx` because `54.99 + 6.99` is `61.980000000000004`. The
+    delivered total is never rounded.
+    """
+    _serve(monkeypatch, gamestop_goplusplus)
+    watch = Watch(name="GO Plus +", retailer="gamestop", target=GAMESTOP_URL, max_price=80)
+
+    result = retailers.check_html(watch)
+
+    assert result.price == 54.99
+    assert result.shipping == 6.99
+    assert result.delivered_total == pytest.approx(61.98)
+
+
+def test_a_page_with_no_structured_data_carries_no_shipping_and_moves_no_availability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An offerless UNKNOWN stays UNKNOWN, and states `shipping=None` rather than inheriting it.
+
+    The shipping work must move no `Availability` anywhere: nothing becomes
+    OUT_OF_STOCK because a shipping cost could not be read, and no UNKNOWN is
+    resolved into a verdict by it.
+    """
+    _serve(monkeypatch, "<html><body>a page we cannot read</body></html>")
+    watch = Watch(name="GO Plus +", retailer="gamestop", target=GAMESTOP_URL, max_price=80)
+
+    result = retailers.check_html(watch)
+
+    assert result.availability is Availability.UNKNOWN
+    assert result.shipping is None
+    assert result.delivered_total is None
+    assert result.alertable is False
+
+
+def test_a_number_in_a_field_never_observed_carrying_one_is_not_a_shipping_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A SYNTHETIC stand-in, in `PUBLISH_WORKFLOW`'s idiom, and what it does not claim.
+
+    WHAT THIS DOES NOT CLAIM: that `shippingAndImportFee.price` is where
+    Walmart puts a paid shipping cost. Nobody knows where Walmart puts one —
+    **no captured payload in this repository shows Walmart's paid marketplace
+    shipping shape at all**, and a fixture cannot be edited to carry shipping
+    Walmart never sent without lying about what was captured. So this payload
+    is written here, in the test, labelled synthetic, rather than smuggled into
+    the fixture tree.
+
+    WHAT IT DOES CLAIM: that a number sitting in a field which has never been
+    observed carrying one does not become a shipping cost. The fee here is
+    non-zero and the SHIPPING option carries no `freeFulfillment`, so the two
+    signals do not agree, so nothing is resolved — and with a ceiling
+    configured, nothing resolved is not alertable.
+
+    That is the $54.99-item-with-$45-shipping case REQ-17 names, answered by
+    refusal rather than by a pass. The item price alone would clear the $80
+    ceiling comfortably, which is exactly why the old ceiling let it through.
+    """
+    page = _nextdata(
+        availabilityStatus="IN_STOCK",
+        sellerName="Walmart.com",
+        priceInfo={
+            "currentPrice": {"price": 54.99},
+            "additionalFees": {"shippingAndImportFee": {"price": 45.0}},
+        },
+        fulfillmentOptions=[{"type": "SHIPPING", "speedDetails": {}}],
+        location={"storeIds": ["0"]},
+    )
+    _serve(monkeypatch, page, WALMART_URL)
+    watch = Watch(
+        name="GO Plus +", retailer="walmart", target=WALMART_URL, max_price=80, store_id="0"
+    )
+
+    result = retailers.check_html(watch, first_party_only=True)
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.price == 54.99
+    assert result.shipping is None
+    assert result.delivered_total is None
+    assert result.alertable is False
+
+
+def test_the_walmart_capture_that_says_free_shipping_says_so_on_the_result(
+    monkeypatch: pytest.MonkeyPatch, walmart_goplusplus: str
+) -> None:
+    """`0.0` is a claim, and it survives to the Result — but the flip still fails.
+
+    Both of Walmart's free-shipping signals agree on this capture, so shipping
+    resolves at `0.0` and the delivered total is the item price. That total is
+    $229.99 against an $80 ceiling, so the reseller listing is refused by the
+    ceiling exactly as it was before REQ-17 — the new rule tightened this
+    defence without loosening it anywhere.
+    """
+    _serve(monkeypatch, walmart_goplusplus, WALMART_URL)
+    watch = Watch(
+        name="GO Plus +", retailer="walmart", target=WALMART_URL, max_price=80, store_id="0"
+    )
+
+    result = retailers.check_html(watch, first_party_only=False)
+
+    assert result.availability is Availability.IN_STOCK
+    assert result.shipping == 0.0
+    assert result.delivered_total == pytest.approx(229.99)
+    assert result.alertable is False
+
+
+# --------------------------------------------------------------------------
 # Who is selling this? — the seller filter's own failure modes
 # --------------------------------------------------------------------------
 
