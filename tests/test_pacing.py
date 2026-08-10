@@ -13,6 +13,15 @@ Two separate defects, and the second is the one that actually cost something:
    the extractor was never reached — and it went out 20 times in 24 hours. An
    alert that cries wolf 20 times is worse than no alert, because this project's
    entire pitch is that its alerts mean something.
+
+   THE SENTENCE QUOTED ABOVE WAS WITHDRAWN IN PHASE 5 (REQ-15, 2026-08-10), and
+   so was its replacement's other half — the refusal arm's "we are asking too
+   often", which kept firing after a 6-hour backoff had been observed not to
+   help. The quotation is HISTORY, kept because it is the subject of the tests
+   below; it is not a live claim about what the code says. What the arms say now
+   is the measured fact plus `monitor.CAUSE_UNKNOWN`, and the three assertions
+   below were rewritten from the prose to that property. The gate on their
+   absence is `tests/test_alert_text.py`.
 """
 
 from __future__ import annotations
@@ -23,7 +32,7 @@ import pytest
 
 from boty.fetch import Blocked, FetchError, is_refusal
 from boty.models import Availability, Health, Result, Watch
-from boty.monitor import State, assess_health, run_once
+from boty.monitor import CAUSE_UNKNOWN, State, assess_health, run_once
 from boty.pacing import MAX_BACKOFF_SECONDS, Pacer
 
 
@@ -58,10 +67,11 @@ def test_a_refused_control_is_not_reported_as_a_broken_detector() -> None:
     (health,) = assess_health([_refused(_w("amazon"))])
     assert not health.ok, "a refusal still means we cannot verify the detector"
     assert health.refused, "a refusal must be marked as one"
-    assert "probably fine" in health.reason, (
-        f"a refusal is reported as {health.reason!r} — telling the reader the "
-        f"detector is probably broken is false, and it is what made this alert "
-        f"channel unreadable"
+    assert "refus" in health.reason and CAUSE_UNKNOWN in health.reason, (
+        f"a refusal is reported as {health.reason!r} — it must name the measured "
+        f"fact (a refusal) and then say the cause is not established. Telling the "
+        f"reader the detector is broken is false here, and it is what made this "
+        f"alert channel unreadable"
     )
 
 
@@ -69,8 +79,12 @@ def test_a_genuinely_broken_control_still_says_so_loudly() -> None:
     """The other direction. Backing off must not have muffled the real alarm."""
     (health,) = assess_health([_broken(_w("gamestop"))])
     assert not health.ok and not health.refused
-    assert "probably broken" in health.reason
-    assert "missed silently" in health.reason
+    assert "IN_STOCK" in health.reason, "the measured fact: a control stopped verifying"
+    assert CAUSE_UNKNOWN in health.reason
+    assert "missed silently" in health.reason, (
+        "the consequence follows from what a control IS, so it survives the "
+        "withdrawal — unlike the cause, which was never measured"
+    )
 
 
 def test_one_non_refusal_among_refusals_is_treated_as_breakage() -> None:
@@ -83,7 +97,7 @@ def test_one_non_refusal_among_refusals_is_treated_as_breakage() -> None:
     w1, w2 = _w("gamestop", "a"), _w("gamestop", "b")
     (health,) = assess_health([_refused(w1), _broken(w2)])
     assert not health.refused, "a non-refusal among refusals must not be swallowed"
-    assert "probably broken" in health.reason
+    assert "IN_STOCK" in health.reason and CAUSE_UNKNOWN in health.reason
 
 
 def test_a_healthy_retailer_is_unaffected() -> None:

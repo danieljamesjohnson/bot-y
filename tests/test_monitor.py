@@ -21,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from boty.models import Availability, Result, Watch
-from boty.monitor import State, assess_health, run_once
+from boty.monitor import CAUSE_UNKNOWN, State, assess_health, run_once
 
 
 def _result(
@@ -113,6 +113,174 @@ def test_health_is_reported_per_retailer() -> None:
     health = {h.retailer: h.ok for h in assess_health(results)}
 
     assert health == {"gamestop": True, "walmart": False}
+
+
+# --------------------------------------------------------------------------
+# The four arms — which one fires for which input, and what each may claim
+# --------------------------------------------------------------------------
+#
+# REQ-15. Two of these failures have a cause the code measured and two do not,
+# and every arm is only allowed to say what its own inputs establish.
+#
+# Store values in this file come from the redaction vocabulary — `"0"` and
+# `"00000"` — because `scripts/identity_check.py` scans every tracked file and a
+# real store number resolves publicly to one street address.
+
+
+def _control(
+    availability: Availability,
+    *,
+    retailer: str = "gamestop",
+    name: str = "ctl",
+    refused: bool = False,
+    store_id: str | None = None,
+    store: str | None = None,
+) -> Result:
+    watch = Watch(
+        name=name,
+        retailer=retailer,
+        target=f"https://{retailer}.example/{name}",
+        control=True,
+        store_id=store_id,
+    )
+    return Result(watch, availability, detail="synthetic", refused=refused, store=store)
+
+
+def test_a_refusal_names_the_refusal_and_claims_nothing_else() -> None:
+    """What the code established is that a page did not come back.
+
+    It did NOT establish a rate — that sentence kept firing after backing off to
+    a 6-hour interval had been observed not to help — and it establishes nothing
+    about the detector in either direction, because a refusal means the extractor
+    was never reached.
+    """
+    (health,) = assess_health([_control(Availability.UNKNOWN, refused=True)])
+
+    assert health.ok is False
+    assert health.refused is True
+    assert "refus" in health.reason, "the measured fact has to be named"
+    assert CAUSE_UNKNOWN in health.reason
+    for withdrawn in ("we are asking too often", "probably fine", "probably broken"):
+        assert withdrawn not in health.reason
+    assert "no action is needed" not in health.reason, (
+        "`assess_health` takes a list of Results and cannot see a Pacer, so it "
+        "cannot know what action is needed — and `cli.watch_cycle` only pages a "
+        "refusal once it is entrenched, which is exactly when that advice is false"
+    )
+
+
+def test_a_broken_control_names_the_measurement_and_says_the_cause_is_unknown() -> None:
+    """A control did not read IN_STOCK, and it was not a refusal. Whether the
+    cause is the extractor, the retailer's markup, or the control itself having
+    genuinely sold out is NOT established — so the arm states the measurement and
+    then says so."""
+    (health,) = assess_health([_control(Availability.OUT_OF_STOCK)])
+
+    assert health.ok is False
+    assert health.refused is False
+    assert "IN_STOCK" in health.reason
+    assert CAUSE_UNKNOWN in health.reason
+    assert "probably broken" not in health.reason
+
+
+def test_an_unpinned_store_is_the_one_failure_whose_cause_was_measured() -> None:
+    """The store arm, and the reason it must NOT carry CAUSE_UNKNOWN.
+
+    Saying "the cause is not established" about a gap we can name is the same
+    class of dishonesty as the withdrawn sentences, pointed the other way.
+    """
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="walmart", store_id=None)]
+    )
+
+    assert health.ok is False
+    assert health.refused is False
+    assert "store_id" in health.reason
+    assert CAUSE_UNKNOWN not in health.reason
+
+
+def test_a_mismatched_store_reaches_the_same_arm() -> None:
+    """Pinned, but the page answered for somebody else's store."""
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="walmart", store_id="0", store="00000")]
+    )
+
+    assert health.ok is False
+    assert "store_id" in health.reason
+    assert CAUSE_UNKNOWN not in health.reason
+
+
+def test_the_no_control_arm_is_unchanged_and_claims_no_unknown_cause() -> None:
+    """Its cause was measured too: there is no control configured, and the file
+    that would configure one is the whole of the diagnosis."""
+    (health,) = assess_health([_result(Availability.OUT_OF_STOCK, retailer="target")])
+
+    assert health.reason == "no control watch configured"
+    assert CAUSE_UNKNOWN not in health.reason
+
+
+def test_a_refusal_is_never_attributed_to_the_store_pin() -> None:
+    """Precedence, and the reason for it.
+
+    This control is refused AND unpinned — both predicates match. A refusal means
+    no page came back, so the store could not have been established either;
+    reporting it as a store gap would be naming a cause we did not measure, which
+    is the defect this whole plan closes.
+    """
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="walmart", refused=True, store_id=None)]
+    )
+
+    assert health.refused is True
+    assert CAUSE_UNKNOWN in health.reason
+    assert "store_id" not in health.reason
+
+
+def test_a_store_gap_beside_a_plain_breakage_is_reported_as_breakage() -> None:
+    """`all`, not `any` — the existing rule, applied to the new arm.
+
+    If even one control failed for a reason that is neither a refusal nor a store
+    gap, something may really be wrong, and the louder reading is the safe one.
+    """
+    results = [
+        _control(Availability.UNKNOWN, retailer="walmart", name="a", store_id=None),
+        _control(Availability.OUT_OF_STOCK, retailer="walmart", name="b", store_id="0", store="0"),
+    ]
+    (health,) = assess_health(results)
+
+    assert health.refused is False
+    assert CAUSE_UNKNOWN in health.reason, "the group's cause is not established"
+    assert len(health.failing_controls) == 2
+
+
+def test_a_refusal_beside_a_store_gap_falls_to_the_louder_arm() -> None:
+    """The other mixed group, and it is not a refusal report.
+
+    `refused` stays True only when EVERY broken control is a refusal, so this
+    group is not the refusal arm's. It is not the store arm's either — a refusal
+    is not a store gap, on the precedence above — so it lands on the breakage arm,
+    which is the reading that claims least about a mixed group.
+    """
+    results = [
+        _control(Availability.UNKNOWN, retailer="walmart", name="a", refused=True, store_id="0"),
+        _control(Availability.UNKNOWN, retailer="walmart", name="b", store_id=None),
+    ]
+    (health,) = assess_health(results)
+
+    assert health.refused is False
+    assert CAUSE_UNKNOWN in health.reason
+
+
+def test_a_healthy_store_scoped_control_is_untouched_by_the_new_arm() -> None:
+    """The store arm reads only BROKEN controls. A Walmart control reading
+    IN_STOCK is healthy whatever its pin says — the guards in `retailers.py`
+    already made it impossible for an unpinned reading to be IN_STOCK at all."""
+    (health,) = assess_health(
+        [_control(Availability.IN_STOCK, retailer="walmart", store_id=None)]
+    )
+
+    assert health.ok is True
+    assert health.reason == ""
 
 
 # --------------------------------------------------------------------------
