@@ -211,15 +211,24 @@ class Result:
     #: when it cost 20 pages in 24 hours. Both cases produce
     #: `Availability.UNKNOWN`, which is correct: we do not know the stock. But
     #: they mean opposite things about the CODE. A page we cannot parse means
-    #: the extractor has rotted and a human must look. A refusal means the
-    #: extractor is very likely fine and we are asking too often — nobody needs
-    #: waking, and the right response is to back off, which is something the
-    #: monitor can do by itself.
+    #: the extractor was reached and could not read what came back. A refusal
+    #: means the extractor was NEVER REACHED, so the reading says nothing about
+    #: it in either direction — and the response the monitor can take by itself
+    #: is to ask less often, which is why this is `refused` and not an alert.
     #:
     #: Reporting a refusal as "the detector is probably broken, so real
     #: restocks would be missed silently" is not just noisy, it is false, and
     #: it trains the reader to ignore the one alert this project exists to
     #: send.
+    #:
+    #: THIS PARAGRAPH USED TO SAY "the extractor is very likely fine and we are
+    #: asking too often". Both halves were withdrawn on 2026-08-10 under REQ-15,
+    #: along with the alert text that said them. "Very likely fine" is as
+    #: unmeasured as "probably broken" when the extractor was never reached, and
+    #: the rate claim was falsified twice: after backing off to a 6-hour interval
+    #: the very next single request was still refused. `refused` is still exactly
+    #: the right distinction to record — what changed is what may be CONCLUDED
+    #: from it, which is now nothing beyond "no page came back".
     refused: bool = False
     #: Which store the PAGE said answered — read out of the retailer's own
     #: hydration payload, not inferred and not configured. `Watch.store_id` is

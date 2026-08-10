@@ -57,10 +57,23 @@ def send_restock(urls: list[str], results: list[Result]) -> bool:
 
 
 def send_health_warning(urls: list[str], unhealthy: list[Health]) -> bool:
-    """Alert that a detector looks broken.
+    """Alert that one or more retailers are no longer verified.
 
     Deliberately as loud as a restock alert. A monitor you wrongly believe is
     working is worse than one you know is down.
+
+    THIS FUNCTION COMPOSES NO DIAGNOSIS OF ITS OWN, and must not start. The body
+    is `h.reason` plus `h.failing_controls`, verbatim — `monitor.assess_health`
+    is the one place that decides what a failure may be said to mean, and a
+    second opinion written here would be unreachable by the gate that checks it.
+    Until 2026-08-10 the exception was the hardcoded title, `"bot-y: detector
+    problem (N retailer(s))"`, which asserted a problem with the detector over a
+    body that might be saying the detector was never reached — the same defect as
+    the two withdrawn sentences in `monitor.py`, on the one surface a phone
+    actually shows. Withdrawn under REQ-15. What `ok=False` establishes is stated
+    by `assess_health`'s own docstring — "not because anything is known to be
+    broken, but because nothing is known at all" — so the measured word is
+    UNVERIFIED. The count stays, because the count is measured.
     """
     if not urls or not unhealthy:
         return False
@@ -72,10 +85,10 @@ def send_health_warning(urls: list[str], unhealthy: list[Health]) -> bool:
     for h in unhealthy:
         lines.append(f"[{h.retailer}] {h.reason}")
         lines.extend(f"  • {c}" for c in h.failing_controls)
-    log.warning("sending detector health warning for: %s", ", ".join(h.retailer for h in unhealthy))
+    log.warning("sending health warning for: %s", ", ".join(h.retailer for h in unhealthy))
     return bool(
         client.notify(
-            title=f"bot-y: detector problem ({len(unhealthy)} retailer(s))",
+            title=f"bot-y: {len(unhealthy)} retailer(s) unverified",
             body="\n".join(lines),
         )
     )
