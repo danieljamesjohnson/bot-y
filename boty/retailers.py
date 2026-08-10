@@ -20,7 +20,7 @@ from urllib.parse import quote_plus
 from . import parse
 from .browser import BROWSER_PATH_ENV, fetch_rendered
 from .fetch import Blocked, FetchError, get, is_refusal
-from .models import Availability, Extraction, Result, Rung, Watch
+from .models import STORE_SCOPED, Availability, Extraction, Result, Rung, Watch
 
 log = logging.getLogger(__name__)
 
@@ -192,9 +192,11 @@ def _verdict_from_html(
     # `tests/test_parse.py`. A predicate would be the claim "only Walmart has
     # stores", maintained in a second place.
     #
-    # NOTHING BELOW BRANCHES ON IT, and that is deliberate. This function
-    # RECORDS which store answered; turning an unpinned or mismatched store into
-    # UNKNOWN is 05-02's guard, and `watch.store_id` is not read here at all.
+    # READ HERE, COMPARED BELOW. 05-01 shipped this line with the note that
+    # nothing below branched on it and that turning an unpinned or mismatched
+    # store into UNKNOWN was 05-02's guard. 05-02 added exactly that: the two
+    # `STORE_SCOPED` returns further down, ahead of the offer logic. The read
+    # stays a single call in a single place, and the comparison happens once.
     store = parse.nextdata_store(html)
     ld = parse.ldjson_read(html, sku=sku)
     offers = ld.offers
@@ -215,6 +217,77 @@ def _verdict_from_html(
         source = "add-to-cart control"
     elif offers:
         extraction = Extraction.STRUCTURED
+
+    # WHICH STORE THIS READING IS ABOUT — two guards, ahead of every verdict.
+    #
+    # On 2026-08-09 the daemon recorded the Walmart milk control OUT_OF_STOCK at
+    # $3.17 while three live reads minutes later returned IN_STOCK at $2.42. Same
+    # URL, same parser. A parser bug does not change a price: two different
+    # stores answered, and the system published one store's shelf as a fact about
+    # another's. 05-01 made the store recordable; these two returns are what stop
+    # a reading from the wrong store being a verdict at all.
+    #
+    # PLACEMENT. Here, after `extraction` is settled and BEFORE `if not offers:`,
+    # so they are the first thing in this function that can return and no stock
+    # verdict can form ahead of them — while the guarded Results still carry the
+    # same `rung`, `extraction`, `url` and `store` as every other return on the
+    # path. That is the "error paths carry the same metadata as success paths"
+    # rule four adapter docstrings already commit to.
+    #
+    # REJECTED PLACEMENT, recorded so it is not re-proposed as an optimisation:
+    # hoisting the config-gap check into `check_html` AHEAD of the fetch, which
+    # would save a request. It loses two things worth more than the request. A
+    # control watch that stops making its request stops proving the transport
+    # works, which is the control's entire job. And `Pacer` records refusals off
+    # the results of the requests actually made, so a retailer that silently
+    # stopped being asked would drift out of the backoff accounting. Politeness
+    # is a hard constraint here, but not at the price of blinding the control.
+    if watch.retailer in STORE_SCOPED:
+        if watch.store_id is None:
+            # The config gap, reported as a config gap — the shape the
+            # no-first-party-list UNKNOWN below uses, for the same reason: a
+            # missing piece of configuration is not a stock fact, and laundering
+            # one into the other is what UNKNOWN exists to prevent. The message
+            # names the key by the name a user types and the file they type it
+            # in, so it is a fix instruction rather than a complaint.
+            return Result(
+                watch,
+                Availability.UNKNOWN,
+                detail=(
+                    f"no store_id pinned for this watch — set store_id in "
+                    f"config/products.yaml. A {watch.retailer} page answers for "
+                    f"whichever store it chooses, so with nothing pinned this "
+                    f"reading is about some store, not necessarily yours"
+                ),
+                url=url,
+                rung=rung,
+                extraction=extraction,
+                store=store,
+            )
+        if store != watch.store_id:
+            # `store is None` is handled INSIDE this guard rather than as a third
+            # one. "The page did not name a store" and "the page named a
+            # different store" are the same fact for the purposes of the verdict:
+            # neither can be SHOWN to come from the pinned store.
+            #
+            # `!r` and not bare interpolation: `store` is a string read out of a
+            # retailer's own JSON and this sentence reaches a plain-text
+            # notification body, so a value carrying whitespace or a newline
+            # could otherwise silently restructure the message.
+            answered = f"store {store!r}" if store is not None else "no store"
+            return Result(
+                watch,
+                Availability.UNKNOWN,
+                detail=(
+                    f"the page named {answered}; this watch pins store "
+                    f"{watch.store_id!r} — a reading that cannot be shown to come "
+                    f"from the pinned store is not a verdict about it"
+                ),
+                url=url,
+                rung=rung,
+                extraction=extraction,
+                store=store,
+            )
 
     if not offers:
         if sku is not None:

@@ -2659,8 +2659,10 @@ def test_the_verdict_function_branches_on_the_store_ahead_of_every_verdict() -> 
     assert body.count("STORE_SCOPED") == 1, (
         "one predicate, read once — a second copy is a second place to get it wrong"
     )
-    guard = body.index("STORE_SCOPED")
-    assert guard < body.index("if not offers:"), (
-        "the store guards must precede the offer logic, or a stock verdict can "
-        "form for a store nobody asked about before they are ever consulted"
+    # The property, stated as source order: the FIRST `return` in this function
+    # is the config-gap guard's. Nothing — no UNKNOWN, no OUT_OF_STOCK, no
+    # IN_STOCK — can be returned ahead of the store check.
+    assert body.index("STORE_SCOPED") < body.index("return Result("), (
+        "a return precedes the store guards, so a verdict can form for a store "
+        "nobody asked about before they are ever consulted"
     )

@@ -103,6 +103,41 @@ class Extraction(str, Enum):
     DOM = "dom"
 
 
+#: Which retailers a MISSING store pin is a gap for — the one definition, read
+#: by `retailers._verdict_from_html` (the guard) and by `monitor.assess_health`
+#: (the health arm that says why a reading went UNKNOWN).
+#:
+#: IT IS A CLAIM ABOUT THE RETAILER, NOT ABOUT THE PAGE, and that is measured
+#: rather than assumed. Walmart's `__NEXT_DATA__` carries
+#: `product.location.storeIds`, and `parse.nextdata_store` returns `None` for
+#: every other retailer in the captured corpus — asserted across the whole
+#: fixture tree in `tests/test_parse.py`, not inferred from one page.
+#:
+#: WHY A NAMED SET AND NOT `store is not None`. Keying on whether THIS PAGE
+#: happened to name a store would let a Walmart page that stopped emitting the
+#: field slip past the config gap entirely: no store on the page, nothing to
+#: compare, verdict published. The whole point is that a missing pin can never
+#: masquerade as a verdict, and a predicate that a retailer can switch off by
+#: changing its own payload is not that.
+#:
+#: ONE DEFINITION, TWO READERS, AND WHY IT LIVES HERE. The guard and the health
+#: arm must agree: a guard that fires where the health arm stays quiet produces
+#: an UNKNOWN nobody is ever told about. A second copy is a second place to get
+#: it wrong — the argument `_verdict_from_html`'s own docstring makes about the
+#: UNKNOWN logic it was extracted to centralise. It cannot live in
+#: `retailers.py`, because `monitor.py` would then have to import that module to
+#: read it, dragging `curl_cffi` and the browser stack into a file that keeps
+#: even `Pacer` behind `TYPE_CHECKING`. It belongs beside `Watch.store_id`
+#: because *which retailers an absent pin is a gap for* is part of what that
+#: field means.
+#:
+#: WHAT ADDING A RETAILER COSTS: every watch for it starts reading UNKNOWN until
+#: somebody pins a store, including the control, which means the retailer goes
+#: unhealthy on the status page the moment the entry lands. That is a decision
+#: with a commit message behind it, not a list to grow casually.
+STORE_SCOPED: frozenset[str] = frozenset({"walmart"})
+
+
 @dataclass(frozen=True)
 class Watch:
     """One product at one retailer."""
@@ -217,10 +252,13 @@ class Result:
     #: something else, and the only honest availability for a question nobody
     #: asked is UNKNOWN.
     #:
-    #: THIS PLAN ADDS NO SUCH GUARD. The store is recorded here and published in
-    #: `status.json`; 05-02 is where it reaches a verdict. Nothing in
-    #: `_verdict_from_html` branches on `store` or on `Watch.store_id` yet, and
-    #: that split is why this field exists before the guard does.
+    #: THE GUARD NOW EXISTS, and it is in `retailers._verdict_from_html`, not
+    #: here. 05-01 shipped this field with the note "this plan adds no such
+    #: guard … 05-02 is where it reaches a verdict"; 05-02 added it, ahead of
+    #: every stock verdict in that function, under the `STORE_SCOPED` predicate
+    #: above. This field is still only the RECORD of what arrived — it carries
+    #: no verdict logic of its own, so a reader looking for the branch finds it
+    #: in one place rather than two.
     store: str | None = None
 
     @property
