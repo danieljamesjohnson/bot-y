@@ -1000,8 +1000,18 @@ def test_every_workflow_in_this_directory_passes_every_directory_rule() -> None:
     """
     workflows = _all_workflow_texts()
     assert len(workflows) >= 2, sorted(workflows)
-    for family, rule in DIRECTORY_RULES.items():
-        assert rule(workflows) == [], f"{family}: {rule(workflows)}"
+    # Collected across ALL families and asserted ONCE, rather than asserted
+    # inside the loop. Measured in 06-03 with the probe on disk: the in-loop
+    # form failed on `pin` and stopped, so a contributor who added a workflow
+    # violating all four families would be told about one, fix it, re-run, and
+    # be told about the next. A gate that reveals a quarter of the problem per
+    # run is a gate people learn to distrust.
+    reported = {
+        family: found
+        for family, rule in DIRECTORY_RULES.items()
+        if (found := rule(workflows))
+    }
+    assert reported == {}, reported
 
 
 def test_the_directory_reader_sees_every_workflow_file_under_both_yaml_spellings() -> None:
