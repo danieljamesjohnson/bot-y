@@ -41,20 +41,67 @@ the *same* rule against a deliberately broken copy of the real README. A gate
 asserted only against the tree it is meant to guard has never been watched
 failing, and this project has already shipped one of those.
 
-Nothing here touches the network. It reads two files off disk.
+WHY THE RUNG CELL IS BOUND TO THE CODE, AND WHAT THAT BINDING COSTS
+--------------------------------------------------------------------
+The Rung cell was the one column in this table bound to nothing at all.
+Measured 2026-08-10 against the tree with no binding in it: mutating
+`check_amazon` to return `Rung.BROWSER` — which contradicts the shipped
+`| Amazon | 1 | dom |` row outright — left the suite GREEN, pytest exit 0,
+`687 passed, 1 skipped`. REQ-18 recorded the same measurement at an older
+suite size ("left 131 tests green"); the number moved and the fact did not.
+
+Two joins had to be built, not one, and neither existed before. The
+README-to-code binding runs retailer → adapter (the `if`-chain inside
+`cli._make_checker`) and then adapter → rung (the literal `rung=Rung.X`
+keywords in `boty/retailers.py`). A gate that bound only the second half would
+stay green the day `_make_checker` stopped routing amazon to `check_amazon`,
+which is the same false claim one join further along.
+
+The binding is STATIC: it walks the source of those two files with `ast` and
+never imports or runs either. That is what makes the routing chain visible at
+all — a dynamic binding would have to drive five adapters across three
+transports, including `check_bestbuy_api`, for which this repository holds no
+fixture, and it still could not see the `if`-chain. THE COST IS STATED RATHER
+THAN BURIED: a static gate asserts what the source SAYS, not what RUNS. That
+cost is small here because the failure REQ-18 names *is* a source edit —
+somebody changes an adapter's rung and forgets the README — and because the
+runtime half is already covered elsewhere: `tests/test_retailers.py` asserts
+`result.rung is Rung.BROWSER` / `Rung.API` through `cli._make_checker` for Best
+Buy on both of its arms. This file binds the README to the source; those tests
+bind the source to behaviour. Neither substitutes for the other.
+
+`ast` over this repository's own files is an established idiom here rather
+than a new one: `tests/test_ci_workflow.py` walks its own source, and
+`tests/test_alert_text.py` walks `boty/monitor.py` and `boty/notify.py`.
+
+Nothing here touches the network. It reads four files off disk.
 """
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import re
 from pathlib import Path
 from typing import Any
 
 from boty.config import Config
+from boty.models import KNOWN_RETAILERS, Rung
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 README = REPO_ROOT / "README.md"
 CONFIG = REPO_ROOT / "config" / "products.yaml"
+
+#: The two source files the Rung binding reads. Text, never imports.
+#:
+#: `REPO_ROOT` is `Path(__file__).resolve().parent.parent`, which inside
+#: `scripts/mutation_check.py`'s sandbox resolves to the SANDBOX root rather
+#: than to this repository — `boty` and `README.md` are both in
+#: `SANDBOX_CONTENTS`. That is not incidental: it is the entire mechanism by
+#: which a mutated adapter becomes visible to this gate, and it costs no
+#: sandbox edit, no skip and no `HarnessError` risk.
+CLI = REPO_ROOT / "boty" / "cli.py"
+RETAILERS = REPO_ROOT / "boty" / "retailers.py"
 
 #: The header of the retailer table in README.md. Located by its cells rather
 #: than by a line number, so editing the prose around it cannot silently point
@@ -126,6 +173,40 @@ RUNGS = {"1", "2", "3", "4"}
 #: honest rung for a retailer nothing watches, so these three are exactly the
 #: cells that must be backed by a configured watch.
 WORKING_RUNGS = {"1", "2", "3"}
+
+#: The numeral each `Rung` member is published as in the README's rung column.
+#:
+#: WHY IT DID NOT ALREADY EXIST. Nothing in this tree mapped a `Rung` to a
+#: numeral anywhere — `boty/models.py` names the members and `README.md` numbers
+#: the ladder, and the two were joined only in a reader's head. That is the
+#: whole of REQ-18's gap: the column could say anything.
+#:
+#: WHY IT LIVES HERE AND NOT IN `boty/models.py`. A numeral is a documentation
+#: fact about the ladder `README.md` publishes, not a runtime fact. `models.Rung`
+#: deliberately keeps itself out of `monitor` and `Health`, and nothing in the
+#: package needs to know what a rung is *called* in a table. Putting it in the
+#: package would give `boty/` a constant whose only consumer is a test.
+#:
+#: WHY IT IS A PIN AND NOT A RULE, in `UNREAD_POSITIONS`' and
+#: `TRUSTED_ACTION_OWNERS`' sense: it is enumerated with its justification
+#: inline, so widening it means editing a red test rather than deriving a
+#: number from whatever the enum happens to hold. The justification is quotable
+#: from both sides and the two already agree word for word — README's ladder
+#: paragraph ("Rung 1 is impersonated HTTP, rung 2 a retailer's own sanctioned
+#: API, rung 3 a real browser, rung 4 'dropped, with the evidence written
+#: down'") and the three `Rung` member docstrings ("Impersonated TLS against the
+#: public product page", "The retailer's own sanctioned API", "A real browser
+#: rendering the page").
+#:
+#: RUNG 4 HAS NO MEMBER ON PURPOSE, and that absence is load-bearing rather than
+#: an oversight — `models.Rung`'s own docstring says so: "There is no member for
+#: rung 4 ('dropped'): a dropped retailer produces no readings, so a `Rung` for
+#: it would be a value that can never appear on a `Result`." So the values of
+#: this mapping are exactly `WORKING_RUNGS`, asserted in both directions by
+#: `test_every_rung_member_has_a_numeral_and_rung_four_has_none`, and a rung-4
+#: matrix row is a claim that NOTHING reads that retailer rather than a claim
+#: about a transport.
+RUNG_NUMERALS: dict[Rung, str] = {Rung.TLS: "1", Rung.API: "2", Rung.BROWSER: "3"}
 
 #: The vocabulary an Extraction cell may state, mirroring `boty.models.Extraction`
 #: — `structured` for a retailer's own machine-readable feed, `dom` for
@@ -431,6 +512,260 @@ def _undeclared_degraded(rows: dict[str, list[str]]) -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# The Rung cell, bound to the code that takes it — both joins, statically
+# --------------------------------------------------------------------------
+
+
+def _scoped_nodes(function: ast.FunctionDef) -> list[ast.AST]:
+    """Every node inside `function` that is not inside a NESTED function.
+
+    Attribution matters here: a `rung=Rung.X` keyword written inside a closure
+    is a claim made by that closure, not by whatever encloses it. A plain
+    `ast.walk` would credit both, and the adapter map would start reporting
+    rungs an adapter does not itself take.
+    """
+    found: list[ast.AST] = []
+    stack: list[ast.AST] = list(ast.iter_child_nodes(function))
+    while stack:
+        node = stack.pop()
+        found.append(node)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+    return found
+
+
+def _called_names(node: ast.AST) -> list[str]:
+    """The plainly-named functions called in every `return` under `node`.
+
+    RECURSIVE, and that is the point rather than a convenience: Best Buy's arm
+    holds a nested `if cfg.bestbuy_api_key:` whose own `return` names
+    `check_bestbuy_api`. A walk that looked only at an arm's top-level returns
+    would drop that adapter silently, and the Best Buy row's second numeral —
+    the `(2 with a key)` half — would become unbacked without anything going
+    red.
+    """
+    names: list[str] = []
+    for inner in ast.walk(node):
+        if not isinstance(inner, ast.Return) or inner.value is None:
+            continue
+        for call in ast.walk(inner.value):
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name):
+                names.append(call.func.id)
+    return names
+
+
+def _routing(
+    cli_text: str | None = None, known: frozenset[str] | None = None
+) -> dict[str, tuple[str, ...]]:
+    """Retailer key → the adapter functions `cli._make_checker` can return for it.
+
+    The first of the Rung binding's two joins. It is read out of the source
+    because that `if`-chain is the only place a watch is matched to a transport
+    — `_make_checker`'s own docstring says so — and because nothing else in
+    this tree can see it: no test routes a `target` watch through
+    `_make_checker` at all.
+
+    `known` is the set of retailers the FALLTHROUGH `return` serves, and it is a
+    PARAMETER rather than a closed-over import for one reason: it is what lets
+    the corruption tests below watch the rung-4 direction go red without editing
+    a byte of source text. Passing `frozenset()` yields exactly the keys the
+    router names in an `if`, which is a different and also useful question.
+
+    AN UNPARSEABLE ROUTER RAISES. It does not return `{}`. A rule handed an
+    empty mapping reports all seven rows clean and every gate above it goes on
+    passing — the vacuous pass this file's preamble was written against, one
+    column over. `_matrix` already set the precedent with its `assert start is
+    not None`, and the messages here name what was not found for the same
+    reason: a gate that loses its footing has to say where.
+    """
+    text = CLI.read_text(encoding="utf-8") if cli_text is None else cli_text
+    known = KNOWN_RETAILERS if known is None else known
+    tree = ast.parse(text)
+
+    maker = next(
+        (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_make_checker"),
+        None,
+    )
+    assert maker is not None, (
+        f"no `_make_checker` function in {CLI}: the one place a watch is matched to a "
+        "transport. If it was renamed or replaced by a registry, this binding moves with it — "
+        "it must never quietly report that every retailer routes nowhere."
+    )
+    checker = next(
+        (n for n in ast.iter_child_nodes(maker) if isinstance(n, ast.FunctionDef) and n.name == "check"),
+        None,
+    )
+    assert checker is not None, (
+        f"no nested `check` closure inside `_make_checker` in {CLI}. The routing `if`-chain "
+        "lives in that closure; without it there is nothing to read, and an empty mapping "
+        "would report the whole support matrix clean."
+    )
+
+    arms: dict[str, tuple[str, ...]] = {}
+    fallthrough: tuple[str, ...] | None = None
+    for statement in checker.body:
+        if isinstance(statement, ast.If):
+            keys = [
+                node.value
+                for node in ast.walk(statement.test)
+                if isinstance(node, ast.Constant) and isinstance(node.value, str)
+            ]
+            adapters = tuple(dict.fromkeys(_called_names(statement)))
+            for key in keys:
+                arms[key] = adapters
+        elif isinstance(statement, ast.Return):
+            fallthrough = tuple(dict.fromkeys(_called_names(statement)))
+
+    assert fallthrough is not None, (
+        f"no fallthrough `return` at the end of `check` in {CLI}. Every retailer with no arm "
+        "of its own is served by that return, so without it this binding would report "
+        "GameStop, Walmart and Nintendo as routed to nothing — three false clean rows."
+    )
+
+    routing = dict(arms)
+    for key in sorted(known - set(arms)):
+        routing[key] = fallthrough
+    return routing
+
+
+def _adapter_rungs(retailers_text: str | None = None) -> dict[str, tuple[str, ...]]:
+    """Adapter function name → the rung numerals its own source can produce.
+
+    The second join. Collected from LITERAL `rung=Rung.X` keyword arguments and
+    from nothing else.
+
+    WHY ONLY A LITERAL. `_verdict_from_html` takes `rung` as a parameter and
+    passes `rung=rung` into every `Result(...)` it builds. That is an `ast.Name`
+    rather than an `ast.Attribute`, so this walk does not see it and
+    `_verdict_from_html` does not appear in this mapping at all. That is
+    deliberate: a pass-through is not a claim about which rung anything takes.
+    The claim is made at the call site that supplies the literal, which is
+    exactly where `check_html`, `check_amazon` and the three others make it.
+
+    An unrecognised member name RAISES rather than being skipped, for
+    `_routing`'s reason: a `Rung` member this mapping cannot name is a rung the
+    support matrix cannot describe, and quietly dropping it would report the
+    adapter as taking one fewer rung than it does.
+    """
+    text = RETAILERS.read_text(encoding="utf-8") if retailers_text is None else retailers_text
+    tree = ast.parse(text)
+
+    rungs: dict[str, tuple[str, ...]] = {}
+    for function in ast.walk(tree):
+        if not isinstance(function, ast.FunctionDef):
+            continue
+        numerals: set[str] = set()
+        for node in _scoped_nodes(function):
+            if not isinstance(node, ast.keyword) or node.arg != "rung":
+                continue
+            value = node.value
+            if not (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)):
+                continue
+            if value.value.id != "Rung":
+                continue
+            member = Rung.__members__.get(value.attr)
+            assert member is not None, (
+                f"{function.name} names `Rung.{value.attr}`, which is not a member of "
+                f"boty.models.Rung ({sorted(Rung.__members__)}). Either the enum moved or the "
+                "source is unparseable by this gate; both are louder than a dropped rung."
+            )
+            assert member in RUNG_NUMERALS, (
+                f"{function.name} takes {member!r}, which RUNG_NUMERALS does not name. "
+                "Add it there, with the README ladder sentence that justifies its numeral."
+            )
+            numerals.add(RUNG_NUMERALS[member])
+        if numerals:
+            rungs[function.name] = tuple(sorted(numerals))
+    return rungs
+
+
+def _declared_rungs(cell: str) -> tuple[str, ...]:
+    """The numerals a README rung cell declares — the primary, plus any alternates.
+
+    The primary is the established `cell[:1]`, the same one-character read
+    `_rungless`, `_overstated` and `_extraction_mismatch` all make. Every digit
+    inside parentheses is an ALTERNATE.
+
+    That is what makes Best Buy's `3 (2 with a key)` a two-numeral claim instead
+    of a special case: it declares `('2', '3')`, its two adapters take `('2',
+    '3')`, and a plain set comparison settles it. A conditional cell needs no
+    exemption, which is the only version of it worth having — an exemption is a
+    row that stops being checked.
+
+    A parenthetical this pattern cannot read yields the primary alone, and that
+    FAILS SAFE rather than passing: Best Buy's code side would still be
+    `('2', '3')` against a declared `('3',)`, so the row goes red and somebody
+    looks at the cell.
+    """
+    alternates = {
+        digit
+        for group in re.findall(r"\(([^)]*)\)", cell)
+        for digit in re.findall(r"\d", group)
+    }
+    return tuple(sorted({cell[:1]} | alternates))
+
+
+def _rung_mismatch(
+    rows: dict[str, list[str]],
+    routing: dict[str, tuple[str, ...]] | None = None,
+    rungs: dict[str, tuple[str, ...]] | None = None,
+) -> dict[str, tuple[str, str]]:
+    """Rows whose Rung cell disagrees with the rung the code actually takes.
+
+    DELIBERATELY TWO-DIRECTIONAL, for the reason `_extraction_mismatch` and
+    `_misdeclared_disagreement` both give, and it is worth restating because
+    this rule spans two files rather than two columns:
+
+    - a WORKING-RUNG row (`1`, `2`, `3`) must declare EXACTLY the numerals its
+      routed adapters take. Not "include" — equality, so an adapter taking a
+      rung the cell does not name goes red, and a cell naming a rung no adapter
+      takes goes red too;
+    - a NON-WORKING row (`4`, or the `—` of `UNPROBED_RUNG`) must have no
+      adapter binding at all. Rung 4 is a claim that nothing reads this
+      retailer, and it must go red the moment something does.
+
+    A one-directional version would be satisfied by deleting adapters, or by
+    writing `4` in every row.
+
+    BOTH JOINS ARE LOAD-BEARING AND THIS RULE SPANS BOTH. A binding to
+    `check_amazon`'s rung alone stays perfectly green the day `_make_checker`
+    stops routing amazon to `check_amazon` — the adapter still says `Rung.TLS`,
+    the README still says `1`, and Amazon is silently read by something else.
+    So the code side is resolved as the union over the adapters the ROUTER
+    reaches, never over an adapter named by hand.
+
+    "NO ADAPTER AT ALL" AND "AN ADAPTER THAT STATES NO RUNG" ARE DIFFERENT
+    FINDINGS and are reported differently. Only the first is a legitimate rung-4
+    row. Collapsing the second into it would let an adapter this gate cannot
+    read masquerade as a retailer nothing reads, which is precisely the shape a
+    rung-4 row wants to see.
+
+    Returns `{display name: (what the README declares, what the code takes)}`.
+    """
+    routing = _routing() if routing is None else routing
+    rungs = _adapter_rungs() if rungs is None else rungs
+
+    bad: dict[str, tuple[str, str]] = {}
+    for key, name in ROADMAP_RETAILERS.items():
+        if name not in rows:
+            continue
+        cell = rows[name][RUNG]
+        adapters = routing.get(key, ())
+        unreadable = sorted(a for a in adapters if not rungs.get(a))
+        if unreadable:
+            bad[name] = (cell, f"{', '.join(unreadable)} states no rung")
+            continue
+        code = sorted({numeral for a in adapters for numeral in rungs[a]})
+        if cell[:1] in WORKING_RUNGS:
+            if tuple(code) != _declared_rungs(cell):
+                bad[name] = (cell, ", ".join(code) if code else "no adapter")
+        elif adapters:
+            bad[name] = (cell, ", ".join(code))
+    return bad
+
+
+# --------------------------------------------------------------------------
 # The shipped README
 # --------------------------------------------------------------------------
 
@@ -621,6 +956,84 @@ def test_the_matrix_does_not_advertise_a_retailer_the_monitor_does_not_watch() -
         "written down — is the only honest rung for a retailer the monitor does not read. "
         "If the watch was deliberately removed, move the row to rung 4 and record why in "
         "docs/retailer-evidence.md in the same commit."
+    )
+
+
+def test_every_rung_member_has_a_numeral_and_rung_four_has_none() -> None:
+    """The pin, asserted against the enum in both directions.
+
+    A new `Rung` member arriving with no numeral would be a transport the
+    support matrix has no way to describe, and `_adapter_rungs` would raise on
+    the first adapter that took it — loudly, but at the wrong layer and with a
+    worse message. A numeral with no member would be the opposite: a column
+    value nothing can ever produce.
+
+    This is also where `RUNGS - WORKING_RUNGS == {"4"}` stops being an
+    assumption. Rung 4 has no `Rung` member on purpose — `models.Rung` says a
+    dropped retailer produces no readings — and the whole non-working half of
+    `_rung_mismatch` rests on that.
+    """
+    assert set(RUNG_NUMERALS) == set(Rung), {
+        "members with no numeral": sorted(m.name for m in set(Rung) - set(RUNG_NUMERALS)),
+        "numerals with no member": sorted(m.name for m in set(RUNG_NUMERALS) - set(Rung)),
+    }
+    assert set(RUNG_NUMERALS.values()) == WORKING_RUNGS, sorted(RUNG_NUMERALS.values())
+    assert RUNGS - WORKING_RUNGS == {"4"}, RUNGS - WORKING_RUNGS
+
+
+def test_every_retailer_the_router_names_is_a_known_retailer() -> None:
+    """`_make_checker`'s string comparisons, checked against the one spelling list.
+
+    `models.KNOWN_RETAILERS`' own comment names `_make_checker`'s `== "bestbuy"
+    / "amazon" / "target"` as its consumers, and nothing checked that. A typo in
+    an arm does not fail: the watch falls through to `check_html`, which is a
+    real transport, so the retailer is read by the wrong adapter at the wrong
+    rung while every test stays green.
+
+    `known=frozenset()` gives exactly the keys the router names in an `if`,
+    because the fallthrough is then assigned to nobody.
+    """
+    named = set(_routing(known=frozenset()))
+
+    assert named <= set(KNOWN_RETAILERS), sorted(named - set(KNOWN_RETAILERS))
+
+
+def test_every_routed_adapter_states_a_rung_in_its_own_source() -> None:
+    """Every adapter the router can reach names exactly one rung, in its own file.
+
+    Two claims, and the second is the interesting one. An adapter that states NO
+    rung is one this gate cannot read, and `_rung_mismatch` reports it as such
+    rather than as an absent adapter — but the honest state is that there are
+    none, and this is where that is asserted positively.
+
+    An adapter that could produce TWO different rungs would make its README cell
+    unwritable: the row would have to name both, and a reader could not tell
+    which one produced the number in front of them. Best Buy's two rungs come
+    from two adapters, which is the coherent way to say it.
+    """
+    rungs = _adapter_rungs()
+    adapters = sorted({a for names in _routing().values() for a in names})
+
+    assert all(len(rungs.get(a, ())) == 1 for a in adapters), {
+        a: rungs.get(a, ()) for a in adapters if len(rungs.get(a, ())) != 1
+    }
+
+
+def test_every_matrix_rung_cell_matches_the_rung_its_adapter_takes() -> None:
+    """REQ-18, against the shipped tree: the claim, and the code under it.
+
+    Both joins at once. The Rung cell is compared against the rung taken by the
+    adapters `cli._make_checker` actually routes that retailer to — not against
+    an adapter named here by hand, which would leave the routing half unbound
+    and the claim half-checked.
+    """
+    rows = _matrix()
+
+    assert not _rung_mismatch(rows), (
+        f"the README Rung cell disagrees with the rung the code takes for: {_rung_mismatch(rows)}. "
+        "A working-rung row (1-3) declares exactly the numerals the adapters `cli._make_checker` "
+        "routes it to take, including a conditional second rung in parentheses; a rung-4 row has "
+        "no adapter at all. Both joins are read out of boty/cli.py and boty/retailers.py as text."
     )
 
 
