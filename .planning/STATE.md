@@ -253,7 +253,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 05 P01 | 25min | 4 tasks | 19 files |
 | Phase 05 P02 | 20min | 3 tasks | 10 files |
 | Phase 05 P03 | 27min | 3 tasks | 9 files |
-| Phase 05 P04 | 45min | 3 tasks (1 checkpoint answered `defer`, 1 not entered) | 4 files |
+| Phase 05 P04 | 20min | 3 tasks (1 checkpoint answered `defer`, 1 not entered) | 5 files |
 
 ## Decisions
 
