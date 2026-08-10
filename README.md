@@ -49,6 +49,15 @@ bot-y reads the seller on each offer and defaults to first-party only, with an
 independent price ceiling as a second line of defence. Either alone suppresses
 that listing.
 
+The ceiling measures **the delivered total — item price plus shipping — not the
+item price**. A $54.99 listing with $45 shipping is a $99.99 purchase, and a
+ceiling that reads only the item price waves it through. Where the delivered
+total cannot be established — the page publishes no shipping cost, or publishes
+it as a sentence rather than a number — bot-y **refuses to authorise the alert**
+rather than guessing. That costs coverage on retailers whose pages say nothing
+readable about shipping, and it is the deliberate trade: a ceiling that cannot
+be evaluated must not authorise an alert.
+
 ### 3. Fetching: TLS first, browser last
 
 Anti-bot systems read your TLS ClientHello **before any HTTP header arrives**. A
@@ -165,6 +174,18 @@ MSRP. The seller is not in `FIRST_PARTY['amazon']` and `amazon` is in
 even consulted — two independent refusals of the same listing. The watch reads
 OUT_OF_STOCK, which is the correct answer: there is no first-party Amazon offer.
 It flips the day Amazon itself sells one.
+
+**And on that day it will not page anybody, which is stated here rather than
+discovered later.** That `max_price: 80` is measured against the delivered
+total, and Amazon's reader is the add-to-cart control — a button, an
+availability line and a seller name, none of which is a shipping cost. So the
+delivered total cannot be established, the ceiling cannot be evaluated, and the
+alert is refused. Nintendo is in the same position for a different reason: it
+publishes `shippingDetails` as an English sentence ("Free UPS Ground Shipping on
+orders over $50") where GameStop publishes a number, and no shipping figure is
+parsed out of prose anywhere in this project — a regex over that sentence
+returns $6.99 for an item that ships free. GameStop and Walmart are unaffected:
+both publish a shipping cost this project can read.
 
 [`docs/retailer-evidence.md`](docs/retailer-evidence.md) carries every record,
 including which two probes would establish whether anything has changed at
@@ -441,8 +462,9 @@ it is always available.
 `mutation` exists because a green suite is not evidence that it detects
 anything. It corrupts specific things in a throwaway copy of the package — the
 buyable check, "I could not read this page" becoming out-of-stock, the seller
-filter, the price ceiling, the restock edge detector, the degraded flag — and
-requires the tests to go red for each. A survivor names a real hole: that
+filter, the price ceiling against the delivered total, the fallback that would
+let an unread shipping cost pass as free, the restock edge detector, the
+degraded flag — and requires the tests to go red for each. A survivor names a real hole: that
 breakage could ship with every test green.
 
 If you have no internet, the live check **skips** and says so rather than

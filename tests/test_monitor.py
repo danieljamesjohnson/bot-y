@@ -528,8 +528,13 @@ def test_run_once_alerts_again_on_the_restock_after_a_sellout(tmp_path: Path) ->
         Availability.IN_STOCK,
     ):
 
+        # `shipping=0.0` — a positive claim that this offer ships free, so the
+        # delivered total is $54.99 and the $80 ceiling passes. The subject
+        # here is the restock EDGE, and under REQ-17 a reading with no shipping
+        # cost read is not alertable under a ceiling: without this the loop
+        # would fire zero alerts and stop saying anything about the edge at all.
         def checker(w: Watch, av: Availability = availability) -> Result:
-            return Result(w, av, price=54.99, detail="synthetic")
+            return Result(w, av, price=54.99, detail="synthetic", shipping=0.0)
 
         _, _, alerts = run_once([watch], checker, state)
         fired.append(len(alerts))

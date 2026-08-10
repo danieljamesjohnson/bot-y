@@ -97,6 +97,17 @@ with `max_price: 80` against a $54.99 MSRP, and a control watch on a
 replacement HDMI cable. The comment above them says it in the repository's own
 words:
 
+**What `max_price` measures, because it decides whether your retailer can alert
+at all.** It is the **delivered total** — item price plus shipping — and not the
+item price: a $54.99 listing with $45 shipping is a $99.99 purchase, and a
+ceiling reading the item price alone waves it through. Where your reader cannot
+establish a delivered total, a watch with a ceiling **will not alert**, by
+design. So if your retailer publishes a shipping cost, read it into
+`Offer.shipping`; if it publishes one only as prose, do **not** parse it —
+Nintendo's sentence yields $6.99 for an item that ships free, which is a wrong
+verdict rather than a missing feature. A control watch carries no ceiling and is
+unaffected either way.
+
 > No adapter code exists for Nintendo and none is needed. Its pages carry
 > ordinary schema.org Product markup that `check_html` already reads — the
 > whole of its support is one FIRST_PARTY line and these two watches.

@@ -69,10 +69,24 @@ notify:
 
 watches:
   # ---- what we actually want -------------------------------------------
+  # ---- what `max_price` measures, which is not what it used to ----------
+  # THE CEILING IS THE DELIVERED TOTAL: item price PLUS shipping. A $54.99
+  # listing with $45 shipping is a $99.99 purchase, and a ceiling that read the
+  # item price alone waved it straight through — one of only two defences
+  # against a reseller alert, defeated by a number the page publishes.
+  #
+  # AND WHERE THE DELIVERED TOTAL CANNOT BE ESTABLISHED, NO ALERT IS
+  # AUTHORISED. That is not a bug to work around by raising a ceiling. Two of
+  # the four watches below are in exactly that position today: Nintendo
+  # publishes its shipping cost as an English sentence, and Amazon's reader is
+  # an add-to-cart button. Neither can be turned into a number without
+  # guessing, and a guessed delivered total is worth less than none.
   - name: Pokémon GO Plus +
     retailer: gamestop
     target: https://www.gamestop.com/consoles-hardware/nintendo-switch/gaming-accessories/controllers/products/pokemon-go-plus-plus/20003961.html
-    max_price: 80          # MSRP is $54.99; anything near $140 is a flip
+    # MSRP is $54.99 and GameStop publishes $6.99 shipping, so the delivered
+    # total is $61.98 — under this ceiling. Anything near $140 is a flip.
+    max_price: 80
 
   # ---- Walmart is pinned to ONE store, and you have to say which ---------
   # Walmart assigns a store per request, and both stock and price differ between
@@ -118,8 +132,22 @@ watches:
 
   # The one that matters most. Nintendo MAKES this, lists it at $54.99 — MSRP to
   # the cent — and has no marketplace, so neither flipper defence has anything to
-  # defend against here. The ceiling stays on anyway: it costs nothing and it is
-  # the independent second line if the seller filter ever regresses.
+  # defend against here.
+  #
+  # THE CEILING NOW COSTS SOMETHING HERE, and the sentence above used to say it
+  # costs nothing. Nintendo publishes `shippingDetails` as prose — "Standard UPS
+  # Ground Shipping: $6.99, 3-9 business days. Free UPS Ground Shipping on
+  # orders over $50." — where GameStop publishes a `MonetaryAmount`. The item is
+  # over $50, so the true shipping cost is zero, but nothing here parses a
+  # shipping figure out of a sentence: a regex over that one returns $6.99 and
+  # produces a delivered total of $61.98 for an item that ships free, which
+  # would suppress a genuine MSRP restock at the only first-party listing of
+  # this product anywhere in this file.
+  #
+  # So the delivered total cannot be established, and this watch cannot alert
+  # while that stays true. The ceiling is deliberately NOT raised or removed to
+  # compensate — removing it would be trading a defence for coverage, and this
+  # project's stated tiebreaker is trustworthiness over coverage.
   - name: Pokémon GO Plus +
     retailer: nintendo
     target: https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-112387/

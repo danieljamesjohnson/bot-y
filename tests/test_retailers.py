@@ -1928,12 +1928,22 @@ def test_target_control_fixture_is_in_stock_priced_and_alertable(
 ) -> None:
     """The live half of the Target guard, frozen. If this reads anything else the
     detector is broken, and the control watch in `config/products.yaml` is what
-    says so within a cycle on the real page."""
+    says so within a cycle on the real page.
+
+    THE `max_price: 80` THAT USED TO BE ON THIS SYNTHETIC WATCH IS GONE, and
+    removing it made the watch MORE faithful rather than less: the shipped
+    Target control carries no ceiling, and no control in `config/products.yaml`
+    does. Under REQ-17 a ceiling is measured against the delivered total, and
+    Target's reader is an add-to-cart button that publishes no shipping cost —
+    so a synthetic ceiling here would have made this assertion a statement
+    about REQ-17's refusal rather than about the detector, which is what this
+    test exists to watch. The refusal itself is pinned where it belongs, in
+    `test_a_first_party_amazon_offer_under_a_ceiling_cannot_be_alerted`.
+    """
     watch = Watch(
         name="CONTROL — up&up microfiber dust cloths",
         retailer="target",
         target=_TARGET_URL,
-        max_price=80,
         control=True,
     )
     r = retailers._verdict_from_html(
@@ -2121,12 +2131,18 @@ def test_amazon_control_fixture_is_in_stock_first_party_priced_and_alertable(
     the label `Shipper / Seller`, and it is the value `FIRST_PARTY['amazon']` was
     set from. If this reads anything else the detector is broken, and the control
     watch in `config/products.yaml` says so within a cycle on the real page.
+
+    THE `max_price: 80` THAT USED TO BE ON THIS SYNTHETIC WATCH IS GONE, for
+    the reason the Target control above records: the shipped Amazon control
+    carries no ceiling, and Amazon publishes no shipping cost, so a synthetic
+    ceiling here would have turned this into an assertion about REQ-17's
+    refusal instead of about the detector. The refusal is pinned directly in
+    the next test.
     """
     watch = Watch(
         name="CONTROL — Amazon Basics AA batteries (20-pack)",
         retailer="amazon",
         target=_AMAZON_CONTROL_URL,
-        max_price=80,
         control=True,
     )
     r = _amazon_verdict(amazon_aa_batteries, watch, _AMAZON_CONTROL_URL)
@@ -2136,6 +2152,43 @@ def test_amazon_control_fixture_is_in_stock_first_party_priced_and_alertable(
     assert r.alertable
     assert "add-to-cart" in r.detail
     assert "Amazon.com" in r.detail
+
+
+def test_a_first_party_amazon_offer_under_a_ceiling_cannot_be_alerted(
+    amazon_aa_batteries: str,
+) -> None:
+    """REQ-17's user-visible cost, measured rather than described.
+
+    This is a first-party Amazon offer, IN_STOCK, at $9.99, against an $80
+    ceiling — every other defence satisfied. It is nonetheless not alertable,
+    because `add_to_cart_offers` reads a button and a button carries no
+    shipping cost, so the delivered total cannot be established and the
+    configured ceiling cannot be evaluated.
+
+    The shipped Amazon PRODUCT watch (`config/products.yaml`) carries exactly
+    that `max_price: 80`, so this is what happens to it the day Amazon itself
+    sells a GO Plus +: the reading is correct, the verdict is IN_STOCK, and no
+    page is sent. That consequence is Dan's to accept or reject and it is
+    routed to him at 06-06's checkpoint — it is deliberately NOT worked around
+    here by raising a ceiling or editing a watch.
+
+    The `detail` says so in words, so the silence is diagnosable from the
+    status page without re-reading this file.
+    """
+    watch = Watch(
+        name="Pokémon GO Plus +",
+        retailer="amazon",
+        target=_AMAZON_CONTROL_URL,
+        max_price=80,
+    )
+    r = _amazon_verdict(amazon_aa_batteries, watch, _AMAZON_CONTROL_URL)
+
+    assert r.availability is Availability.IN_STOCK
+    assert r.price == 9.99
+    assert r.shipping is None
+    assert r.delivered_total is None
+    assert r.alertable is False
+    assert "delivered total not established" in r.detail
 
 
 def test_an_amazon_reading_declares_both_axes_and_is_degraded(

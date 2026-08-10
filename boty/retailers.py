@@ -197,6 +197,19 @@ def _verdict_from_html(
     # store into UNKNOWN was 05-02's guard. 05-02 added exactly that: the two
     # `STORE_SCOPED` returns further down, ahead of the offer logic. The read
     # stays a single call in a single place, and the comparison happens once.
+    #
+    # WHAT SHIPPING COSTS, threaded onto every Result below in the same ten
+    # places `store` is — the eight here and the two refusal arms in
+    # `check_html` — with `shipping=offer.shipping` on the one success return
+    # that has an offer and an explicit `shipping=None` on the other nine.
+    #
+    # AND THE HONEST ASYMMETRY WITH `store`, written out rather than pretended
+    # to be a gate: a site missed here would be behaviourally INVISIBLE.
+    # `None` is the correct value on every offerless path, so forgetting one
+    # would change no verdict and redden no test. This is a statement of intent
+    # that nothing can watch go red, and the reason it is stated at all is that
+    # the next person to add a return here will otherwise inherit the default
+    # by accident and never learn whether they meant to.
     store = parse.nextdata_store(html)
     ld = parse.ldjson_read(html, sku=sku)
     offers = ld.offers
@@ -271,6 +284,7 @@ def _verdict_from_html(
                 rung=rung,
                 extraction=extraction,
                 store=store,
+                shipping=None,
             )
         # `store is None` is handled INSIDE the mismatch guard rather than as a
         # third one. "The page did not name a store" and "the page named a
@@ -298,6 +312,7 @@ def _verdict_from_html(
                 rung=rung,
                 extraction=extraction,
                 store=store,
+                shipping=None,
             )
 
     if not offers:
@@ -320,6 +335,7 @@ def _verdict_from_html(
                 rung=rung,
                 extraction=extraction,
                 store=store,
+                shipping=None,
             )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way
@@ -335,6 +351,7 @@ def _verdict_from_html(
             rung=rung,
             extraction=extraction,
             store=store,
+            shipping=None,
         )
 
     offer = _pick(offers, watch.retailer, first_party_only)
@@ -357,6 +374,7 @@ def _verdict_from_html(
                 rung=rung,
                 extraction=extraction,
                 store=store,
+                shipping=None,
             )
         if first_party_only and watch.retailer in MARKETPLACES and any(o.seller is None for o in offers):
             # The page says something is buyable but does not say by whom, on a
@@ -373,6 +391,7 @@ def _verdict_from_html(
                 rung=rung,
                 extraction=extraction,
                 store=store,
+                shipping=None,
             )
         return Result(
             watch,
@@ -382,19 +401,40 @@ def _verdict_from_html(
             rung=rung,
             extraction=extraction,
             store=store,
+            shipping=None,
         )
 
     state = Availability.IN_STOCK if offer.available else Availability.OUT_OF_STOCK
     seller = offer.seller or "first-party"
+    # WHAT YOU WOULD PAY, not just what the item costs, and the suffix says so
+    # when it cannot be worked out. Only when a ceiling is configured: a watch
+    # with no `max_price` never consults the delivered total, so telling its
+    # reader that one is missing would be noise about a decision nobody makes.
+    #
+    # The healthy string stays BYTE-IDENTICAL. 03.1-04 verified
+    # `ld+json: InStock from Best Buy` character-for-character against live
+    # output, and the `ld+json (repaired)` decision already respected that
+    # constraint by naming the repair in `source` rather than appending here.
+    #
+    # NO MUTATION MAY ANCHOR ON THIS SENTENCE. It is prose, it will be reworded,
+    # and Phase 5 had to re-anchor two mutations for exactly that. M4, M17 and
+    # M18 anchor on control flow and expressions in `boty/models.py`.
+    detail = f"{source}: {offer.raw_availability} from {seller}"
+    if watch.max_price is not None and offer.shipping is None:
+        detail += (
+            " — delivered total not established: no shipping cost was read, "
+            "so the configured ceiling cannot be evaluated"
+        )
     return Result(
         watch,
         state,
         price=offer.price,
-        detail=f"{source}: {offer.raw_availability} from {seller}",
+        detail=detail,
         url=url,
         rung=rung,
         extraction=extraction,
         store=store,
+        shipping=offer.shipping,
     )
 
 
@@ -403,13 +443,14 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
     try:
         page = get(watch.target)
     except Blocked as exc:
-        # `store=None` stated, not inherited: a refusal produced no page, so
-        # nothing said which store answered. Written out so this arm declares
-        # its metadata the way the browser adapters declare theirs, rather than
-        # depending on a dataclass default staying what it is today.
-        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target, refused=True, store=None)
+        # `store=None` and `shipping=None` stated, not inherited: a refusal
+        # produced no page, so nothing said which store answered or what
+        # shipping would cost. Written out so this arm declares its metadata
+        # the way the browser adapters declare theirs, rather than depending on
+        # a dataclass default staying what it is today.
+        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target, refused=True, store=None, shipping=None)
     except FetchError as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc), store=None)
+        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc), store=None, shipping=None)
 
     return _verdict_from_html(
         watch,
