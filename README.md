@@ -313,7 +313,7 @@ the command rather than below it.
 pip install bot-y
 ```
 
-Publication happens from the `v1.0.0` tag. If that command reports no matching
+Publication happens from the `v0.2.0` tag. If that command reports no matching
 distribution, the tag has not been pushed yet and the clone below is the way in.
 
 ### From a clone

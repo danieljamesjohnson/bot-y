@@ -8,8 +8,12 @@ argument is that it refuses to report a stock verdict it cannot back — so a
 release note that says "improved reliability" would be the wrong register for
 this project twice over. Every entry below names the thing that changed and,
 where there is one, the measurement behind it. `pyproject.toml` states the
-version; `scripts/release_check.py` binds this file's top heading to it, so the
-two cannot drift.
+version, and two separate checks bind this file's top heading to it:
+`scripts/release_check.py` at release time, over the network, and
+`tests/test_packaging_metadata.py` in every `make verify-offline` run — which
+binds the same number to `README.md`'s publication instruction and to this
+project's own milestone record as well. So the numbers cannot drift, and the
+offline half runs on every commit rather than only on a release day.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -17,6 +21,103 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 Nothing yet.
+
+## [0.2.0] - 2026-08-10
+
+**The number went DOWN, and that is the entry.** This release renumbers the
+project from `1.0.0` to `0.2.0`. It is a correction, not a bump.
+
+The `1.0.0` above was declared before this project had shipped, published or
+bought anything — it was a plan to publish, written as though the publishing had
+happened. That is the same overclaim this release corrects everywhere else, so
+correcting it in the version number too is the only consistent thing to do.
+
+Rolling a version *down* is normally reckless, because somebody may already be
+pinned to the number you are taking away. Nobody is, and that was re-measured on
+2026-08-10 rather than assumed: `git tag -l` reports **0 tags**,
+`git ls-remote --tags origin` reports **0 refs** against a remote that answered,
+and `https://pypi.org/pypi/bot-y/json` and `https://pypi.org/pypi/bot-y/1.0.0/json`
+both return **HTTP 404**. No `1.0.0` of this package exists anywhere, so no
+install can break. Nothing was tagged or uploaded by this release either.
+
+### Added
+
+- **The price ceiling measures the delivered total.** `max_price` compares
+  `price + shipping` rather than the item price, and a shipping cost that cannot
+  be resolved produces UNKNOWN instead of a pass. Measured against the built
+  tree: of the four watches carrying a ceiling, GameStop still alerts
+  ($54.99 + $6.99 = $61.98 under 80), Nintendo and Amazon stop being able to page
+  because one publishes shipping as prose and the other's is behind a button, and
+  Walmart is *not demonstrated* — the only first-party Walmart capture here
+  resolves no shipping at all. No ceiling was raised to absorb that. Watched going
+  red by two mutations in `scripts/mutation_check.py`.
+- **The README support matrix's Rung cell is bound to the code.** Both joins —
+  retailer to adapter out of the command-line dispatcher, adapter to rung out of
+  `boty/retailers.py`, read statically rather than by running anything — with
+  nine red-watches and two mutations. It was previously bound to nothing:
+  mutating the Amazon adapter to claim a browser transport, directly contradicting
+  the shipped `| Amazon | 1 | dom |` row, left the suite at **exit 0, 687 passed**.
+- **Workflow files are gated by directory, not by name.** Every file under the
+  continuous-integration workflow directory is covered by the action-pin,
+  exit-code, timeout and runner rules, so a second workflow added tomorrow cannot
+  escape them by not being the one file a rule was written against.
+- **`CHANGELOG.md` is gated on its contents.** Eight rules over this document —
+  leaked agent markup, heading shape and real calendar dates, unreplaced
+  placeholders, end-of-file shape, required headings, empty release sections,
+  stale path citations, line-numbered citations. Every prohibition is paired with
+  a presence rule, because "no markup and no placeholders" is satisfied by an
+  empty file. Watched red on the byte-exact document that shipped with two lines
+  of leaked tool-call markup for the whole of the previous release: with no
+  contents rule in the tree it passed at **exit 0, 711 passed**; with the gate it
+  fails naming the file and both lines.
+- **The version number is bound in four places.** `pyproject.toml` is the
+  referent; `README.md`'s publication instruction, this file's top released
+  heading and the project's own milestone record are each checked against it, in
+  both directions, with a deleted statement reported as a finding rather than as
+  agreement. Two mutations prove it bites where the mutation harness runs. Before
+  this release nothing offline read any of the four, and two of them had already
+  diverged.
+- **Walmart readings are pinned to a store.** A Walmart price is a statement about
+  one store, and this monitor was comparing readings from whichever store the site
+  assigned. The store is now read from the same page node the offer comes from and
+  published alongside the verdict; an unpinned or unexpected store returns UNKNOWN
+  rather than a number. Found by measurement: the same URL and parser produced
+  `OUT_OF_STOCK` at $3.17 and `IN_STOCK` at $2.42 minutes apart.
+- **Backoff state survives a restart.** Refusal counts and the paging memory
+  round-trip through a state file, so restarting the monitor no longer forgets
+  that a retailer asked it to slow down. The next-due time is deliberately *not*
+  persisted, so a restart still asks once at full rate.
+
+### Changed
+
+- **`Development Status` is now `4 - Beta`.** At `1.0.0` the classifier said
+  Production/Stable; at `0.2.0` that would be the same asserted-versus-real
+  disagreement pointed the other way. What refuses Production/Stable: nothing
+  published, no tag, nobody but the maintainer has installed it. What refuses
+  Alpha: this has run as a service against six live retailers publishing
+  per-cycle status, and the offline gate has been the phase contract since the
+  first phase. The classifier is bound to the version by a rule now, in both
+  directions, so it cannot go stale at the next change.
+- **Health warnings no longer guess at a cause they cannot know.** Four sentences
+  that asserted a cause — including "the detector is probably broken" — were
+  withdrawn and replaced with a partition that includes an explicit
+  cause-unknown case, so the fix cannot be satisfied by deleting every
+  explanation.
+
+### Not in this release
+
+- **None of this is running on the maintainer's daemon.** The deployed service
+  still executes code from before all of it, because the restart was deferred.
+  Every claim above is a claim about the tree, verified by `make verify-offline`,
+  and not a claim about a running process.
+- **`make verify` still fails live**, in three classes: two controls cannot run
+  on that host for want of a browser binary, and one reads UNKNOWN because the
+  offline gate runs in a shell with no store pinned — which is the store guard
+  above working, not a defect. None of the three was caused by this release and
+  none is fixed by it.
+- **Still not published.** `pip install bot-y` resolves nothing, and this release
+  does not change that. A release note claiming deployed behaviour would be the
+  exact overclaim `0.2.0` exists to correct.
 
 ## [1.0.0] - 2026-08-05
 

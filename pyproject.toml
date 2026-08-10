@@ -4,7 +4,35 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bot-y"
-version = "1.0.0"
+# 1.0.0 -> 0.2.0, and THIS IS THE CORRECTION, NOT A VERSION BUMP.
+#
+# The v1.0 numbering was itself the overclaim this milestone corrects everywhere
+# else: it was declared before the project had shipped, published or bought
+# anything, at a moment when the only thing that had happened was a plan to
+# publish. `.planning/STATE.md` has said `milestone: v0.2` since this milestone
+# was scoped, so the two have been disagreeing in the tree for the whole of it,
+# with nothing offline reading either one.
+#
+# ROLLING *DOWN* IS SAFE ONLY BECAUSE NOTHING WAS EVER TAGGED OR UPLOADED — so
+# nobody can be pinned to a 1.0.0 that exists. That is a measurement, not an
+# assurance, and it was re-taken on 2026-08-10 at the moment of the roll rather
+# than quoted from Phase 4's record:
+#
+#   git tag -l                                   -> 0 tags
+#   git ls-remote --tags origin                  -> 0 refs (exit 0; the remote
+#                                                   answered, and listed heads)
+#   https://pypi.org/pypi/bot-y/json             -> HTTP 404
+#   https://pypi.org/pypi/bot-y/1.0.0/json       -> HTTP 404
+#
+# The long form of why, and what v0.2 actually contains, is the `## [0.2.0]`
+# entry in CHANGELOG.md.
+#
+# This number is no longer a claim only this file makes.
+# `tests/test_packaging_metadata.py` binds it to README.md's publication
+# instruction, CHANGELOG.md's top released heading and `.planning/STATE.md`'s
+# milestone, in both directions, and `make verify-offline` fails when any of them
+# moves without the others.
+version = "0.2.0"
 description = "Self-hosted restock monitor for big retailers — TLS-impersonation fetching, structured stock data, and control products that catch broken detectors instead of failing silently."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -65,24 +93,61 @@ keywords = ["restock", "monitor", "stock", "scraping", "notifications"]
 #                                      classifier is a claim that something did.
 #   Topic :: System :: Monitoring   <- what the thing is
 #
-# `Development Status :: 5 - Production/Stable` arrived with the 1.0.0 bump, and
-# it is FIRST in the list because that is where alphabetical order puts it —
-# 04-02 left this list sorted and the sort is the only thing keeping it readable.
+# `Development Status` is FIRST in the list because that is where alphabetical
+# order puts it — 04-02 left this list sorted and the sort is the only thing
+# keeping it readable. `4 - Beta` sorts to exactly the position
+# `5 - Production/Stable` held, so the reversal below moved nothing else.
 #
-# 04-02 deferred this entry deliberately, on the grounds that development status
-# is a statement about the version and the version was 0.1.0. There is now a
-# version to make it about, so the choice has to be made rather than deferred
-# again. `4 - Beta` was 04-02's placeholder guess and it is REJECTED in writing:
-# tagging 1.0.0 while classifying the package Beta is exactly the
-# asserted-versus-real disagreement this phase exists to close, and it leaves a
-# reader to decide which of the two numbers to believe.
+# THE ENTRY REVERSED HERE, AND THE ARGUMENT IT REVERSES, KEPT RATHER THAN
+# DELETED. Phase 4 wrote the following, and it was RIGHT — for 1.0.0:
 #
-# What backs `5 - Production/Stable` is in the tree rather than in ambition:
-# `make verify` has been the phase gate since Phase 1 and every phase states its
-# success criteria as its exit code; the control-product mechanism catches a
-# BROKEN DETECTOR rather than reporting a confident false verdict; `deploy/`
-# ships two systemd units; and this monitor has run as a service against six
-# live retailers, publishing per-cycle status, for the whole of Phase 3.
+#   04-02 deferred this entry deliberately, on the grounds that development
+#   status is a statement about the version and the version was 0.1.0. There is
+#   now a version to make it about, so the choice has to be made rather than
+#   deferred again. `4 - Beta` was 04-02's placeholder guess and it is REJECTED
+#   in writing: tagging 1.0.0 while classifying the package Beta is exactly the
+#   asserted-versus-real disagreement this phase exists to close, and it leaves
+#   a reader to decide which of the two numbers to believe.
+#
+#   What backs `5 - Production/Stable` is in the tree rather than in ambition:
+#   `make verify` has been the phase gate since Phase 1 and every phase states
+#   its success criteria as its exit code; the control-product mechanism catches
+#   a BROKEN DETECTOR rather than reporting a confident false verdict; `deploy/`
+#   ships two systemd units; and this monitor has run as a service against six
+#   live retailers, publishing per-cycle status, for the whole of Phase 3.
+#
+# WHAT OVERRULED IT: not a change of mind, but a change of the number the
+# classifier is a statement about. The version above is now `0.2.0`, and Phase
+# 4's own sentence runs the other way unchanged in form — a package classified
+# Production/Stable at 0.2.0 is the same asserted-versus-real disagreement,
+# pointed the opposite direction, and it leaves a reader the same two numbers to
+# choose between. Everything Phase 4 listed as backing is still true and still in
+# the tree; none of it was ever an argument for the digit 5 specifically, and at
+# a major version of 0 it cannot be one.
+#
+# WHAT REFUSES `5 - Production/Stable` AT 0.2.0, measured on 2026-08-10 rather
+# than felt: nothing has been published (`https://pypi.org/pypi/bot-y/json` and
+# `https://pypi.org/pypi/bot-y/1.0.0/json` both HTTP 404); no tag exists locally
+# or on the remote (`git tag -l` 0 tags, `git ls-remote --tags origin` 0 refs);
+# nobody but the maintainer has ever installed it; and `make verify` has failed
+# live since 2026-08-06 in three classes.
+#
+# WHAT REFUSES `3 - Alpha`: this monitor has run as a service against six live
+# retailers publishing per-cycle status; `make verify-offline` has been the phase
+# gate since Phase 1; and the control-product mechanism catches a broken detector
+# rather than reporting a confident false verdict. `4 - Beta` is the honest
+# landing between two things that are both true.
+#
+# WHAT WOULD MOVE IT BACK TO `5`, so the next reader does not have to guess: a
+# published release that somebody other than the maintainer has installed, and a
+# live `make verify` that passes.
+#
+# AND THIS IS NO LONGER PROSE ANYBODY HAS TO REMEMBER. The classifier and the
+# version are bound by a rule in `tests/test_packaging_metadata.py`, in BOTH
+# directions: Production/Stable and Mature are refused below major 1, and
+# Planning, Pre-Alpha, Alpha and Beta are refused at major 1 and above — which is
+# Phase 4's own reasoning above, made executable. The next bump cannot leave this
+# comment stale, because `make verify-offline` will go red first.
 #
 # TWO ABSENCES, each deliberate:
 #   * No `License ::` classifier. Measured, not stylistic: alongside the SPDX
@@ -93,7 +158,7 @@ keywords = ["restock", "monitor", "stock", "scraping", "notifications"]
 #     marker is a real change with real consequences and it belongs in its own
 #     commit.
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: POSIX :: Linux",
