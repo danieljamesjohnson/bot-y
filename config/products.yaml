@@ -32,6 +32,25 @@ settings:
 
   state_path: state.json
 
+  # Where the backoff is remembered between runs. Two things live in it: how
+  # many times in a row each retailer has refused us, and which retailers you
+  # have already been notified about for their current failure.
+  #
+  # It exists because a restart used to reset both to zero. The monitor came
+  # back hammering a retailer that had just walled it — the backoff started
+  # again from double the interval instead of resuming where it was — and it
+  # re-notified you about a refusal you had already been told about. Under
+  # systemd a restart is not a rare event, so "you are told once" was really
+  # "once per process".
+  #
+  # A runtime artifact, gitignored, and safe to delete: doing so costs one
+  # repeated notification and one shallow backoff, nothing more. It is also aged
+  # out automatically, so a file left behind by a machine that was switched off
+  # for a week is ignored rather than applied — and the next scheduled attempt
+  # is never read back from it, so a restart always asks once, immediately, at
+  # the normal rate.
+  pacer_state_path: pacer-state.json
+
   # OPTIONAL, and genuinely optional: leave it unset and Best Buy still works.
   #
   # Best Buy refuses impersonated HTTP at the connection layer, so its default

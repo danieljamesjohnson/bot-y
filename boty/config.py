@@ -196,6 +196,22 @@ class Config:
     state_path: Path = Path("state.json")
     #: Snapshot for the dashboard. Written every cycle; served as a static file.
     status_path: Path = Path("served/boty/status.json")
+    #: Where `boty.pacing.Pacer` remembers its backoff across a restart: how many
+    #: times each retailer has refused in a row, and which retailers have already
+    #: been paged about their current failure.
+    #:
+    #: NAMED FOR THE OBJECT THAT OWNS IT even though the document holds two
+    #: things, because ROADMAP criterion 6 names `Pacer._state` in as many words
+    #: and one slightly-narrow name beats two names for two keys in one file.
+    #:
+    #: NOT folded into `state.json`, and that was considered. That file's
+    #: document is `State.seen` in its entirety — `monitor.State.load` parses the
+    #: whole thing as the map — so a second top-level key there is a schema
+    #: change with a migration behind it. Worse, `run_once` saves it BEFORE
+    #: delivery is attempted, on purpose, which is exactly the wrong moment to
+    #: commit a paging memory whose entire job is to be rolled back when a
+    #: delivery fails.
+    pacer_state_path: Path = Path("pacer-state.json")
 
     @classmethod
     def load(cls, path: str | Path) -> Config:
@@ -224,4 +240,5 @@ class Config:
             retailer_intervals=_retailer_intervals(settings),
             state_path=Path(settings.get("state_path", "state.json")),
             status_path=Path(settings.get("status_path", "served/boty/status.json")),
+            pacer_state_path=Path(settings.get("pacer_state_path", "pacer-state.json")),
         )

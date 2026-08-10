@@ -572,6 +572,34 @@ def test_a_refusal_past_the_cap_is_pushed_once_not_once_per_process(
     )
 
 
+def test_a_refusal_past_the_cap_is_pushed_once_within_one_process_too(
+    restart_cfg: Config, sent: dict[str, list]
+) -> None:
+    """The same clause without any restart at all, and it was broken separately.
+
+    `warned` is recomputed from `health` each cycle, and `health` is derived
+    from `results` — of which a paced-out retailer has none. So "not checked"
+    read as "recovered", and the memory was erased by the very next cycle:
+    measured 2026-08-10, it survived exactly one cycle out of the nine that
+    followed the page, and the retailer was paged again at its next check. At
+    the cap that is a notification every six hours, forever, about a refusal
+    somebody was already told about — the 20-pages-in-24-hours failure rebuilt
+    at a slower cadence.
+
+    120 cycles is measured to contain the sixth refusal (it lands at cycle
+    61-65), which is the second check past the cap and therefore the second
+    page.
+    """
+    _run(restart_cfg, cycles=120)
+
+    assert _refusals(restart_cfg) == 6, "120 cycles is measured to yield 6 refusals"
+    assert sent["health"] == [["gamestop"]], (
+        "the retailer was paged twice in one process. The backoff skipping a "
+        "cycle is not the retailer recovering, and only a retailer that was "
+        "actually checked can have ended its failure episode"
+    )
+
+
 def test_the_same_scenario_pushes_twice_when_the_state_file_is_deleted(
     restart_cfg: Config, sent: dict[str, list]
 ) -> None:

@@ -252,7 +252,11 @@ def watch_cycle(
 
     `warned` is which retailers have already been warned about in the current
     failure episode, and the new set is returned rather than mutated so the
-    caller holds exactly one copy of that memory.
+    caller holds exactly one copy of that memory. An episode ends when a
+    retailer is CHECKED and found no longer pageable — never merely because the
+    pacer skipped it, which is a cycle in which we learned nothing about it. See
+    the comment at `still_unhealthy` below; that distinction is the difference
+    between REQ-16's "pushed once" and "pushed once per check past the cap".
     """
     # monotonic, not time.time(): an NTP correction mid-pass would otherwise
     # publish a negative duration into a file served over HTTP.
@@ -315,7 +319,20 @@ def watch_cycle(
         if h not in pageable:
             log.info("%s unhealthy but refusing, not broken — not paging: %s", h.retailer, h.reason)
     fresh = [h for h in pageable if h.retailer not in warned]
-    still_unhealthy = {h.retailer for h in pageable}
+    # A retailer the PACER SKIPPED this cycle keeps its memory. `health` is
+    # derived from `results`, and `run_once` returns no result at all for a
+    # retailer that was not due — deliberately, because a synthetic reading for
+    # a question nobody asked is the bug one level up. But that means an
+    # un-carried `warned` treats "not checked" as "recovered", and the moment a
+    # retailer is entrenched enough to page is exactly the moment the backoff
+    # starts skipping it: measured 2026-08-10, the memory survived precisely one
+    # cycle and the next paced-out cycle erased it, so a retailer past the cap
+    # was re-paged on every subsequent check — 2 pages in 120 cycles, climbing
+    # to one every six hours forever at the cap. REQ-16 says such a refusal is
+    # pushed ONCE. Only a retailer that was actually CHECKED and is no longer
+    # pageable has shown us anything that ends its episode.
+    checked = {r.watch.retailer for r in results}
+    still_unhealthy = {h.retailer for h in pageable} | (warned - checked)
     if fresh and not send_health_warning(cfg.notify_urls, fresh):
         # Same defect, same fix: marking a retailer as warned on the strength
         # of an attempt rather than a delivery means a broken detector gets
@@ -342,10 +359,23 @@ def watch_loop(
     number runs exactly that many polls and returns, which is what lets the
     tests assert on what a *sequence* of cycles does.
     """
-    warned: set[str] = set()
     # One pacer for the life of the loop: the backoff is memory, and a pacer
     # rebuilt each cycle would forget every refusal and hammer at full rate.
-    pacer = Pacer(default_interval=cfg.interval_seconds, overrides=dict(cfg.retailer_intervals))
+    #
+    # That memory now has to survive the PROCESS as well, and it is loaded once,
+    # into this same one pacer, for the same reason — a second construction site
+    # is exactly what the invariant above forbids, which is why `load` is an
+    # instance method and not a `State`-style classmethod.
+    pacer = Pacer(
+        default_interval=cfg.interval_seconds,
+        overrides=dict(cfg.retailer_intervals),
+        state_path=cfg.pacer_state_path,
+    )
+    # `warned` is restored rather than started empty, and it has to be assigned
+    # HERE rather than above, because the pacer it reads through does not exist
+    # until the line above. An empty `warned` on a fresh process is precisely how
+    # REQ-16's "pushed once" became "pushed once per process".
+    warned = pacer.load()
     consecutive_failures = 0
     completed = 0
     # The pacer's clock. Advanced by the delay we ASK for rather than read from
@@ -378,6 +408,25 @@ def watch_loop(
                     consecutive_failures,
                 )
                 return 1
+        finally:
+            # ONE WRITE PER CYCLE, not one per `record`. `monitor.run_once` is
+            # the precedent — it saves state once at the end of a pass rather
+            # than on each mutation — and a cycle is the only unit here with a
+            # beginning and an end. Committing `refusals` and `warned` together
+            # means the persisted pair can never describe two different cycles.
+            #
+            # `finally`, not the end of the `try`. The handler above exists
+            # because a cycle that raises must not take the service down; a
+            # cycle that raises AFTER a refusal was recorded must not lose that
+            # refusal either, or the backoff silently shallows every time
+            # something goes wrong — which is the moment politeness matters
+            # most. It also covers the `return 1` give-up path.
+            #
+            # `watch_cycle`'s signature is untouched, so its rollback semantics
+            # still hold: when a health send fails it returns a REDUCED `warned`,
+            # and the reduced set is what reaches disk. An undelivered warning is
+            # not remembered as delivered on disk any more than it is in memory.
+            pacer.save(warned)
 
         completed += 1
         # Jitter so we do not hammer on a fixed cadence, which is itself a signal.

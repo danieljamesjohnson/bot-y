@@ -19,6 +19,11 @@ build/
 .env
 *.log
 state.json
+# The pacer's runtime memory: how many times each retailer has refused in a row
+# and which ones have already been paged about it. It needs its own line — the
+# entry above is a literal basename and does not match this one — so without it
+# the first `boty watch` in a checkout offers the file for commit.
+pacer-state.json
 
 # changedetection.io stack — separate tool, kept on disk for the dashboard
 # of unguarded sites, but not part of bot-y
