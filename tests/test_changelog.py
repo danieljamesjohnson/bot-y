@@ -230,14 +230,23 @@ PLACEHOLDERS: tuple[str, ...] = ("TODO", "TBD", "FIXME", "x.y.z", "Lorem ipsum")
 #: written over angle brackets is red on the shipped tree on arrival. Keeping the
 #: same shape here means the clean side of the markup rule is asserted in both
 #: halves of this file, not only in the half that reads the repository.
+#:
+#: EVERY BACKTICKED PATH IN HERE MUST BE IN `SANDBOX_CONTENTS`. `pyproject.toml`
+#: is; `CHANGELOG.md` is not. Measured, not predicted: an earlier draft of this
+#: constant cited the real changelog by name in its preamble, `stale_path_citations`
+#: resolved it here and not inside `build_sandbox()`, and
+#: `test_every_rule_is_green_on_a_well_formed_changelog` — the test whose whole
+#: job is to run where `CHANGELOG.md` does not exist — failed in the one place it
+#: was written for. An "unconditional" document that cites an uncopied path is
+#: coupled to the sandbox's contents while looking as though it is not.
 MINIMAL = """# Changelog
 
 What changed in each release, and what each change was measured against.
 
 Fixture captures in this project are redacted by emptying every `<script>` body,
 and that token is here deliberately: it is the one angle-bracket shape the real
-`CHANGELOG.md` carries, so a markup rule written over angle brackets rather than
-over the defect would be caught by this document as well as by the shipped one.
+changelog carries, so a markup rule written over angle brackets rather than over
+the defect would be caught by this document as well as by the shipped one.
 
 ## [Unreleased]
 
@@ -812,7 +821,13 @@ def test_every_rule_is_green_on_a_well_formed_changelog() -> None:
     assert not file_shape_problems(MINIMAL)
     assert not missing_required_headings(MINIMAL)
     assert not empty_release_sections(MINIMAL)
-    assert not stale_path_citations(MINIMAL, REPO_ROOT)
+    assert not stale_path_citations(MINIMAL, REPO_ROOT), (
+        "MINIMAL cites a path that does not resolve. If this is red inside "
+        "`make mutation` and green in the repository, the citation names something "
+        "`SANDBOX_CONTENTS` does not copy — which makes this 'unconditional' test "
+        "quietly conditional on the sandbox's contents. Cite a copied path instead; "
+        "do not widen SANDBOX_CONTENTS to make this pass."
+    )
     assert not line_numbered_citations(MINIMAL)
 
 
