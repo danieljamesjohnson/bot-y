@@ -22,6 +22,7 @@ from boty.parse import (
     ldjson_offers,
     ldjson_read,
     nextdata_offers,
+    nextdata_store,
 )
 
 #: MSRP of the Pokémon GO Plus +. Anything far above this is a flipper.
@@ -266,6 +267,139 @@ def test_nextdata_returns_none_on_malformed_json() -> None:
 
 def test_nextdata_empty_input_is_none() -> None:
     assert nextdata_offers("") is None
+
+
+# --------------------------------------------------------------------------
+# nextdata_store — WHICH store answered
+# --------------------------------------------------------------------------
+#
+# WHY BOTH SHIPPED FIXTURES READ `"0"`, AND WHY THAT IS NOT A WALMART SENTINEL.
+#
+# `"0"` here is THIS REPO'S OWN REDACTION PLACEHOLDER. Commit `8dec2e0` replaced
+# a real store number with `"0"` throughout both Walmart fixtures — in
+# `"storeId"`, in `"storeIds"`, and inside embedded ad hrefs — and `"0"` sits in
+# `identity_check.py`'s `allowed` redaction vocabulary beside `"00000"` and
+# `"XX"`. The pre-redaction capture carries the real number many times over.
+#
+# So `"0"` says nothing whatsoever about what Walmart does with an unassigned
+# store, and `nextdata_store` must NOT special-case it. A
+# `if store == "0": return None` branch would be a claim about Walmart that
+# nothing in this repo has measured. `05-PATTERNS.md` drew exactly that
+# inference — "very likely Walmart's 'no store assigned' sentinel" — and it is
+# wrong. This paragraph exists so the next reader does not draw it again.
+
+
+def _nextdata_page(**data: object) -> str:
+    """A minimal Walmart hydration payload — `data` is the `initialData.data` node."""
+    doc = {"props": {"pageProps": {"initialData": {"data": data}}}}
+    return f'<html><script id="__NEXT_DATA__" type="application/json">{json.dumps(doc)}</script></html>'
+
+
+def test_the_walmart_fixtures_say_which_store_answered(
+    walmart_milk: str, walmart_goplusplus: str
+) -> None:
+    """Both captures carry a store, and both read the redacted placeholder.
+
+    See the paragraph above: `"0"` is this repo's redaction of a real number,
+    not Walmart's own value. The reading being `"0"` is a fact about `8dec2e0`,
+    not about Walmart.
+    """
+    assert nextdata_store(walmart_milk) == "0"
+    assert nextdata_store(walmart_goplusplus) == "0"
+
+
+def test_no_non_walmart_page_in_the_corpus_claims_a_store(
+    gamestop_goplusplus: str,
+    gamestop_ps5: str,
+    bestbuy_pikachu: str,
+    target_dust_cloths: str,
+    amazon_aa_batteries: str,
+    nintendo_hdmi: str,
+) -> None:
+    """The reader is called unconditionally, with no retailer predicate.
+
+    That is safe because it is anchored on Walmart's own hydration shape, which
+    no other retailer here emits — and this asserts it against the whole
+    captured corpus rather than assuming it. A retailer predicate would be a
+    claim ("only Walmart has stores") maintained in a second place, which is one
+    more place to go stale when a seventh retailer arrives.
+    """
+    for page in (
+        gamestop_goplusplus,
+        gamestop_ps5,
+        bestbuy_pikachu,
+        target_dust_cloths,
+        amazon_aa_batteries,
+        nintendo_hdmi,
+    ):
+        assert nextdata_store(page) is None
+
+
+def test_a_page_that_does_not_say_returns_none_rather_than_guessing() -> None:
+    """`None` is "the page did not tell us", never "store 0"."""
+    assert nextdata_store("") is None
+    assert nextdata_store("<html><body>plain page</body></html>") is None
+    assert nextdata_store('<script id="__NEXT_DATA__">{broken</script>') is None
+    assert nextdata_store('<script id="__NEXT_DATA__">{"props": {}}</script>') is None
+
+
+def test_every_shape_the_store_list_could_take_that_is_not_one_string_is_none() -> None:
+    """Defensive at each step, in `nextdata_offers`' shape.
+
+    The multi-entry case is the one worth stating: taking `[0]` out of a list
+    with two entries would be a guess about ordering that nothing measured. Both
+    shipped fixtures carry exactly one element (measured 2026-08-10), so a
+    second one means Walmart changed something and we should say we do not know.
+    """
+    assert nextdata_store(_nextdata_page(product={})) is None
+    assert nextdata_store(_nextdata_page(product={"location": {}})) is None
+    assert nextdata_store(_nextdata_page(product={"location": {"storeIds": []}})) is None
+    assert nextdata_store(_nextdata_page(product={"location": {"storeIds": "0"}})) is None
+    assert nextdata_store(_nextdata_page(product={"location": {"storeIds": [0]}})) is None
+    assert nextdata_store(_nextdata_page(product={"location": {"storeIds": [None]}})) is None
+    assert nextdata_store(_nextdata_page(product={"location": "elsewhere"})) is None
+    assert (
+        nextdata_store(_nextdata_page(product={"location": {"storeIds": ["0", "00000"]}}))
+        is None
+    ), "a two-entry list must not be resolved by picking the first one"
+
+
+def test_the_placeholder_store_is_returned_and_not_swallowed() -> None:
+    """The trap, asserted directly: NO `"0"` special case.
+
+    `"0"` is this repo's placeholder, not Walmart's sentinel, so the reader has
+    nothing to say about it and must hand it back like any other value. If a
+    later change wants to treat some value as "no store assigned", that has to
+    be a measurement of Walmart's behaviour, made and cited at the time.
+    """
+    assert nextdata_store(_nextdata_page(product={"location": {"storeIds": ["0"]}})) == "0"
+    assert (
+        nextdata_store(_nextdata_page(product={"location": {"storeIds": ["00000"]}})) == "00000"
+    )
+
+
+def test_the_store_is_read_from_the_same_node_as_the_offer(walmart_milk: str) -> None:
+    """The invariant this whole phase rests on, pinned.
+
+    The store and the offer come out of ONE node — `product` — so a reading
+    cannot attribute a price from one subtree to a store named in another. There
+    is a second store in these pages, under
+    `contentLayout.pageMetadata.location`, and it was deliberately not taken;
+    see the constant's comment in `boty/parse.py`.
+    """
+    offers = nextdata_offers(walmart_milk)
+    store = nextdata_store(walmart_milk)
+    assert offers is not None and store is not None
+
+    # Same synthetic node, both readers: remove the product node and BOTH go
+    # quiet together, which is what "one node" means operationally.
+    empty = _nextdata_page(contentLayout={"pageMetadata": {"location": {"storeId": "00000"}}})
+    assert nextdata_offers(empty) is None
+    assert nextdata_store(empty) is None, (
+        "the store was read out of the page-layout metadata subtree. That is a "
+        "fact about the chrome the page rendered, not about the offer — taking "
+        "it would let a price from one store be attributed to another."
+    )
 
 
 # --------------------------------------------------------------------------

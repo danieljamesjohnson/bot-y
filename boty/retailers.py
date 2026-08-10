@@ -180,6 +180,22 @@ def _verdict_from_html(
     # call can tell them apart. See `LdJsonRead` — the distinction was bought
     # on 2026-08-04, when Best Buy served three unparseable blocks and the
     # detail below said the SKU had not resolved.
+    # WHICH STORE ANSWERED. Read once, here, because this is where the html is,
+    # and threaded onto every return below — including the UNKNOWNs, which are
+    # the paths a human reads when something is wrong. That is the same "error
+    # paths carry the same metadata as success paths" rule `check_target_browser`
+    # commits to for `rung` and `extraction`.
+    #
+    # Called with no retailer predicate: the path is Walmart's own hydration
+    # shape, so every other retailer here returns `None` because the path is
+    # absent, which is measured against the whole captured corpus in
+    # `tests/test_parse.py`. A predicate would be the claim "only Walmart has
+    # stores", maintained in a second place.
+    #
+    # NOTHING BELOW BRANCHES ON IT, and that is deliberate. This function
+    # RECORDS which store answered; turning an unpinned or mismatched store into
+    # UNKNOWN is 05-02's guard, and `watch.store_id` is not read here at all.
+    store = parse.nextdata_store(html)
     ld = parse.ldjson_read(html, sku=sku)
     offers = ld.offers
     # A repaired read is never silent. Naming it in `source` rather than
@@ -219,6 +235,7 @@ def _verdict_from_html(
                 url=url,
                 rung=rung,
                 extraction=extraction,
+                store=store,
             )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way
@@ -233,6 +250,7 @@ def _verdict_from_html(
             url=url,
             rung=rung,
             extraction=extraction,
+            store=store,
         )
 
     offer = _pick(offers, watch.retailer, first_party_only)
@@ -254,6 +272,7 @@ def _verdict_from_html(
                 url=url,
                 rung=rung,
                 extraction=extraction,
+                store=store,
             )
         if first_party_only and watch.retailer in MARKETPLACES and any(o.seller is None for o in offers):
             # The page says something is buyable but does not say by whom, on a
@@ -269,6 +288,7 @@ def _verdict_from_html(
                 url=url,
                 rung=rung,
                 extraction=extraction,
+                store=store,
             )
         return Result(
             watch,
@@ -277,6 +297,7 @@ def _verdict_from_html(
             url=url,
             rung=rung,
             extraction=extraction,
+            store=store,
         )
 
     state = Availability.IN_STOCK if offer.available else Availability.OUT_OF_STOCK
@@ -289,6 +310,7 @@ def _verdict_from_html(
         url=url,
         rung=rung,
         extraction=extraction,
+        store=store,
     )
 
 
@@ -297,9 +319,13 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
     try:
         page = get(watch.target)
     except Blocked as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target, refused=True)
+        # `store=None` stated, not inherited: a refusal produced no page, so
+        # nothing said which store answered. Written out so this arm declares
+        # its metadata the way the browser adapters declare theirs, rather than
+        # depending on a dataclass default staying what it is today.
+        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target, refused=True, store=None)
     except FetchError as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc))
+        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc), store=None)
 
     return _verdict_from_html(
         watch,

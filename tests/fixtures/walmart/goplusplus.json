@@ -5,5 +5,5 @@
   "captured_at": "2026-08-02T16:49:18Z",
   "status": 200,
   "bytes": 483194,
-  "note": "IN_STOCK but seller is a marketplace reseller at ~4x MSRP; must be rejected by first-party filter AND by price ceiling. Verified at capture: sellerName 'Clove Brothers LLC', currentPrice $229.99, availabilityStatus IN_STOCK, against a $54.99 MSRP and an $80 ceiling."
+  "note": "IN_STOCK but seller is a marketplace reseller at ~4x MSRP; must be rejected by first-party filter AND by price ceiling. Verified at capture: sellerName 'Clove Brothers LLC', currentPrice $229.99, availabilityStatus IN_STOCK, against a $54.99 MSRP and an $80 ceiling. REDACTION: the store this page was served by is scrubbed throughout — every storeId, storeIds entry and store query parameter reads the placeholder 0, which is NOT a Walmart value and must not be read as one. A store number resolves publicly to one street address, so it is redacted for the same reason the postal code and city on this page are. parse.nextdata_store therefore reads 0 off this fixture, and deliberately has no special case for it."
 }

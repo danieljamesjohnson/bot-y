@@ -2170,3 +2170,210 @@ def test_an_amazon_watch_is_dispatched_to_the_rung_one_dom_path() -> None:
     assert r.extraction is Extraction.DOM, (
         "the extraction label follows the reader that ran, error paths included"
     )
+
+
+# --------------------------------------------------------------------------
+# WHICH STORE ANSWERED — recorded on every return path, changing no verdict
+# --------------------------------------------------------------------------
+#
+# `"0"` in the Walmart fixtures is THIS REPO'S REDACTION PLACEHOLDER, written
+# over a real store number by commit `8dec2e0`, and it sits in
+# `identity_check.py`'s allow-list beside `"00000"` and `"XX"`. It is NOT
+# Walmart's "no store assigned" sentinel — nothing here has measured what
+# Walmart does in that case — which is why `parse.nextdata_store` has no `"0"`
+# branch and why the synthetic store values below are `"0"` and `"00000"`, the
+# only two store-shaped literals this repo's identity guard permits in a tracked
+# file.
+
+
+def test_the_walmart_control_records_the_store_and_moves_no_verdict(
+    monkeypatch: pytest.MonkeyPatch, walmart_milk: str
+) -> None:
+    """The regression proof for "this plan changes no verdict".
+
+    The three values asserted here are byte-identical to what
+    `test_a_first_party_walmart_offer_is_alertable` asserted before the store
+    existed. If recording which store answered moved an availability, a price or
+    a detail, it would show up right here.
+    """
+    _serve(monkeypatch, walmart_milk, WALMART_URL)
+    watch = Watch(name="milk", retailer="walmart", target=WALMART_URL, control=True)
+
+    result = retailers.check_html(watch, first_party_only=True)
+
+    assert result.store == "0"
+    assert result.availability is Availability.IN_STOCK
+    assert result.price == 2.42
+    assert "Walmart.com" in result.detail
+
+
+def test_a_page_that_names_no_store_records_no_store(
+    monkeypatch: pytest.MonkeyPatch, gamestop_goplusplus: str
+) -> None:
+    """A GameStop reading is unchanged and claims nothing about a store."""
+    _serve(monkeypatch, gamestop_goplusplus)
+    watch = Watch(name="GO Plus +", retailer="gamestop", target=GAMESTOP_URL)
+
+    result = retailers.check_html(watch)
+
+    assert result.store is None
+    assert result.availability is Availability.OUT_OF_STOCK
+    assert result.price == 54.99
+
+
+def test_a_refusal_records_no_store_because_it_produced_no_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both refusal arms state `store=None` rather than inheriting it.
+
+    A refusal produced no page, so nothing said which store answered. The arms
+    say so explicitly, the way `check_target_browser` states its metadata on
+    every path — the alternative is a field whose value on the error path is an
+    accident of the dataclass's declaration order.
+    """
+    _raise(monkeypatch, Blocked("challenge page"))
+    watch = Watch(name="milk", retailer="walmart", target=WALMART_URL, store_id="0")
+    blocked = retailers.check_html(watch)
+
+    _raise(monkeypatch, FetchError("connection reset"))
+    failed = retailers.check_html(watch)
+
+    assert blocked.store is None
+    assert blocked.availability is Availability.UNKNOWN
+    assert blocked.refused is True
+    assert failed.store is None
+    assert failed.availability is Availability.UNKNOWN
+
+
+def test_every_verdict_path_carries_the_store_including_the_unknowns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Error paths carry the same metadata as success paths.
+
+    That is the rule `check_target_browser`'s docstring commits to for `rung`
+    and `extraction`, and it applies here for the reason it applied there: the
+    UNKNOWN paths are the ones a human reads when something is wrong, and a
+    diagnosis missing the store is missing the thing 05-02 will guard on.
+
+    Every branch below is a distinct `return` in `_verdict_from_html`.
+    """
+    location = {"location": {"storeIds": ["00000"]}}
+
+    # 1. No offers at all, no SKU — "page shape changed?"
+    no_offers = _nextdata(**location)
+    _serve(monkeypatch, no_offers, WALMART_URL)
+    watch = Watch(name="milk", retailer="walmart", target=WALMART_URL)
+    r = retailers.check_html(watch)
+    assert r.availability is Availability.UNKNOWN and r.store == "00000"
+
+    # 2. No offers, with a SKU — the unresolved-SKU diagnosis.
+    r = retailers._verdict_from_html(
+        watch, no_offers, url=WALMART_URL, first_party_only=True, rung=Rung.TLS, sku="6216393"
+    )
+    assert r.availability is Availability.UNKNOWN and r.store == "00000"
+    assert "did not resolve" in r.detail
+
+    # 3. An offer on a retailer with no first-party list configured.
+    unknown_retailer = Watch(name="thing", retailer="nowhere", target=WALMART_URL)
+    page = _nextdata(
+        availabilityStatus="IN_STOCK",
+        sellerName="Somebody Else",
+        priceInfo={"currentPrice": {"price": 9.99}},
+        **location,
+    )
+    r = retailers._verdict_from_html(
+        unknown_retailer, page, url=WALMART_URL, first_party_only=True, rung=Rung.TLS
+    )
+    assert r.availability is Availability.UNKNOWN and r.store == "00000"
+    assert "no first-party seller list" in r.detail
+
+    # 4. A marketplace offer with no seller recorded.
+    unattributed = _nextdata(
+        availabilityStatus="IN_STOCK",
+        priceInfo={"currentPrice": {"price": 9.99}},
+        **location,
+    )
+    r = retailers._verdict_from_html(
+        watch, unattributed, url=WALMART_URL, first_party_only=True, rung=Rung.TLS
+    )
+    assert r.availability is Availability.UNKNOWN and r.store == "00000"
+    assert "cannot tell whose offer" in r.detail
+
+    # 5. Offers exist, none of them first-party.
+    reseller = _nextdata(
+        availabilityStatus="IN_STOCK",
+        sellerName="A Flipper LLC",
+        priceInfo={"currentPrice": {"price": 219.0}},
+        **location,
+    )
+    r = retailers._verdict_from_html(
+        watch, reseller, url=WALMART_URL, first_party_only=True, rung=Rung.TLS
+    )
+    assert r.availability is Availability.OUT_OF_STOCK and r.store == "00000"
+    assert "none first-party" in r.detail
+
+    # 6. The ordinary verdict.
+    first_party = _nextdata(
+        availabilityStatus="IN_STOCK",
+        sellerName="Walmart.com",
+        priceInfo={"currentPrice": {"price": 2.42}},
+        **location,
+    )
+    r = retailers._verdict_from_html(
+        watch, first_party, url=WALMART_URL, first_party_only=True, rung=Rung.TLS
+    )
+    assert r.availability is Availability.IN_STOCK and r.store == "00000"
+
+
+def test_a_mismatched_store_is_recorded_and_still_not_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """05-01 records; 05-02 guards. This pins the boundary between them.
+
+    The watch is pinned to one store and the page says another answered. That is
+    exactly the condition this phase exists to catch — and here it is still
+    IN_STOCK and still alertable, because turning it into UNKNOWN is 05-02's
+    change and putting it here would put two plans inside one branch. When 05-02
+    lands, this test is the one that has to be moved deliberately.
+    """
+    page = _nextdata(
+        availabilityStatus="IN_STOCK",
+        sellerName="Walmart.com",
+        priceInfo={"currentPrice": {"price": 2.42}},
+        location={"storeIds": ["00000"]},
+    )
+    _serve(monkeypatch, page, WALMART_URL)
+    watch = Watch(name="milk", retailer="walmart", target=WALMART_URL, store_id="0")
+
+    result = retailers.check_html(watch)
+
+    assert watch.store_id == "0"
+    assert result.store == "00000"
+    assert result.availability is Availability.IN_STOCK
+
+
+def test_the_verdict_function_does_not_branch_on_a_store_at_all() -> None:
+    """Structural, because the behavioural version of this cannot be written yet.
+
+    "No verdict changes in this plan" is a claim about ABSENCE, and the honest
+    way to gate an absence is to read the source. `_verdict_from_html` must
+    mention the store exactly once — the single call that reads it — and must
+    never mention `store_id`. When 05-02 adds its guards this test goes red, and
+    that is the point: the change will be deliberate and visible in a diff.
+    """
+    import inspect
+
+    src = inspect.getsource(retailers._verdict_from_html)
+    body = "\n".join(
+        line for line in src.splitlines() if not line.lstrip().startswith("#")
+    )
+    body = body.split('"""', 2)[-1]
+
+    assert "store_id" not in body, (
+        "_verdict_from_html now reads the configured pin. That is 05-02's guard, "
+        "not this plan's recording."
+    )
+    assert body.count("parse.nextdata_store") == 1, (
+        "the store must be read exactly once, where the html is, and threaded "
+        "onto every return from there."
+    )

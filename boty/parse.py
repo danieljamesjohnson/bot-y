@@ -323,6 +323,74 @@ def nextdata_offers(html: str) -> list[Offer] | None:
     ]
 
 
+#: Which store answered, relative to the product node above.
+#:
+#: Addressed off `_WALMART_PRODUCT_PATH` rather than restated, so the store and
+#: the offer cannot drift onto different subtrees in a later edit — which is the
+#: entire point of this path and not a tidiness preference.
+#:
+#: THE OTHER CANDIDATE, AND WHY IT WAS NOT TAKEN. Both shipped fixtures also
+#: carry `props.pageProps.initialData.data.contentLayout.pageMetadata.location`
+#: with a `storeId` in it, and today the two agree. It was rejected because it
+#: lives in a PAGE-LAYOUT METADATA subtree: a fact about the chrome the page
+#: rendered, not about the offer. `product.location` sits under the very node
+#: `nextdata_offers` reads for availability, price and seller, so the store, the
+#: price and the availability cannot come from different places and disagree. If
+#: the two ever do disagree, taking the metadata one would attribute an offer to
+#: a store that did not produce it — and "this reading is about one store" is the
+#: only claim this field exists to support.
+_WALMART_STORE_PATH = (*_WALMART_PRODUCT_PATH, "location", "storeIds")
+
+
+def nextdata_store(html: str) -> str | None:
+    """Which store the page says answered (Walmart), or `None` if it did not say.
+
+    `None` means "the page did not tell us which store answered". It never means
+    "store 0" — `0` is this repo's own redaction placeholder, not a Walmart
+    value — and it is the correct, permanent answer for every other retailer
+    here, because none of them emits this hydration shape. That is measured
+    against the whole captured corpus in `tests/test_parse.py`, not assumed.
+
+    Called UNCONDITIONALLY by `retailers._verdict_from_html`, with no retailer
+    predicate. The path is Walmart's own, so a non-Walmart page returns `None`
+    by construction; a predicate would be the claim "only Walmart has stores",
+    maintained in a second place and stale the moment it is wrong. The browser
+    adapters (`check_amazon`, `check_target_browser`, `check_bestbuy_browser`)
+    inherit `Result.store`'s `None` default correctly for the same reason —
+    none of them reads a Walmart page — and that is a decision, not an oversight.
+
+    NO REGEX OVER RAW HTML, deliberately. `storeId` appears fifteen times in
+    `tests/fixtures/walmart/milk-control.html` across `storeName`, `storeIds`,
+    `storeFrontIds`, a null `storeId` and a `storeId=` query parameter inside
+    embedded ad hrefs. A substring grep hits the wrong one, and would do it
+    silently.
+
+    `storeIds` is a list, and it is accepted ONLY as a list of exactly one
+    `str`. Empty, multi-entry, or holding a non-string all return `None`:
+    picking `[0]` out of a two-entry list would be a guess about ordering that
+    nothing measured. Both shipped fixtures carry exactly one element
+    (measured 2026-08-10).
+    """
+    m = _NEXTDATA_RE.search(html)
+    if not m:
+        return None
+    try:
+        doc = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return None
+
+    stores = _dig(doc, _WALMART_STORE_PATH)
+    if not isinstance(stores, list) or len(stores) != 1:
+        return None
+    store = stores[0]
+    # Handed back exactly as the page wrote it. There is deliberately no
+    # special case for any particular value — see the module's Walmart fixture
+    # notes and `tests/test_parse.py`: the `0` in those captures is our own
+    # redaction, so a branch on it would be a claim about Walmart that nothing
+    # measured.
+    return store if isinstance(store, str) and store else None
+
+
 #: Button text that means "you can buy this right now".
 #:
 #: Lifted verbatim from Dan's original pre-bot-y script, which drove Selenium at

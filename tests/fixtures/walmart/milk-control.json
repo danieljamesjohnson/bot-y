@@ -5,5 +5,5 @@
   "captured_at": "2026-08-02T16:49:23Z",
   "status": 200,
   "bytes": 471690,
-  "note": "IN_STOCK control, first-party seller Walmart.com"
+  "note": "IN_STOCK control, first-party seller Walmart.com. REDACTION: the store this page was served by is scrubbed throughout — every storeId, storeIds entry and store query parameter reads the placeholder 0, which is NOT a Walmart value and must not be read as one. A store number resolves publicly to one street address, so it is redacted for the same reason the postal code and city on this page are. parse.nextdata_store therefore reads 0 off this fixture, and deliberately has no special case for it."
 }
