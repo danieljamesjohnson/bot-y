@@ -354,22 +354,41 @@ class Pacer:
         full disk is a worse monitor, not a dead one — and `watch_loop` calls
         this from a `finally` inside its own handler, so a raise here would be
         counted as a failed cycle and ten of them would exit the service.
+
+        `Exception`, NOT `OSError`, and that widening was bought by 05-REVIEW's
+        WR-05. Only the write raises `OSError`; `sorted(warned)` and
+        `json.dumps` are in here too, and neither does. `sorted` over a set with
+        mixed key types raises `TypeError` — reachable, before CR-01 coerced
+        `Watch.retailer`, because `Health.retailer` and therefore `warned` could
+        hold a non-`str`. So the handler was narrower than the promise in the
+        paragraph above it, and the gap was expensive rather than untidy: the
+        `finally` at the call site means anything escaping here also DISCARDS a
+        pending `return 1` on the give-up path, replacing a diagnosable exit
+        code with a traceback from a function whose only job is writing a
+        counter to disk — the exact outcome `cli._warn_monitor_is_stuck`'s
+        docstring says it exists to avoid.
+
+        A blanket `except` is normally the wrong instinct, and it is the right
+        one here for the reason `_warn_monitor_is_stuck` gives: this is a
+        best-effort side effect on the failure path, so ANY failure of it must
+        be reported and stepped over rather than promoted. `log.exception`
+        carries the type and the traceback, so nothing is swallowed silently.
         """
         if self.state_path is None:
             return
-        doc = {
-            "version": STATE_VERSION,
-            "retailers": {
-                name: {"refusals": st.refusals, "refused_at": st.refused_at}
-                for name, st in self._state.items()
-                if st.refusals
-            },
-            "warned": sorted(warned),
-        }
         try:
+            doc = {
+                "version": STATE_VERSION,
+                "retailers": {
+                    name: {"refusals": st.refusals, "refused_at": st.refused_at}
+                    for name, st in self._state.items()
+                    if st.refusals
+                },
+                "warned": sorted(warned),
+            }
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
             self.state_path.write_text(json.dumps(doc, indent=2, sort_keys=True))
-        except OSError:
+        except Exception:
             log.exception(
                 "could not write the pacer state to %s — the backoff still works "
                 "in memory, but it will not survive a restart",

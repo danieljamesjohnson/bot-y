@@ -678,6 +678,34 @@ def test_failing_to_persist_degrades_rather_than_raising(tmp_path: Path) -> None
 
     p.save({"amazon"})  # must not raise
 
+
+def test_a_serialisation_failure_degrades_the_same_way_a_disk_failure_does(
+    tmp_path: Path,
+) -> None:
+    """The handler was narrower than the promise one line above it.
+
+    `save` wrapped only `OSError`, but `json.dumps` and `sorted(warned)` are
+    inside the same `try` and neither raises that. `sorted` over a set with
+    mixed key types raises TypeError — reachable, before 05-REVIEW's CR-01,
+    because `Watch.retailer` was not coerced, so `Health.retailer` and therefore
+    `warned` could hold a non-`str`.
+
+    The docstring commits to "failing to persist a backoff must degrade to the
+    old in-memory behaviour, never take down a cycle". `OSError` alone does not
+    deliver that, and the call site makes the gap expensive rather than untidy:
+    `cli.watch_loop` calls this from a `finally`, so a raise there also DISCARDS
+    a pending `return 1` — see the give-up test in `test_cli_watch.py`.
+
+    A set of mixed types is used rather than a monkeypatched `json.dumps`
+    because it reaches the real failure through the real code path.
+    """
+    p = _pacer(tmp_path / "pacer-state.json")
+    p.record("amazon", refused=True, now=0.0)
+
+    p.save({"amazon", 1})  # type: ignore[arg-type]  # must not raise
+
+    assert p._for("amazon").refusals == 1, "the in-memory backoff must survive intact"
+
     assert p._for("amazon").refusals == 1, "the pacer kept working in memory"
     p.record("amazon", refused=True, now=0.0)
     assert p._for("amazon").refusals == 2

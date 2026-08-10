@@ -309,6 +309,38 @@ def test_a_failing_notifier_cannot_stop_the_loop_giving_up(
     assert rc == 1
 
 
+def test_a_failing_pacer_write_cannot_stop_the_loop_giving_up(
+    cfg: Config, monkeypatch: pytest.MonkeyPatch, sent: dict[str, list]
+) -> None:
+    """The `finally` is not allowed to eat the exit code, and it could.
+
+    `pacer.save` is called from a `finally` — deliberately, so a cycle that
+    raises after a refusal was recorded does not lose that refusal. The cost of
+    that placement is that ANY exception escaping `save` replaces the pending
+    `return 1` on the give-up path with a traceback from the wrong place, which
+    is precisely the outcome `_warn_monitor_is_stuck`'s docstring says it exists
+    to avoid: a diagnosable exit turned into a stack trace nobody can act on,
+    from a function whose only job is writing a counter to disk.
+
+    `save` wrapped only `OSError`, so `json.dumps` raising anything else walked
+    straight out. Driven here through `json.dumps` rather than by replacing
+    `save` itself, because replacing `save` would test the test.
+    """
+    import boty.pacing
+
+    def _unserialisable(*args: object, **kwargs: object) -> str:
+        raise TypeError("keys must be str, not tuple")
+
+    monkeypatch.setattr(boty.pacing.json, "dumps", _unserialisable)
+    state = State.load(cfg.state_path)
+
+    rc = cli.watch_loop(
+        cfg, _explodes(RuntimeError("boom")), state, cycles=50, sleep=lambda s: None
+    )
+
+    assert rc == 1, "the give-up exit code was replaced by a raise from the finally"
+
+
 # --------------------------------------------------------------------------
 # REQ-08: every pass says how long it took
 # --------------------------------------------------------------------------
