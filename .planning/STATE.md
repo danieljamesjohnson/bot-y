@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.2
-milestone_name: Say Only What You Measured
-status: Ready to plan
-stopped_at: "Milestone v0.2 scoped 2026-08-10. Phase 5 is next and needs planning."
-last_updated: "2026-08-10T00:00:00.000Z"
+milestone_name: — Say Only What You Measured
+status: Executing Phase 5
+stopped_at: Completed 05-01-PLAN.md — the store is a fact that exists and is published
+last_updated: "2026-08-10T15:44:52.787Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,13 +21,23 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Milestone **v0.2 — Say Only What You Measured**. Phase 5 next, unplanned.
+**Current focus:** Phase 5 — A Reading Means Something
 
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 5 of 6 — *A Reading Means Something* — NOT YET PLANNED
-**Next command:** `/gsd-plan-phase 5`
+**Phase:** 5 of 6 — *A Reading Means Something* — **EXECUTING**, 1 of 4 plans complete
+**Next command:** `/gsd-execute-phase 5` (05-02 next; 05-04 is `autonomous: false` and checkpoints for Dan)
+
+**05-01 is done and the phase is NOT.** `gsd-tools state advance-plan` wrote
+`status: Phase complete — ready for verification` after the first of four plans — it read the
+"Plan: 6 of 6 complete" line left behind by Phase 4 — and that was corrected by hand.
+Recorded because a milestone about not overclaiming should not have its own state file
+claiming a phase closed after a quarter of it.
+
+**REQ-14 is still Pending on purpose.** 05-01 shipped the *recording* half — the pin, the
+reading, and the publication. The *verdict* half (unpinned or mismatched ⇒ UNKNOWN plus a
+health message) is 05-02, which is what closes the requirement.
 
 **v1.0.0 is open, untagged, and stays that way.** Its definition of done includes *"Dan has
 successfully bought a Pokémon GO Plus +"* — a market condition, not a work item — and the
@@ -91,15 +101,15 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 04 of 5 (Open Source Ready) — **COMPLETE 2026-08-06**, closed on three of five criteria MET; 3 and 5 UNMET and deliberately not amended (Dan deferred publishing)
 **Plan:** 6 of 6 complete (04-01 … 04-06, all waves done)
-**Last session:** 2026-08-06T14:59:15.028Z
+**Last session:** 2026-08-10T15:43:29.502Z
 **Stopped At:** Completed 04-06-PLAN.md — Phase 4 closed
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
 
 2. **Pacing and backoff (2026-08-04), in response to a live alert.** Amazon and GameStop had been refusing us for a day. Not a detector bug: `interval_seconds` is per PASS, so load is `watches x 288/day` — Amazon 576, GameStop 1,440 — with no backoff at all. Worse, every failing control was reported as "the detector is probably broken", which is false for a refusal and sent 20 pages in 24 hours. Added `Result.refused` / `fetch.is_refusal`, split the health message, added `boty/pacing.py` (per-retailer cadence + exponential backoff, capped, reset on a good read), and stopped paging for refusals until they outlast the backoff. Verified live: 0 pages while both retailers refused, both published as `paced` rather than dropped.
 
-**Last Activity:** 2026-08-06
-**Last Activity Description:** Phase 04 closed — five verdicts recorded, REQ-11 still Pending (publish deferred)
+**Last Activity:** 2026-08-10
+**Last Activity Description:** Phase 5 execution started
 
 3. **Two live detector failures (2026-08-04 evening), both caught by control products within a cycle, neither a broken detector.** Best Buy began serving its JSON-LD **JavaScript-escaped** — `\'` inside strings, literal `\n` outside them — so `json.loads` refused all three blocks, `parse.py` skipped them silently, and the control read UNKNOWN with a detail naming the wrong cause. Proven against the shipped fixture, which parses 3/3 on the same SKU with no backslashes at all. `ldjson_read` now parses strictly first and only then offers an already-failed block to a string-state-aware repair; it reports `blocks`/`unparseable`/`repaired`, and a repaired read publishes as `ld+json (repaired)` so it cannot look ordinary. **Not claimed:** that the repair restored the live reading — Best Buy was serving valid markup again by 17:45 and the live read carried no `(repaired)` marker. The escaping is intermittent; a clean probe does not disprove it. Separately, **Target's UNKNOWN was our own render race**: ~35 KB of markup carrying the add-to-cart control arrives between 1s and 3s (measured: absent at `settle=1.0`, present at 3.0 and 6.0), and `fetch_rendered`'s default is exactly 3.0. `check_target_browser` now re-renders once at 10.0s before concluding — in the adapter, because it is a layout question and `boty/browser.py` is deliberately ignorant of layout. **M2's anchor was re-pointed** because this change moved the line it named, and the harness refused to run rather than quietly drop to seven mutations. Verified: mypy clean, 419 passed, 8/8 mutations, `VERIFY: PASS (OFFLINE)`, both new gates watched failing in both directions (removing the repair reddens 3 tests, making it over-reach reddens 22), **service restarted onto the fixed code** and publishing **6/6 retailers healthy**, 13 watches, 47.1s of REQ-08's 120s.
 
@@ -182,6 +192,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 04 P04 | 80m | 3 tasks | 4 files |
 | Phase 04 P05 | 22m | 3 tasks | 10 files |
 | Phase 04 P06 | 35 | 3 tasks | 4 files |
+| Phase 05 P01 | 25min | 4 tasks | 19 files |
 
 ## Decisions
 
@@ -264,6 +275,13 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 04]: 04-05: REQ-11 deliberately NOT marked complete — this plan bumped the version and proved a wheel locally; neither is a PyPI publish nor a pushed tag, and 04-06 closes REQ-11 by measuring what Dan actually publishes
 - [Phase 4]: Phase 4 closed 2026-08-06 on three of five criteria MET. Dan deferred publishing — verbatim: "i don't think we need to host it yet. it's probably not quite ready for that" — so criteria 3 (pip install from PyPI) and 5 (a tagged v1.0.0) stand UNMET and were NOT reworded, on Phase 3.1 criterion 1's precedent. REQ-11 stays Pending. 04-06-HANDOFF.md is on disk with all four publish steps and exact strings, so closing it later needs no replan.
 - [Phase 4]: The main branch WAS pushed (b0a272f..76d4156, upstream configured) but by the orchestrator agent, not by Dan. Steps 2-4 of the handoff card — trusted publisher, tag, publish — were not done. Nothing is on PyPI (HTTP 404) and zero tags exist locally or on origin.
+- [Phase ?]: 05-01: the real Walmart store number reaches the daemon as ${WALMART_STORE_ID} from the mode-600 EnvironmentFile, never as a literal in the tracked public config and never via a second overlay file — ${VAR} substitution already exists in config.py and already argues this exact case, and an unset variable degrades to unpinned, which is the behaviour REQ-14 asks for anyway
+- [Phase ?]: 05-01: parse.nextdata_store reads product.location.storeIds, NOT contentLayout.pageMetadata.location.storeId — the rejected path is page-layout metadata, a fact about the chrome the page rendered; the chosen one sits under the very node the offer comes from, so a price and a store cannot come from different subtrees and disagree
+- [Phase ?]: 05-01: NO 0 special case anywhere in the parser — 0 in both Walmart fixtures is this repo's own redaction placeholder from 8dec2e0, sitting in identity_check's allow-list beside 00000 and XX, not Walmart's no-store sentinel; 05-PATTERNS.md inferred otherwise and is wrong
+- [Phase ?]: 05-01: an absent store_id LOADS and is carried as data on the Watch while a bool REFUSES the file — _sub's idiom for the absence (crashing would take down five healthy retailers over one Walmart watch, and the health message needs a running daemon), _price's for the typo
+- [Phase ?]: 05-01: the identity guard was measurably blind to every YAML spelling of store_id and was widened and watched going red on all four spellings BEFORE the key was written into the tracked config; the new rule's character classes must not be simplified to a lowercase-only form, which does not catch storeId without re.I doing the work
+- [Phase ?]: 05-01: REQ-14 deliberately NOT marked complete — this plan shipped the recording half; the verdict half is 05-02, which the outline's own traceability table names as the closer. Same reasoning that left REQ-11 Pending after 04-05
+- [Phase ?]: 05-01: _identity_leaks exists TWICE (scripts/identity_check.py and tests/test_fetch.py) and the copies have drifted in two behavioural ways — ZZ in the allow-list, and _is_reserved_ip vs a bare 192.0.2. prefix. Only the shipped script was widened; reconciling would redden a grid cell and is a decision of its own, flagged for a later plan
 
 ### Blockers
 
