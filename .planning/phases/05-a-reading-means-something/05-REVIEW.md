@@ -24,6 +24,13 @@ findings:
   info: 4
   total: 15
 status: findings
+fixed_at: 2026-08-10
+fixed_by: gsd-code-fixer
+dispositions:
+  fixed: [CR-01, CR-02, CR-03, WR-01, WR-02, WR-03, WR-05]
+  deferred: [WR-04, WR-06, WR-07, WR-08, IN-01, IN-02, IN-03]
+  fixed_in_passing: [IN-04]
+gate_after_fixes: "make verify-offline exit 0 — 667 passed, 16/16 mutations, identity PASS (181 files)"
 ---
 
 # Phase 5: Code Review Report
@@ -32,6 +39,37 @@ status: findings
 **Depth:** deep (static review + offline suite; no live retailer reads)
 **Files Reviewed:** 14 source files (plus the phase's test files, read for coverage gaps only)
 **Status:** findings
+
+---
+
+## Dispositions, recorded 2026-08-10 after the fix pass
+
+Each finding below carries a **Disposition** line. Seven were fixed, each in its own
+commit, each watched going red first. Baseline before the pass: 642 passed, 14/14
+mutations. After: **667 passed, 16/16 mutations, `make verify-offline` exit 0.** No
+live retailer read was made.
+
+**Two things about this file itself, recorded rather than quietly repaired:**
+
+1. **A store number was redacted out of this document.** CR-03's own text below
+   identifies the value it quotes as "the operator's pinned store", and this file is
+   tracked and public — so the finding that a store number must not leave the box was
+   written up in a way that put one into the repository. Every occurrence, and the
+   octal value WR-03 derived from it, is now the `REDACTED` / `<octal>` placeholder.
+   The shape of every measurement is unchanged. It remains in this repo's git history,
+   in the review commit and in `3ddf504` (which copied it into a docstring in
+   `boty/notify.py` before the identity gate caught it) — history is not rewritten
+   here, because `QUESTIONS.md` § 0e already has that decision open with Dan.
+2. **`scripts/identity_check.py` has no rule for this carrier.** The config-key rule
+   catches `store_id: <n>`; it does not catch `store '<n>'` in prose, which is the
+   shape `_verdict_from_html` writes and the shape this document leaked in. Not fixed
+   here — a new rule needs a sweep of the whole tracked tree before it can be turned
+   on without reddening `make verify` — and recorded as the follow-up it is.
+
+**Not touched, deliberately:** no success criterion was amended, and the Phase 5
+closing outcome table in `.planning/ROADMAP.md` was left exactly as it stood. Two
+findings do bear on recorded verdicts and are flagged for the orchestrator rather
+than absorbed — see CR-02 (criterion 4) and WR-01 (criteria 5 and 6).
 
 ## Summary
 
@@ -84,7 +122,7 @@ Reproduced against `tests/fixtures/walmart/milk-control.html`:
 
 ```
 walmart  -> unknown       price=None store='0' health_ok=False
-           detail: the page named store '0'; this watch pins store '4521' — ...
+           detail: the page named store '0'; this watch pins store 'REDACTED' — ...
 Walmart  -> in_stock      price=2.42 store='0' health_ok=True
            detail: __NEXT_DATA__: IN_STOCK from Walmart.com
 ```
@@ -118,6 +156,52 @@ an unknown retailer is not a legitimate state (unlike an absent pin), and the
 alternative is a verdict about the wrong store. Add a test that a store-scoped retailer
 spelled with any casing still reaches the guard.
 
+**Disposition: FIXED, with the suggested fix corrected in two places** — `337d743`.
+
+`models.KNOWN_RETAILERS` (beside `STORE_SCOPED`, on that constant's own
+one-definition argument) plus `config._retailer`. A name differing from a known
+retailer only by case or whitespace is REFUSED, naming the spelling to write; a name
+that is no known retailer at all is logged at ERROR and loaded.
+
+*Correction 1 — the suggested set would have refused the shipped config.*
+`KNOWN_RETAILERS = {"walmart", "gamestop", "bestbuy", "amazon", "target"}` omits
+`nintendo`, which `config/products.yaml` names on two watches. Taken verbatim,
+`boty watch` would not have started. The set is now bound to `retailers.FIRST_PARTY`'s
+keys by a test rather than by anybody's reading.
+
+*Correction 2 — the reproduction understates its precondition.* The transcript's
+`Walmart -> in_stock $2.42` needs `first_party_only: false`; the shipped config sets it
+true. Re-measured against the same fixture:
+
+```
+first_party_only=True   walmart  -> unknown    price=None
+first_party_only=True   Walmart  -> unknown    price=None
+first_party_only=True   walmrt   -> unknown    price=None
+first_party_only=False  walmart  -> unknown    price=None
+first_party_only=False  Walmart  -> in_stock   price=2.42
+first_party_only=False  walmrt   -> in_stock   price=2.42
+```
+
+The finding stands — under `first_party_only: true` the typo reads UNKNOWN only
+because `Walmart` is also missing from `FIRST_PARTY`, which is luck, not a guard, and
+the message it produces sends the reader to debug a seller list.
+
+*Why unknown names are logged rather than refused, which is a departure from the
+suggested fix.* Row 6 shows `walmrt` is dangerous in the same way, so refusing every
+unknown name is the complete fix — and it makes two other gates unrepresentable.
+`scripts/evidence_check.py` rule 1's test case is a **config-only `microcenter` watch
+with no adapter at all**, and rule 5's is a **`pokemoncenter` watch shipped ahead of
+its evidence**, whose own docstring says a blanket ban would make "the outcome this
+whole phase is walking towards — a refused retailer re-probed, reached, and shipped —
+unrepresentable". Refusing would kill rule 1 outright (`KNOWN_RETAILERS` is a subset of
+`ROADMAP_RETAILERS`, so its condition could never fire again) and force 7 tests in
+another phase's gate to be rewritten or deleted. **That is the orchestrator's call, not
+the fixer's.** The residual is written down beside `KNOWN_RETAILERS`, tested, and
+carries the two options for closing it.
+
+Watched going red: with the loader hook removed, all 8 new assertions fail; the
+shipped-config positive control passes on both sides.
+
 ### CR-02: A plain fetch failure on a pinned Walmart control is reported as a store-pin config gap
 
 **File:** `boty/monitor.py:88-107` (`_is_store_gap`), `boty/monitor.py:174-197` (the arm)
@@ -131,7 +215,7 @@ which satisfies `c.store != c.watch.store_id`.
 Reproduced:
 
 ```
->>> r = Result(walmart_control_pinned_4521, Availability.UNKNOWN,
+>>> r = Result(walmart_control_pinned_REDACTED, Availability.UNKNOWN,
 ...            detail='fetch failed: connection timed out', refused=False, store=None)
 >>> assess_health([r])[0].reason
 'a control reading cannot be shown to come from the store this watch is about —
@@ -173,6 +257,24 @@ Everything else falls to the breakage arm, which carries `CAUSE_UNKNOWN` and is 
 reading that claims least. Add the missing test: a pinned store-scoped control with
 `refused=False, store=None` must **not** produce a reason containing `store_id`.
 
+**Disposition: FIXED as suggested** — `32a0279`. `_is_store_gap` now requires a
+positive store fact, and no new cause was invented for the gap it leaves: the reading
+falls to the breakage arm, which carries `CAUSE_UNKNOWN`.
+
+Two negative tests (the timeout path and the reshaped-payload path, which arrive
+through different code) plus two positive ones, so the narrowing cannot have been met
+by disabling the arm. Both negatives were watched failing against the unfixed tree;
+both positives passed on either side. **M15** pins it — a mutation that restores the
+exact clause and moves no availability, no price and no `ok` flag, only which sentence
+a person reads, so a verdict-only suite would pass it straight through. This also
+closes IN-04(a).
+
+**Bears on a recorded verdict, flagged not absorbed.** The ROADMAP's criterion-4 row
+records the `ast` alert-text gate as MET in the tree. That gate checks which arms carry
+`CAUSE_UNKNOWN`; it cannot see which arm a given *reading* lands on, which is what was
+wrong here. Criterion 4 was therefore MET by a gate that could not have caught this.
+Whether the row needs a note is the orchestrator's call — the table is untouched.
+
 ### CR-03: The operator's store number is sent verbatim in the push-notification body
 
 **File:** `boty/retailers.py:288-302` → `boty/monitor.py:221` → `boty/notify.py:84-94`
@@ -189,11 +291,11 @@ body:
 
 ```
 [walmart] a control reading cannot be shown to come from the store this watch is about — ...
-  * CONTROL milk: unknown (the page named store '0'; this watch pins store '4521' —
+  * CONTROL milk: unknown (the page named store '0'; this watch pins store 'REDACTED' —
     a reading that cannot be shown to come from the pinned store is not a verdict about it)
 ```
 
-`'4521'` there is the operator's pinned store — the value `config/products.yaml`
+`'REDACTED'` there is the operator's pinned store — the value `config/products.yaml`
 refuses to hold even as a commented example, that `_store_id`'s docstring calls "a
 geolocator — it resolves publicly to one street address", and that `3bd1663` rewrote 170
 commits to remove. It now leaves the machine on every store-mismatch page, over a
@@ -227,6 +329,25 @@ The alert still says *that* the store disagreed, which is the actionable fact; t
 operator reads *which* off their own dashboard. Add a test asserting the pinned
 `store_id` string never appears in the composed body.
 
+**Disposition: FIXED as suggested, and fixed first** — `3ddf504`.
+`notify._redact_store_numbers`, applied to both joins. The regex matches either quote
+delimiter, because `repr` switches when the value contains one; it stays keyed on the
+carrier rather than on any run of digits, since the same body carries the SKUs, HTTP
+statuses and prices somebody is being paged to read.
+
+Prioritised above CR-01 and CR-02 because it is armed to fire on the very next action
+the phase recommends: the number reaches a push body only when a pin is *set*, and
+setting the pin is what the closing checkpoint asks Dan to do.
+
+The test composes the detail through the real guard rather than typing it out, so it
+cannot pass by agreeing with a string nobody produces. Watched going red: the body read
+`this watch pins store '<the pin>'`. Both joins are asserted separately, because a fix
+applied to one looks exactly like a fix applied to both.
+
+**One thing this fix does not cover, and it is the same class:** `_redact_host_paths`
+and this function are both prose filters. WR-07 records the other surfaces the number
+still reaches (`status.json`, journald at INFO); those are deferred below.
+
 ## Warnings
 
 ### WR-01: The persisted paging memory never ages out and never self-cleans
@@ -253,6 +374,36 @@ identical `0.0 <= now - stamp <= STATE_MAX_AGE_SECONDS` window in `load`. Add th
 mutation-check counterpart to M12 for the `warned` half, and a test that a `warned`
 entry older than the cap is discarded.
 
+**Disposition: FIXED as suggested** — `47c2afe`. Exactly the shape proposed,
+`STATE_VERSION` 1 → 2, plus one thing the suggestion did not name and that the fix
+turns on: **the stamp has to be the FIRST time, not the last.** `save` runs every
+cycle, so stamping at write time would refresh the record forever — a bound that cannot
+bind, which is worse than no bound because the file then reads as though it were dated.
+`Pacer._warned_since` carries the episode's original start across writes, and a test
+asserts the stamp survives two saves unchanged.
+
+Reproduced first, against a 90-day-old document:
+
+```
+restored refusals: 0            <- correctly aged out
+restored warned  : {'walmart'}  <- not aged out
+```
+
+**M16** is the M12 counterpart asked for; it gets its own mutation on M7's reason,
+because a tree that ages one half of the document and not the other passes M12 and M13
+together while silencing a broken detector forever. **M13 was re-anchored** — the
+statement doing the work moved from a set comprehension to the return of an accumulated
+set. This also closes IN-04(b).
+
+**Bears on recorded verdicts, flagged not absorbed.** Criterion 5 ("pushed once") and
+criterion 6 ("survives a restart") are both recorded MET. They still are — but the
+persistence they were verified against silenced the retailer permanently once a stale
+file existed, which is the opposite of what criterion 5 is for. Neither row is edited.
+
+**Residual, stated because the fix is load-only:** within one long-running process the
+memory still never ages, because the window is applied at `load`. That is WR-06's
+territory (the episode is keyed by retailer, not by cause) and is deferred below.
+
 ### WR-02: The new identity-gate rule misses the single-quoted YAML spelling it claims to cover
 
 **File:** `scripts/identity_check.py:269-270`
@@ -260,12 +411,12 @@ entry older than the cap is discarded.
 only. Measured against the shipped rule:
 
 ```
-'store_id: 4521'                  -> ['store number in a config key 4521']
-'store_id: "4521"'                -> ['store number in a config key 4521']
-'storeId: 4521'                   -> ['store number in a config key 4521']
-"store_id: '4521'"                -> []        <-- walks through
-'  - {name: x, store_id: 4521}'   -> []        <-- walks through
-'store_id: !!str 4521'            -> []        <-- walks through
+'store_id: REDACTED'                  -> ['store number in a config key REDACTED']
+'store_id: "REDACTED"'                -> ['store number in a config key REDACTED']
+'storeId: REDACTED'                   -> ['store number in a config key REDACTED']
+"store_id: 'REDACTED'"                -> []        <-- walks through
+'  - {name: x, store_id: REDACTED}'   -> []        <-- walks through
+'store_id: !!str REDACTED'            -> []        <-- walks through
 ```
 
 Single-quoted scalars are an ordinary YAML spelling, and the natural one for a value the
@@ -289,7 +440,27 @@ allowing a preceding `{` / `,`). Extend the probe table in `tests/test_fetch.py`
 `store_id: '12345'` and `{store_id: 12345}` and update the residuals paragraph to
 whatever is genuinely left uncovered.
 
-### WR-03: `store_id: 04521` is silently reinterpreted as octal 2385
+**Disposition: FIXED, going further than suggested** — `d35e4e5`. Reproduced exactly
+as measured. The rule is now
+`(?:^|[{,])\s*…\s*:\s*(?:!!\S+\s+)?["\']?(\d+)` — either quote, the `!!str` tag form
+(which the finding listed but the suggested pattern did not cover), and the
+flow-mapping position via the `[{,]` alternative rather than a second rule.
+
+The residuals paragraph went from two entries to three, and residual 1 was **narrowed
+rather than restated**: a commented *flow mapping* is now scanned, because `[{,]` does
+not have to reach back past the `#`. More coverage, so the no-digits rule for the
+`products.yaml` comment paragraph stands unchanged. Residual 3 is the prose over-catch
+the alternative buys, accepted on residual 2's stated fail-closed trade.
+
+Watched going red: the three new probes failed against the shipped rule. Then the
+widened rule reddened `identity_check.py` **itself**, twice, while its own comment was
+being written — once on a literal flow-mapping example, once on the sentence describing
+residual 3. That is a better demonstration than the probe table, and both are now
+described rather than quoted; the executable table lives in the one file `_PROBE_FILES`
+exempts. The same run is what caught a store number in `boty/notify.py` — see the
+dispositions header.
+
+### WR-03: `store_id: 0<n>` is silently reinterpreted as octal
 
 **File:** `boty/config.py:82-141`
 **Issue:** `_store_id` correctly guards the `bool` typo and correctly `str()`-coerces the
@@ -297,14 +468,14 @@ int YAML hands it — but PyYAML resolves a leading-zero all-digits scalar as **
 before `_store_id` ever sees it:
 
 ```
-store_id: 04521  ->  2385  ->  '2385'
+store_id: 0REDACTED  ->  <octal>  ->  '<octal>'
 store_id: 1_234  ->  1234  ->  '1234'
 store_id: 12:30  ->   750  ->   '750'
 ```
 
 The failure is in the safe direction (the pin never matches, so the reading is UNKNOWN)
 but it is silent and the diagnosis is actively misleading: the alert says "this watch
-pins store '2385'" for a file that says `04521`, and the operator has no way to see the
+pins store '<octal>'" for a file that says `0REDACTED`, and the operator has no way to see the
 transformation. The function's own docstring makes exactly this argument for the `str()`
 coercion ("an `int` compared against the string Walmart puts in its own JSON is a silent
 never-match") and then stops one step short of the value YAML mangled on the way in.
@@ -324,6 +495,23 @@ if not isinstance(value, str):
 `${WALMART_STORE_ID}` substitution already produces a `str`, so the shipped config is
 unaffected. Alternatively keep the coercion and warn loudly when
 `str(value) != str(raw_scalar)`.
+
+**Disposition: FIXED, taking the first option** — `5f8188d`. The alternative is not
+available: `yaml.safe_load` has already discarded the raw scalar by the time
+`_store_id` is called, so there is nothing to compare against without parsing the
+document twice.
+
+This **reverses `test_a_yaml_integer_store_id_is_coerced_to_a_string`**, which asserted
+the opposite and had a good argument for it (an `int` against the `str` in Walmart's
+own JSON is a silent never-match). That argument is kept and its method replaced —
+refusing forces the quoted form, which cannot be outrun by the parser the way `str()`
+was. The reversal is argued in place in both the test and the docstring, on this repo's
+house style. A positive test pins both documented forms so the check cannot be met by
+refusing everything.
+
+Watched going red, then the identity gate reddened on the illustrative table in the
+docstring and in the test — its own config-key rule catching its own examples — so both
+are described rather than quoted, the same move WR-02 made.
 
 ### WR-04: `Pacer.record` does not clamp `refusals`, so the overflow `MAX_PERSISTED_REFUSALS` exists to prevent is still reachable
 
@@ -348,6 +536,15 @@ The constant is already documented as "far below the crash point and far above w
 cap binds", so this costs nothing operationally and makes the load-path `min()`
 redundant-by-agreement rather than the only defence.
 
+**Disposition: DEFERRED — real, and not fixed here.** The reasoning is sound and the
+fix is one line. It was left out because it is the only warning in this pass with no
+route to a fail-safe violation: the finding's own arithmetic puts the crash at roughly
+256 days of continuous refusal at the 6-hour cap, and `MAX_PERSISTED_REFUSALS` already
+bounds every value that crosses a restart. Adding a one-line change with no test that
+can be watched going red inside the cap's lifetime is worth less than saying plainly
+that it was not done. Recommended as a follow-up, with the clamp and an
+`OverflowError`-shaped test together.
+
 ### WR-05: `pacer.save()` in a `finally` can raise a type it does not catch, replacing the give-up exit
 
 **File:** `boty/cli.py:411-429`, `boty/pacing.py:369-377`
@@ -364,6 +561,23 @@ handler is narrower than that promise.
 **Fix:** widen the handler to `except Exception:` with the same `log.exception` message,
 or (better, and complementary) fix the root cause in CR-01 and keep `OSError` for the
 I/O half while adding `except (TypeError, ValueError)` around the serialisation.
+
+**Disposition: FIXED, taking the first option** — `1328c0e`. `except Exception`, with
+the document construction moved inside the `try` so `sorted(warned)` is actually
+covered. The narrower option was rejected: this is a best-effort side effect called
+from a `finally` on the failure path, so the class of exception is not the interesting
+question — `_warn_monitor_is_stuck` makes exactly this argument one module over, and it
+is the function whose docstring names the outcome being prevented. `log.exception`
+keeps the type and traceback, so nothing is swallowed.
+
+CR-01's coercion did close the specific `TypeError` route, as the finding predicted.
+The handler is widened anyway, because the promise in `save`'s own docstring is about
+persistence failing, not about one exception type.
+
+Watched going red, both halves: `save({"amazon", 1})` raised straight out, and
+`watch_loop`'s give-up path returned a `TypeError` instead of `1`. The second test
+drives `json.dumps` rather than replacing `save`, because replacing `save` would test
+the test.
 
 ### WR-06: `warned` is keyed only by retailer, so a failure that changes cause is never re-paged
 
@@ -389,6 +603,18 @@ def _episode(h: Health) -> str:
 and carry `set[str]` of episode keys through `warned` / `Pacer.load` / `Pacer.save`
 (bump `STATE_VERSION`). `checked` then compares on the retailer prefix.
 
+**Disposition: DEFERRED — agreed, and it is a behaviour change, not a repair.** Changing
+what an episode *is* changes when a person's phone rings, which is REQ-16's subject
+matter rather than a defect in its implementation. WR-01 was fixed because a stale file
+silencing a detector forever is unambiguously wrong; this one has a real trade on the
+other side (a retailer whose failure oscillates between two causes would page on every
+flip), and picking a side of it is a decision, not a fix.
+
+WR-01 has already bumped `STATE_VERSION` to 2, so whoever takes this gets the version
+bump for free and should fold the episode key into the same `warned` mapping the
+timestamps now live in. Note also that WR-01's fix is load-only, so **this finding is
+what still bounds the memory inside one long-running process.**
+
 ### WR-07: `status.json` publishes the operator's pinned store to everything that can reach the dashboard
 
 **File:** `boty/status.py:142-143`, `boty/monitor.py:260-267`
@@ -410,6 +636,20 @@ serving the *derived* tag state (`match` / `mismatch` / `unpinned` / `not-stated
 only the answering store, keeping the pinned value out of the file entirely — the
 dashboard's four render branches need nothing more than that.
 
+**Disposition: DEFERRED — and it is the one deferral worth looking at next.** CR-03 cut
+the third-party transport, which is the surface that leaves the tailnet. This one is
+about `served/boty/status.json` and about `run_once`'s INFO line, which puts both store
+numbers into journald. Both are ours, which is why it is a warning and not a critical —
+but "ours" is doing real work in that sentence and it is not argued anywhere in
+`status.py`.
+
+Not fixed here because the good version (serve the derived tag state and drop
+`store_pinned` entirely) touches `status.write`, `boty/cli.py`'s renderer,
+`served/boty/index.html` and their tests together — four surfaces and a schema change,
+which is a plan item rather than a review fix. The comment-only half was left out too:
+a comment recording a decision nobody has actually taken would be worse than the
+silence.
+
 ### WR-08: `check_bestbuy_api` bypasses `_verdict_from_html`, so `STORE_SCOPED` is unenforced on that path
 
 **File:** `boty/retailers.py:725-813`, `boty/models.py:134-137`
@@ -430,6 +670,20 @@ watch.store_id != <nothing measurable>` is awkward, so the honest version is to 
 UNKNOWN for any store-scoped retailer reached over a transport that cannot report a
 store.
 
+**Disposition: DEFERRED — latent, and confirmed latent.** `STORE_SCOPED` is
+`{"walmart"}` and `check_bestbuy_api` is reachable only for `bestbuy`, so no watch can
+take the unguarded path today. The drift is real and the finding is right about it.
+
+Not fixed here for a specific reason: the finding's own preferred fix — return UNKNOWN
+for any store-scoped retailer on a transport that cannot report a store — is
+unreachable dead code until somebody adds a retailer to the set, which means it cannot
+be watched going red against anything. A guard nobody can see fail is precisely what
+this project's standing rule refuses to trust. The cheap half (state in `STORE_SCOPED`'s
+comment that the API path is unguarded and must be wired first) is also not done,
+because that comment already says adding a retailer "is a decision with a commit message
+behind it" and the honest place for this constraint is that commit, beside the change
+that makes it live.
+
 ## Info
 
 ### IN-01: `_refusal_is_entrenched` reaches into `Pacer._for` and mutates as a side effect of a query
@@ -442,6 +696,12 @@ comprehension filters it out). Works, but couples `cli` to `pacing`'s internals 
 a read-shaped call a write.
 **Fix:** add `Pacer.refusals(retailer) -> int` as a non-mutating public query
 (`self._state.get(retailer)` with a `0` default) and call that.
+
+**Disposition: DEFERRED — correct, and it is a refactor.** The side effect is real and
+harmless exactly as the finding says (`refusals` is 0, so `save`'s comprehension filters
+it out), and WR-01's rewrite of `save` did not change that. Left alone because every
+change in this pass was one somebody could be shown going red, and a non-mutating query
+that behaves identically cannot be. Good first item for whoever touches `cli.py` next.
 
 ### IN-02: The two store-tag renderers do not consult `STORE_SCOPED`
 
@@ -456,6 +716,12 @@ definition is not consulted.
 **Fix:** publish a `store_scoped` boolean alongside `store` / `store_pinned` in
 `status.write` and gate the `unpinned` branch on it in both renderers.
 
+**Disposition: DEFERRED — and it should be folded into WR-07, not done on its own.**
+Both findings add or remove a field in `status.json` and then change two renderers to
+match; doing them separately means touching the same four surfaces twice and writing the
+schema test twice. The finding is right that this is the one place the phase's single
+definition is not consulted, and right that no verdict is affected.
+
 ### IN-03: `__NEXT_DATA__` is extracted and JSON-parsed twice per Walmart page
 
 **File:** `boty/parse.py:326-390`, `boty/retailers.py:200-201`
@@ -465,6 +731,13 @@ duplication buys real independence between the two readers, but a shared
 `_nextdata_doc(html)` helper would give both the same parsed document — which is also the
 stronger guarantee, since it makes "the store and the offer came from the same parse"
 true by construction rather than by both re-reading the same bytes.
+
+**Disposition: DEFERRED — and the finding argues its own other side.** A shared
+`_nextdata_doc` would make "the store and the offer came from the same parse" true by
+construction, which is stronger; the duplication buys real independence between the two
+readers, which is what caught nothing yet but is why it was written that way. Neither is
+wrong, so it is a design choice rather than a defect, and it belongs with somebody
+holding a profile of a real ~470KB page rather than with a review fixer.
 
 ### IN-04: Two behaviours added by this phase have no test
 
@@ -477,6 +750,17 @@ no such behaviour (WR-01). Both gaps are why a green 642-test run does not contr
 findings above.
 **Fix:** add both cases when fixing CR-02 and WR-01; the second belongs beside
 `test_state_older_than_the_backoff_cap_is_discarded`.
+
+**Disposition: FIXED, both halves, exactly where the finding said to put them.**
+(a) closed by `32a0279` — `test_a_page_that_never_arrived_is_not_reported_as_a_store_pin_gap`,
+plus a second case for the reshaped-payload route, plus M15.
+(b) closed by `47c2afe` —
+`test_a_paging_memory_older_than_the_backoff_cap_is_discarded`, written as the sibling of
+`test_state_older_than_the_backoff_cap_is_discarded`, plus its younger-than-cap and
+future-stamp counterparts, plus M16.
+
+The finding's closing observation held up under the pass: the 642-test run was green
+because these two behaviours did not exist to be tested, not because they worked.
 
 ## Verified Clean
 
