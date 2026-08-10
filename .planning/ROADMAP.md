@@ -470,6 +470,19 @@ is now closed (registration rejected, 2026-08-10). The finding outlived the reta
 Walmart carries marketplace sellers, so a $54.99 listing with $45 shipping defeats one of
 only two reseller defences **today**.
 
+**Progress: 1 of 6 plans complete (06-01, 2026-08-10).** Criterion 1 is **built and gated in
+the tree** — the ceiling measures `price + shipping` and refuses an alert where that total
+cannot be established; `make verify-offline` exits 0 at **688 passed** and **18/18** mutations,
+up from 667 and 16/16, with M4 re-anchored and M17/M18 added. It is **NOT marked met and
+REQ-17 is left Pending**: 06-06 closes it by measuring what landed, and criterion 1 carries a
+user-visible cost that has not been put to a person yet. Measured against the built tree, of
+the four watches carrying a `max_price`: GameStop still alerts ($54.99 + $6.99 = $61.98, under
+80); **Nintendo and Amazon stop being able to page** — one publishes shipping as prose, the
+other's reader is a button; and **Walmart is "not demonstrated"**, correcting 06-01's own plan,
+because the only first-party Walmart capture in this repo resolves no shipping at all. No
+ceiling was raised and no watch edited to absorb any of it. The table goes to Dan at 06-06's
+blocking checkpoint; full working in `.planning/phases/06-claims-with-gates-under-them/06-01-SUMMARY.md`.
+
 ## Open Questions
 
 - **Amazon** may be unreachable without a browser or paid proxies. Phase 2 should establish that early and cheaply rather than sinking a plan into it. If it's out, say so in the support matrix with evidence.

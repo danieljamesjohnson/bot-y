@@ -2,18 +2,21 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-status: Phase 5 complete — six criteria met against the tree, none deployed
-stopped_at: Completed 05-04-PLAN.md — Phase 5 closed
-last_updated: "2026-08-10T17:20:00.000Z"
+status: Executing Phase 6 — 1 of 6 plans complete
+stopped_at: Completed 06-01-PLAN.md — criterion 1 of five built and gated
+last_updated: "2026-08-10T20:58:03.019Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  # percent is PHASE-based (1 of 2), not plan-based. Phase 6 is unplanned, so its
-  # plan count is unknown and a plan-based figure would read 100% on a half-done
-  # milestone — the exact overclaim this milestone exists to close.
+  total_plans: 10
+  completed_plans: 5
+  # percent is PHASE-based (1 of 2 complete), not plan-based, for the reason
+  # this milestone exists: Phase 6 is one plan into six, and a plan-based
+  # figure would move on every commit while the phase criterion it serves is
+  # still unmet. The two happen to coincide at 50 today (5 of 10 plans, 1 of 2
+  # phases) — that is a coincidence, not agreement, and the basis is stated so
+  # the next reader does not adopt the wrong one when they diverge.
   percent: 50
 ---
 
@@ -24,15 +27,26 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 6 — Claims With Gates Under Them (Phase 5 closed 2026-08-10; its one outstanding action is a service restart, not more work)
+**Current focus:** Phase 6 — Claims With Gates Under Them
 
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 5 of 6 — *A Reading Means Something* — **COMPLETE 2026-08-10**, 4 of 4 plans, closed on
-six of six criteria MET **against the tree** and **not one of them confirmed on the deployed
-daemon**
-**Next command:** `/gsd-plan-phase 6`
+**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 1 of 6 plans complete
+(06-01, 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six of six criteria MET
+**against the tree**, with **not one of them confirmed on the deployed daemon**
+**Next command:** `/gsd-execute-phase 6` (next plan: 06-02)
+
+**06-01 landed criterion 1, and it landed a bill with it.** The `max_price` ceiling now measures
+the delivered total — item price plus shipping — and refuses to authorise an alert where that
+total cannot be established. Measured against the built tree: **Nintendo and Amazon stop being
+able to page**, because one publishes its shipping cost as an English sentence and the other's
+reader is a button. **Walmart is "not demonstrated"** — the plan predicted it keeps its
+alertability, and the measurement corrected that: the only first-party Walmart capture in this
+repo resolves no shipping at all. GameStop is unaffected ($54.99 + $6.99 = $61.98, under 80).
+No ceiling was raised and no watch edited to hide any of it; the four-watch table in
+`06-01-SUMMARY.md` is **06-06's blocking-checkpoint material**, and REQ-17 is deliberately left
+Pending for 06-06 to close by measuring what landed.
 
 **The most useful thing anyone can do to this project right now is restart `boty.service`.**
 Everything Phase 5 built is in the tree, gated and green offline; **none of it is running.**
@@ -57,6 +71,18 @@ misfires observed the same run and worth recording with it: `state update-progre
 `state record-metric` rejected the documented positional form with `phase, plan, and duration
 required`, so the Phase 05 P04 row below was written by hand. Recorded because a milestone about
 not overclaiming should not have its own state file claiming a phase closed at the halfway mark.
+
+**A FIFTH misfire, at 06-01, identical in all three parts.** `advance-plan` returned the same
+`{"reason": "last_plan", "current_plan": 6, "total_plans": 6, "status":
+"ready_for_verification"}` — after the FIRST plan of a six-plan phase — and again wrote
+`status: Phase complete — ready for verification` and again overwrote `stopped_at` with Phase
+4's stale value. `record-metric` again rejected the documented positional form. `update-progress`
+did write frontmatter this time (`percent: 50`) but on a plan basis, silently replacing the
+comment recording that this figure is phase-based; the comment is restored above. All corrected
+by hand, for the fifth time. The pattern is now stable enough to state plainly: **`gsd-tools`
+reads `Plan: 6 of 6 complete` out of the archived v1.0.0 block at the bottom of this file**, that
+block is kept verbatim and cannot be edited to fix the tool, so every plan in this phase should
+expect to correct these three fields by hand and should not trust the tool's own summary line.
 
 **REQ-14 and REQ-15 are CLOSED by 05-02.** 05-01 shipped REQ-14's *recording* half — the pin,
 the reading, the publication. 05-02 shipped the *verdict* half (unpinned or mismatched ⇒
@@ -167,7 +193,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 2. **Pacing and backoff (2026-08-04), in response to a live alert.** Amazon and GameStop had been refusing us for a day. Not a detector bug: `interval_seconds` is per PASS, so load is `watches x 288/day` — Amazon 576, GameStop 1,440 — with no backoff at all. Worse, every failing control was reported as "the detector is probably broken", which is false for a refusal and sent 20 pages in 24 hours. Added `Result.refused` / `fetch.is_refusal`, split the health message, added `boty/pacing.py` (per-retailer cadence + exponential backoff, capped, reset on a good read), and stopped paging for refusals until they outlast the backoff. Verified live: 0 pages while both retailers refused, both published as `paced` rather than dropped.
 
 **Last Activity:** 2026-08-10
-**Last Activity Description:** Phase 5 execution started
+**Last Activity Description:** Phase 6 execution started
 
 3. **Two live detector failures (2026-08-04 evening), both caught by control products within a cycle, neither a broken detector.** Best Buy began serving its JSON-LD **JavaScript-escaped** — `\'` inside strings, literal `\n` outside them — so `json.loads` refused all three blocks, `parse.py` skipped them silently, and the control read UNKNOWN with a detail naming the wrong cause. Proven against the shipped fixture, which parses 3/3 on the same SKU with no backslashes at all. `ldjson_read` now parses strictly first and only then offers an already-failed block to a string-state-aware repair; it reports `blocks`/`unparseable`/`repaired`, and a repaired read publishes as `ld+json (repaired)` so it cannot look ordinary. **Not claimed:** that the repair restored the live reading — Best Buy was serving valid markup again by 17:45 and the live read carried no `(repaired)` marker. The escaping is intermittent; a clean probe does not disprove it. Separately, **Target's UNKNOWN was our own render race**: ~35 KB of markup carrying the add-to-cart control arrives between 1s and 3s (measured: absent at `settle=1.0`, present at 3.0 and 6.0), and `fetch_rendered`'s default is exactly 3.0. `check_target_browser` now re-renders once at 10.0s before concluding — in the adapter, because it is a layout question and `boty/browser.py` is deliberately ignorant of layout. **M2's anchor was re-pointed** because this change moved the line it named, and the harness refused to run rather than quietly drop to seven mutations. Verified: mypy clean, 419 passed, 8/8 mutations, `VERIFY: PASS (OFFLINE)`, both new gates watched failing in both directions (removing the repair reddens 3 tests, making it over-reach reddens 22), **service restarted onto the fixed code** and publishing **6/6 retailers healthy**, 13 watches, 47.1s of REQ-08's 120s.
 
@@ -254,6 +280,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 05 P02 | 20min | 3 tasks | 10 files |
 | Phase 05 P03 | 27min | 3 tasks | 9 files |
 | Phase 05 P04 | 20min | 3 tasks (1 checkpoint answered `defer`, 1 not entered) | 5 files |
+| Phase 06 P01 | 44min | 3 tasks (2 TDD, so 5 code commits) | 11 files |
 
 ## Decisions
 
@@ -355,6 +382,13 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 05]: 05-04: no code was written in the closing plan, deliberately — a criterion unmet at close is RECORDED unmet, because a closing plan that implemented its way to a green table would be a phase measuring work it did in the act of measuring
 - [Phase 05]: 05-04: `deploy/boty-secret` has no store subcommand (only telegram and bestbuy) although the store number needs the same three protections its docstring names — shell history, scrollback, chat transcript — for an identity reason rather than a credential one. Flagged for a later plan, NOT grown here: a closing plan adding a shell subcommand would ship code with nothing gating it
 - [Phase 05]: 05-04: the real store number was never obtained and commit 95f84a6 was explicitly not read — the pre-redaction Walmart capture in public history does carry a real store number, and reading it out would have been the exact leak QUESTIONS.md § 0e exists to close. bot-y never guesses where the user lives, and neither does the agent closing its phases
+- [Phase 06]: 06-01: the price ceiling measures the DELIVERED TOTAL (item price + shipping), and where that total cannot be established it refuses to authorise an alert rather than guessing — the lenient fallback to the item price was rejected because "publishes nothing" and "publishes something we did not read" are indistinguishable on the retailer the defence exists for
+- [Phase 06]: 06-01: the REQ-17 refusal lands on `alertable`, never on `Availability` — a pricing question must not erase a page's own stock statement, and it would strand Nintendo and Amazon at a permanent UNKNOWN with no path back. `alertable is False` resolves nothing and moves in the fail-safe direction
+- [Phase 06]: 06-01: no shipping figure is parsed out of prose anywhere — Nintendo publishes `shippingDetails` as a sentence under the identical key GameStop publishes an object under, and a regex over it returns $6.99 for an item that ships free, i.e. a wrong VERDICT rather than a missing feature
+- [Phase 06]: 06-01: Walmart shipping resolves to 0.0 only when two INDEPENDENT fields agree, selected by `type` and never by index; `fulfillmentOptions[*].speedDetails.fulfillmentPrice` is not read at all, because its only non-null instance in the corpus is a $7.95 from-store DELIVERY fee on a pickup item
+- [Phase 06]: 06-01: a negative shipping cost is refused in `Result.delivered_total` and in exactly one place — the single point where an untrusted number becomes a decision, rather than N readers with N chances to get it wrong (T-06-01)
+- [Phase 06]: 06-01: `alertable`'s redundant `price is None` guard was DELETED so M4 stays load-bearing — with both guards present, flipping the first would change no verdict, the mutation would SURVIVE, and the harness would report a hole that is not there
+- [Phase 06]: 06-01: the re-measurement CORRECTS 06-01's own plan on Walmart — the plan predicted the watch keeps its alertability, but the only first-party Walmart capture in this repo resolves no shipping at all, so the honest answer for 06-06's checkpoint is "not demonstrated", not "yes". Two watches confirmed lost, a third unproven
 
 ### Blockers
 
