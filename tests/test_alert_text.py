@@ -44,6 +44,7 @@ and by neither of the two whose cause was measured.
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 import pytest
@@ -309,6 +310,122 @@ def test_the_body_is_exactly_the_reason_and_the_failing_controls(
         "  • milk: unknown (detail)\n"
         "  • eggs: unknown (detail)"
     )
+
+
+# --------------------------------------------------------------------------
+# The store number is a geolocator, and it must not leave the box
+# --------------------------------------------------------------------------
+
+
+def _walmart_page(*, answering_store: str) -> str:
+    """A minimal Walmart hydration payload, shaped like the real fixture.
+
+    Built here rather than imported from `test_retailers.py` so this file keeps
+    the property its docstring claims: one requirement, one place.
+    """
+    doc = {
+        "props": {
+            "pageProps": {
+                "initialData": {
+                    "data": {
+                        "product": {
+                            "location": {"storeIds": [answering_store]},
+                            "availabilityStatus": "IN_STOCK",
+                            "sellerName": "Walmart.com",
+                            "priceInfo": {"currentPrice": {"price": 2.42}},
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return f'<html><script id="__NEXT_DATA__" type="application/json">{json.dumps(doc)}</script></html>'
+
+
+def test_a_store_number_never_reaches_the_notification_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A store number resolves publicly to one street address.
+
+    `3bd1663` force-rewrote 170 commits of this repo's history to remove exactly
+    that class of value, `config/products.yaml` refuses to hold one even as a
+    commented example, and `_store_id`'s docstring calls it a geolocator. And
+    then the mismatch guard's `detail` — which interpolates BOTH the answering
+    store and the pinned one — was copied verbatim into `failing_controls` and
+    joined into the push body, over a transport whose documented options include
+    `ntfy://<topic>`, world-readable unless auth is configured.
+
+    Measured 2026-08-10 against the tree BEFORE the redaction existed: the body
+    read `this watch pins store '<the operator's store>'`. The mismatch arm is
+    the 2026-08-09 incident this phase was built around, so it is the arm most
+    likely to fire.
+
+    THE DETAIL IS COMPOSED BY THE REAL GUARD, not typed out here, so this test
+    cannot pass by agreeing with a string nobody produces. The values are this
+    repo's redaction vocabulary (`0`, `00000`) and neither is a real store.
+
+    What is redacted is the NUMBER, not the fact: the alert still says a store
+    disagreed, which is the actionable half. Which store is read off the
+    dashboard, which is ours.
+    """
+    from boty import retailers
+    from boty.models import Rung
+
+    pinned, answered = "00000", "0"
+    watch = Watch(
+        name="milk",
+        retailer="walmart",
+        target="https://walmart.example/ip/1",
+        control=True,
+        store_id=pinned,
+    )
+    result = retailers._verdict_from_html(
+        watch,
+        _walmart_page(answering_store=answered),
+        url=watch.target,
+        first_party_only=True,
+        rung=Rung.TLS,
+    )
+    assert result.availability is Availability.UNKNOWN, "the guard did not fire; nothing is under test"
+    assert pinned in result.detail, (
+        "`Result.detail` no longer names the pinned store. It is supposed to — "
+        "the terminal and the gitignored status.json are ours. The cut is at the "
+        "notification boundary."
+    )
+
+    (health,) = monitor.assess_health([result])
+    recorder = _Recorder()
+    monkeypatch.setattr(notify, "_client", lambda urls: recorder)
+
+    notify.send_health_warning(["ntfy://example"], [health])
+
+    assert pinned not in recorder.body, (
+        f"the operator's pinned store left the machine in the push body:\n{recorder.body}"
+    )
+    assert "store '" not in recorder.body and 'store "' not in recorder.body, (
+        f"a quoted store number survived the redaction:\n{recorder.body}"
+    )
+    assert "<redacted>" in recorder.body, "the redaction did not run at all"
+    assert "pins store" in recorder.body, "the alert stopped saying a store disagreed"
+
+
+def test_the_redaction_leaves_a_reason_that_carries_no_store_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`h.reason` goes through the same filter as `failing_controls`.
+
+    Asserted separately because they are two joins in `send_health_warning` and
+    a fix applied to one of them looks exactly like a fix applied to both.
+    """
+    recorder = _Recorder()
+    monkeypatch.setattr(notify, "_client", lambda urls: recorder)
+
+    notify.send_health_warning(
+        ["ntfy://example"],
+        [Health("walmart", ok=False, reason="the page named store '00000'", failing_controls=[])],
+    )
+
+    assert "00000" not in recorder.body, f"only the control list was redacted:\n{recorder.body}"
 
 
 def test_an_empty_send_is_still_false(monkeypatch: pytest.MonkeyPatch) -> None:
