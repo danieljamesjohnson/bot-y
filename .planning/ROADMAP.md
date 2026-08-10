@@ -470,8 +470,9 @@ is now closed (registration rejected, 2026-08-10). The finding outlived the reta
 Walmart carries marketplace sellers, so a $54.99 listing with $45 shipping defeats one of
 only two reseller defences **today**.
 
-**Progress: 2 of 6 plans complete (06-01 and 06-02, both 2026-08-10).** `make verify-offline`
-exits 0 at **701 passed** and **20/20** mutations, up from 667 and 16/16 at Phase 5's close.
+**Progress: 3 of 6 plans complete (06-01, 06-02 and 06-03, all 2026-08-10).** `make verify-offline`
+exits 0 at **711 passed** and **20/20** mutations, up from 667 and 16/16 at Phase 5's close. The
+mutation ratio is **unchanged by 06-03, deliberately** — see criterion 3 below.
 
 **Criterion 1 is built and gated in the tree** (06-01) — the ceiling measures `price + shipping`
 and refuses an alert where that total cannot be established; M4 re-anchored, M17/M18 added. It is
@@ -499,6 +500,27 @@ measured, neither is — `_extraction_mismatch` binds one README cell to another
 `tests/` bound a README cell to `boty/` at all. Both joins were therefore new construction.
 `REQUIREMENTS.md` was not edited. Full working in
 `.planning/phases/06-claims-with-gates-under-them/06-02-SUMMARY.md`.
+
+**Criterion 3 is built and gated in the tree** (06-03), and the gap was **executed before the gate
+was written** rather than argued. Every rule in `tests/test_ci_workflow.py` but
+`_pr_triggered_privilege` was keyed to a filename — `CI = WORKFLOWS / "ci.yml"`, then the same four
+families written out again for `RELEASE` — so a **third** workflow file was guarded by nothing. A
+workflow carrying a floating action tag, a swallowed exit code, no `timeout-minutes` and
+`runs-on: ubuntu-latest` was written into the real `.github/workflows/` and `pytest tests/` returned
+**exit 0, 701 passed**. The four families are now `DIRECTORY_RULES` over `_all_workflow_texts()`,
+each a pure function of `dict[str, str]` returning filename-prefixed findings, keyed on the
+criterion's own four words. **The same file and the same command afterwards: exit 1, 2 failed, 709
+passed**, naming all four families and the file; probe removed in a `finally`, tree clean, absence
+now a permanent test. Three of four rules were **wrapped, not rewritten** — no rule's judgement
+changed — and **zero `test_*` names were removed or renamed** (67 → 77), proven by comparison
+against HEAD rather than promised. **06-03 registers NO mutation and leaves M21-M22 deliberately
+unallocated:** `apply_mutation` cannot add a file, so a criterion about a file that does not exist
+yet is outside the harness by construction; 06-06 must not read the gap as a lost mutation.
+**REQ-19 is left Pending** — this plan ships the workflow half, 06-04 the `CHANGELOG.md` half.
+**A correction 06-06 must carry:** `06-PATTERNS.md` and `06-PLAN-OUTLINE.md` both name the
+exit-code rule `_flattened_exit_codes`; no such function exists — it is `_flattening`. Neither
+document was edited. Full working in
+`.planning/phases/06-claims-with-gates-under-them/06-03-SUMMARY.md`.
 
 ## Open Questions
 

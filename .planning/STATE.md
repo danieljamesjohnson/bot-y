@@ -2,21 +2,22 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-status: Executing Phase 6 — 2 of 6 plans complete
-stopped_at: Completed 06-02-PLAN.md — criterion 2 of five built and gated
-last_updated: "2026-08-10T21:27:16.458Z"
+status: Executing Phase 6 — 3 of 6 plans complete
+stopped_at: Completed 06-03-PLAN.md — criterion 3 of five built, watched red on disk, and removed
+last_updated: "2026-08-10T21:54:21.253Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 10
-  completed_plans: 6
+  completed_plans: 7
   # percent is PHASE-based (1 of 2 complete), not plan-based, for the reason
-  # this milestone exists: Phase 6 is two plans into six, and a plan-based
+  # this milestone exists: Phase 6 is three plans into six, and a plan-based
   # figure would move on every commit while the phase criterion it serves is
-  # still unmet. `state update-progress` reported 60% on a plan basis this run
+  # still unmet. `state update-progress` reported 70% on a plan basis this run
   # and left this field alone; 50 is the phase figure and is deliberate. The
-  # basis is stated so the next reader does not adopt the wrong one.
+  # basis is stated so the next reader does not adopt the wrong one. This
+  # comment has now been stripped by the tool and restored by hand three times.
   percent: 50
 ---
 
@@ -32,10 +33,34 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 2 of 6 plans complete
-(06-01 and 06-02, both 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six of six
+**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 3 of 6 plans complete
+(06-01, 06-02 and 06-03, all 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six of six
 criteria MET **against the tree**, with **not one of them confirmed on the deployed daemon**
-**Next command:** `/gsd-execute-phase 6` (next plan: 06-03)
+**Next command:** `/gsd-execute-phase 6` (next plan: 06-04)
+
+**06-03 landed criterion 3, and the gap was executed before the gate was written.** Every rule in
+`tests/test_ci_workflow.py` but `_pr_triggered_privilege` was keyed to a filename —
+`CI = WORKFLOWS / "ci.yml"`, then the same four families written out again for `RELEASE` — so a
+**third** workflow file was guarded by nothing. Measured on this tree, not inferred: a workflow
+carrying a floating action tag, a swallowed exit code, no `timeout-minutes` and
+`runs-on: ubuntu-latest`, written into the real `.github/workflows/`, left `pytest tests/` at
+**exit 0, 701 passed**. The four families are now `DIRECTORY_RULES` over `_all_workflow_texts()`,
+findings prefixed with the filename, and the identical file and command afterwards give **exit 1,
+2 failed, 709 passed**, naming all four families and the file. The probe was removed in a `finally`,
+`git status --porcelain` is clean, and its absence is now a permanent test rather than a habit.
+`make verify-offline` exits 0 at **711 passed** and **20/20**.
+
+**06-03 registers NO mutation, and M21-M22 are deliberately UNALLOCATED.** `apply_mutation`
+string-replaces inside an existing file and **cannot add one**, so a criterion about a workflow file
+*that does not exist yet* is outside the harness by construction. 06-04 and 06-05 should keep their
+own reservations rather than renumbering into the gap, and **06-06 must not read it as a lost
+mutation.** The full three-reason argument is in `06-03-SUMMARY.md`.
+
+**A correction 06-06 must carry, and neither document was edited to make it go away.**
+`06-PATTERNS.md` and `06-PLAN-OUTLINE.md` both name the exit-code rule `_flattened_exit_codes`.
+**No such function exists** — it is `_flattening`. Confirmed against the tree before and after this
+plan. Same handling as 06-02's `06-CONTEXT.md` correction: a measurement note, never an edit to a
+planning document or a requirement.
 
 **06-02 landed criterion 2 — the one that was literally a report that an existing gate could
 not go red.** The README support matrix's Rung cell is now bound to the code across **both**
@@ -128,6 +153,23 @@ non-login shell on this host — every call returns `/usr/bin/env: 'node': No su
 directory` until `export NVM_DIR=$HOME/.nvm; . $NVM_DIR/nvm.sh` is sourced first. A run that
 forgets that gets three silent no-ops instead of three misfires, which is the worse failure of
 the two because nothing looks wrong.
+
+**A SEVENTH misfire, at 06-03 — and this run found the invocation that WORKS.** `advance-plan`
+returned the same `{"reason": "last_plan", "current_plan": 6, "total_plans": 6, "status":
+"ready_for_verification"}` after the THIRD plan of a six-plan phase, again wrote `status: Phase
+complete — ready for verification`, and again overwrote `stopped_at` with Phase 4's stale value.
+`update-progress` again stripped the comment recording that `percent` is phase-based, reporting
+`70%` on a plan basis while leaving the frontmatter field at `50`. All corrected by hand, for the
+seventh time. **The new and useful part:** the documented POSITIONAL form fails
+(`state.record-metric "Phase 06" "P03" "38min" ...` → `phase, plan, and duration required`;
+`state.add-decision "<text>"` → `summary required`) but the **flag form is accepted** —
+`state.record-metric --phase "Phase 06" --plan "P03" --duration "38min" --tasks "3 tasks" --files
+"1 file"` returns a populated object, and `state.add-decision --summary "<text>"` returns
+`{"added": true}`. Two caveats measured with it: `record-metric` echoed the values but **wrote no
+row** to the Performance Metrics table, and `add-decision` prefixes every entry `[Phase ?]`
+regardless of input, which is why this file's decisions are still written by hand. Six prior plans
+wrote these fields by hand assuming the verbs were simply broken; they are broken in a narrower way
+than that, and the next plan should not waste the same twenty minutes rediscovering it.
 
 **REQ-14 and REQ-15 are CLOSED by 05-02.** 05-01 shipped REQ-14's *recording* half — the pin,
 the reading, the publication. 05-02 shipped the *verdict* half (unpinned or mismatched ⇒
@@ -327,6 +369,8 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 05 P04 | 20min | 3 tasks (1 checkpoint answered `defer`, 1 not entered) | 5 files |
 | Phase 06 P01 | 44min | 3 tasks (2 TDD, so 5 code commits) | 11 files |
 | Phase 06 P02 | 41min | 3 tasks | 3 files |
+| Phase 06 P03 | 38min | 3 tasks | 1 file |
+| Phase Phase 06 PP03 | 38min | 3 tasks tasks | 1 file files |
 
 ## Decisions
 
@@ -442,6 +486,12 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 06]: 06-02: M19's anchor is the shortest UNIQUE extension of the naive one and its uniqueness is bound by a test, not observed once — the bare `rung=Rung.TLS,` occurs twice with check_html (GameStop, Walmart, Nintendo) first, so 06-PATTERNS.md's proposed anchor would have mutated three retailers while its breaks= sentence said Amazon
 - [Phase 06]: 06-02: REQ-18's `131` was RE-MEASURED (exit 0, 687 passed 1 skipped) and recorded beside the criterion rather than replacing it; REQ-18's inaccurate "Routing and Extraction are already pinned" parenthetical was NOT edited either — a criterion is not amended to make it meetable, and by the same rule not to make it accurate
 - [Phase 06]: 06-01: the re-measurement CORRECTS 06-01's own plan on Walmart — the plan predicted the watch keeps its alertability, but the only first-party Walmart capture in this repo resolves no shipping at all, so the honest answer for 06-06's checkpoint is "not demonstrated", not "yes". Two watches confirmed lost, a third unproven
+- [Phase 06]: 06-03: the four workflow rule families are keyed to the DIRECTORY, not to a filename — `CI = WORKFLOWS / "ci.yml"` written out a second time for RELEASE left a THIRD workflow guarded by nothing, measured on this tree at exit 0 with 701 tests green
+- [Phase 06]: 06-03: three of four families are WRAPPED, not rewritten — the rules were already correct when called by hand; the defect was what they were handed, so no rule's judgement changed and the timeout bound was copied character-for-character out of the two tests it was extracted from
+- [Phase 06]: 06-03: the pin family keeps the RAW view and the exit-code family the comment-stripped one, and the shipped tree detects either mistake for free — a pin rule reading `_code` reports all seven shipped pins, an exit-code rule reading raw reports the workflows' own decision records. The green side of that gate is the assertion, not a formality
+- [Phase 06]: 06-03: the on-disk probe names `actions/checkout@v4` (trusted owner, mutable ref) and never a third-party owner — writing `some-vendor/...` into a public repo's real workflow directory to test a rule about `tj-actions` is not a trade this project makes; that half is watched in-suite only, derived with `.replace()`
+- [Phase 06]: 06-03: NO mutation registered and M21-M22 left deliberately UNALLOCATED — `apply_mutation` string-replaces inside an existing file and cannot add one, so a criterion about a file that does not exist yet is outside the harness by construction. 06-04/06-05 keep their reservations; 06-06 must not read the gap as a lost mutation
+- [Phase 06]: 06-03: the shipped-tree directory test reports EVERY family at once rather than asserting inside the loop — measured with the probe on disk, the in-loop form failed on `pin` and stopped, telling a contributor about one violation per run
 
 ### Blockers
 
