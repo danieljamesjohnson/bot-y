@@ -96,11 +96,35 @@ def _store_id(value: Any, where: str) -> str | None:
       is — would otherwise coerce to the perfectly plausible pin `"True"` and
       never match anything, silently, forever. `_price`'s precedent, followed
       rather than re-argued.
-    - Anything else becomes `str(value).strip()`, and an empty result becomes
-      `None`. The `str()` coercion is `_price`'s own documented bug one field
-      over: YAML reads an unquoted store number as an `int`, and an `int`
-      compared against the string Walmart puts in its own JSON is a silent
-      never-match — no exception, no log line, just a pin that can never agree.
+    - ANY OTHER non-`str` raises, naming the octal case. This branch used to
+      read "anything else becomes `str(value).strip()`", on the argument that
+      YAML reads an unquoted store number as an `int` and an `int` compared
+      against the string Walmart puts in its own JSON is a silent never-match.
+      That argument was right and its method was one step too late: PyYAML has
+      already finished with the scalar before this function is called. Measured
+      2026-08-10, with the value described rather than quoted because the
+      identity gate's config-key rule catches its own examples — which it did to
+      this paragraph on its first draft, and that is the gate working:
+
+          a leading zero      ->  resolved as OCTAL, so the digits change
+          an underscore       ->  a digit separator, silently dropped
+          a colon             ->  resolved as sexagesimal
+
+      The failure is in the safe direction —
+      the pin never matches, so the reading is UNKNOWN — but it is silent, and
+      the diagnosis is actively misleading: the mismatch guard reports the watch
+      as pinning one number for a file that plainly says another, with nothing
+      anywhere showing the transformation. Refusing a non-string forces the
+      quoted form, which makes the resolver irrelevant, and keeps the original
+      goal by a method that cannot be outrun by the parser.
+
+      This is REFUSE-shaped rather than log-shaped, unlike the absence below,
+      and it costs nothing on the documented path: `${WALMART_STORE_ID}`
+      substitution always produces a `str`, so the shipped config is unaffected,
+      and a literal store number in a tracked file is the leak class the
+      identity gate refuses anyway.
+    - A `str` becomes `value.strip()`, and an empty result becomes `None` — the
+      unset-`${VAR}` case, which is unpinned, which is UNKNOWN.
 
     WHY AN ABSENCE LOADS AND A TYPO REFUSES. This module has both idioms and
     picking the wrong one takes the daemon down: `_price` and `_interval` refuse
@@ -138,7 +162,14 @@ def _store_id(value: Any, where: str) -> str | None:
         return None
     if isinstance(value, bool):  # bool is an int subclass; `store_id: true` is a typo
         raise ValueError(f"{where}: store_id must be a store number, got {value!r}")
-    return str(value).strip() or None
+    if not isinstance(value, str):
+        raise ValueError(
+            f"{where}: store_id must be quoted — YAML reads an unquoted store number as "
+            f"an integer, a leading zero as OCTAL, and a colon as sexagesimal, so the "
+            f"value reaching this code ({value!r}) may not be the one in the file. "
+            f'Write store_id: "..." or store_id: ${{WALMART_STORE_ID}}'
+        )
+    return value.strip() or None
 
 
 def _retailer(value: Any, where: str) -> str:

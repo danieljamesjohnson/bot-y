@@ -85,19 +85,65 @@ def test_no_price_ceiling_stays_none(tmp_path: Path) -> None:
 # catch.
 
 
-def test_a_yaml_integer_store_id_is_coerced_to_a_string(tmp_path: Path) -> None:
-    """YAML reads an unquoted store number as an `int`, and that is a silent bug.
+def test_an_unquoted_store_id_is_refused_because_yaml_has_already_changed_it(
+    tmp_path: Path,
+) -> None:
+    """REVERSED 2026-08-10 by 05-REVIEW WR-03. This test used to assert the opposite.
 
-    The store this phase compares against is read out of Walmart's own JSON,
-    where it is a string. An `int` from the config compared against a `str` from
-    the page is a never-match — no exception, no log line, just a pin that can
-    never agree with anything. `_price` has the same class of bug recorded one
-    field over, which is why `target` is coerced with `str()` too.
+    It read `test_a_yaml_integer_store_id_is_coerced_to_a_string`, and its
+    argument was right as far as it went: the store this phase compares against
+    is read out of Walmart's own JSON, where it is a string, so an `int` from the
+    config against a `str` from the page is a never-match with no exception and
+    no log line. `str()` fixed that.
+
+    What it missed is that PyYAML has already finished with the value before
+    `_store_id` is called. Measured 2026-08-10, described rather than quoted
+    because the identity gate's config-key rule catches its own examples:
+
+        a leading zero      ->  resolved as OCTAL, so the digits change
+        an underscore       ->  a digit separator, silently dropped
+        a colon             ->  resolved as sexagesimal
+
+    The failure is in the safe direction — the
+    pin never matches, so the reading is UNKNOWN — but it is silent, and the
+    diagnosis it produces is actively misleading: the alert says the watch pins
+    one number for a file that plainly says another, and nothing anywhere shows
+    the transformation. The old docstring made exactly this argument for the
+    `str()` coercion and then stopped one step short of the value YAML mangled
+    on the way in.
+
+    So the coercion's goal is kept and its method is replaced: refusing a
+    non-string forces the quoted form, which makes the YAML resolver irrelevant.
+    It also cannot be reached by anyone following the documentation — the shipped
+    config says `store_id: ${WALMART_STORE_ID}` and `${VAR}` substitution always
+    produces a `str` — and a literal store number in a tracked file is the leak
+    class the identity gate refuses anyway.
     """
-    cfg = Config.load(_write(tmp_path, _WATCH + "    store_id: 0\n"))
+    with pytest.raises(ValueError, match="quoted"):
+        Config.load(_write(tmp_path, _WATCH + "    store_id: 0\n"))
 
-    assert cfg.watches[0].store_id == "0"
-    assert isinstance(cfg.watches[0].store_id, str)
+
+def test_the_refusal_names_octal_because_that_is_the_case_nobody_would_guess(
+    tmp_path: Path,
+) -> None:
+    """A message that says "must be quoted" without saying why gets worked around.
+
+    The leading-zero case is the one that silently changes the value rather than
+    merely its type, so it is the one the message spells out.
+    """
+    with pytest.raises(ValueError, match="OCTAL"):
+        Config.load(_write(tmp_path, _WATCH + "    store_id: 0\n"))
+
+
+def test_the_documented_forms_are_unaffected(tmp_path: Path) -> None:
+    """The positive half: the refusal must not reach the way people are told to write it.
+
+    `${WALMART_STORE_ID}` substitutes to a `str` before any `Watch` is built, and
+    a quoted literal is a `str` by construction. If either of these raised, the
+    only way to keep a working config would be to weaken the check.
+    """
+    monkeypatched = _write(tmp_path, _WATCH + '    store_id: "00000"\n')
+    assert Config.load(monkeypatched).watches[0].store_id == "00000"
 
 
 def test_a_quoted_store_id_is_the_same_string(tmp_path: Path) -> None:
