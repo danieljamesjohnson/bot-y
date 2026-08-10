@@ -1230,6 +1230,22 @@ def test_a_store_number_cannot_enter_through_a_yaml_config_key() -> None:
         '  store_id: "12345"\n',
         "    storeId: 202\n",
         "  STORE_ID: 12345\n",
+        # Added 2026-08-10 by 05-REVIEW WR-02. The rule's own comment claimed
+        # EVERY YAML spelling of this key had been measured and recorded two
+        # residuals; these three were neither caught nor recorded. Measured
+        # against the shipped script before the widening: all three returned [].
+        #
+        # A single-quoted scalar is an ordinary YAML spelling and the natural
+        # one for a value the author wants kept as a string — which is exactly
+        # what a store number is.
+        "  store_id: '12345'\n",
+        # Flow mapping. `^\\s*` could not reach a key that follows a `{` or a
+        # `,` on the same line.
+        "  - {name: x, store_id: 12345}\n",
+        # An explicit string tag, which is the other way to say "keep this a
+        # string" — and, since WR-03, a form somebody reading the store_id
+        # error message might reach for.
+        "  store_id: !!str 12345\n",
     ):
         leaks = ic._identity_leaks("config/products.yaml", line)
         assert leaks, (

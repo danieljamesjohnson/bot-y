@@ -20,7 +20,7 @@ from .models import Health, Result
 
 log = logging.getLogger(__name__)
 
-#: `store '4521'` / `store "4521"` — the shape `retailers._verdict_from_html`'s
+#: `store '00000'` / `store "00000"` — the shape `retailers._verdict_from_html`'s
 #: mismatch guard writes. It renders both numbers with `!r`, and `repr` switches
 #: to double quotes when the value contains a single one, so both delimiters are
 #: matched rather than the one that happens to be usual.

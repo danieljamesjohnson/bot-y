@@ -244,29 +244,65 @@ def _identity_leaks(name: str, body: str) -> list[str]:
         # 2026-08-10: PASS, exit 0, zero hits on the existing corpus. It does not
         # fire on `store_id: ${WALMART_STORE_ID}` (which is what the shipped
         # config actually says), on `state_path:` or on `status_path:`. The
-        # `^\s*` anchor under `(?m)` is what keeps it off prose and off the JSON
-        # forms the rules above already own, and `value.strip("0.- ")` below is
-        # what keeps `0` and `00000` — this repo's own redaction vocabulary —
-        # usable as test values.
+        # anchor under `(?m)` is what keeps it off prose and off the JSON forms
+        # the rules above already own, and `value.strip("0.- ")` below is what
+        # keeps `0` and `00000` — this repo's own redaction vocabulary — usable
+        # as test values.
         #
-        # TWO MEASURED RESIDUALS, recorded because a gate whose limits are not
+        # WIDENED 2026-08-10 by 05-REVIEW WR-02, because the paragraph above
+        # claimed more coverage than the pattern had. It ended `"?(\d+)` — an
+        # optional DOUBLE quote only — and started `^\s*`. Measured against the
+        # shipped rule at bb6d418:
+        #
+        #     bare digits                     -> caught
+        #     double-quoted digits            -> caught
+        #     camelCase key, bare digits      -> caught
+        #     SINGLE-quoted digits            -> []   <-- walked through
+        #     a key inside a flow mapping     -> []   <-- walked through
+        #     an explicit !!str tag           -> []   <-- walked through
+        #
+        # Described rather than quoted, and that is not squeamishness: the
+        # widened rule catches its own examples, so a literal probe table here
+        # would redden the gate that contains it. The executable table lives in
+        # `tests/test_fetch.py`, the sole `_PROBE_FILES` member, which is exactly
+        # what that exemption is for.
+        #
+        # A single-quoted scalar is an ordinary YAML spelling and the natural one
+        # for a value the author wants kept as a string, which is exactly what a
+        # store number is. A gate whose stated coverage exceeds its real coverage
+        # is worse than one with a known hole, so: `["\']?` for either quote,
+        # `(?:!!\S+\s+)?` for an explicit tag, and `(?:^|[{,])` so a key that
+        # follows a `{` or a `,` on the same line is reachable.
+        #
+        # THREE MEASURED RESIDUALS, recorded because a gate whose limits are not
         # written down gets trusted past them:
         #
-        # 1. A `#`-commented line is NOT scanned — `^\s*` followed by `[A-Za-z_]*`
-        #    cannot cross the `#`. That is exactly the property that keeps this
-        #    rule off prose, and it is also a hole: it is why the comment
-        #    paragraph beside `store_id` in `config/products.yaml` carries no
-        #    digits at all, not even an invented example.
+        # 1. A `#`-commented line is still not scanned in its PLAIN form — `^`
+        #    followed by `\s*[A-Za-z_]*` cannot cross the `#`. That is the
+        #    property that keeps this rule off prose, and it is also a hole: it
+        #    is why the comment paragraph beside `store_id` in
+        #    `config/products.yaml` carries no digits at all, not even an
+        #    invented example. NARROWED by the widening, and only here: a
+        #    commented FLOW mapping (`# - {name: x, store_id: <n>}`) is now
+        #    caught, because the `[{,]` alternative does not have to reach back
+        #    past the `#`. That is more coverage, not less, so the no-digits rule
+        #    for that paragraph stands unchanged.
         # 2. It over-catches by design: `restore_id: <n>` is caught, because
         #    `[A-Za-z_]*store` matches inside `restore`. Fail-closed, on the
         #    stated precedent of the ZIP+4 rule above — a false positive costs one
         #    redaction, a false negative costs a public address. If it ever fires
         #    on real data, narrow it deliberately and say so here.
+        # 3. The `[{,]` alternative over-catches prose the same way: a sentence
+        #    that puts a comma, this key and a number in that order is now a hit.
+        #    Same trade as 2, and the same instruction if it ever fires. (This
+        #    very paragraph reddened the gate while it was being written, which
+        #    is the cheapest possible demonstration that the widening works.)
         #
-        # Both residuals are pinned in `tests/test_fetch.py`, which is the only
-        # file that can hold a literal `store_id: <n>` probe: it is the sole
-        # member of `_PROBE_FILES`, so the pattern rules are not run over it.
-        (r'(?m)^\s*[A-Za-z_]*[Ss]tore(?:_?[Ii][Dd]|_?[Nn]umber|_?[Nn]o|_?[Cc]ode)?\s*:\s*"?(\d+)',
+        # All three are pinned in `tests/test_fetch.py`, which is the only file
+        # that can hold a literal `store_id: <n>` probe: it is the sole member of
+        # `_PROBE_FILES`, so the pattern rules are not run over it.
+        (r'(?m)(?:^|[{,])\s*[A-Za-z_]*[Ss]tore(?:_?[Ii][Dd]|_?[Nn]umber|_?[Nn]o|_?[Cc]ode)?'
+         r'\s*:\s*(?:!!\S+\s+)?["\']?(\d+)',
          "store number in a config key"),
         (r'"(?:state|region|province)(?:Code|OrProvinceCode|_code)?"\s*:\s*"([A-Z]{2})"', "state or region"),
         (r'"(?:city|cityName|locality|town)"\s*:\s*"([A-Za-z][A-Za-z .\'-]{2,})"', "city"),
