@@ -85,6 +85,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from boty.config import Config
 from boty.models import KNOWN_RETAILERS, Rung
 
@@ -978,7 +980,7 @@ def test_every_rung_member_has_a_numeral_and_rung_four_has_none() -> None:
         "numerals with no member": sorted(m.name for m in set(RUNG_NUMERALS) - set(Rung)),
     }
     assert set(RUNG_NUMERALS.values()) == WORKING_RUNGS, sorted(RUNG_NUMERALS.values())
-    assert RUNGS - WORKING_RUNGS == {"4"}, RUNGS - WORKING_RUNGS
+    assert {"4"} == RUNGS - WORKING_RUNGS, RUNGS - WORKING_RUNGS
 
 
 def test_every_retailer_the_router_names_is_a_known_retailer() -> None:
@@ -1063,6 +1065,210 @@ def _corrupt_text(text: str, retailer: str, column: int, value: str) -> str:
             lines[i] = "| " + " | ".join(cells) + " |"
             return "\n".join(lines)
     raise AssertionError(f"no row for {retailer!r} to corrupt")
+
+
+def _corrupt_source(path: Path, search: str, replace: str) -> str:
+    """The real source file with one substring replaced, proven unique first.
+
+    `_corrupt` for a `.py` file instead of a table row, and it exists for the
+    same reason: a corruption typed out by hand is a corruption of a file nobody
+    ships, and the rule would be watched failing against fiction.
+
+    THE SINGLE-OCCURRENCE ASSERTION IS NOT DECORATION. It is the same ambiguity
+    trap `scripts/mutation_check.py`'s `apply_mutation` walks into — that
+    function does `before.replace(search, replace, 1)`, so the FIRST occurrence
+    wins and a two-occurrence anchor silently edits whichever one comes first.
+    A corruption that quietly moved the wrong adapter would still turn a test
+    red, and the red would prove nothing about the adapter its name mentions.
+    """
+    text = path.read_text(encoding="utf-8")
+    assert text.count(search) == 1, (
+        f"{search!r} occurs {text.count(search)} times in {path}, not once. A corruption that "
+        "cannot say WHICH occurrence it edited proves nothing about the one it names."
+    )
+    return text.replace(search, replace, 1)
+
+
+#: The edit REQ-18 names, verbatim, and the shortest unique anchor for it.
+#:
+#: Shared by the corruption test below and by mutation M19, so the in-process
+#: gate and the harness are watching the same change rather than two edits that
+#: look alike. The trailing newline and indented `#` are the disambiguator: the
+#: bare `rung=Rung.TLS,` occurs TWICE in `boty/retailers.py` and `check_html` —
+#: GameStop, Walmart and Nintendo — comes first.
+AMAZON_RUNG_ANCHOR = "        rung=Rung.TLS,\n        #"
+AMAZON_RUNG_MUTATED = "        rung=Rung.BROWSER,\n        #"
+
+
+def test_an_adapter_taking_a_rung_the_readme_does_not_claim_fails() -> None:
+    """REQ-18's own mutation, stated as a test. This is criterion 2.
+
+    `check_amazon` returns `Rung.BROWSER` while `| Amazon | 1 | dom |` still
+    says rung 1. Measured against the tree with no binding in it, that edit left
+    pytest at exit 0 and `687 passed, 1 skipped` — REQ-18 recorded the same
+    thing at an older suite size, "left 131 tests green". Without this test
+    there is no assertion anywhere that goes red for it.
+
+    THE SECOND ASSERTION IS THE ONE THAT IS EASY TO SKIP. The anchor has to move
+    `check_amazon` and only `check_amazon`, and a string-count does not
+    establish that — it establishes that exactly one place matched, not which
+    place. `check_html` reading `("1",)` afterwards is the proof, by AST, and it
+    is what stops a red test being reported as a fact about Amazon when three
+    other retailers moved instead.
+    """
+    rungs = _adapter_rungs(_corrupt_source(RETAILERS, AMAZON_RUNG_ANCHOR, AMAZON_RUNG_MUTATED))
+
+    assert rungs["check_amazon"] == ("3",), rungs
+    assert rungs["check_html"] == ("1",), (
+        "the mutation moved `check_html`, which serves GameStop, Walmart and Nintendo — "
+        f"not `check_amazon`, which is the adapter this test is about. {rungs}"
+    )
+    assert _rung_mismatch(_matrix(), rungs=rungs) == {"Amazon": ("1", "3")}
+
+
+def test_a_readme_rung_cell_contradicting_the_code_fails() -> None:
+    """The other direction, with NO code change at all.
+
+    A reader is misled just as badly by an edited table as by an edited adapter,
+    and only one of those two edits is something a mutation can make. Nothing in
+    `boty/` moves here: Amazon's row is corrupted to claim rung 3 while
+    `check_amazon` goes on taking `Rung.TLS`, and the rule has to notice.
+
+    Without this half, `_rung_mismatch` would be satisfied by a README that
+    described the code correctly once and was then free to drift — which is the
+    WR-04 shape this whole file was written against.
+    """
+    rows = _matrix(_corrupt("Amazon", RUNG, "3"))
+
+    assert _rung_mismatch(rows) == {"Amazon": ("3", "1")}
+
+
+def test_routing_a_retailer_to_another_retailers_adapter_fails() -> None:
+    """The routing join, alone, and nothing else in this tree can see it.
+
+    `check_target_browser` is UNTOUCHED here and still says `Rung.BROWSER`, so a
+    gate that read only `boty/retailers.py` stays green while Target is silently
+    read at rung 1 by Amazon's adapter against a README cell that says 3. That
+    is the whole reason the binding spans two files instead of one.
+
+    No existing test routes a `target` watch through `_make_checker` at all —
+    `test_retailers.py`'s `_make_checker` tests cover bestbuy and gamestop, and
+    every other reference to `check_target_browser` calls the adapter directly.
+    So this arm was unguarded in both files at once.
+    """
+    routing = _routing(
+        _corrupt_source(
+            CLI,
+            "return check_target_browser(watch, first_party_only=cfg.first_party_only)",
+            "return check_amazon(watch, first_party_only=cfg.first_party_only)",
+        )
+    )
+
+    assert routing["target"] == ("check_amazon",), routing
+    assert _adapter_rungs()["check_target_browser"] == ("3",), (
+        "the adapter itself is unchanged — that is the point of this test"
+    )
+    assert _rung_mismatch(_matrix(), routing=routing) == {"Target": ("3", "1")}
+
+
+def test_a_rung_four_row_whose_retailer_gains_an_adapter_fails() -> None:
+    """The clean other half: rung 4 is a claim that NOTHING reads this retailer.
+
+    Pokémon Center is the live case — absent from `KNOWN_RETAILERS`, no routing
+    arm, no adapter. The moment its key becomes known it falls through
+    `_make_checker` to `check_html` at rung 1, and the `4` in its row stops being
+    true.
+
+    `_overstated` would NOT catch this. That rule reads `config/products.yaml`,
+    and a build can grow an adapter before it grows a watch — the retailer would
+    be readable, described as dropped, and configured nowhere. One column over,
+    that is exactly the gap `_extraction_mismatch` was written to close.
+    """
+    routing = _routing(known=KNOWN_RETAILERS | {"pokemoncenter"})
+
+    assert routing["pokemoncenter"] == ("check_html",), routing
+    assert _rung_mismatch(_matrix(), routing=routing) == {"Pokémon Center": ("4", "1")}
+
+
+def test_best_buys_conditional_cell_must_name_both_of_its_rungs() -> None:
+    """A conditional cell binds BOTH numerals — and the honest state stays clean.
+
+    `3 (2 with a key)` is two claims: the browser rung by default, the API rung
+    when `BESTBUY_API_KEY` is set. Dropping the parenthetical while
+    `check_bestbuy_api` still exists leaves the table saying Best Buy is only
+    ever read by a browser, which is false for anybody who has a key — and it is
+    a one-edit way to make a row look simpler than it is.
+
+    THE CLEAN HALF IS IN THE SAME TEST DELIBERATELY. Without it this would be
+    indistinguishable from "no cell may carry a parenthetical", which makes the
+    honest state unrepresentable and pressures exactly the padding every other
+    gate here was built to stop — the failure
+    `test_the_same_dom_row_declaring_degraded_is_clean` was written against, one
+    column over.
+    """
+    assert _matrix()["Best Buy"][RUNG] == "3 (2 with a key)", "the shipped cell moved"
+    assert "Best Buy" not in _rung_mismatch(_matrix()), "the shipped conditional cell is clean"
+
+    rows = _matrix(_corrupt("Best Buy", RUNG, "3"))
+
+    assert _rung_mismatch(rows) == {"Best Buy": ("3", "2, 3")}
+
+
+def test_an_adapter_that_states_no_rung_is_not_mistaken_for_no_adapter() -> None:
+    """An adapter this gate cannot read must never look like a retailer nothing reads.
+
+    `check_amazon`'s only literal `rung=Rung.X` keyword is deleted, so it falls
+    out of `_adapter_rungs` entirely — the same shape `_verdict_from_html`
+    already has, and legitimately, because a pass-through makes no claim.
+
+    The distinction is the whole safety of the rung-4 direction. An empty set is
+    precisely what a rung-4 row wants to see, so collapsing "states no rung" into
+    "no adapter" would turn the honest half of the two-directional rule into a
+    hole: delete a rung keyword and the row could then claim `4` with a live
+    adapter behind it.
+    """
+    rungs = _adapter_rungs(_corrupt_source(RETAILERS, AMAZON_RUNG_ANCHOR, "        #"))
+
+    assert "check_amazon" not in rungs, rungs
+    assert rungs["check_html"] == ("1",), "only Amazon's adapter was touched"
+
+    found = _rung_mismatch(_matrix(), rungs=rungs)
+
+    assert found == {"Amazon": ("1", "check_amazon states no rung")}
+    assert "no adapter" not in found["Amazon"][1]
+
+
+def test_a_router_this_gate_cannot_parse_raises_rather_than_reporting_everything_clean() -> None:
+    """The vacuous pass, refused three ways.
+
+    A static rule that returns `{}` when it loses its footing reports seven
+    clean rows, and every test above it goes on passing while the claim
+    underneath them is checked by nothing. That is the failure this file's
+    preamble was written against, and `_matrix`'s `assert start is not None` is
+    the precedent being followed.
+
+    Three ways to lose the router, each an edit somebody could plausibly make:
+    rename it, rename the closure that holds the `if`-chain, or replace the
+    fallthrough `return`. Each raises, and each message names what was not
+    found — a gate that gives up has to say where.
+    """
+    renamed = _corrupt_source(CLI, "def _make_checker(cfg: Config)", "def _make_router(cfg: Config)")
+    with pytest.raises(AssertionError, match="_make_checker"):
+        _routing(renamed)
+
+    no_closure = _corrupt_source(
+        CLI, "    def check(watch: Watch) -> Result:", "    def route(watch: Watch) -> Result:"
+    )
+    with pytest.raises(AssertionError, match="nested `check` closure"):
+        _routing(no_closure)
+
+    no_fallthrough = _corrupt_source(
+        CLI,
+        "        return check_html(watch, first_party_only=cfg.first_party_only)",
+        "        raise NotImplementedError",
+    )
+    with pytest.raises(AssertionError, match="fallthrough"):
+        _routing(no_fallthrough)
 
 
 def test_a_blanked_rung_cell_fails_the_rung_rule() -> None:
