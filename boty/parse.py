@@ -45,6 +45,24 @@ class Offer:
     price: float | None
     seller: str | None
     raw_availability: str = ""
+    #: What this offer says shipping costs, where it says anything at all.
+    #:
+    #: Declared LAST, after `raw_availability`, with a default, for the reason
+    #: `Result.rung`, `Result.extraction` and `Result.store` record: every
+    #: pre-existing construction site stays valid and keeps its meaning,
+    #: because none of them reads a shipping cost.
+    #:
+    #: WHAT THE DEFAULT MEANS: **nobody read a shipping cost.** It is never
+    #: `0.0`. `0.0` is a positive claim that this offer ships free — two
+    #: independent Walmart fields agreeing, or a retailer's own
+    #: `MonetaryAmount` saying so — and `None` is the absence of any claim at
+    #: all. That distinction is the whole of REQ-17: the price ceiling measures
+    #: the delivered total, and where the delivered total cannot be established
+    #: `Result.alertable` refuses to authorise an alert rather than guessing.
+    #: Collapsing the two would resolve "I could not tell" into "ships free",
+    #: which is the permissive direction and the hole this field exists to
+    #: close.
+    shipping: float | None = None
 
 
 def _as_float(v: Any) -> float | None:
@@ -166,6 +184,53 @@ def _iter_nodes(doc: Any) -> Iterator[dict[str, Any]]:
                 stack.append(node["@graph"])
 
 
+def _ldjson_shipping(offer: dict[str, Any]) -> float | None:
+    """The shipping cost off a schema.org offer, or None if it did not state one.
+
+    TYPE-CHECKED BEFORE IT DIGS, deliberately, and not by the accident of
+    `_dig` returning None when handed a str. Each guard below exists because a
+    real page reaches it, and the wrong answer each one prevents is a WRONG
+    VERDICT rather than a missing feature.
+
+    - **`shippingDetails` is a `str`.** This is Nintendo, on the identical key
+      GameStop publishes an object under:
+
+          "Standard UPS Ground Shipping: $6.99, 3-9 business days.
+           Free UPS Ground Shipping on orders over $50."
+
+      The GO Plus + is $54.99, so it clears the $50 threshold and **the true
+      shipping cost is zero**. A regex over that sentence returns `$6.99` and
+      yields a delivered total of $61.98 for an item that ships free — an
+      inflated total that can suppress a genuine MSRP restock at the one
+      retailer that makes the product and lists it at MSRP with no marketplace
+      attached. So no shipping figure is parsed out of prose anywhere in this
+      module. Reading presentation text as a fact is the same error 05-01
+      rejected in its `"0"` sentinel.
+
+    - **`shippingDetails` is a `list`.** schema.org permits a list of
+      `OfferShippingDetails`, one per destination region, and **no capture in
+      this repository shows one**. Picking an entry would be a guess about
+      which region applies, and a guessed shipping cost is worth less than
+      none: `None` refuses the alert, a guess authorises one.
+
+    - **`shippingRate` is not a dict.** Same rule one level down. The number
+      lives in a `MonetaryAmount`, and anything else is a shape nobody measured.
+
+    `_as_float` is REUSED rather than re-written: it already returns None for
+    non-numeric input, which is half of T-06-01. The other half — a negative
+    value — is refused once, in `models.Result.delivered_total`, where a
+    shipping number becomes a decision. N readers would be N chances to get it
+    wrong.
+    """
+    details = offer.get("shippingDetails")
+    if not isinstance(details, dict):
+        return None
+    rate = details.get("shippingRate")
+    if not isinstance(rate, dict):
+        return None
+    return _as_float(rate.get("value"))
+
+
 def ldjson_offers(html: str, *, sku: str | None = None) -> list[Offer] | None:
     """Offers from schema.org Product markup, or None if there is none.
 
@@ -260,6 +325,7 @@ def ldjson_read(html: str, *, sku: str | None = None) -> LdJsonRead:
                         price=_as_float(offer.get("price")),
                         seller=(seller or {}).get("name") if isinstance(seller, dict) else seller,
                         raw_availability=raw.rsplit("/", 1)[-1],
+                        shipping=_ldjson_shipping(offer),
                     )
                 )
 
@@ -277,6 +343,25 @@ def ldjson_read(html: str, *, sku: str | None = None) -> LdJsonRead:
 #: walk happily reports a $12 screen protector as your restock.
 _WALMART_PRODUCT_PATH = ("props", "pageProps", "initialData", "data", "product")
 
+#: The fee record, relative to the product node above — one of the two
+#: independent signals that together resolve Walmart shipping to zero.
+#:
+#: Addressed off the product node rather than restated from the document root,
+#: for the reason `_WALMART_STORE_PATH` gives below: the fee, the offer and the
+#: store must not be able to drift onto different subtrees in a later edit.
+_WALMART_SHIPPING_FEE_PATH = ("priceInfo", "additionalFees", "shippingAndImportFee", "price")
+
+#: The other signal: the fulfilment record for shipping specifically.
+#:
+#: SELECTED BY ITS `type` FIELD, NEVER BY INDEX. `nextdata_store`'s comment
+#: already argues this case — "picking `[0]` out of a two-entry list would be a
+#: guess about ordering that nothing measured" — and although the SHIPPING entry
+#: happens to sit at index 0 in both shipped captures, that is a coincidence
+#: rather than a measurement. There are three entries in each: SHIPPING, PICKUP
+#: and DELIVERY.
+_WALMART_FULFILMENT_KEY = "fulfillmentOptions"
+_WALMART_SHIPPING_OPTION = "SHIPPING"
+
 
 def _dig(doc: Any, path: Iterable[str]) -> Any | None:
     for key in path:
@@ -284,6 +369,83 @@ def _dig(doc: Any, path: Iterable[str]) -> Any | None:
             return None
         doc = doc.get(key)
     return doc
+
+
+def _nextdata_shipping(product: Any) -> float | None:
+    """Walmart shipping, resolved to `0.0` ONLY when two independent fields agree.
+
+    The two are `fulfillmentOptions[type=SHIPPING].speedDetails.freeFulfillment`
+    being `True` and `priceInfo.additionalFees.shippingAndImportFee.price` being
+    `0`. One field agreeing with itself is one field; a fulfilment record and a
+    fee record saying the same thing is a measurement. Anything else is
+    unresolved, and unresolved means `Result.alertable` refuses the alert.
+
+    Measured across both shipped captures, 2026-08-10:
+
+    ==========================================  ==========  ==============
+    field                                       goplusplus  milk-control
+    ==========================================  ==========  ==============
+    shippingAndImportFee.price                  0           0
+    SHIPPING speedDetails                       a dict      **null**
+    SHIPPING speedDetails.freeFulfillment       True        absent
+    ==========================================  ==========  ==============
+
+    So `goplusplus` resolves at `0.0` and `milk-control` stays unresolved. That
+    asymmetry is the correct, fail-safe answer and it costs nothing: milk is a
+    control and carries no `max_price`, so no verdict there can change.
+
+    THREE THINGS A LATER READER WILL OTHERWISE TRY TO "FIX":
+
+    (a) **No captured payload shows Walmart's paid marketplace shipping shape
+        at all.** No field name is invented for it here, so unresolved is the
+        common Walmart path rather than the rare one. That is deliberate: the
+        $54.99-item-with-$45-shipping case REQ-17 exists for is answered by
+        refusal, not by a pass, precisely because "publishes nothing" and
+        "publishes something we did not read" are indistinguishable from here.
+
+    (b) **`fulfillmentOptions[*].speedDetails.fulfillmentPrice` is NOT read.**
+        The only non-null instance in the corpus is
+        `{"price": 7.95, "priceString": None}` on the milk control's DELIVERY
+        option — a from-store delivery fee on a pickup/delivery item, not a
+        shipping charge. Reading it as shipping would invent a $7.95 shipping
+        cost out of a real field, which is the same error as reading Nintendo's
+        sentence, reached from the other direction.
+
+    (c) **That same key is `None` on one capture and a `dict` on the other**, so
+        anything that ever does read it must type-check first — exactly as
+        `shippingDetails` must, and for the same reason.
+
+    Also measured and deliberately not used:
+    `priceInfo.additionalFees.estimatedTotalPrice` exists on both captures and
+    equals the item price on both ($229.99 and $2.42). It has never been
+    observed differing from the item price, so adopting it as "the delivered
+    total" would be adopting an untested claim about what it includes.
+
+    `is True` and not truthiness, so a `"true"` string or a `1` does not pass —
+    a retailer reshaping this field into a string must read as unresolved, not
+    as free.
+    """
+    options = product.get(_WALMART_FULFILMENT_KEY) if isinstance(product, dict) else None
+    if not isinstance(options, list):
+        return None
+
+    free = False
+    for option in options:
+        if not isinstance(option, dict) or option.get("type") != _WALMART_SHIPPING_OPTION:
+            continue
+        speed = option.get("speedDetails")
+        if isinstance(speed, dict) and speed.get("freeFulfillment") is True:
+            free = True
+    if not free:
+        return None
+
+    fee = _dig(product, _WALMART_SHIPPING_FEE_PATH)
+    # `isinstance(True, int)` is True in Python, and `False == 0`, so a boolean
+    # in this field would otherwise read as a fee of zero — a type confusion
+    # answering a question the payload never answered.
+    if isinstance(fee, bool) or not isinstance(fee, (int, float)) or fee != 0:
+        return None
+    return 0.0
 
 
 def nextdata_offers(html: str) -> list[Offer] | None:
@@ -319,6 +481,7 @@ def nextdata_offers(html: str) -> list[Offer] | None:
             price=_as_float(current.get("price")) if isinstance(current, dict) else None,
             seller=product.get("sellerName"),
             raw_availability=status,
+            shipping=_nextdata_shipping(product),
         )
     ]
 
@@ -729,6 +892,11 @@ def add_to_cart_offers(html: str) -> list[Offer] | None:
         if price is not None:
             break
 
+    # `shipping` is left at its default, and the silence would otherwise read
+    # as an oversight: this reader reads a button, an availability line and a
+    # seller name, and not one of those carries a shipping cost. `None` here is
+    # the honest and permanent answer for Target and Amazon, not a gap somebody
+    # forgot to fill.
     return [
         Offer(
             available=available,
