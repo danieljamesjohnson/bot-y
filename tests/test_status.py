@@ -31,19 +31,22 @@ def _result(
     extraction: Extraction | None = None,
     control: bool = False,
     availability: Availability = Availability.IN_STOCK,
+    store: str | None = None,
+    store_pinned: str | None = None,
 ) -> Result:
     watch = Watch(
         name="goplusplus",
         retailer="bestbuy",
         target="6577129",
         control=control,
+        store_id=store_pinned,
     )
     kwargs: dict[str, Rung | Extraction] = {}
     if rung is not None:
         kwargs["rung"] = rung
     if extraction is not None:
         kwargs["extraction"] = extraction
-    return Result(watch, availability, price=54.99, detail="synthetic", **kwargs)
+    return Result(watch, availability, price=54.99, detail="synthetic", store=store, **kwargs)
 
 
 #: "this argument was not passed at all", which is a different thing from
@@ -179,6 +182,8 @@ def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path)
             "rung",
             "extraction",
             "degraded",
+            "store",
+            "store_pinned",
         }
         assert entry["rung"] == "browser"
         assert entry["degraded"] is True
@@ -274,3 +279,128 @@ def test_report_does_not_raise_for_any_availability(
     for availability in Availability:
         _report([_result(availability=availability, rung=Rung.BROWSER)], [])
     assert capsys.readouterr().out.count("[degraded]") == len(list(Availability))
+
+
+# --------------------------------------------------------------------------
+# WHICH STORE — both the one that answered and the one that was pinned
+# --------------------------------------------------------------------------
+#
+# Synthetic store values here are `"0"` and `"00000"`, this repo's redaction
+# vocabulary, and the assertions go through a subscript rather than a whole-dict
+# literal. Measured 2026-08-10: a four-digit store number written as a JSON
+# `store` value inside a tracked test file trips the identity guard, which is
+# correct — this file is public and a store number resolves to one street
+# address.
+
+
+def test_both_stores_are_published_because_one_cannot_tell_the_states_apart(
+    tmp_path: Path,
+) -> None:
+    """Two keys, not one, and that is the whole reason this block exists.
+
+    `store` is what answered; `store_pinned` is what was configured. With only
+    one of them a reader cannot tell "no store recorded" from "store B answered
+    and you pinned A" — and those are exactly the two states this phase exists
+    to distinguish. It is the same precedent the `rung`/`extraction`/`degraded`
+    block sets one field over: publish the raw fact beside any derived flag,
+    because the flag alone cannot say WHY.
+    """
+    payload = _payload(tmp_path, [_result(store="00000", store_pinned="0")])
+
+    (entry,) = payload["watches"]
+    assert entry["store"] == "00000"
+    assert entry["store_pinned"] == "0"
+
+
+def test_a_watch_with_no_store_publishes_null_rather_than_zero(tmp_path: Path) -> None:
+    """`null`, never `0` and never `""`.
+
+    `duration_seconds`' argument applies word for word: "a missing measurement
+    serialised as 0 would read off the dashboard as the fastest check ever
+    recorded". Here it is worse than an analogy — `0` is this repo's redaction
+    placeholder and the literal value both Walmart fixtures carry, so an absent
+    store published as `0` would read off the dashboard as a real store.
+    """
+    payload = _payload(tmp_path, [_result()])
+
+    (entry,) = payload["watches"]
+    assert entry["store"] is None
+    assert entry["store_pinned"] is None
+    assert entry["store"] != 0 and entry["store"] != ""
+
+
+def test_each_store_key_is_published_independently_of_the_other(tmp_path: Path) -> None:
+    """The two asymmetric states, which are the interesting ones.
+
+    A page that answered with a store nobody pinned, and a pin whose page said
+    nothing. Neither collapses to "no store", and a single key would render both
+    as the same row.
+    """
+    answered_only = _payload(tmp_path, [_result(store="0")])["watches"][0]
+    pinned_only = _payload(tmp_path, [_result(store_pinned="0")])["watches"][0]
+
+    assert answered_only["store"] == "0" and answered_only["store_pinned"] is None
+    assert pinned_only["store"] is None and pinned_only["store_pinned"] == "0"
+
+
+# --------------------------------------------------------------------------
+# The printed report — the store tag
+# --------------------------------------------------------------------------
+
+
+def test_report_shows_a_matching_store_plainly(capsys: pytest.CaptureFixture[str]) -> None:
+    out = _tags(capsys, _result(store="0", store_pinned="0"))
+
+    assert "[store 0]" in out
+
+
+def test_report_says_when_the_page_answered_and_nothing_was_pinned(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out = _tags(capsys, _result(store="0"))
+
+    assert "[store 0, unpinned]" in out
+
+
+def test_report_says_when_a_pin_exists_and_the_page_did_not_say(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out = _tags(capsys, _result(store_pinned="0"))
+
+    assert "[store ?, pinned 0]" in out
+
+
+def test_report_says_when_the_two_disagree(capsys: pytest.CaptureFixture[str]) -> None:
+    """The 2026-08-09 case, on one line of `boty check`.
+
+    The daemon recorded the milk control out of stock at one price while live
+    reads minutes later read in stock at another. Same URL, same parser, two
+    stores. This tag is what makes that visible without a second reading to
+    compare against.
+    """
+    out = _tags(capsys, _result(store="00000", store_pinned="0"))
+
+    assert "[store 00000 != pinned 0]" in out
+
+
+def test_report_prints_no_store_tag_for_a_watch_with_neither(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Five retailers here can never produce a store. Their rows must stay clean."""
+    out = _tags(capsys, _result())
+
+    assert "store" not in out
+
+
+def test_the_store_tag_did_not_touch_the_availability_symbols() -> None:
+    """`SYMBOL` is indexed unconditionally and must stay three-membered.
+
+    Stated here because the store is the third thing in two phases to arrive
+    looking like it might want to be an `Availability` member. It is not: a
+    fourth key is a KeyError in the middle of printing a report, and this plan
+    changes no availability at all.
+    """
+    from boty.cli import SYMBOL
+
+    assert set(SYMBOL) == set(Availability)
+    assert len(SYMBOL) == 3

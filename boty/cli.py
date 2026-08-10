@@ -86,6 +86,39 @@ def _make_checker(cfg: Config) -> Callable[[Watch], Result]:
     return check
 
 
+def _store_tag(r: Result) -> str | None:
+    """The store, in one tag, or `None` for a watch that has neither.
+
+    Separate from `_report`'s comprehension because that comprehension is
+    `(label, bool)` pairs and a store is not a bool — the tag's TEXT depends on
+    which of the two values is present, not merely on whether one is.
+
+    Four forms, and the distinction each one buys:
+
+    - `[store X]` — the pin and the page agree. An ordinary label.
+    - `[store X, unpinned]` — the page answered and nobody asked for a store, so
+      the reading is about whichever location Walmart chose today.
+    - `[store ?, pinned X]` — a pin exists and the page did not say. `?` rather
+      than a blank, because "the page did not tell us" is a fact worth printing.
+    - `[store Y != pinned X]` — they disagree. This is the 2026-08-09 case: the
+      daemon read the milk control out of stock at one price while live reads
+      minutes later read in stock at another, and nothing on the line could say
+      that two different stores had answered.
+
+    Nothing here is a verdict. `SYMBOL` is untouched and still three-membered.
+    """
+    answered, pinned = r.store, r.watch.store_id
+    if answered is None and pinned is None:
+        return None
+    if answered is None:
+        return f"[store ?, pinned {pinned}]"
+    if pinned is None:
+        return f"[store {answered}, unpinned]"
+    if answered != pinned:
+        return f"[store {answered} != pinned {pinned}]"
+    return f"[store {answered}]"
+
+
 def _report(results: list[Result], health: list[Health]) -> None:
     for r in results:
         price = f"${r.price:>8.2f}" if r.price is not None else " " * 9
@@ -106,6 +139,11 @@ def _report(results: list[Result], health: list[Health]) -> None:
             )
             if on
         ]
+        # Appended rather than folded into the comprehension above: that one
+        # switches a fixed label on a bool, and the store tag's text varies.
+        store_tag = _store_tag(r)
+        if store_tag is not None:
+            tags.append(store_tag)
         tag = f" {' '.join(tags)}" if tags else ""
         print(f"  {SYMBOL[r.availability]} {r.watch.retailer:<9} {r.watch.name[:30]:<30}{price}  {r.detail[:56]}{tag}")
 

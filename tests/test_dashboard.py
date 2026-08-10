@@ -37,7 +37,26 @@ DASHBOARD = Path(__file__).resolve().parent.parent / "served" / "boty" / "index.
 #: the cost is nothing, and the rule "everything at this sink is escaped"
 #: survives contact with a future edit in a way that "these three but not those
 #: two" does not.
-UNTRUSTED = ("w.name", "w.detail", "w.retailer", "w.url", "r.retailer", "r.reason")
+#:
+#: `w.store` is retailer-controlled in the sharpest sense: `parse.nextdata_store`
+#: hands back whatever string Walmart put in `storeIds[0]`, of any length or
+#: content, and it lands in `innerHTML` on Mission Control's origin.
+#: `w.store_pinned` comes from `config/products.yaml` and is operator-controlled,
+#: and it is listed anyway for the reason `name` and `url` are.
+#:
+#: BOTH entries are needed and neither implies the other: the regex below is
+#: `(?<![\w.])w\.store\b`, and `\b` after `store` does not match inside
+#: `w.store_pinned`.
+UNTRUSTED = (
+    "w.name",
+    "w.detail",
+    "w.retailer",
+    "w.url",
+    "w.store",
+    "w.store_pinned",
+    "r.retailer",
+    "r.reason",
+)
 
 
 @pytest.fixture(scope="module")
@@ -171,3 +190,44 @@ def test_the_health_banner_is_escaped_too(page: str) -> None:
         assert f"esc({field})" in line.replace(" ", ""), (
             f"{field} is interpolated into the health banner unescaped"
         )
+
+
+# --------------------------------------------------------------------------
+# REQ-14: the row has to say which store the reading is about
+# --------------------------------------------------------------------------
+
+
+def test_the_dashboard_renders_both_store_keys(page: str) -> None:
+    """`status.write` publishes `store` and `store_pinned`; the page reads both.
+
+    One key alone cannot tell "no store recorded" from "store B answered and you
+    pinned A", and those are the two states this phase exists to distinguish. A
+    contract asserted at the producing end only is a comment — which is the
+    lesson that put this module's docstring on this file.
+    """
+    assert re.search(r"(?<![\w.])w\.store\b", page), (
+        "the dashboard does not read the `store` key that `status.write` "
+        "publishes for it, so a Walmart row cannot say which store answered"
+    )
+    assert "w.store_pinned" in page, (
+        "the dashboard does not read `store_pinned`, so a mismatch renders "
+        "identically to a correct pin"
+    )
+
+
+def test_the_store_tag_has_two_visual_weights(page: str) -> None:
+    """A correct pin is a LABEL; an unpinned or mismatched store is a WARNING.
+
+    The same distinction the file already draws between `control` and
+    `degraded`: `.tag` recedes because "this is the canary" is ordinary, while
+    `degraded` is loud because it is a claim about how much the number beside it
+    is worth. A reading from a store you did not ask about is the loud kind.
+    """
+    assert re.search(r"\.tag\.store\s*\{", page), (
+        "no `.tag.store` rule — a store tag styled like every other tag says "
+        "'here is a word' rather than 'this reading may not be about you'"
+    )
+    assert re.search(r"\.tag\.store\.warn\s*\{", page), (
+        "no `.tag.store.warn` rule — an unpinned or mismatched store renders "
+        "identically to a correctly pinned one"
+    )

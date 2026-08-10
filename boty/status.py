@@ -116,6 +116,31 @@ def write(
                 "rung": r.rung.value,
                 "extraction": r.extraction.value,
                 "degraded": r.degraded,
+                # WHICH STORE. Two keys, and that is the point: `store` is what
+                # the page said answered, `store_pinned` is what the operator
+                # configured. Published together for the reason `rung` and
+                # `extraction` are published beside `degraded` — the raw facts go
+                # out alongside any derived flag, because a single value cannot
+                # tell a reader WHY.
+                #
+                # Applied here: one key alone cannot distinguish "no store
+                # recorded" from "store B answered and you pinned A", and those
+                # are the two states this phase exists to tell apart. On
+                # 2026-08-09 this monitor recorded the Walmart milk control out
+                # of stock at one price while three live reads minutes later
+                # returned in stock at another. Same URL, same parser — two
+                # stores answered, and nothing in the file could say so.
+                #
+                # `None` for a non-Walmart watch is correct and permanent: no
+                # other retailer here publishes a store on a product page.
+                # Serialised as `null`, NEVER as `0` and never as `""` — the
+                # `duration_seconds` argument above applies word for word, and
+                # here it is sharper than an analogy, because `0` is this repo's
+                # own redaction placeholder and the literal value both Walmart
+                # fixtures carry. An absent store published as `0` would read off
+                # the dashboard as a real store.
+                "store": r.store,
+                "store_pinned": r.watch.store_id,
             }
             for r in results
         ],
