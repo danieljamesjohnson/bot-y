@@ -215,12 +215,26 @@ MUTATIONS = (
     # every test that now pins it still produced `VERIFY: PASS` at exit 0.
     # A mutation gate that cannot see the layer where the worst bug lived is
     # not guarding the thing it claims to guard.
+    # Re-anchored 2026-08-10 (06-01, REQ-17): the ceiling stopped measuring
+    # `self.price` and started measuring `self.delivered_total`, so the three
+    # lines M4 named no longer exist. `apply_mutation` would have raised
+    # HarnessError and `make verify` would have died rather than quietly
+    # dropping to fifteen mutations — the same required re-point M2 and M13
+    # already record, made deliberately rather than discovered.
+    #
+    # The re-point is onto the ONE guard that now remains. `alertable` used to
+    # carry a `price is None` check ahead of this one; it was deleted in the
+    # same commit, and that deletion is what keeps this mutation load-bearing:
+    # with both guards in place, flipping the first `return False` to
+    # `return True` would change nothing (the delivered total is also None, the
+    # second guard returns False), M4 would SURVIVE, and the harness would
+    # report a hole that was not there.
     Mutation(
         ident="M4",
         target="boty/models.py",
-        search="        if self.price is None:\n            return False\n        return self.price <= self.watch.max_price",
-        replace="        if self.price is None:\n            return True\n        return self.price <= self.watch.max_price",
-        breaks="an unreadable price clears the ceiling — a flip at any price becomes alertable",
+        search="        total = self.delivered_total\n        if total is None:\n            return False\n        return total <= self.watch.max_price",
+        replace="        total = self.delivered_total\n        if total is None:\n            return True\n        return total <= self.watch.max_price",
+        breaks="a delivered total that could not be established clears the ceiling — an unreadable price, or an offer whose shipping cost was never read, becomes alertable at any price",
     ),
     Mutation(
         ident="M5",
@@ -414,6 +428,35 @@ MUTATIONS = (
         search="            if not 0.0 <= now - float(stamp) <= STATE_MAX_AGE_SECONDS:",
         replace="            if False:",
         breaks="a paging memory of any age is restored, so a `pacer-state.json` left on disk from months ago permanently suppresses the health warning for the retailer it names — the alert this project exists to send, silenced by a stale runtime artifact, with a green dashboard over it",
+    ),
+    # M17 and M18 are the two halves of REQ-17, and they get their own
+    # mutations rather than riding on the re-anchored M4 for M6/M7's stated
+    # reason: they prove different things.
+    #
+    # M4 dying proves the guard EXISTS — that SOMETHING refuses an
+    # unestablished delivered total. It says nothing about whether shipping is
+    # part of that total, or whether an unread shipping cost is treated as
+    # unestablished at all.
+    #
+    # Both are anchored on an EXPRESSION and a condition, never on a `detail`
+    # string, a docstring, a comment or any message prose. 06-01 added a
+    # sentence to `_verdict_from_html`'s success `detail` that a careless
+    # anchor would grab, and M2's re-anchoring lesson is explicit about what
+    # that costs: "matching the message text would tie a mutation to prose that
+    # is edited far more often than the verdict is."
+    Mutation(
+        ident="M17",
+        target="boty/models.py",
+        search="        if self.price is None or self.shipping is None or self.shipping < 0:\n            return None\n        return self.price + self.shipping",
+        replace="        if self.price is None or (self.shipping is not None and self.shipping < 0):\n            return None\n        return self.price + (self.shipping or 0.0)",
+        breaks="rebuilds the REJECTED lenient fallback exactly: an offer whose shipping cost could not be read is treated as shipping free, so its delivered total is the item price and the $54.99-listing-with-$45-shipping case walks through an $80 ceiling again — REQ-17's own defect, and a tree that summed a resolved shipping correctly while quietly falling back otherwise would pass M4 with the whole hole intact",
+    ),
+    Mutation(
+        ident="M18",
+        target="boty/models.py",
+        search="        return self.price + self.shipping",
+        replace="        return self.price",
+        breaks="drops the shipping addend from the sum, so the ceiling measures the item price again while every guard around it still looks correct — killed on CAPTURED GameStop numbers rather than synthetic ones: $54.99 + $6.99 fails a $60 ceiling and $54.99 alone clears it",
     ),
 )
 
