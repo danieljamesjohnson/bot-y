@@ -137,6 +137,70 @@ class Extraction(str, Enum):
 #: with a commit message behind it, not a list to grow casually.
 STORE_SCOPED: frozenset[str] = frozenset({"walmart"})
 
+#: Every retailer this build has an adapter and a seller list for, spelled the
+#: one way the code compares. `config.Config.load` reads it twice: it REFUSES a
+#: watch whose name differs from one of these only by case or surrounding
+#: whitespace, and it logs an error for a name that is not here at all.
+#:
+#: WHY THIS EXISTS. `Watch.retailer` is a free-form string that the whole system
+#: branches on, and every consumer compares it case-sensitively:
+#: `cli._make_checker`'s `== "bestbuy" / "amazon" / "target"`,
+#: `retailers.MARKETPLACES`, `retailers.FIRST_PARTY`, and `retailer in
+#: STORE_SCOPED` above. An unrecognised value does not fail — it falls through
+#: `_make_checker` to `check_html`, which is the CORRECT transport for Walmart.
+#: So `retailer: Walmart`, one capital, reached Walmart's real page, parsed it
+#: perfectly, and skipped the store guard and `monitor._is_store_gap` together.
+#: Measured 2026-08-10 against `tests/fixtures/walmart/milk-control.html`:
+#:
+#:     first_party_only=True   walmart  -> unknown    price=None
+#:     first_party_only=True   Walmart  -> unknown    price=None
+#:     first_party_only=True   walmrt   -> unknown    price=None
+#:     first_party_only=False  walmart  -> unknown    price=None
+#:     first_party_only=False  Walmart  -> in_stock   price=2.42
+#:     first_party_only=False  walmrt   -> in_stock   price=2.42
+#:
+#: A price and an availability from a store nobody pinned, published as a
+#: verdict — the 2026-08-09 failure this phase exists to prevent, reachable by a
+#: YAML typo nothing warned about.
+#:
+#: REFUSED RATHER THAN NORMALISED for the case/whitespace form, and the
+#: alternative is worth naming because it is the obvious one. `.strip().lower()`
+#: would also close that hole, and it would close it by accepting a spelling
+#: that matches nothing the code says — file and constant agreeing only after a
+#: transformation nobody can see. This project's stated value is that a reading
+#: you cannot trust must not look like one you can; the same goes for the file
+#: that produces it. `Walmart` is never a legitimate state: it collides with a
+#: name we own, and there is exactly one right thing for it to have said.
+#:
+#: A NAME THAT IS NOT HERE AT ALL IS LOGGED, NOT REFUSED, and that is a measured
+#: constraint rather than timidity. `scripts/evidence_check.py` has two rules
+#: that REQUIRE such a watch to be constructible: rule 1 catches a retailer
+#: configured but outside the ROADMAP's Retailer Scope table (its test case is a
+#: `microcenter` watch with no adapter at all — "config-only" in as many words),
+#: and rule 5 catches a retailer configured while the evidence file still says
+#: REFUSED (its test case is `pokemoncenter`, and that test's own docstring says
+#: a blanket ban would make "the outcome this whole phase is walking towards — a
+#: refused retailer re-probed, reached, and shipped — unrepresentable"). So the
+#: loader follows `_sub`'s idiom instead: not an error, because it is a
+#: legitimate state, but it must be VISIBLE.
+#:
+#: THE RESIDUAL, recorded because a gate whose limits are not written down gets
+#: trusted past them: the last row of the table above still stands. A name that
+#: is not a known retailer at all, on a Walmart URL, with `first_party_only:
+#: false`, publishes an unguarded verdict — and only the log line opposes it.
+#: Closing that means either refusing the file (which unrepresents both
+#: evidence_check cases above) or moving the no-seller-list escape hatch so it
+#: also runs when `first_party_only` is false. That is a decision with two gates
+#: on the other side of it, not a tidy-up.
+#:
+#: EQUAL TO `retailers.FIRST_PARTY`'s keys, asserted by a test rather than by
+#: this comment — `models` must not import `retailers` (see STORE_SCOPED above
+#: for why the dependency runs this way). Adding a retailer means adding it in
+#: both places, in one commit.
+KNOWN_RETAILERS: frozenset[str] = frozenset(
+    {"walmart", "gamestop", "nintendo", "bestbuy", "target", "amazon"}
+)
+
 
 @dataclass(frozen=True)
 class Watch:

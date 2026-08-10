@@ -17,7 +17,7 @@ from typing import Any
 
 import yaml
 
-from .models import Watch
+from .models import KNOWN_RETAILERS, Watch
 
 log = logging.getLogger(__name__)
 
@@ -141,6 +141,59 @@ def _store_id(value: Any, where: str) -> str | None:
     return str(value).strip() or None
 
 
+def _retailer(value: Any, where: str) -> str:
+    """Check a configured retailer name, refusing the spelling that lies.
+
+    `_price`'s shape again — same `where`, same call-site form — because it is
+    the same class of value read out of the same document.
+
+    THE ONE THAT REFUSES is a name that differs from a known retailer only by
+    case or by surrounding whitespace. `retailer: Walmart` is not a retailer
+    this build does not know; it is `walmart`, misspelled in the one way that
+    silently changes behaviour. Every consumer compares this string as written
+    — `cli._make_checker`, `retailers.MARKETPLACES`, `retailers.FIRST_PARTY`
+    and `models.STORE_SCOPED` — and the miss does not fail loudly: it falls
+    through `_make_checker` to `check_html`, which is the CORRECT transport for
+    Walmart, so the page is fetched and parsed perfectly with both store guards
+    switched off. Measured 2026-08-10: with `first_party_only: false` that
+    published `in_stock $2.42` from a store nobody pinned, dashboard green.
+
+    Refused rather than lower-cased, on `models.KNOWN_RETAILERS`' argument: a
+    silent coercion makes the file and the code agree only after a
+    transformation nobody can see, and there is exactly one right thing for
+    `Walmart` to have said.
+
+    THE ONE THAT ONLY LOGS is a name that is not a known retailer at all. That
+    is `_sub`'s idiom — "not an error, because an unset ${BESTBUY_API_KEY} is a
+    legitimate state, but it must be visible" — and here it is load-bearing
+    rather than lenient: `scripts/evidence_check.py`'s rules 1 and 5 both need
+    such a watch to be CONSTRUCTIBLE (a config-only `microcenter`, and a
+    `pokemoncenter` shipped ahead of its evidence). Refusing the file would
+    unrepresent both. `models.KNOWN_RETAILERS` records the residual this leaves.
+
+    `str()` coercion on the way out, matching `target` one line over, so a
+    `retailer: 123` cannot reach a `==` against a string and quietly never match.
+    """
+    name = str(value)
+    if name not in KNOWN_RETAILERS and name.strip().lower() in KNOWN_RETAILERS:
+        raise ValueError(
+            f"{where}: retailer {name!r} is spelled differently from "
+            f"{name.strip().lower()!r}, which is the only spelling this build compares "
+            f"against. Written this way the watch is routed to a generic reader and "
+            f"loses its store guard silently. Write {name.strip().lower()!r}"
+        )
+    if name not in KNOWN_RETAILERS:
+        log.error(
+            "watch %s names retailer %r, which this build has no adapter or seller "
+            "list for — it will be read by the generic checker, it cannot be "
+            "store-guarded, and it is expected to read UNKNOWN. Known retailers: %s",
+            where,
+            name,
+            ", ".join(sorted(KNOWN_RETAILERS)),
+        )
+    return name
+
+
 def _interval(settings: dict[str, Any]) -> int:
     value = settings.get("interval_seconds", 300)
     try:
@@ -223,7 +276,7 @@ class Config:
             watches.append(
                 Watch(
                     name=entry["name"],
-                    retailer=entry["retailer"],
+                    retailer=_retailer(entry["retailer"], f"watch {entry.get('name')!r}"),
                     target=str(entry["target"]),
                     max_price=_price(entry.get("max_price"), f"watch {entry.get('name')!r}"),
                     control=bool(entry.get("control", False)),

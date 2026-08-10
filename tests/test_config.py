@@ -345,6 +345,156 @@ def test_the_default_pacer_state_file_is_gitignored() -> None:
     )
 
 
+# --------------------------------------------------------------------------
+# retailer: is a key the whole system branches on, so it is validated
+# --------------------------------------------------------------------------
+
+
+def test_a_capitalised_retailer_is_refused_rather_than_silently_unguarded(
+    tmp_path: Path,
+) -> None:
+    """One capital letter used to switch off both of the store guards.
+
+    Every consumer compares this string case-sensitively — `_make_checker`'s
+    `== "bestbuy" / "amazon" / "target"`, `retailers.MARKETPLACES`, and
+    `watch.retailer in models.STORE_SCOPED`. An unrecognised value falls through
+    `_make_checker` to `check_html`, which is the CORRECT transport for Walmart,
+    so `retailer: Walmart` reaches Walmart's real page, parses it perfectly, and
+    skips the store guard and `_is_store_gap` together.
+
+    Measured 2026-08-10 against `tests/fixtures/walmart/milk-control.html` and
+    the tree at bb6d418:
+
+        first_party_only=True   walmart  -> unknown    price=None
+        first_party_only=True   Walmart  -> unknown    price=None
+        first_party_only=False  walmart  -> unknown    price=None
+        first_party_only=False  Walmart  -> in_stock   price=2.42
+
+    A price and an availability from a store nobody pinned, published as a
+    verdict, with the dashboard green — the exact 2026-08-09 failure the phase
+    exists to prevent, reachable by a plausible YAML typo that nothing warned
+    about. (With the shipped `first_party_only: true` the same typo reads
+    UNKNOWN instead — but only because `Walmart` is absent from `FIRST_PARTY`
+    too, which is luck rather than a guard, and the message it produces sends
+    the reader to debug a seller list.)
+
+    REFUSED and not normalised, deliberately. Lower-casing would also close the
+    hole, and it would do it by accepting a spelling that no longer matches
+    anything the code says — a config file and a code constant agreeing only
+    after a transformation nobody can see. This project's whole value is that a
+    reading you cannot trust must not look like one you can, and the same
+    applies to the file that produces it. The error names the exact spelling to
+    write.
+    """
+    with pytest.raises(ValueError, match="retailer"):
+        Config.load(
+            _write(tmp_path, "watches:\n  - name: thing\n    retailer: Walmart\n    target: https://x/1\n")
+        )
+
+
+@pytest.mark.parametrize("spelling", ["Walmart", "WALMART", "walmart ", " walmart", "GameStop"])
+def test_every_case_and_whitespace_variant_is_refused(tmp_path: Path, spelling: str) -> None:
+    """The class, not the one instance.
+
+    `GameStop` is here because it is how the retailer writes its own name, so it
+    is the spelling an operator copying from the site would type; the trailing
+    and leading space forms are what a hand-edited YAML file grows.
+    """
+    with pytest.raises(ValueError):
+        Config.load(
+            _write(
+                tmp_path,
+                f'watches:\n  - name: thing\n    retailer: "{spelling}"\n    target: https://x/1\n',
+            )
+        )
+
+
+def test_the_error_names_the_spelling_to_write_instead(tmp_path: Path) -> None:
+    """A refusal that does not say what to write instead is a puzzle, not a message."""
+    with pytest.raises(ValueError, match="'walmart'"):
+        Config.load(
+            _write(tmp_path, "watches:\n  - name: thing\n    retailer: Walmart\n    target: https://x/1\n")
+        )
+
+
+def test_a_retailer_this_build_cannot_check_loads_but_says_so_loudly(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The residual, recorded so the gate is not trusted past it.
+
+    `walmrt` is not a miscased `walmart` — it is a name this build has no
+    adapter and no seller list for. Measured 2026-08-10, it is dangerous in
+    exactly the same way as `Walmart` when `first_party_only: false`:
+
+        first_party_only=True   walmrt   -> unknown    price=None
+        first_party_only=False  walmrt   -> in_stock   price=2.42
+
+    It is nonetheless LOADED, and that is a constraint rather than an oversight.
+    `scripts/evidence_check.py` has two rules that require such a watch to be
+    constructible: rule 1 catches a retailer configured but outside the
+    ROADMAP's Retailer Scope table, and its own test case is a `microcenter`
+    watch with no adapter at all; rule 5 catches a retailer configured while the
+    evidence file still records it REFUSED, and its test case is
+    `pokemoncenter`, whose docstring says a blanket ban would make "the outcome
+    this whole phase is walking towards — a refused retailer re-probed, reached,
+    and shipped — unrepresentable". Refusing the file would unrepresent both.
+
+    So the loader follows `_sub`'s idiom: not an error, because it is a
+    legitimate state, but it must be VISIBLE. Closing the residual properly
+    means either accepting that unrepresentation or moving the no-seller-list
+    escape hatch so it also runs when `first_party_only` is false — a decision
+    with two gates on the other side of it, not a tidy-up.
+    """
+    with caplog.at_level(logging.ERROR):
+        cfg = Config.load(
+            _write(tmp_path, "watches:\n  - name: thing\n    retailer: walmrt\n    target: https://x/1\n")
+        )
+
+    assert cfg.watches[0].retailer == "walmrt", "the name must reach the Watch unchanged"
+    assert "walmrt" in caplog.text
+    assert "no adapter" in caplog.text
+
+
+def test_the_shipped_config_names_only_retailers_this_build_knows() -> None:
+    """The positive half, and it is not decoration.
+
+    A validator can meet every test above by refusing everything. This is the
+    file the daemon actually loads, and it carries `nintendo` on two watches —
+    which is exactly the retailer 05-REVIEW's suggested `KNOWN_RETAILERS` left
+    out. Taking that set verbatim would have refused the shipped config at
+    startup.
+    """
+    root = Path(__file__).resolve().parent.parent
+    cfg = Config.load(root / "config" / "products.yaml")
+
+    assert {w.retailer for w in cfg.watches} == {
+        "gamestop",
+        "walmart",
+        "nintendo",
+        "bestbuy",
+        "target",
+        "amazon",
+    }
+
+
+def test_the_known_retailer_set_is_exactly_the_one_with_seller_lists() -> None:
+    """One definition, two readers — `STORE_SCOPED`'s own argument, applied here.
+
+    A retailer in `KNOWN_RETAILERS` with no `FIRST_PARTY` entry loads fine and
+    then reads UNKNOWN forever on `_verdict_from_html`'s no-seller-list escape
+    hatch, which is a permanent health warning from a config the loader called
+    valid. A retailer in `FIRST_PARTY` and not here cannot be configured at all,
+    so its seller list is dead code. Neither is a state anybody would choose;
+    both are what a set maintained in two places drifts into.
+    """
+    from boty.models import KNOWN_RETAILERS, STORE_SCOPED
+    from boty.retailers import FIRST_PARTY, MARKETPLACES
+
+    assert set(FIRST_PARTY) == KNOWN_RETAILERS
+    assert STORE_SCOPED <= KNOWN_RETAILERS
+    assert MARKETPLACES <= KNOWN_RETAILERS
+
+
 def test_both_walmart_watches_carry_a_store_pin_key() -> None:
     """CONTEXT is explicit that REQ-14 applies to the PRODUCT watch, not only the control.
 
