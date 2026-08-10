@@ -26,16 +26,62 @@ backed off to once a day has quietly stopped being a monitor — at the cap it
 keeps trying, and the health report keeps saying it is refused, which is a
 state somebody should eventually see rather than one that disappears.
 
-Deliberately in-memory. A restart clears the backoff and tries once at full
-rate, which is the right trade: the alternative is a persisted penalty
-outliving the condition that caused it, and one extra request per restart is
-cheaper to reason about than a stale file.
+IT IS PERSISTED NOW, AND THIS FILE USED TO ARGUE THE OPPOSITE
+-------------------------------------------------------------
+Until 2026-08-10 the paragraph here read, in full:
+
+    "Deliberately in-memory. A restart clears the backoff and tries once at
+    full rate, which is the right trade: the alternative is a persisted
+    penalty outliving the condition that caused it, and one extra request per
+    restart is cheaper to reason about than a stale file."
+
+Two measured facts overruled it.
+
+1. `boty.service` is a systemd unit with `Restart=` semantics, so a restart is
+   not a rare event — it is what a supervisor does whenever anything goes
+   wrong. "One extra request per restart" is the cost of a restart you can
+   count; against a flapping service it is a retailer that walled us being
+   asked at FULL rate indefinitely, which is exactly the behaviour the
+   politeness constraint calls a hard limit.
+2. REQ-16 says a refusal that outlasts the cap is pushed ONCE. The counter that
+   defines "the cap" is `refusals`, and `cli._refusal_is_entrenched` reads it
+   and nothing else. If it resets, "once" silently becomes "once per process" —
+   and the page-once bookkeeping hanging off it resets with it, so a restart
+   re-pages a retailer somebody has already been told about. That is the
+   20-pages-in-24-hours failure this module exists to prevent, rebuilt from the
+   other end.
+
+THE STALE-FILE OBJECTION IS ANSWERED, NOT DROPPED. The withdrawn paragraph's
+objection was a persisted penalty outliving the condition that caused it, and
+it gets two answers — the second of which is the stronger:
+
+(a) Every record carries a wall-clock stamp and is discarded past
+    `STATE_MAX_AGE_SECONDS`, so a file written before a machine was off for a
+    week is ignored rather than applied; and a retailer at zero refusals is
+    never written at all, so the document self-cleans.
+(b) `due_at` IS STILL NOT PERSISTED, which keeps the withdrawn paragraph's own
+    concession intact. A restart still tries once, immediately, at full rate,
+    so the condition is re-tested at once. What is inherited is only the DEPTH
+    the penalty resumes at IF that one request is refused again, plus whether
+    a human has already been told. The withdrawn paragraph was right about the
+    request and wrong about the memory.
+
+SO: `refusals` and the wall-clock time it was last incremented are written,
+along with the caller's paging memory. `due_at` never is. `cli.watch_loop`
+drives this class with a synthetic clock (`scheduled_now`) that starts at 0.0
+in every process, so a persisted `due_at` would be a number with no referent:
+compared against a fresh 0.0 it either fires immediately or blocks a retailer
+for the entire age of the previous process. Neither is a schedule; both are an
+accident.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -47,11 +93,79 @@ BACKOFF_FACTOR = 2.0
 #: retailer coming back is noticed the same day.
 MAX_BACKOFF_SECONDS = 6 * 60 * 60
 
+#: Schema version of the persisted document. A file carrying any other value is
+#: treated as absent.
+#:
+#: The hedge is worth arguing rather than assuming. `monitor.State` has no
+#: version and needs none: its document is a flat map of strings whose meaning
+#: cannot drift. This one carries a COUNT whose units are a policy decision —
+#: `BACKOFF_FACTOR` and the cap — so a future version that changed either and
+#: then restored an old file under the new units would pin a retailer at a wait
+#: nobody chose. One integer against that is cheap.
+STATE_VERSION = 1
+
+#: Persisted state older than this is discarded rather than applied. DERIVED
+#: from `MAX_BACKOFF_SECONDS` rather than re-chosen, so the two cannot drift
+#: apart — the same argument `Result.degraded` makes about deriving rather than
+#: storing. The cap already IS this project's written answer to how long a
+#: refusal stays evidence ("long enough to outlast a rate-limit window and short
+#: enough that a retailer coming back is noticed the same day"), so a record
+#: older than one full cap-length window has outlived the reasoning that
+#: produced it. This is half the answer to the stale-file objection quoted at
+#: the top of this file; the other half is that `due_at` is never persisted.
+STATE_MAX_AGE_SECONDS = MAX_BACKOFF_SECONDS
+
+#: Ceiling on a refusal count read back off disk. A measured number, not a round
+#: one.
+#:
+#: `record` computes `st.interval * BACKOFF_FACTOR ** st.refusals`, and float
+#: exponentiation has a domain limit. Measured 2026-08-10 on CPython 3.12.3:
+#: `2.0 ** 1024` raises OverflowError; `2.0 ** 1023` returns 8.99e307, and the
+#: multiplication that follows overflows to `inf` — which `min()` clamps to the
+#: cap harmlessly, so the failure is a cliff rather than a slope. (The exponent
+#: is where it breaks; the multiply never raises.) So a file containing
+#: `"refusals": 1000000000` is not a big number. It is an exception raised
+#: inside every cycle, caught by `watch_loop`'s handler, counted to
+#: `FAILURES_BEFORE_GIVING_UP` and returned as exit 1: a one-line denial of
+#: service on the monitor, from a file the monitor wrote itself.
+#:
+#: 64 is far below the crash point and far above where the cap binds (7 refusals
+#: at the default 300 s interval), so clamping costs nothing operationally —
+#: only the number `skipped_reason` prints changes, and "64 refusal(s)" already
+#: says what it needs to. It must also stay comfortably above
+#: `cli.REFUSALS_BEFORE_PAGING`, or persistence would silently defeat the paging
+#: clause it exists to serve. That relationship is asserted by a test rather
+#: than by this comment, because this module must not import `boty.cli` — the
+#: dependency runs the other way.
+MAX_PERSISTED_REFUSALS = 64
+
+
 @dataclass
 class _RetailerState:
     interval: float
     refusals: int = 0
+    #: The CALLER's clock, and it never leaves this process. `cli.watch_loop`
+    #: advances a synthetic `scheduled_now` from 0.0 every process, so this
+    #: number is meaningless to anybody else — which is precisely why `save`
+    #: does not write it and `load` does not read it.
     due_at: float = 0.0
+    #: WALL clock (`time.time()`), set when `refusals` was last incremented.
+    #: This field exists only to be written down.
+    #:
+    #: This class now holds two clocks and confusing them is the bug that made
+    #: `due_at` unpersistable, so state the distinction rather than leave it to
+    #: be rediscovered: `due_at` is a position on the caller's schedule;
+    #: `refused_at` is a timestamp on the EVIDENCE. `time.monotonic()` is the
+    #: wrong tool here for exactly the reason it is the right one in
+    #: `cli.watch_cycle`'s duration measurement — its epoch is process- and
+    #: boot-local, so it means nothing in a file.
+    #:
+    #: The residual is accepted and bounded in both directions. An NTP
+    #: correction or a manual clock change forward ages a record out early,
+    #: which degrades to the old in-memory behaviour — the safe direction. A
+    #: jump backwards leaves a stamp in the future, which `load` discards rather
+    #: than trusting forever.
+    refused_at: float = 0.0
 
 
 @dataclass
@@ -65,6 +179,14 @@ class Pacer:
     default_interval: float
     overrides: dict[str, float] = field(default_factory=dict)
     _state: dict[str, _RetailerState] = field(default_factory=dict, repr=False)
+    #: Where the backoff survives a restart, or `None` for "do not persist".
+    #:
+    #: Declared LAST and with a default for the reason `Result.rung` and
+    #: `Result.extraction` state one module over: every pre-existing
+    #: construction site stays valid and keeps its meaning. There are nine in
+    #: `tests/test_pacing.py` alone and not one names a path, and `None` is the
+    #: behaviour all of them have today.
+    state_path: Path | None = None
 
     def _for(self, retailer: str) -> _RetailerState:
         if retailer not in self._state:
@@ -95,6 +217,9 @@ class Pacer:
         st = self._for(retailer)
         if refused:
             st.refusals += 1
+            # Wall clock, and only here: this is the moment the evidence was
+            # collected, which is the only thing a later process can date.
+            st.refused_at = time.time()
             wait = min(
                 st.interval * BACKOFF_FACTOR ** st.refusals,
                 MAX_BACKOFF_SECONDS,
@@ -110,6 +235,7 @@ class Pacer:
             if st.refusals:
                 log.info("%s is answering again after %d refusal(s)", retailer, st.refusals)
             st.refusals = 0
+            st.refused_at = 0.0
             wait = st.interval
         st.due_at = now + wait
 
@@ -125,3 +251,127 @@ class Pacer:
         if st.refusals:
             return f"backing off after {st.refusals} refusal(s) — next attempt in ~{mins:.0f} min"
         return f"paced at {st.interval / 60:.0f} min — next attempt in ~{mins:.0f} min"
+
+    # ----------------------------------------------------------------------
+    # Surviving the process
+    #
+    # WHY THESE TWO TAKE AND RETURN `warned`, WHICH IS NOT THIS CLASS'S STATE.
+    # A reviewer will otherwise read it as a field this class forgot to store,
+    # so: it is passed THROUGH and never held. `Pacer` decides cadence — `due`,
+    # `record` and `skipped_reason` do not read `warned` and must not start.
+    # `cli.watch_cycle` decides paging. But the two facts are written and read
+    # at the same two moments, and REQ-16's "pushed once" is a joint property of
+    # both: `refusals` decides whether a refusal is PAGEABLE, `warned` decides
+    # whether it has ALREADY BEEN PAGED. Restoring one without the other
+    # restores half a decision — and the half that is missing is the worse one,
+    # because a process that comes back knowing the retailer is entrenched and
+    # not knowing it already said so pages immediately. One document, one write,
+    # one load. A second file would be a second gitignore line, a second
+    # corrupt-file path, and a second way for a restart to come back holding a
+    # contradiction. A field this class never read would be a smell; a parameter
+    # it only serialises is a stated pass-through.
+    #
+    # Instance methods rather than a `State`-style classmethod, because `Pacer`
+    # needs `default_interval` and `overrides` at construction and
+    # `cli.watch_loop`'s invariant is one pacer for the life of the loop: the
+    # loop builds the pacer and then loads INTO it. A classmethod would invite a
+    # second construction site, which is the thing that invariant forbids.
+    # ----------------------------------------------------------------------
+
+    def load(self) -> set[str]:
+        """Restore the backoff depth from disk, and hand back the paging memory.
+
+        Built on `monitor.State.load`'s shape — one `try` around the read and
+        the parse, catching `(OSError, json.JSONDecodeError)` into empty state —
+        and on `parse.nextdata_offers`' discipline inside it: `isinstance` at
+        every step, each failure returning nothing rather than guessing, so no
+        other exception type can arise from a hostile document. A corrupt,
+        truncated, absent or hand-edited file must never stop the monitor
+        starting, and must never pin a retailer at the cap forever.
+
+        `due_at` is not read, and the module docstring says why: it was measured
+        against a clock that no longer exists.
+        """
+        if self.state_path is None:
+            return set()
+        try:
+            doc = json.loads(self.state_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return set()
+        if not isinstance(doc, dict) or doc.get("version") != STATE_VERSION:
+            return set()
+
+        now = time.time()
+        retailers = doc.get("retailers")
+        if isinstance(retailers, dict):
+            for name, entry in retailers.items():
+                if not isinstance(name, str) or not isinstance(entry, dict):
+                    continue
+                refusals = entry.get("refusals")
+                # `bool` is an `int` subclass, so `"refusals": true` would
+                # otherwise restore a backoff of 1. `config._price`'s own
+                # precedent, one module over.
+                if not isinstance(refusals, int) or isinstance(refusals, bool) or refusals <= 0:
+                    continue
+                refused_at = entry.get("refused_at")
+                if not isinstance(refused_at, (int, float)) or isinstance(refused_at, bool):
+                    continue
+                # BOTH bounds. Past the cap the record has outlived its
+                # reasoning; a stamp in the FUTURE is a clock that jumped
+                # backwards, and with only an upper bound it would hold the
+                # state for as long as the skew lasted.
+                if not 0.0 <= now - float(refused_at) <= STATE_MAX_AGE_SECONDS:
+                    continue
+                # `interval` comes from config, never from the file: it is a
+                # standing decision, and a persisted copy would let yesterday's
+                # file quietly override an edit to `retailer_intervals` — the
+                # opposite of what a settings file is for.
+                st = self._for(name)
+                st.refusals = min(refusals, MAX_PERSISTED_REFUSALS)
+                st.refused_at = float(refused_at)
+
+        warned = doc.get("warned")
+        if not isinstance(warned, list):
+            return set()
+        return {w for w in warned if isinstance(w, str)}
+
+    def save(self, warned: set[str]) -> None:
+        """Commit the backoff depth and the paging memory in one write.
+
+        Retailers at zero refusals are omitted, so only a retailer currently in
+        a backoff appears: one that started answering again drops out, and one
+        deleted from the config ages out rather than accumulating forever.
+        `warned` is a sorted list because a set is not JSON and an unsorted one
+        would make every write a spurious diff.
+
+        Plain `write_text`, NOT `status.write`'s temp-and-replace, and the
+        difference is the reason: `status.json` is atomic because it is served
+        over HTTP *while* it is being written. This file has exactly one reader,
+        once, at startup, in the same process that writes it.
+
+        Wrapped, on `status.write`'s precedent: failing to persist a backoff
+        must degrade to the old in-memory behaviour, never take down a cycle. A
+        full disk is a worse monitor, not a dead one — and `watch_loop` calls
+        this from a `finally` inside its own handler, so a raise here would be
+        counted as a failed cycle and ten of them would exit the service.
+        """
+        if self.state_path is None:
+            return
+        doc = {
+            "version": STATE_VERSION,
+            "retailers": {
+                name: {"refusals": st.refusals, "refused_at": st.refused_at}
+                for name, st in self._state.items()
+                if st.refusals
+            },
+            "warned": sorted(warned),
+        }
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            self.state_path.write_text(json.dumps(doc, indent=2, sort_keys=True))
+        except OSError:
+            log.exception(
+                "could not write the pacer state to %s — the backoff still works "
+                "in memory, but it will not survive a restart",
+                self.state_path,
+            )

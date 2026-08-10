@@ -585,6 +585,15 @@ def test_the_age_out_is_derived_from_the_backoff_cap() -> None:
     assert STATE_MAX_AGE_SECONDS == MAX_BACKOFF_SECONDS
 
 
+def _versioned(**payload: object) -> str:
+    """A document that gets the version right and everything else wrong."""
+    return json.dumps({"version": STATE_VERSION, **payload})
+
+
+def _entry(**fields: object) -> str:
+    return _versioned(retailers={"a": fields})
+
+
 _HOSTILE = [
     ("this is not json at all", "not JSON"),
     ("", "an empty file"),
@@ -592,33 +601,19 @@ _HOSTILE = [
     ('"amazon"', "a JSON string"),
     ("3", "a JSON number"),
     ("null", "JSON null"),
-    ('{"version": %d, "retailers": 3}' % STATE_VERSION, "retailers is not a mapping"),
-    ('{"version": %d, "retailers": {"a": 3}}' % STATE_VERSION, "an entry is not a mapping"),
-    (
-        '{"version": %d, "retailers": {"a": {"refusals": "x", "refused_at": 0}}}' % STATE_VERSION,
-        "refusals is a string",
-    ),
-    (
-        '{"version": %d, "retailers": {"a": {"refusals": -5, "refused_at": 0}}}' % STATE_VERSION,
-        "refusals is negative",
-    ),
-    (
-        '{"version": %d, "retailers": {"a": {"refusals": true, "refused_at": 0}}}' % STATE_VERSION,
-        "refusals is a bool (an int subclass)",
-    ),
-    (
-        '{"version": %d, "retailers": {"a": {"refusals": 1000000000.0}}}' % STATE_VERSION,
-        "refusals is a float and refused_at is absent",
-    ),
-    (
-        '{"version": %d, "retailers": {"a": {"refusals": 3, "refused_at": "now"}}}' % STATE_VERSION,
-        "refused_at is a string",
-    ),
-    ('{"version": %d, "warned": "amazon"}' % STATE_VERSION, "warned is a bare string"),
-    ('{"version": %d, "warned": [1, 2]}' % STATE_VERSION, "warned is a list of ints"),
-    ('{"version": %d, "warned": 7}' % STATE_VERSION, "warned is a number"),
-    ('{"version": 999, "retailers": {"a": {"refusals": 9}}}', "an unrecognised version"),
-    ('{"retailers": {"a": {"refusals": 9}}}', "no version at all"),
+    (_versioned(retailers=3), "retailers is not a mapping"),
+    (_versioned(retailers={"a": 3}), "an entry is not a mapping"),
+    (_entry(refusals="x", refused_at=0), "refusals is a string"),
+    (_entry(refusals=-5, refused_at=0), "refusals is negative"),
+    (_entry(refusals=True, refused_at=0), "refusals is a bool (an int subclass)"),
+    (_entry(refusals=10**9), "refusals is huge and refused_at is absent"),
+    (_entry(refusals=3, refused_at="now"), "refused_at is a string"),
+    (_entry(refusals=3, refused_at=None), "refused_at is null"),
+    (_versioned(warned="amazon"), "warned is a bare string"),
+    (_versioned(warned=[1, 2]), "warned is a list of ints"),
+    (_versioned(warned=7), "warned is a number"),
+    (json.dumps({"version": 999, "retailers": {"a": {"refusals": 9}}}), "an unrecognised version"),
+    (json.dumps({"retailers": {"a": {"refusals": 9}}}), "no version at all"),
 ]
 
 
