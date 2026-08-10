@@ -23,6 +23,11 @@ can contribute to.
 - [x] **Phase 3.1: Target and Amazon, Supported** - INSERTED 2026-08-03. Reverses Phase 3's drop-on-terms decision at Dan's direction (completed 2026-08-03)
 - [x] **Phase 4: Open Source Ready** - Contributor docs, CI, packaging, release (completed 2026-08-06)
 
+### Milestone v0.2 — Say Only What You Measured (scoped 2026-08-10)
+
+- [ ] **Phase 5: A Reading Means Something** - Pin the store, name the cause, page only when it matters
+- [ ] **Phase 6: Claims With Gates Under Them** - Delivered-total ceiling, bind the matrix, gate what ships
+
 ## Retailer Scope
 
 Deliberately narrowed from a padded list of ten. Newegg, B&H and Micro Center
@@ -351,6 +356,66 @@ Deliberately excluded — see PROJECT.md for reasoning:
 - Formal plugin API (premature until ~10 adapters reveal the interface)
 - Auto add-to-cart / checkout (different product, different ethics)
 - Web UI beyond the read-only status page
+
+---
+
+## Milestone v0.2 — Say Only What You Measured
+
+**Scoped 2026-08-10, from four days of live operation after Phase 4.** Every phase below
+closes a claim the system was making without having measured it. v1.0.0 stays open and
+untagged — its definition of done includes *"Dan has successfully bought a Pokémon GO
+Plus +"*, a market condition — and phase numbering continues rather than restarting.
+
+**The v1.0 numbering was itself the same error**, declared before the project had shipped,
+published or bought anything. v0.2 is the correction, and it is safe only because
+publishing was deferred: nothing was ever tagged or uploaded.
+
+### Phase 5: A Reading Means Something
+
+**Goal**: A Walmart reading is a statement about a known store, and every alert names only
+what was measured — or says it does not know.
+**Depends on**: Phase 4
+**Requirements**: REQ-14, REQ-15, REQ-16
+**Success Criteria** (what must be TRUE):
+
+  1. Every Walmart `Result` records the store it came from, and that store is published in `status.json`
+  2. A reading from an unpinned or unexpected store is UNKNOWN, never a verdict — watched going red
+  3. No alert text names a cause the code has not established; where the cause is unknown the alert says so
+  4. A refusal the backoff is handling is recorded but not pushed; one that outlasts the cap is pushed once
+  5. The page-once state survives a service restart — `Pacer._state` is in-memory today, so a restart currently resets every backoff to zero
+
+**Why this first.** It is the only item in the milestone that touches what a *product*
+reading means. Walmart is one of four retailers that can alert on the GO Plus +, and its
+readings are currently statements about an arbitrary store. Everything in Phase 6 is a
+gate over a claim; this is the claim itself.
+
+**The measurement that opened it** (2026-08-09): the daemon recorded the milk control
+`OUT_OF_STOCK` at **$3.17**; three live reads minutes later returned `IN_STOCK` at
+**$2.42**. Same URL, same parser. A parser bug does not change a price — two different
+stores answered. Detail in `.planning/seeds/walmart-store-assignment-is-unpinned.md`.
+
+### Phase 6: Claims With Gates Under Them
+
+**Goal**: Every claim this project publishes — a price filter, a matrix row, a shipped
+file, a version number — has a gate under it that has been watched going red.
+**Depends on**: Phase 5
+**Requirements**: REQ-17, REQ-18, REQ-19, REQ-20
+**Success Criteria** (what must be TRUE):
+
+  1. The price ceiling applies to the delivered total; an unresolvable shipping cost is UNKNOWN, not a pass
+  2. Mutating an adapter's `Rung` against a contradicting README row turns a test red — today it leaves 131 green
+  3. A workflow file added under `.github/workflows/` is covered by the pin, exit-code, timeout and runner rules
+  4. `CHANGELOG.md` is gated on its **contents**, not its existence — the leaked-markup class cannot ship again
+  5. `pyproject.toml` reads `0.2.0`, agrees with the project's milestone version, and cannot silently diverge
+
+**Why second.** None of it changes what a reading means, so it cannot block Phase 5 — but
+all four are the same shape as the bugs Phase 5 fixes, one level up: a claim asserted at
+the producing end with nothing checking it at the consuming one.
+
+**Note on criterion 1.** The delivered-total hole was found while researching eBay, which
+is now closed (registration rejected, 2026-08-10). The finding outlived the retailer:
+Walmart carries marketplace sellers, so a $54.99 listing with $45 shipping defeats one of
+only two reseller defences **today**.
 
 ## Open Questions
 

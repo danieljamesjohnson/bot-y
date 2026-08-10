@@ -1,18 +1,80 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0.0
-milestone_name: milestone
-status: Phase complete — ready for verification
-stopped_at: Completed 04-06-PLAN.md — Phase 4 closed, 3 of 5 criteria MET
-last_updated: "2026-08-06T14:59:22.771Z"
-last_activity: 2026-08-06
+milestone: v0.2
+milestone_name: Say Only What You Measured
+status: Ready to plan
+stopped_at: "Milestone v0.2 scoped 2026-08-10. Phase 5 is next and needs planning."
+last_updated: "2026-08-10T00:00:00.000Z"
+last_activity: 2026-08-10
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 23
-  completed_plans: 22
-  percent: 80
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
+
+# State: bot-y
+
+## Project Reference
+
+See: `.planning/PROJECT.md` (updated 2026-08-10)
+
+**Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
+**Current focus:** Milestone **v0.2 — Say Only What You Measured**. Phase 5 next, unplanned.
+
+## Status
+
+**Milestone:** v0.2 (scoped 2026-08-10)
+**Phase:** 5 of 6 — *A Reading Means Something* — NOT YET PLANNED
+**Next command:** `/gsd-plan-phase 5`
+
+**v1.0.0 is open, untagged, and stays that way.** Its definition of done includes *"Dan has
+successfully bought a Pokémon GO Plus +"* — a market condition, not a work item — and the
+milestone audit (`.planning/v1.0.0-MILESTONE-AUDIT.md`) recommended against tagging it as
+shipped. 0 integration blockers, 2 warnings, both carried into v0.2 as REQ-18 and REQ-19.
+
+**Why v0.2 after v1.0.0.** The v1.0 numbering was itself an overclaim — declared before the
+project had shipped, published or bought anything. Renumbering down is the same correction
+this milestone makes everywhere else, applied to the version number. Safe only because
+publishing was deferred: nothing was tagged or uploaded, so nobody can be pinned to a 1.0.0
+that exists. `pyproject.toml` rolls 1.0.0 → 0.2.0 in Phase 6 (REQ-20).
+
+## What v0.2 is
+
+Six live findings, one shape — the system stating something it had not established:
+
+| The claim | What was actually true |
+|---|---|
+| "the detector is probably broken" | It was not. Three live reads: `IN_STOCK` at $2.42, `available=True` |
+| "we are asking too often" | Falsified — a 6-hour backoff was still refused on the next single request, twice |
+| A Walmart reading is about Walmart | It is about *some store*. The differing price ($3.17 vs $2.42) is what proved it |
+| The price ceiling filters resellers | It reads `offer.price`; $45 shipping walks through |
+| The matrix states each rung | Not bound to code — mutating `check_amazon`'s rung left 131 tests green |
+| The changelog ships what was written | Nothing reads its body; leaked markup shipped for a whole phase |
+
+**Phase 5 is the only one that changes what a *product* reading means** — Walmart is one of
+four retailers that can alert on the GO Plus +. Phase 6 is gates over claims.
+
+## Carried into this milestone
+
+- **`Pacer._state` is in-memory only.** A service restart resets every backoff to zero, so any page-once bookkeeping hung off it re-pages on restart. Phase 5 criterion 5.
+- **`boty.service` has been running pre-Phase-4 code since 2026-08-04 17:48.** No detector logic changed in Phase 4, so it is not urgent — but do NOT restart while a retailer is in backoff, for the reason above.
+- **`make verify` fails live** (`VERIFY: FAIL (live controls)`, exit 2): no Chrome/Chromium binary on this host, so Best Buy and Target cannot run at all; Walmart and Amazon hit challenge pages intermittently. All four read UNKNOWN, never a false verdict. `make verify-offline` exits 0 — 531 passed, 8/8 mutations.
+- **eBay is closed.** Developers Program registration was **rejected** 2026-08-10. See `.planning/research/ebay-CLOSED-registration-rejected.md`. The delivered-total ceiling finding survived it and is REQ-17.
+- **Do not put a real postal code or store id in a fixture or config without redaction.** Phase 3.1 spent seven re-verification rounds on that leak class, and Phase 5 works directly with store identifiers.
+
+## Seeds feeding this milestone
+
+- `.planning/seeds/walmart-store-assignment-is-unpinned.md` → REQ-14
+- `.planning/seeds/notify-only-when-a-decision-changes-the-outcome.md` → REQ-15, REQ-16
+- `.planning/seeds/nothing-reads-the-changelog-body.md` → REQ-19
+
+---
+
+# Previous milestone — v1.0.0 (open, untagged)
+
+<!-- Kept verbatim below. v1.0.0 was not archived, because it was not completed. -->
 
 # State: bot-y
 

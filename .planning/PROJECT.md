@@ -60,6 +60,45 @@ looking yourself.
 - **Forking changedetection.io** — it's Apache-2.0 and actively maintained (last push 2 days ago, external PRs merged at a 2-day median). Forking means permanently diverging from a fast-moving upstream to add one concept — control products — that its per-watch architecture has no place for.
 - **Aggressive polling** — 5-minute default with jitter. A drought lasts weeks; sub-minute polling buys nothing and is what gets an IP blocked.
 
+## Current Milestone: v0.2 — Say Only What You Measured
+
+**Goal:** every claim bot-y makes — in an alert, in a reading, in the README, in its
+own version number — is backed by something it actually measured.
+
+**Why this, and why now.** Four days of live operation after Phase 4 produced six
+findings with one shape. Each is the system stating something it had not established:
+
+| The claim | What was actually true |
+|---|---|
+| *"the detector is probably broken"* (Walmart control page) | It was not. Three live reads returned `IN_STOCK` at $2.42 and `nextdata_offers` gave `available=True` |
+| *"we are asking too often"* (refusal page) | Falsified: after backing off to a 6-hour interval, the very next single request was still refused. Twice |
+| A Walmart reading is about **Walmart** | It is about *some store*. Nothing is pinned, and the recorded price differed from the live one ($3.17 vs $2.42), which is what proved it |
+| The price ceiling filters resellers | It reads `offer.price`. A $54.99 listing with $45 shipping walks straight through |
+| The README support matrix states each retailer's rung | Not bound to code — mutating `check_amazon` to return `Rung.BROWSER` against a README saying rung 1 left **131 tests green** |
+| The published changelog says what was written | Nothing reads its body. It shipped with leaked tool-call markup for a whole phase, on the path to PyPI |
+
+**And the version number was the same error.** v1.0.0 was declared before the project
+had shipped, published, or bought anything; the milestone audit then had to record that
+its own definition of done was unmet. **Renumbering to v0.2 is not bookkeeping — it is
+the version finally matching what was measured**, which is this milestone's whole thesis
+applied to itself. Safe to do only because publishing was deferred: nothing was ever
+tagged or uploaded, so no one can be pinned to a 1.0.0 that exists.
+
+**The one that is not cosmetic.** Store pinning is not about a noisy milk control. The
+same unpinned assignment governs the **GO Plus + watch on Walmart** — one of only four
+retailers that can alert on the real product. A restock reading there is currently a
+statement about an arbitrary store, not about Walmart. Never observed going wrong; also
+never prevented.
+
+**v1.0.0 stays open and untagged**, exactly as its audit recommended. Its definition of
+done — *Dan has successfully bought a Pokémon GO Plus +* — is a market condition, and it
+closes when the market moves rather than when we decide it has. Phase numbering continues
+from 5.
+
+**Explicitly not in scope:** eBay. Registration for the eBay Developers Program was
+**rejected** on 2026-08-10 — see `.planning/research/ebay-CLOSED-registration-rejected.md`.
+The one finding worth keeping from it is in scope above: the delivered-total ceiling.
+
 ## Context
 
 **Origin.** Dan wanted a Pokémon GO Plus + (MSRP $54.99), which is out of stock

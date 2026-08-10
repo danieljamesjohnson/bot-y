@@ -1,4 +1,11 @@
-# Requirements: bot-y v1.0
+# Requirements: bot-y
+
+**Current milestone: v0.2 — Say Only What You Measured** (scoped 2026-08-10).
+v1.0.0 remains open and untagged: its definition of done includes *"Dan has
+successfully bought a Pokémon GO Plus +"*, which is a market condition, and the
+milestone audit recommended against tagging it as shipped. **The v1.0 numbering was
+itself an overclaim** — declared before the project had shipped, published or bought
+anything — and v0.2 is the correction.
 
 ## Definition of Done
 
@@ -57,6 +64,20 @@ has not worked.
 - [x] **REQ-10**: CI runs lint, type check and the offline test suite on every PR.
 - [~] **REQ-11**: ~~`pip install bot-y` works from PyPI, and a v1.0.0 tag exists.~~ **DESCOPED from v1.0 on 2026-08-07** — not met, not reworded, and struck through rather than deleted so the withdrawn promise stays visible. Dan: *"Let's kill those 2 since I wouldn't publish it without more real testing."* Nothing technical blocks it (`make release-check` → 10/10, artefacts proven in a clean venv); the handoff card is on disk. Carry it into a later milestone if the project is published.
 
+### Milestone v0.2 — Say Only What You Measured
+
+<!-- Every one of these closes a claim the system was making without having measured it.
+     Scoped 2026-08-10 from four days of live operation after Phase 4. v1.0.0 stays open
+     and untagged; none of these depend on it and none of them close it. -->
+
+- [ ] **REQ-14**: A Walmart reading states which store it came from, and a reading from an unpinned or unexpected store is UNKNOWN rather than a verdict. Measured 2026-08-09: the same URL returned `OUT_OF_STOCK`/$3.17 to the daemon and `IN_STOCK`/$2.42 to three consecutive live reads minutes later. The differing **price** is what proves the mechanism — a parser bug does not change a price; two different stores answered. Applies to the GO Plus + product watch, not only the control.
+- [ ] **REQ-15**: No alert names a cause that was not measured. The two live counterexamples are the whole requirement: *"the detector is probably broken"* fired while the detector demonstrably worked, and *"we are asking too often"* kept firing after backing off to a 6-hour interval had been observed not to help. Where the cause is unknown, the alert says so.
+- [ ] **REQ-16**: A notification is sent only when a human decision changes the outcome. A refusal the backoff is actively handling is recorded, not pushed; a refusal that outlasts the cap is pushed once; a detector producing a *wrong* verdict is pushed immediately. Recording and notifying stay separate — a retailer that is not being watched right now is real information even when there is no action to take.
+- [ ] **REQ-17**: The price ceiling applies to the **delivered total**, not the item price, and a shipping cost that cannot be resolved produces UNKNOWN rather than a pass. A $54.99 listing with $45 shipping currently defeats one of only two defences against a reseller alert.
+- [ ] **REQ-18**: Every claim in the README support matrix is bound to the code it describes. Today the **Rung** cell is not: mutating `check_amazon` to return `Rung.BROWSER`, directly contradicting the shipped `| Amazon | 1 | dom |` row, left 131 tests green. Routing and Extraction are already pinned; Rung is the gap.
+- [ ] **REQ-19**: Files that ship to a stranger are gated on their contents, not their existence. `CHANGELOG.md` shipped with leaked tool-call markup for an entire phase — `MANIFEST.in` puts it in the sdist and `pyproject.toml` points installers at it — because `release_check.py` asserts only that the file exists and `_changelog_version` reads only its first heading. A workflow file added under `.github/workflows/` likewise escapes the pin, exit-code, timeout and runner rules while the suite stays green.
+- [ ] **REQ-20**: The package version and the project's own milestone version agree, and cannot silently diverge. Rolling `pyproject.toml` from the aspirational `1.0.0` to `0.2.0` is safe only because publishing was deferred — nothing was tagged or uploaded, so nobody can be pinned to a 1.0.0 that exists.
+
 ## Non-Functional Requirements
 
 - **Trustworthiness over coverage.** Where they conflict, correctness wins. Ten provably-correct retailers beat a hundred maybes. This is the tiebreaker for every scoping decision.
@@ -108,4 +129,11 @@ Maintained by `gsd-tools`; a requirement flips to Complete when its phase comple
 | REQ-11 | Phase 4 | **DESCOPED from v1.0 (2026-08-07)** — Dan: *"Let's kill those 2 since I wouldn't publish it without more real testing."* Not met and not reworded; the criterion was wrong scope for v1.0, which is a different act from rewording one to pass. History, unedited: Pending — 04-02 shipped the licence and the packaging metadata REQ-11 rests on, and its frontmatter claimed the requirement on landing. It does not close it. REQ-11's own text is `pip install bot-y` works **from PyPI**, and a **v1.0.0** tag exists: at the end of wave 2 the version is `0.1.0`, `git tag -l` is empty, and nothing has been published. **04-06** is the plan that closes this, by measuring what Dan actually publishes rather than by asserting it here. **04-06 ran on 2026-08-06 and did NOT close it — the honest outcome is that it stays Pending.** Dan deferred publishing, verbatim: *"i don't think we need to host it yet. it's probably not quite ready for that"*. Re-measured at close rather than assumed: `https://pypi.org/pypi/bot-y/json` → **HTTP 404**, `git tag -l` → empty, `git ls-remote --tags origin` → **0 refs**. Both halves of REQ-11's text are therefore unproven, and no criterion was reworded to make it closeable. What 04-06 *did* deliver is the handoff card at `.planning/phases/04-open-source-ready/04-06-HANDOFF.md`, which carries every exact string the publish needs, read off the shipped tree — so closing REQ-11 later needs no replanning, only the four steps on that card |
 | REQ-12 | Phase 1 | Complete |
 | REQ-07a | Phase 3.1 | Complete — **both retailers registered, and both on an observation rather than a policy reading, which is the whole point of this requirement.** *(This cell described the mid-phase state until 2026-08-03: "Target stays dropped … Amazon still unprobed". Both halves were overtaken by the plans that followed and the narrative is replaced rather than appended to, because a status cell is not a log.)* **Target** — reachable at rung 1 but *empty* (no price, availability or seller anywhere in the HTML; stock renders from `redsky.target.com`, `Disallow: /`). Dan answered the `robots.txt` question in `QUESTIONS.md` 0d, so 03.1-02 registered it at **rung 3 + `dom`**, reading the add-to-cart control off the rendered page — **control-only**, because Target has delisted the GO Plus + (TCIN `88714054`, HTTP 200 as late as 2025-05, now 404). **Amazon** — 03.1-03 made this repo's first live `/dp/` requests: three, all HTTP 200, no challenge, no `BLOCK_PHRASES` match. No structured data at all, but `<input id="add-to-cart-button">` is in the rung-1 bytes, so it registered at **rung 1 + `dom`** (shape C). Phase 3 had dropped it on its Conditions of Use having never sent a request; the technical answer is that it serves us. Six retailers ship, 6/6 control-verified. The gate that makes this mechanical is `evidence_check` rule 6 — a `REFUSED` verdict must cite an observation carrying a status code, a byte count or a matched block phrase, watched failing on a prose-only body |
+| REQ-14 | Phase 5 | Pending |
+| REQ-15 | Phase 5 | Pending |
+| REQ-16 | Phase 5 | Pending |
+| REQ-17 | Phase 6 | Pending |
+| REQ-18 | Phase 6 | Pending |
+| REQ-19 | Phase 6 | Pending |
+| REQ-20 | Phase 6 | Pending |
 | REQ-13 | Phase 3.1 | Complete — 03.1-01 built six matrix columns with a two-directional `⚠ disagree` rule; 03.1-05 grew the row contract to a fourth field, **Extraction** (`structured` / `dom` / `—`), tied to the Rung cell in both directions by `_extraction_mismatch` and watched failing each way on a corrupted copy of the real README |
