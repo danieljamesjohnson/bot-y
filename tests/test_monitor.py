@@ -271,6 +271,103 @@ def test_a_refusal_beside_a_store_gap_falls_to_the_louder_arm() -> None:
     assert CAUSE_UNKNOWN in health.reason
 
 
+def test_a_page_that_never_arrived_is_not_reported_as_a_store_pin_gap() -> None:
+    """The other no-page outcome, and it is not a refusal.
+
+    `is_refusal` is True only for `Blocked` and statuses {401, 403, 429}. A
+    connection timeout, a DNS failure, a TLS error, an HTTP 500 or 502 all
+    produce NO PAGE AT ALL and return `refused=False, store=None` — which
+    satisfied `c.store != c.watch.store_id` and sent the operator to check a
+    `store_id` that is set correctly, in a file that is not the problem.
+
+    That is REQ-15's own defect ("no alert names a cause the code has not
+    established") rebuilt inside the arm that was added to serve REQ-15.
+    `_is_store_gap`'s docstring already carried the right argument for refusals —
+    "a refusal means no page came back, so the store could not have been
+    established either" — it just did not extend it to the rest of the no-page
+    outcomes.
+
+    Where the cause is genuinely unknown the alert must SAY so, so this asserts
+    `CAUSE_UNKNOWN` as well as the absence: an arm that met this test by going
+    silent would fail REQ-15's second clause instead of its first.
+    """
+    (health,) = assess_health(
+        [
+            _control(
+                Availability.UNKNOWN,
+                retailer="walmart",
+                store_id="0",
+                store=None,
+            )
+        ]
+    )
+
+    assert health.ok is False
+    assert health.refused is False
+    assert "store_id" not in health.reason, (
+        "a fetch that produced no page was reported as a store-pin config gap. "
+        "Nothing here measured a store, and the pin is set."
+    )
+    assert CAUSE_UNKNOWN in health.reason
+
+
+def test_a_reshaped_page_that_names_no_store_is_not_a_store_pin_gap_either() -> None:
+    """The same predicate reached from the other side, and it is not the same bug.
+
+    A Walmart page that parses fine but stops emitting
+    `product.location.storeIds` also lands on `store=None` with the pin set. The
+    honest reading is "the page shape changed", which is exactly the thing the
+    code cannot distinguish from three others — so it is the breakage arm's, and
+    the breakage arm says the cause is not established.
+
+    Listed separately from the timeout above because the two arrive through
+    different code (`FetchError` versus a successful parse) and a fix that only
+    covered one of them would look identical from outside.
+    """
+    reshaped = _control(
+        Availability.OUT_OF_STOCK,
+        retailer="walmart",
+        store_id="00000",
+        store=None,
+    )
+    (health,) = assess_health([reshaped])
+
+    assert "store_id" not in health.reason
+    assert CAUSE_UNKNOWN in health.reason
+
+
+def test_the_store_arm_still_fires_on_the_two_states_that_were_measured() -> None:
+    """The positive half, so the fix above cannot pass by disabling the arm.
+
+    Only two states are genuinely measured: nobody pinned a store, or a store
+    ANSWERED and it was the wrong one. Both must still reach the arm that names
+    `store_id`, and neither may claim the cause is unknown.
+    """
+    for description, control in (
+        ("unpinned", _control(Availability.UNKNOWN, retailer="walmart", store_id=None)),
+        (
+            "answered for another store",
+            _control(Availability.UNKNOWN, retailer="walmart", store_id="0", store="00000"),
+        ),
+    ):
+        (health,) = assess_health([control])
+        assert "store_id" in health.reason, f"{description}: the measured arm stopped firing"
+        assert CAUSE_UNKNOWN not in health.reason, f"{description}: a measured cause claimed to be unknown"
+
+
+def test_an_unpinned_watch_is_a_store_gap_whatever_came_back() -> None:
+    """`store_id is None` is measured from CONFIG, not from the page.
+
+    So it stays true regardless of what the fetch produced — including the
+    no-page outcomes above. The narrowing applies only to the mismatch half.
+    """
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="walmart", store_id=None, store=None)]
+    )
+
+    assert "store_id" in health.reason
+
+
 def test_a_healthy_store_scoped_control_is_untouched_by_the_new_arm() -> None:
     """The store arm reads only BROKEN controls. A Walmart control reading
     IN_STOCK is healthy whatever its pin says — the guards in `retailers.py`

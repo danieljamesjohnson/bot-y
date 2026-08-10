@@ -380,6 +380,20 @@ MUTATIONS = (
         replace="    still_unhealthy = {h.retailer for h in pageable}",
         breaks="a cycle the backoff skipped counts as the retailer recovering, so a refusal past the cap is re-paged at every subsequent check — one notification every six hours, forever, about a refusal somebody was already told about",
     ),
+    # M15 restores the exact clause 05-REVIEW's CR-02 found, and it is here
+    # rather than left to the two tests for M6's stated reason: this one moves
+    # no availability, no price and no `ok` flag — only WHICH SENTENCE a person
+    # reads — so a verdict-only suite passes it straight through while the alert
+    # sends somebody to edit a config file that is not the problem. The `search`
+    # is the return statement and nothing else; the paragraph above it is
+    # freshly written prose and M2's re-anchoring lesson applies.
+    Mutation(
+        ident="M15",
+        target="boty/monitor.py",
+        search="    return c.store is not None and c.store != c.watch.store_id",
+        replace="    return c.store != c.watch.store_id",
+        breaks="a fetch that produced NO PAGE — a timeout, a DNS failure, an HTTP 500, or a payload that stopped naming a store — is reported as a store-pin config gap, so the alert names a cause nobody measured and points the operator at a `store_id` that is set correctly. REQ-15's own defect, rebuilt inside the arm added to serve REQ-15",
+    ),
 )
 
 

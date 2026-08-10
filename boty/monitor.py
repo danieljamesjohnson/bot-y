@@ -99,12 +99,37 @@ def _is_store_gap(c: Result) -> bool:
     refusal means no page came back, so the store could not have been established
     either; attributing one to the store pin would be naming a cause we did not
     measure, which is the defect this module is being repaired for.
+
+    NEITHER IS ANY OTHER NO-PAGE OUTCOME, and that is the last line. The clause
+    used to read `c.store != c.watch.store_id`, which is satisfied by
+    `store=None` — and `is_refusal` is True only for `Blocked` and statuses
+    {401, 403, 429} (`boty/fetch.py`), so a connection timeout, a DNS failure, a
+    TLS error, an HTTP 500 or 502 all arrive here with `refused=False` and no
+    page behind them. Each one produced an alert telling the operator to go and
+    check a `store_id` that was set correctly, in a file that was not the
+    problem: REQ-15's defect rebuilt inside the arm added to serve REQ-15. The
+    docstring above already had the argument and simply did not extend it.
+
+    ONLY TWO STATES ARE GENUINELY MEASURED, so only two return True:
+
+    - the pin is ABSENT, which is read off the config and is therefore true
+      whatever the page did (or did not) say; and
+    - a store ANSWERED and it was not the pinned one.
+
+    A page that named NO store establishes nothing about the pin — a timeout, a
+    500 and a Walmart payload that stopped emitting
+    `product.location.storeIds` all land there, and none of them is a config
+    gap. They fall to the breakage arm, which carries `CAUSE_UNKNOWN` and is the
+    reading that claims least. Naming a plausible-sounding cause instead is the
+    failure this predicate exists to prevent, pointed the other way.
     """
     if c.refused:
         return False
     if c.watch.retailer not in STORE_SCOPED:
         return False
-    return c.watch.store_id is None or c.store != c.watch.store_id
+    if c.watch.store_id is None:
+        return True
+    return c.store is not None and c.store != c.watch.store_id
 
 
 def assess_health(results: list[Result]) -> list[Health]:
