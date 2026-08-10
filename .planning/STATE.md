@@ -2,23 +2,37 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-status: Executing Phase 6 — 4 of 6 plans complete
-stopped_at: Completed 06-04-PLAN.md — criterion 4 of five built, watched red on disk, and restored
-last_updated: "2026-08-10T22:24:46.049Z"
+# `state advance-plan` wrote `Phase complete — ready for verification` here and
+# `Completed 04-06-PLAN.md — Phase 4 closed` below, both wrong: 06-06 has not run,
+# and Phase 4 closed two phases ago. Corrected by hand, and recorded rather than
+# silently overwritten, because a state file that misstates its own position is
+# the defect this milestone is about.
+status: Executing Phase 6 — 5 of 6 plans complete
+stopped_at: Completed 06-05-PLAN.md — criterion 5 built, red before the roll and green after
+last_updated: "2026-08-10T23:03:51.949Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   # percent is PHASE-based (1 of 2 complete), not plan-based, for the reason
-  # this milestone exists: Phase 6 is four plans into six, and a plan-based
+  # this milestone exists: Phase 6 is five plans into six, and a plan-based
   # figure would move on every commit while the phase criterion it serves is
-  # still unmet. `state update-progress` reported 80% on a plan basis this run
+  # still unmet. `state update-progress` reported 90% on a plan basis this run
   # and left this field alone; 50 is the phase figure and is deliberate. The
   # basis is stated so the next reader does not adopt the wrong one. This
-  # comment has now been stripped by the tool and restored by hand four times.
+  # comment has now been stripped by the tool and restored by hand FIVE times.
   percent: 50
+#
+# THE `milestone:` LINE ABOVE IS MACHINE-READ AS OF 06-05 (`30cb977`).
+# `tests/test_packaging_metadata.py` binds it to `pyproject.toml`'s
+# `[project] version`, so changing one without the other turns
+# `make verify-offline` red naming both files. Nothing under `tests/` or
+# `scripts/` had ever read `.planning/` before that commit. The comparison is
+# lenient in exactly one way: a milestone names a MINOR LINE, so `v0.2` agrees
+# with `0.2.0` and would agree with `0.2.7` — but NOT with `0.21.0`, because the
+# components are compared as lists and not as a string prefix.
 ---
 
 # State: bot-y
@@ -33,10 +47,33 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 4 of 6 plans complete
-(06-01, 06-02, 06-03 and 06-04, all 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six
+**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 5 of 6 plans complete
+(06-01 … 06-05, all 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six
 of six criteria MET **against the tree**, with **not one of them confirmed on the deployed daemon**
-**Next command:** `/gsd-execute-phase 6` (next plan: 06-05)
+**Next command:** `/gsd-execute-phase 6` (next plan: 06-06 — the closing plan; it marks REQ-17
+through REQ-20 by measuring what landed, and **all four are still Pending on purpose**)
+
+**06-05 landed criterion 5, and this project's version is no longer a claim only one file makes.**
+`pyproject.toml` reads **`0.2.0`**, and the roll is recorded in the file as **the correction, not a
+bump** — the v1.0 numbering was itself the overclaim this milestone corrects everywhere else.
+Rolling *down* is safe only because nothing was ever tagged or uploaded, and all four facts were
+**re-measured at execution** rather than inherited: `git tag -l` 0 tags, `git ls-remote --tags
+origin` 0 refs against a remote that answered, and HTTP 404 for both `bot-y` and `bot-y/1.0.0` on
+PyPI. No tag was created and nothing was published. The gate was written **first**, against a tree
+that disagreed with itself: `pytest tests/` at **exit 1, 2 failed, 757 passed** with nothing rolled
+— `pyproject.toml` saying `1.0.0` while this file said `milestone: v0.2`, a disagreement that had
+been sitting here since the milestone was scoped with nothing offline reading either one — then
+**exit 0, 759 passed** after the roll, same command. `make verify-offline` exits 0 at **759 passed**
+and **22/22**, the ratio risen by exactly 2 with **M25 and M26** — this repository's first mutations
+outside `boty/` — both observed CAUGHT by the always-on `pyproject` <-> `README` binding.
+
+**Two things from 06-05 that bind future edits to THIS file.** (1) The `milestone:` key in the
+frontmatter above is **machine-read** as of `30cb977`; changing it without changing
+`pyproject.toml`'s version turns `make verify-offline` red naming both files. (2) The
+`Development Status` classifier is now **`4 - Beta`**, argued in place with Phase 4's rejection of
+Beta kept verbatim, and bound to the version in both directions — so it cannot go stale at the next
+change. What would move it back to `5` is written into `pyproject.toml`: a published release
+somebody other than the maintainer has installed, and a live `make verify` that passes.
 
 **06-04 landed criterion 4, and the defect was executed on disk before the gate existed.**
 `CHANGELOG.md` shipped with two literal lines of leaked agent tool-call markup for the whole of
@@ -332,8 +369,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 04 of 5 (Open Source Ready) — **COMPLETE 2026-08-06**, closed on three of five criteria MET; 3 and 5 UNMET and deliberately not amended (Dan deferred publishing)
 **Plan:** 6 of 6 complete (04-01 … 04-06, all waves done)
-**Last session:** 2026-08-10T17:12:13.945Z
-**Stopped At:** Completed 04-06-PLAN.md — Phase 4 closed
+**Last session:** 2026-08-10T23:03:51.942Z
+**Stopped At:** Completed 06-05-PLAN.md — criterion 5 built, red before the roll and green after
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
 
@@ -433,6 +470,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 06 P04 | 47min | 3 tasks (2 commits — the green side was never committed alone) | 1 file |
 | Phase Phase 06 PP03 | 38min | 3 tasks tasks | 1 file files |
 | Phase Phase 06 PP04 | 47min | 3 tasks tasks | 1 file files |
+| Phase 06 P05 | 31min | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -554,6 +592,9 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 06]: 06-03: the on-disk probe names `actions/checkout@v4` (trusted owner, mutable ref) and never a third-party owner — writing `some-vendor/...` into a public repo's real workflow directory to test a rule about `tj-actions` is not a trade this project makes; that half is watched in-suite only, derived with `.replace()`
 - [Phase 06]: 06-03: NO mutation registered and M21-M22 left deliberately UNALLOCATED — `apply_mutation` string-replaces inside an existing file and cannot add one, so a criterion about a file that does not exist yet is outside the harness by construction. 06-04/06-05 keep their reservations; 06-06 must not read the gap as a lost mutation
 - [Phase 06]: 06-03: the shipped-tree directory test reports EVERY family at once rather than asserting inside the loop — measured with the probe on disk, the in-loop form failed on `pin` and stopped, telling a contributor about one violation per run
+- [Phase 06]: 06-05: pyproject.toml rolled 1.0.0 -> 0.2.0 as a CORRECTION, not a bump — safe only because nothing was ever tagged or uploaded, re-measured at execution (0 tags, 0 refs, PyPI 404, 404)
+- [Phase 06]: 06-05: four statements of one version bound to pyproject.toml as the referent; the always-on rule is pyproject <-> README, correcting the outline's false 'runs everywhere' claim for CHANGELOG.md
+- [Phase 06]: 06-05: Development Status 5 - Production/Stable -> 4 - Beta, argued in place with Phase 4's rejection kept verbatim, and made a two-directional rule so it cannot go stale at the next bump
 
 ### Blockers
 
