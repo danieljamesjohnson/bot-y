@@ -706,9 +706,24 @@ def test_a_file_that_stops_ending_in_a_newline_is_rejected() -> None:
 
 
 @needs_changelog
-def test_a_changelog_with_its_only_release_deleted_is_rejected() -> None:
-    """The gutting direction, on the real document rather than a synthetic one."""
-    corrupted = _corrupt(_shipped(), "## [1.0.0] - 2026-08-05\n", "")
+def test_a_changelog_with_every_release_deleted_is_rejected() -> None:
+    """The gutting direction, on the real document rather than a synthetic one.
+
+    EVERY released heading, DERIVED from the file rather than named. This test
+    was written when `1.0.0` was the only release and it deleted that one heading
+    by its literal text; 06-05 added `## [0.2.0]` above it and the deletion
+    stopped producing a document with no release in it, so the rule went quiet
+    and the assertion — correctly — failed. The rule was right and the corruption
+    had rotted, which is the failure mode `_corrupt`'s own assertion exists to
+    make loud. Derived, it cannot rot again at the next release.
+    """
+    text = _shipped()
+    headings = {line for _, line in _release_headings(text)}
+    assert headings, "the shipped document announces no release, so there is nothing to gut"
+    corrupted = "\n".join(
+        "" if line.rstrip() in headings else line for line in text.splitlines()
+    )
+    assert corrupted != text
 
     findings = missing_required_headings(corrupted)
 
