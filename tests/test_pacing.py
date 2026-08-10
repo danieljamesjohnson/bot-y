@@ -22,10 +22,24 @@ Two separate defects, and the second is the one that actually cost something:
    is the measured fact plus `monitor.CAUSE_UNKNOWN`, and the three assertions
    below were rewritten from the prose to that property. The gate on their
    absence is `tests/test_alert_text.py`.
+
+Items 1 and 2 above are the 2026-08-04 defects. Item 3 is the Phase 5 addition,
+and it is the subject of the persistence section at the foot of this file:
+
+3. The backoff was in-memory, so a restart reset it to zero. Two things broke at
+   once and only the first is obvious: the penalty climbed again from 2x against
+   a retailer that had already walled us, and the page-once bookkeeping hung off
+   the same counter — so REQ-16's "a refusal that outlasts the cap is pushed
+   once" quietly meant "pushed once per PROCESS". Under a systemd unit with
+   `Restart=` semantics that is not a rare event. Fixed 2026-08-10 by persisting
+   `refusals` and the paging memory (never `due_at`); `boty/pacing.py`'s module
+   docstring carries the reversal and the argument for it.
 """
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 
 import pytest
@@ -33,7 +47,13 @@ import pytest
 from boty.fetch import Blocked, FetchError, is_refusal
 from boty.models import Availability, Health, Result, Watch
 from boty.monitor import CAUSE_UNKNOWN, State, assess_health, run_once
-from boty.pacing import MAX_BACKOFF_SECONDS, Pacer
+from boty.pacing import (
+    MAX_BACKOFF_SECONDS,
+    MAX_PERSISTED_REFUSALS,
+    STATE_MAX_AGE_SECONDS,
+    STATE_VERSION,
+    Pacer,
+)
 
 
 def _w(retailer: str, name: str = "ctl", *, control: bool = True) -> Watch:
@@ -323,3 +343,362 @@ def test_a_paced_retailer_is_published_as_unchecked_not_omitted(tmp_path: Path) 
         "letting it redden the dashboard permanently makes the flag useless — "
         "the same 'a gate that fires on the honest outcome' defect the roadmap names"
     )
+
+
+# --------------------------------------------------------------------------
+# The backoff has to outlive the process (item 3 in this module's docstring)
+#
+# Every test below builds a SECOND, brand-new Pacer over the same file rather
+# than calling `load()` on the one that wrote it. A restart is a new object in
+# a new process, and a test that reloaded into the same instance would pass for
+# a `load` that did nothing at all.
+# --------------------------------------------------------------------------
+
+
+def _pacer(path: Path | None = None, interval: float = 300) -> Pacer:
+    return Pacer(default_interval=interval, state_path=path)
+
+
+def test_a_pacer_with_no_state_path_persists_nothing(tmp_path: Path) -> None:
+    """`state_path=None` is every pre-existing construction site, unchanged.
+
+    Nine of them live in this file alone and not one names a path. The default
+    has to mean "do not persist", or adding persistence would change the
+    behaviour of every caller that never asked for it.
+    """
+    p = _pacer()
+    p.record("amazon", refused=True, now=0.0)
+
+    assert p.load() == set(), "a pacer with nowhere to read from restores nothing"
+    p.save({"amazon"})
+
+    assert list(tmp_path.iterdir()) == [], "a pacer with no state_path wrote a file"
+
+
+def test_a_refusal_count_survives_into_a_brand_new_pacer(tmp_path: Path) -> None:
+    """The whole point: five refusals, a restart, still five.
+
+    Without this the backoff climbs again from 2x after every restart, so a
+    retailer that walled us gets asked at full rate and then paced shallowly —
+    which is the politeness regression, and one no verdict-level test can see.
+    """
+    path = tmp_path / "pacer-state.json"
+    first = _pacer(path)
+    for _ in range(5):
+        first.record("amazon", refused=True, now=0.0)
+    first.save(set())
+
+    second = _pacer(path)
+    second.load()
+
+    assert second._for("amazon").refusals == 5, (
+        "the refusal count did not survive the process — the next refusal would "
+        "multiply from one instead of from five"
+    )
+
+
+def test_the_restored_pacer_starts_its_schedule_from_zero(tmp_path: Path) -> None:
+    """`due_at` is neither written nor read, and that is deliberate.
+
+    `cli.watch_loop` drives this class with a synthetic clock starting at 0.0 in
+    every process, so a persisted `due_at` is a number with no referent: it
+    either fires immediately or blocks the retailer for the age of the previous
+    process. Leaving it at 0.0 also KEEPS the withdrawn docstring's concession —
+    a restart still tries once at full rate.
+    """
+    path = tmp_path / "pacer-state.json"
+    first = _pacer(path)
+    for _ in range(5):
+        first.record("amazon", refused=True, now=0.0)
+    assert first._for("amazon").due_at > 0, "the writing pacer really did have a schedule"
+    first.save(set())
+
+    second = _pacer(path)
+    second.load()
+
+    assert second._for("amazon").due_at == 0.0, (
+        "a due_at came back from disk. It was measured against a clock that no "
+        "longer exists, so it is not a schedule — it is an accident"
+    )
+    assert second.due("amazon", 0.0), "a restart must still try once, immediately"
+
+
+def test_the_restored_count_is_load_bearing_on_the_next_wait(tmp_path: Path) -> None:
+    """Restoring the number is not enough; it has to reach the arithmetic.
+
+    A `load` that wrote the count somewhere `record` never reads would pass the
+    assertion above and change nothing about how often we ask.
+    """
+    path = tmp_path / "pacer-state.json"
+    first = _pacer(path)
+    for _ in range(5):
+        first.record("amazon", refused=True, now=0.0)
+    first.save(set())
+
+    second = _pacer(path)
+    second.load()
+    second.record("amazon", refused=True, now=0.0)
+
+    assert second._for("amazon").due_at == 300 * 2**6, (
+        "the first refusal after a restart produced the wait for refusal 1, not "
+        "for refusal 6 — the restored depth never reached the schedule"
+    )
+
+
+def test_a_good_read_clears_the_count_on_disk_as_well(tmp_path: Path) -> None:
+    """The file self-cleans: a retailer at zero refusals is not written at all.
+
+    So a retailer that started answering again drops out, and one deleted from
+    the config ages out of the document rather than accumulating in it forever.
+    """
+    path = tmp_path / "pacer-state.json"
+    first = _pacer(path)
+    first.record("amazon", refused=True, now=0.0)
+    first.save(set())
+    assert "amazon" in json.loads(path.read_text())["retailers"]
+
+    first.record("amazon", refused=False, now=0.0)
+    first.save(set())
+
+    assert json.loads(path.read_text())["retailers"] == {}, (
+        "a retailer with no refusals was still written — the document would "
+        "accumulate every retailer that ever answered"
+    )
+    second = _pacer(path)
+    second.load()
+    assert second._for("amazon").refusals == 0
+
+
+def test_the_paging_memory_round_trips(tmp_path: Path) -> None:
+    """`warned` is passed through, never held — but it must survive the trip.
+
+    Restoring `refusals` without it restores half a decision: process 2 would
+    find the retailer entrenched at its first cycle and page immediately about a
+    refusal somebody was already told about, which is REQ-16's "once" becoming
+    "once per process" from the other end.
+    """
+    path = tmp_path / "pacer-state.json"
+    _pacer(path).save({"amazon", "gamestop"})
+
+    assert _pacer(path).load() == {"amazon", "gamestop"}
+
+
+def test_an_empty_paging_memory_round_trips(tmp_path: Path) -> None:
+    """The other direction, so `load` cannot satisfy the test above by inventing."""
+    path = tmp_path / "pacer-state.json"
+    _pacer(path).save(set())
+
+    assert _pacer(path).load() == set()
+
+
+def _document(refusals: int, age: float, warned: list[str] | None = None) -> str:
+    return json.dumps(
+        {
+            "version": STATE_VERSION,
+            "retailers": {"amazon": {"refusals": refusals, "refused_at": time.time() - age}},
+            "warned": warned or [],
+        }
+    )
+
+
+def test_state_older_than_the_backoff_cap_is_discarded(tmp_path: Path) -> None:
+    """The objection the withdrawn docstring raised, answered rather than ignored.
+
+    A file written before a machine was off for a week would otherwise restore a
+    six-hour backoff against a condition that has had a week to clear.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=5, age=STATE_MAX_AGE_SECONDS + 1))
+
+    p = _pacer(path)
+    p.load()
+
+    assert p._for("amazon").refusals == 0, (
+        "state older than one full cap-length window was applied — it has "
+        "outlived the reasoning that produced it"
+    )
+
+
+def test_state_younger_than_the_cap_is_restored(tmp_path: Path) -> None:
+    """Bounded on both sides, so the age-out cannot pass by discarding everything."""
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=5, age=1.0))
+
+    p = _pacer(path)
+    p.load()
+
+    assert p._for("amazon").refusals == 5
+
+
+def test_a_stamp_in_the_future_is_discarded(tmp_path: Path) -> None:
+    """A clock that jumped backwards must not hold the state forever.
+
+    With only an upper bound, `now - refused_at` goes negative and stays inside
+    it for as long as the skew lasts — pinning a retailer at the cap with no
+    expiry at all, which is the failure the age-out exists to prevent.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=5, age=-STATE_MAX_AGE_SECONDS))
+
+    p = _pacer(path)
+    p.load()
+
+    assert p._for("amazon").refusals == 0
+
+
+def test_the_persisted_count_is_clamped(tmp_path: Path) -> None:
+    """A number out of a file reaching `BACKOFF_FACTOR ** refusals`.
+
+    Measured 2026-08-10 on CPython 3.12.3: `2.0 ** 1024` raises OverflowError.
+    Inside `record` that is an exception every cycle, caught by `watch_loop`,
+    counted to FAILURES_BEFORE_GIVING_UP and returned as exit 1 — a one-line
+    denial of service on the monitor, from a file the monitor wrote itself.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=10**9, age=1.0))
+
+    p = _pacer(path)
+    p.load()
+
+    assert p._for("amazon").refusals == MAX_PERSISTED_REFUSALS
+    p.record("amazon", refused=True, now=0.0)  # must not raise
+    assert p._for("amazon").due_at == MAX_BACKOFF_SECONDS
+
+
+def test_the_clamp_stays_above_the_paging_threshold() -> None:
+    """Imported from both modules, because `pacing` must not import `cli`.
+
+    A clamp at or below REFUSALS_BEFORE_PAGING would mean persistence silently
+    defeated the paging clause it exists to serve.
+    """
+    from boty.cli import REFUSALS_BEFORE_PAGING
+
+    assert MAX_PERSISTED_REFUSALS >= REFUSALS_BEFORE_PAGING
+
+
+def test_the_age_out_is_derived_from_the_backoff_cap() -> None:
+    """Derived, not re-chosen, so the two can never drift apart.
+
+    The cap already IS this project's written answer to how long a refusal stays
+    evidence; a second number here would be a second answer to the same question.
+    """
+    assert STATE_MAX_AGE_SECONDS == MAX_BACKOFF_SECONDS
+
+
+_HOSTILE = [
+    ("this is not json at all", "not JSON"),
+    ("", "an empty file"),
+    ("[]", "a JSON list"),
+    ('"amazon"', "a JSON string"),
+    ("3", "a JSON number"),
+    ("null", "JSON null"),
+    ('{"version": %d, "retailers": 3}' % STATE_VERSION, "retailers is not a mapping"),
+    ('{"version": %d, "retailers": {"a": 3}}' % STATE_VERSION, "an entry is not a mapping"),
+    (
+        '{"version": %d, "retailers": {"a": {"refusals": "x", "refused_at": 0}}}' % STATE_VERSION,
+        "refusals is a string",
+    ),
+    (
+        '{"version": %d, "retailers": {"a": {"refusals": -5, "refused_at": 0}}}' % STATE_VERSION,
+        "refusals is negative",
+    ),
+    (
+        '{"version": %d, "retailers": {"a": {"refusals": true, "refused_at": 0}}}' % STATE_VERSION,
+        "refusals is a bool (an int subclass)",
+    ),
+    (
+        '{"version": %d, "retailers": {"a": {"refusals": 1000000000.0}}}' % STATE_VERSION,
+        "refusals is a float and refused_at is absent",
+    ),
+    (
+        '{"version": %d, "retailers": {"a": {"refusals": 3, "refused_at": "now"}}}' % STATE_VERSION,
+        "refused_at is a string",
+    ),
+    ('{"version": %d, "warned": "amazon"}' % STATE_VERSION, "warned is a bare string"),
+    ('{"version": %d, "warned": [1, 2]}' % STATE_VERSION, "warned is a list of ints"),
+    ('{"version": %d, "warned": 7}' % STATE_VERSION, "warned is a number"),
+    ('{"version": 999, "retailers": {"a": {"refusals": 9}}}', "an unrecognised version"),
+    ('{"retailers": {"a": {"refusals": 9}}}', "no version at all"),
+]
+
+
+@pytest.mark.parametrize(("document", "description"), _HOSTILE, ids=[d for _, d in _HOSTILE])
+def test_a_hostile_state_file_yields_a_usable_pacer(
+    tmp_path: Path, document: str, description: str
+) -> None:
+    """T-05-04: a corrupt state file must never stop the monitor starting.
+
+    BOTH halves are asserted, and the second is the one that matters. A table
+    that only drove `load` would pass while the crash sat one method along, in
+    `record`, where a restored count reaches `BACKOFF_FACTOR ** refusals`.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(document)
+
+    p = _pacer(path)
+    warned = p.load()  # must not raise
+
+    assert warned == set(), f"{description}: restored a paging memory out of a broken file"
+    assert p._for("a").refusals == 0, f"{description}: restored a count out of a broken file"
+    p.record("a", refused=True, now=0.0)  # must not raise either
+    p.record("a", refused=False, now=0.0)
+    assert p.due("a", 10_000.0)
+    assert p.skipped_reason("a", 0.0)
+
+
+def test_a_state_path_that_is_a_directory_is_survivable(tmp_path: Path) -> None:
+    """`read_text` on a directory raises IsADirectoryError, which is an OSError.
+
+    Listed separately because it is not a document at all — it is the shape of
+    accident that a mistyped config produces.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.mkdir()
+
+    p = _pacer(path)
+    assert p.load() == set()
+    p.record("amazon", refused=True, now=0.0)
+    p.save({"amazon"})  # must not raise either
+
+
+def test_a_missing_state_file_is_an_empty_start_not_an_error(tmp_path: Path) -> None:
+    p = _pacer(tmp_path / "nothing-here.json")
+
+    assert p.load() == set()
+    p.record("amazon", refused=True, now=0.0)
+    assert p._for("amazon").refusals == 1
+
+
+def test_failing_to_persist_degrades_rather_than_raising(tmp_path: Path) -> None:
+    """A full disk is a worse monitor, not a dead one.
+
+    `watch_loop` calls `save` from a `finally` inside its own try/except, so a
+    raise here would be counted as a failed cycle — ten of them and the monitor
+    exits 1 because it could not write a backoff counter.
+    """
+    blocker = tmp_path / "blocker"
+    blocker.write_text("I am a file, not a directory")
+    p = _pacer(blocker / "sub" / "pacer-state.json")
+    p.record("amazon", refused=True, now=0.0)
+
+    p.save({"amazon"})  # must not raise
+
+    assert p._for("amazon").refusals == 1, "the pacer kept working in memory"
+    p.record("amazon", refused=True, now=0.0)
+    assert p._for("amazon").refusals == 2
+
+
+def test_the_restored_interval_comes_from_config_not_from_the_file(tmp_path: Path) -> None:
+    """The interval is a config decision and is deliberately never persisted.
+
+    A stored copy would let yesterday's file quietly override an edit to
+    `retailer_intervals` — the opposite of what a settings file is for.
+    """
+    path = tmp_path / "pacer-state.json"
+    _pacer(path).save(set())
+    path.write_text(_document(refusals=1, age=1.0))
+
+    p = Pacer(default_interval=300, overrides={"amazon": 1800}, state_path=path)
+    p.load()
+
+    assert p._for("amazon").interval == 1800
