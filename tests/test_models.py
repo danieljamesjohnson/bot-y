@@ -256,3 +256,72 @@ def test_a_dom_control_reading_in_stock_is_still_healthy() -> None:
     control = _result(Availability.IN_STOCK, extraction=Extraction.DOM, control=True)
     health = assess_health([control])
     assert [(h.retailer, h.ok) for h in health] == [("walmart", True)]
+
+
+# --------------------------------------------------------------------------
+# The store: `Watch.store_id` (what was pinned) and `Result.store` (what answered)
+# --------------------------------------------------------------------------
+#
+# The values below are `0` and `00000` — this repo's redaction vocabulary — for
+# the reason recorded in `tests/test_config.py`: this file is tracked and public,
+# and a real store number resolves to one street address.
+
+
+def test_a_watch_built_without_a_store_pin_is_unpinned() -> None:
+    """`store_id` is declared LAST, after `control`, with a default.
+
+    Every pre-existing construction site in this repo names neither, and
+    inserting the field ahead of `control` would change the positional
+    signature of a frozen dataclass that is constructed positionally in tests.
+
+    `None` here means "nobody pinned a store" — a third state beside "your
+    store" and "someone else's store". The default is a DECISION, not an
+    omission: CONTEXT rejected defaulting to whatever Walmart assigns, because
+    that leaves a reading as a statement about an arbitrary store, which is the
+    bug.
+    """
+    w = Watch(name="thing", retailer="walmart", target="https://walmart.example/1")
+    assert w.store_id is None
+
+
+def test_a_result_built_without_a_store_did_not_learn_one() -> None:
+    """`None` is "the page did not tell us which store answered".
+
+    It is never "store 0". `0` is this repo's own redaction placeholder — it is
+    in the identity guard's `allowed` vocabulary and it is what `8dec2e0` wrote
+    over the store number in both Walmart fixtures — so a default of `0` would
+    read off the dashboard as a real store the fixtures use.
+
+    For a non-Walmart retailer `None` is the honest value and always will be:
+    no other retailer here publishes a store on its product page.
+    """
+    r = _result(Availability.IN_STOCK)
+    assert r.store is None
+
+
+def test_the_store_is_carried_on_the_result_and_changes_no_verdict() -> None:
+    """Recording a store must not move an `Availability`, and here it does not.
+
+    This is the split the phase was planned around: 05-01 makes the store a fact
+    that exists and is published; 05-02 is where an unpinned or mismatched store
+    reaches a verdict. A guard here would put two plans inside one branch.
+    """
+    watch = Watch(
+        name="goplusplus",
+        retailer="walmart",
+        target="https://walmart.example/1",
+        max_price=80,
+        store_id="0",
+    )
+    pinned = Result(watch, Availability.IN_STOCK, price=54.99, detail="synthetic", store="0")
+    mismatched = Result(
+        watch, Availability.IN_STOCK, price=54.99, detail="synthetic", store="00000"
+    )
+
+    assert pinned.store == "0"
+    assert mismatched.store == "00000"
+    # Both still alertable, and both still IN_STOCK. 05-02 changes this; this
+    # plan deliberately does not.
+    assert pinned.alertable is True
+    assert mismatched.alertable is True
+    assert mismatched.availability is Availability.IN_STOCK

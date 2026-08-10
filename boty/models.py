@@ -117,6 +117,33 @@ class Watch:
     #: Control watches are not products you want; they are canaries. See
     #: `boty.monitor` — a control must read IN_STOCK or the detector is broken.
     control: bool = False
+    #: Which store this watch is ABOUT. Walmart assigns a store per request and
+    #: prices and stock differ between them, so a Walmart reading with no store
+    #: pinned is a statement about an arbitrary location. On 2026-08-09 the
+    #: daemon recorded the milk control OUT_OF_STOCK at one price while three
+    #: live reads minutes later returned IN_STOCK at a lower one — same URL,
+    #: same parser. A parser bug does not change a price; two stores answered.
+    #:
+    #: Declared LAST, after `control`, with a default, for the reason `rung` and
+    #: `extraction` record on `Result`: every pre-existing construction site
+    #: stays valid and keeps its meaning. `control` is currently the last field,
+    #: so inserting ahead of it would change the positional signature instead.
+    #:
+    #: THE ABSENCE OF A DEFAULT IS A DECISION, NOT AN OMISSION. `None` means
+    #: "nobody pinned a store", which is a third state beside "your store" and
+    #: "someone else's store" and must not collapse into either. Two
+    #: alternatives were considered and rejected (Dan, 2026-08-10):
+    #:
+    #: - *Default to whatever Walmart assigns and flag only changes.* That
+    #:   leaves a reading as a statement about an arbitrary store, which is the
+    #:   bug itself rather than a fix for it.
+    #: - *Geolocate from a postal code.* More moving parts, and the postal code
+    #:   is precisely the value Phase 3.1's leak incident was about.
+    #:
+    #: The standing rule behind both: bot-y never guesses where the user lives,
+    #: and a missing pin can never masquerade as a verdict. This costs every
+    #: user one setup step, accepted deliberately.
+    store_id: str | None = None
 
     @property
     def key(self) -> str:
@@ -159,6 +186,42 @@ class Result:
     #: it trains the reader to ignore the one alert this project exists to
     #: send.
     refused: bool = False
+    #: Which store the PAGE said answered — read out of the retailer's own
+    #: hydration payload, not inferred and not configured. `Watch.store_id` is
+    #: what the operator asked for; this is what arrived.
+    #:
+    #: Declared last, after `refused`, with a default, for the same reason
+    #: `rung` and `extraction` are: every pre-existing construction site stays
+    #: valid and keeps its meaning, because none of them reads a store.
+    #:
+    #: WHAT THE DEFAULT MEANS: `None` is "the page did not tell us which store
+    #: answered". It is never "store 0" — `0` is this repo's own redaction
+    #: placeholder, sitting in `identity_check.py`'s allow-list beside `00000`
+    #: and `XX`, and it is what `8dec2e0` wrote over the store number in both
+    #: Walmart fixtures. For every non-Walmart retailer here `None` is the
+    #: honest and permanent value: none of them publishes a store on a product
+    #: page, so `parse.nextdata_store` finds nothing and claims nothing.
+    #:
+    #: Deliberately NOT folded into `degraded`. A reading from the wrong store
+    #: is not a lower-confidence answer; it is an answer to a different
+    #: question, and `degraded` means "discount this", which is a different
+    #: instruction from "this does not apply to you".
+    #:
+    #: AND THE ASYMMETRY A READER WILL OTHERWISE TRY TO FIX. An unpinned or
+    #: mismatched store WILL drive `Availability` to UNKNOWN, while `degraded`
+    #: deliberately does not touch `alertable`. That is not an inconsistency.
+    #: `rung` and `extraction` answer *how much is this reading worth* — a
+    #: discounted reading is still a reading about your store, and suppressing
+    #: alerts on it would defeat the point of supporting the retailer at all.
+    #: A reading from a store that is not yours is not worth less; it is about
+    #: something else, and the only honest availability for a question nobody
+    #: asked is UNKNOWN.
+    #:
+    #: THIS PLAN ADDS NO SUCH GUARD. The store is recorded here and published in
+    #: `status.json`; 05-02 is where it reaches a verdict. Nothing in
+    #: `_verdict_from_html` branches on `store` or on `Watch.store_id` yet, and
+    #: that split is why this field exists before the guard does.
+    store: str | None = None
 
     @property
     def degraded(self) -> bool:

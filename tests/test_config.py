@@ -68,6 +68,108 @@ def test_no_price_ceiling_stays_none(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------
+# store_id: a per-watch pin with NO default
+# --------------------------------------------------------------------------
+#
+# Every store value in this file comes from this repo's redaction vocabulary —
+# `0` and `00000` — and that is a rule, not a coincidence. `config/products.yaml`
+# and this file are both tracked and public, and a store number is a geolocator
+# that resolves to one street address. Measured 2026-08-10: a four-digit store
+# number written into a tracked test file as a JSON `storeId` or `store` value
+# trips the identity guard — this comment paragraph tripped it on its own first
+# draft, which is the gate working — while `store_id: "0"` and
+# `store_id: "00000"` are clean under the new config-key rule as well as the old
+# ones, because `value.strip("0.- ")` drops them. If a test here ever trips the
+# guard, change the literal. NEVER add a value to the guard's allow-list, which
+# is the mutation `test_the_allow_list_cannot_absorb_a_real_value` exists to
+# catch.
+
+
+def test_a_yaml_integer_store_id_is_coerced_to_a_string(tmp_path: Path) -> None:
+    """YAML reads an unquoted store number as an `int`, and that is a silent bug.
+
+    The store this phase compares against is read out of Walmart's own JSON,
+    where it is a string. An `int` from the config compared against a `str` from
+    the page is a never-match — no exception, no log line, just a pin that can
+    never agree with anything. `_price` has the same class of bug recorded one
+    field over, which is why `target` is coerced with `str()` too.
+    """
+    cfg = Config.load(_write(tmp_path, _WATCH + "    store_id: 0\n"))
+
+    assert cfg.watches[0].store_id == "0"
+    assert isinstance(cfg.watches[0].store_id, str)
+
+
+def test_a_quoted_store_id_is_the_same_string(tmp_path: Path) -> None:
+    """Both YAML spellings have to land on the same value, or the pin is a coin flip."""
+    cfg = Config.load(_write(tmp_path, _WATCH + '    store_id: "00000"\n'))
+
+    assert cfg.watches[0].store_id == "00000"
+
+
+def test_no_store_pin_loads_and_is_none(tmp_path: Path) -> None:
+    """An absent pin LOADS. It does not raise, and that split is deliberate.
+
+    `_price` and `_interval` refuse the whole file; `_sub` logs and continues.
+    This needs the second, because refusing would take down five healthy
+    retailers over one Walmart watch — and the phase criterion for an unpinned
+    store is UNKNOWN plus a health message, which needs a daemon that is still
+    running to deliver it.
+
+    `None` is a third state beside "your store" and "someone else's store", and
+    it must not collapse into either.
+    """
+    cfg = Config.load(_write(tmp_path, _WATCH))
+
+    assert cfg.watches[0].store_id is None
+
+
+def test_an_unset_store_variable_loads_unpinned_rather_than_raising(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The shipped config says `store_id: ${WALMART_STORE_ID}`.
+
+    The real number lives in the daemon's mode-600 EnvironmentFile, outside this
+    public repo. Unset, `_sub` expands it to empty and says which name it was —
+    and the watch is then unpinned, which degrades to UNKNOWN. That is the
+    behaviour REQ-14 asks for anyway, which is what makes the indirection safe
+    rather than merely convenient.
+    """
+    monkeypatch.delenv("WALMART_STORE_ID", raising=False)
+
+    with caplog.at_level(logging.WARNING, logger="boty.config"):
+        cfg = Config.load(_write(tmp_path, _WATCH + "    store_id: ${WALMART_STORE_ID}\n"))
+
+    assert cfg.watches[0].store_id is None
+    assert "WALMART_STORE_ID" in caplog.text
+
+
+def test_a_set_store_variable_pins_the_watch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WALMART_STORE_ID", "00000")
+
+    cfg = Config.load(_write(tmp_path, _WATCH + "    store_id: ${WALMART_STORE_ID}\n"))
+
+    assert cfg.watches[0].store_id == "00000"
+
+
+def test_a_boolean_store_id_is_refused_by_name(tmp_path: Path) -> None:
+    """`store_id: true` is a typo, exactly as `max_price: true` is.
+
+    `bool` is an `int` subclass, so `str(True)` would sail through as the
+    perfectly plausible pin `"True"` and never match anything. An ABSENCE is a
+    legitimate state; a TYPO is a mistake, and the two get opposite treatment
+    here on `_price`'s precedent.
+    """
+    with pytest.raises(ValueError, match="store_id"):
+        Config.load(_write(tmp_path, _WATCH + "    store_id: true\n"))
+
+    with pytest.raises(ValueError, match="thing"):
+        Config.load(_write(tmp_path, _WATCH + "    store_id: true\n"))
+
+
+# --------------------------------------------------------------------------
 # the polling interval must stay polite
 # --------------------------------------------------------------------------
 
@@ -162,3 +264,32 @@ def test_the_shipped_config_still_loads() -> None:
     assert all(
         w.max_price is None or isinstance(w.max_price, float) for w in cfg.watches
     )
+    # A store pin is a string or it is absent — never an int, never "". The
+    # shipped file substitutes ${WALMART_STORE_ID}, which is unset in CI and in
+    # a fresh clone, so this passes both pinned and unpinned by construction.
+    assert all(
+        w.store_id is None or (isinstance(w.store_id, str) and w.store_id)
+        for w in cfg.watches
+    )
+
+
+def test_both_walmart_watches_carry_a_store_pin_key() -> None:
+    """CONTEXT is explicit that REQ-14 applies to the PRODUCT watch, not only the control.
+
+    Asserted against the file's text rather than against the loaded `Watch`,
+    because the loaded value is `None` whenever `WALMART_STORE_ID` is unset —
+    which is the normal state of a fresh clone and of CI. The key being present
+    is the decision; the value being set is the operator's setup step.
+    """
+    body = (Path(__file__).resolve().parent.parent / "config" / "products.yaml").read_text(
+        encoding="utf-8"
+    )
+    walmart_blocks = [b for b in body.split("- name:") if "retailer: walmart" in b]
+
+    assert len(walmart_blocks) == 2, "expected exactly two Walmart watches"
+    for block in walmart_blocks:
+        assert "store_id: ${WALMART_STORE_ID}" in block, (
+            "a Walmart watch has no store pin. An unpinned Walmart reading is a "
+            "statement about an arbitrary store, which is the bug this phase exists "
+            "for — and the product watch counts, not only the control."
+        )

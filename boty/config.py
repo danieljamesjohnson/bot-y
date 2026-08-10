@@ -79,6 +79,68 @@ def _price(value: Any, where: str) -> float | None:
         raise ValueError(f"{where}: max_price must be a number, got {value!r}") from exc
 
 
+def _store_id(value: Any, where: str) -> str | None:
+    """Coerce a configured store pin to a string, or refuse the file.
+
+    Built in `_price`'s shape — same `where` parameter, same call-site form —
+    because it is the same class of value read out of the same document, and a
+    second idiom here would be a second place to get the bool case wrong.
+
+    Branch by branch:
+
+    - `None` in, `None` out. An ABSENT pin is a legitimate state and must not
+      raise. See the load-vs-refuse paragraph below; this is the whole reason
+      this function is not just `str(value)`.
+    - A `bool` raises, naming the watch. `bool` is an `int` subclass, so
+      `store_id: true` — an entirely plausible typo, exactly as `max_price: true`
+      is — would otherwise coerce to the perfectly plausible pin `"True"` and
+      never match anything, silently, forever. `_price`'s precedent, followed
+      rather than re-argued.
+    - Anything else becomes `str(value).strip()`, and an empty result becomes
+      `None`. The `str()` coercion is `_price`'s own documented bug one field
+      over: YAML reads an unquoted store number as an `int`, and an `int`
+      compared against the string Walmart puts in its own JSON is a silent
+      never-match — no exception, no log line, just a pin that can never agree.
+
+    WHY AN ABSENCE LOADS AND A TYPO REFUSES. This module has both idioms and
+    picking the wrong one takes the daemon down: `_price` and `_interval` refuse
+    the whole file, while `_sub` logs and continues because "an unset
+    ${BESTBUY_API_KEY} is a legitimate state, but it must be visible". A store
+    pin needs the second. Refusing would crash `boty watch` — five healthy
+    retailers taken down over one Walmart watch — and the phase criterion for an
+    unpinned store is UNKNOWN *plus a health message*, which requires a daemon
+    still running to deliver it. So the absence is carried as DATA on the
+    `Watch`, not only as a log line, because `assess_health` has to be able to
+    read it and say so.
+
+    HOW THE REAL STORE NUMBER REACHES THE DAEMON — decided here, not left open.
+    `config/products.yaml` ships `store_id: ${WALMART_STORE_ID}` on both Walmart
+    watches, and the real value lives in the mode-600 `EnvironmentFile` the
+    systemd unit already loads, outside this repo. `_expand`/`_sub` run over the
+    whole document before any `Watch` is built, so the mechanism already exists
+    and an unset variable already logs its own name without failing the load.
+
+    Why not the obvious alternatives:
+
+    - *A literal store number in the tracked file.* That is the leak class
+      itself. A store number is a geolocator — it resolves publicly to one
+      street address — and `3bd1663` force-rewrote 170 commits of this repo's
+      history to remove exactly this class. `config/products.yaml` is tracked
+      and public.
+    - *A second, untracked overlay config.* Invents a mechanism where `${VAR}`
+      substitution already exists and already argues this exact case.
+
+    The property that makes the choice safe rather than merely convenient: an
+    unset variable degrades to empty, which is unpinned, which is UNKNOWN — the
+    behaviour REQ-14 asks for anyway.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):  # bool is an int subclass; `store_id: true` is a typo
+        raise ValueError(f"{where}: store_id must be a store number, got {value!r}")
+    return str(value).strip() or None
+
+
 def _interval(settings: dict[str, Any]) -> int:
     value = settings.get("interval_seconds", 300)
     try:
@@ -149,6 +211,7 @@ class Config:
                     target=str(entry["target"]),
                     max_price=_price(entry.get("max_price"), f"watch {entry.get('name')!r}"),
                     control=bool(entry.get("control", False)),
+                    store_id=_store_id(entry.get("store_id"), f"watch {entry.get('name')!r}"),
                 )
             )
 

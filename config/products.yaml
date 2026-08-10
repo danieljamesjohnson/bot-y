@@ -55,10 +55,47 @@ watches:
     target: https://www.gamestop.com/consoles-hardware/nintendo-switch/gaming-accessories/controllers/products/pokemon-go-plus-plus/20003961.html
     max_price: 80          # MSRP is $54.99; anything near $140 is a flip
 
+  # ---- Walmart is pinned to ONE store, and you have to say which ---------
+  # Walmart assigns a store per request, and both stock and price differ between
+  # them. With nothing pinned, a Walmart reading is a statement about an
+  # arbitrary location — which is how this monitor once recorded the milk
+  # control below as out of stock at one price while three live reads minutes
+  # later returned in stock at a lower one. Same URL, same parser. A parser bug
+  # does not change a price; two different stores answered.
+  #
+  # THERE IS NO DEFAULT, and that is a decision rather than an omission. With
+  # nothing pinned the reading is UNKNOWN and the health message says why —
+  # never a guess at where you live, and never a verdict. Two alternatives were
+  # considered and rejected by name:
+  #
+  #   * default to whatever store Walmart assigns and flag only changes — that
+  #     leaves every reading a statement about an arbitrary store, which is the
+  #     bug itself rather than a fix for it;
+  #   * geolocate from a postal code — more moving parts, and the postal code is
+  #     precisely the value this repo's own leak incident was about.
+  #
+  # TO FIND YOUR OWN STORE NUMBER: open your store's page on walmart.com and
+  # read it out of the URL. Then put it in the ENVIRONMENT, not in this file.
+  # `WALMART_STORE_ID` is read from the daemon's EnvironmentFile — owner-readable
+  # only, and outside this repo. This file is tracked and public, and a store
+  # number is a geolocator: it resolves to one street address. This repo has
+  # already had to rewrite the whole of its own history once to remove exactly
+  # that class of value.
+  #
+  # Leave it unset and nothing breaks at load: the variable expands to empty,
+  # the watch is unpinned, and the reading is UNKNOWN — which is the answer
+  # asked for anyway.
+  #
+  # This paragraph deliberately prints no example store number, not even an
+  # invented one, and carries no digits at all. That is not a style rule. The
+  # identity guard's config-key rule does not scan commented lines — measured —
+  # so a number written up HERE would walk past the gate that catches one
+  # written down there.
   - name: Pokémon GO Plus +
     retailer: walmart
     target: https://www.walmart.com/ip/Pok-mon-GO-Plus-for-Nintendo-Switch/1203950273
     max_price: 80
+    store_id: ${WALMART_STORE_ID}
 
   # The one that matters most. Nintendo MAKES this, lists it at $54.99 — MSRP to
   # the cent — and has no marketplace, so neither flipper defence has anything to
@@ -82,10 +119,16 @@ watches:
   # daily, and never the subject of a marketplace buy-box fight. Do not use a
   # console here — on Walmart those are frequently held by resellers, so an
   # out-of-stock reading would be correct and you would chase a phantom bug.
+  #
+  # Pinned to the same store as the product watch above, and for the same
+  # reason — see that block for the whole argument. A control read from a
+  # different store than the product it is supposed to vouch for proves nothing
+  # about the product's reading.
   - name: CONTROL — Great Value whole milk
     retailer: walmart
     target: https://www.walmart.com/ip/Great-Value-Whole-Vitamin-D-Milk-Gallon-Plastic-Jug-128-Fl-Oz/10450114
     control: true
+    store_id: ${WALMART_STORE_ID}
 
   # ---- Best Buy ---------------------------------------------------------
   # `target` is a SKU, not a URL, and that is deliberate: the same entry has to
