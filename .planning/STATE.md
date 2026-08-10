@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
 status: Executing Phase 5
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-08-10T16:14:35.643Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-08-10T16:50:08.358Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,22 +26,31 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 5 of 6 — *A Reading Means Something* — **EXECUTING**, 2 of 4 plans complete
-**Next command:** `/gsd-execute-phase 5` (05-03 next; 05-04 is `autonomous: false` and checkpoints for Dan)
+**Phase:** 5 of 6 — *A Reading Means Something* — **EXECUTING**, 3 of 4 plans complete
+**Next command:** `/gsd-execute-phase 5` (05-04 next; it is `autonomous: false` and checkpoints for Dan)
 
-**05-01 and 05-02 are done and the phase is NOT.** `gsd-tools state advance-plan` wrote
+**05-01, 05-02 and 05-03 are done and the phase is NOT.** `gsd-tools state advance-plan` wrote
 `status: Phase complete — ready for verification` after the first of four plans — it read the
 "Plan: 6 of 6 complete" line left behind by Phase 4 — and that was corrected by hand. **It did
-it again after 05-02**, for the same reason: the stale line lives in the archived v1.0.0 block
-at the bottom of this file, which is kept verbatim and therefore cannot be edited to fix the
-tool. Corrected by hand both times. Recorded because a milestone about not overclaiming should
-not have its own state file claiming a phase closed at the halfway mark.
+it again after 05-02 and a third time after 05-03**, for the same reason: the stale line lives
+in the archived v1.0.0 block at the bottom of this file, which is kept verbatim and therefore
+cannot be edited to fix the tool. Corrected by hand all three times; after 05-03 it also
+overwrote `stopped_at` with Phase 4's value, which was corrected with it. Recorded because a
+milestone about not overclaiming should not have its own state file claiming a phase closed at
+the halfway mark.
 
 **REQ-14 and REQ-15 are CLOSED by 05-02.** 05-01 shipped REQ-14's *recording* half — the pin,
 the reading, the publication. 05-02 shipped the *verdict* half (unpinned or mismatched ⇒
 UNKNOWN, with a health message that names `store_id`) and withdrew the two alert sentences
 REQ-15 exists because of. Mutations rose 8/8 → 10/10; `make verify-offline` exits 0 at 595
 passed.
+
+**REQ-16 is CLOSED by 05-03.** The backoff and the paging memory now survive the process in one
+gitignored `pacer-state.json` (`refusals` plus a wall-clock stamp; never `due_at`, so a restart
+still asks once at full rate). Measured along the way and fixed: "pushed once" was already false
+*within* one process — a cycle the pacer skipped was read as the retailer recovering, so a
+refusal past the cap was re-paged at every subsequent check. Mutations rose 10/10 → 14/14;
+`make verify-offline` exits 0 at 642 passed.
 
 **Both Walmart watches read UNKNOWN on this host until 05-04's checkpoint.** `store_id:
 ${WALMART_STORE_ID}` is unset here, so the config-gap guard fires and `boty check` shows
@@ -77,8 +86,8 @@ four retailers that can alert on the GO Plus +. Phase 6 is gates over claims.
 
 ## Carried into this milestone
 
-- **`Pacer._state` is in-memory only.** A service restart resets every backoff to zero, so any page-once bookkeeping hung off it re-pages on restart. Phase 5 criterion 5.
-- **`boty.service` has been running pre-Phase-4 code since 2026-08-04 17:48.** No detector logic changed in Phase 4, so it is not urgent — but do NOT restart while a retailer is in backoff, for the reason above.
+- **`Pacer._state` is in-memory only.** A service restart resets every backoff to zero, so any page-once bookkeeping hung off it re-pages on restart. Phase 5 criterion 5. **FIXED IN THE TREE by 05-03 (2026-08-10)** — but not yet in the running daemon; see below.
+- **`boty.service` has been running pre-Phase-4 code since 2026-08-04 17:48.** No detector logic changed in Phase 4, so it is not urgent — but do NOT restart while a retailer is in backoff, for the reason above. **This warning still binds the RUNNING PROCESS**, which has no persistence: the fix is in the tree, not in the daemon, until 05-04 deploys it. Once 05-04 has restarted the service onto this tree the warning is void, and this entry should be struck rather than carried further.
 - **A browser IS available on this host, and nobody knew.** `boty/browser.py` searches PATH and finds nothing, but Playwright's Chromium is at `~/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` (Chrome for Testing 149.0.7827.55) and `BOTY_BROWSER_PATH` accepts it. With it set, `make verify` **runs all six controls** instead of skipping two — measured 2026-08-10. It still FAILS 3/6, but for diagnosable reasons rather than a missing binary: Best Buy and Target now throw a bare `fetch failed: Exception:` with an **empty message** (sandbox? nodriver vs Chrome 149?), and Amazon hits a challenge page. Worth chasing — the empty exception is itself a reporting defect, and this milestone is about not saying things you have not measured.
 - **`make verify` fails live** (`VERIFY: FAIL (live controls)`, exit 2): no Chrome/Chromium binary on this host, so Best Buy and Target cannot run at all; Walmart and Amazon hit challenge pages intermittently. All four read UNKNOWN, never a false verdict. `make verify-offline` exits 0 — 531 passed, 8/8 mutations.
 - **eBay is closed.** Developers Program registration was **rejected** 2026-08-10. See `.planning/research/ebay-CLOSED-registration-rejected.md`. The delivered-total ceiling finding survived it and is REQ-17.
@@ -110,7 +119,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 04 of 5 (Open Source Ready) — **COMPLETE 2026-08-06**, closed on three of five criteria MET; 3 and 5 UNMET and deliberately not amended (Dan deferred publishing)
 **Plan:** 6 of 6 complete (04-01 … 04-06, all waves done)
-**Last session:** 2026-08-10T15:43:29.502Z
+**Last session:** 2026-08-10T16:49:42.596Z
 **Stopped At:** Completed 04-06-PLAN.md — Phase 4 closed
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
@@ -203,6 +212,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 04 P06 | 35 | 3 tasks | 4 files |
 | Phase 05 P01 | 25min | 4 tasks | 19 files |
 | Phase 05 P02 | 20min | 3 tasks | 10 files |
+| Phase 05 P03 | 27min | 3 tasks | 9 files |
 
 ## Decisions
 
@@ -295,6 +305,8 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 05]: REQ-14 and REQ-15 close together in 05-02: the store guard and the alert-text withdrawal both rewrite the same function, so splitting them would have been contention disguised as parallelism
 - [Phase 05]: A claim about ABSENCE is gated with ast.parse (docstrings excluded by node identity), never grep — this repo's own comments quote the withdrawn sentences, so a text gate rots into a vacuous pass
 - [Phase 05]: monitor.CAUSE_UNKNOWN is carried by exactly the refusal and breakage arms and by neither the no-control nor the store-gap arm — saying 'the cause is not established' about a gap we can name is the same dishonesty pointed the other way
+- [Phase 05]: due_at is never persisted; refusals plus a wall-clock stamp are — watch_loop drives Pacer with a synthetic clock starting at 0.0 every process, so a persisted due_at either fires immediately or blocks a retailer for the age of the previous process. Not persisting it also KEEPS the withdrawn docstring's concession: a restart still tries once at full rate.
+- [Phase 05]: A cycle the pacer skipped does not end a failure episode — Measured 2026-08-10: warned was recomputed from health, and a paced-out retailer has no result and so no health entry, so it read as recovered. The paging memory survived exactly one cycle and a refusal past the cap was re-paged at every subsequent check - 2 pages in 120 cycles. watch_cycle now carries warned forward for retailers it did not check.
 
 ### Blockers
 
