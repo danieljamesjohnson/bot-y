@@ -379,6 +379,7 @@ what was measured — or says it does not know.
 **Success Criteria** (what must be TRUE):
 
   1. Every Walmart `Result` records the store it came from, and that store is published in `status.json`
+  0. **Store pinning is required config with no default** (decided 2026-08-10): a per-watch `store_id` in `config/products.yaml`; unset means UNKNOWN with a health message saying so, never a guessed location and never a verdict
   2. A reading from an unpinned or unexpected store is UNKNOWN, never a verdict — watched going red
   3. No alert text names a cause the code has not established; where the cause is unknown the alert says so
   4. A refusal the backoff is handling is recorded but not pushed; one that outlasts the cap is pushed once
