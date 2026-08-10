@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-status: Executing Phase 6 — 1 of 6 plans complete
-stopped_at: Completed 06-01-PLAN.md — criterion 1 of five built and gated
-last_updated: "2026-08-10T20:58:03.019Z"
+status: Executing Phase 6 — 2 of 6 plans complete
+stopped_at: Completed 06-02-PLAN.md — criterion 2 of five built and gated
+last_updated: "2026-08-10T21:27:16.458Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 10
-  completed_plans: 5
+  completed_plans: 6
   # percent is PHASE-based (1 of 2 complete), not plan-based, for the reason
-  # this milestone exists: Phase 6 is one plan into six, and a plan-based
+  # this milestone exists: Phase 6 is two plans into six, and a plan-based
   # figure would move on every commit while the phase criterion it serves is
-  # still unmet. The two happen to coincide at 50 today (5 of 10 plans, 1 of 2
-  # phases) — that is a coincidence, not agreement, and the basis is stated so
-  # the next reader does not adopt the wrong one when they diverge.
+  # still unmet. `state update-progress` reported 60% on a plan basis this run
+  # and left this field alone; 50 is the phase figure and is deliberate. The
+  # basis is stated so the next reader does not adopt the wrong one.
   percent: 50
 ---
 
@@ -32,10 +32,42 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 1 of 6 plans complete
-(06-01, 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six of six criteria MET
-**against the tree**, with **not one of them confirmed on the deployed daemon**
-**Next command:** `/gsd-execute-phase 6` (next plan: 06-02)
+**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 2 of 6 plans complete
+(06-01 and 06-02, both 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six of six
+criteria MET **against the tree**, with **not one of them confirmed on the deployed daemon**
+**Next command:** `/gsd-execute-phase 6` (next plan: 06-03)
+
+**06-02 landed criterion 2 — the one that was literally a report that an existing gate could
+not go red.** The README support matrix's Rung cell is now bound to the code across **both**
+joins: retailer→adapter out of `cli._make_checker`'s if-chain and adapter→rung out of
+`boty/retailers.py`, statically by AST, two-directionally, with nine red-watches and two new
+mutations. **M19 and M20 are both observed CAUGHT by ident** — M19 by nine tests, every one of
+them the new gate. `make verify-offline` exits 0 at **701 passed** and **20/20**.
+
+**REQ-18's `131` was RE-MEASURED before the gate was written and NOT edited.** The criterion's
+own mutation, applied inside the harness's own sandbox to a tree with no Rung binding in it,
+left pytest at **exit 0, `687 passed, 1 skipped`**. The 131 is a pre-Phase-5 figure; the newer
+number is recorded beside it as a measurement note, never as an amendment. **REQ-18 stays
+Pending** for 06-06.
+
+**A correction 06-06 must carry, and `REQUIREMENTS.md` was deliberately not edited to make it
+go away.** `06-CONTEXT.md` says `tests/test_support_matrix.py` "already binds the README's
+Routing and Extraction cells to the code in both directions", and REQ-18's own parenthetical
+says "Routing and Extraction are already pinned; Rung is the gap." **Both are measured false.**
+`_extraction_mismatch` binds one README cell to another README cell — both of its directions
+are inside the table — and before 06-02 nothing in `tests/` imported `boty.models` or bound a
+README cell to `boty/` at all. So both joins were new construction, not a column copy, and a
+rung-only gate would have stayed green the day `_make_checker` stopped routing amazon to
+`check_amazon`. A criterion is never amended to make it meetable, and by the same rule it is
+not amended to make it *accurate* either.
+
+**One measured contradiction of 06-02's own plan, recorded rather than hidden.** Its F6 claimed
+no existing test routes a target watch through `_make_checker`, so M20 would be killed by the
+new gate and nothing else. Measured:
+`tests/test_retailers.py::test_a_target_watch_is_dispatched_to_the_browser_and_dom_path` does
+exactly that and is in M20's kill list. F6's grep was for `check_target_browser`, which that
+test never names. M20 is still not redundant — it pins the README row, and the pre-existing
+test pins the dispatch — but the record says which gates killed it.
 
 **06-01 landed criterion 1, and it landed a bill with it.** The `max_price` ceiling now measures
 the delivered total — item price plus shipping — and refuses to authorise an alert where that
@@ -83,6 +115,19 @@ by hand, for the fifth time. The pattern is now stable enough to state plainly: 
 reads `Plan: 6 of 6 complete` out of the archived v1.0.0 block at the bottom of this file**, that
 block is kept verbatim and cannot be edited to fix the tool, so every plan in this phase should
 expect to correct these three fields by hand and should not trust the tool's own summary line.
+
+**A SIXTH misfire, at 06-02, identical in all three parts.** `advance-plan` returned the same
+`{"reason": "last_plan", "current_plan": 6, "total_plans": 6, "status":
+"ready_for_verification"}` after the SECOND plan of a six-plan phase, and again wrote `status:
+Phase complete — ready for verification` and again overwrote `stopped_at` with Phase 4's stale
+value. `record-metric` again rejected the documented positional form. `update-progress` again
+stripped the comment recording that `percent` is phase-based, this time reporting `60%` on a
+plan basis while leaving the frontmatter field at `50`. All corrected by hand, for the sixth
+time. **One new, environmental note worth carrying:** `gsd-tools` is not reachable from a
+non-login shell on this host — every call returns `/usr/bin/env: 'node': No such file or
+directory` until `export NVM_DIR=$HOME/.nvm; . $NVM_DIR/nvm.sh` is sourced first. A run that
+forgets that gets three silent no-ops instead of three misfires, which is the worse failure of
+the two because nothing looks wrong.
 
 **REQ-14 and REQ-15 are CLOSED by 05-02.** 05-01 shipped REQ-14's *recording* half — the pin,
 the reading, the publication. 05-02 shipped the *verdict* half (unpinned or mismatched ⇒
@@ -281,6 +326,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 05 P03 | 27min | 3 tasks | 9 files |
 | Phase 05 P04 | 20min | 3 tasks (1 checkpoint answered `defer`, 1 not entered) | 5 files |
 | Phase 06 P01 | 44min | 3 tasks (2 TDD, so 5 code commits) | 11 files |
+| Phase 06 P02 | 41min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -388,6 +434,13 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 06]: 06-01: Walmart shipping resolves to 0.0 only when two INDEPENDENT fields agree, selected by `type` and never by index; `fulfillmentOptions[*].speedDetails.fulfillmentPrice` is not read at all, because its only non-null instance in the corpus is a $7.95 from-store DELIVERY fee on a pickup item
 - [Phase 06]: 06-01: a negative shipping cost is refused in `Result.delivered_total` and in exactly one place — the single point where an untrusted number becomes a decision, rather than N readers with N chances to get it wrong (T-06-01)
 - [Phase 06]: 06-01: `alertable`'s redundant `price is None` guard was DELETED so M4 stays load-bearing — with both guards present, flipping the first would change no verdict, the mutation would SURVIVE, and the harness would report a hole that is not there
+- [Phase 06]: 06-02: the Rung binding is STATIC AST over BOTH joins — retailer→adapter from cli._make_checker's if-chain and adapter→rung from the literal `rung=Rung.X` keywords — because a binding to check_amazon's rung alone stays green the day amazon stops being routed to check_amazon, which is the same false claim one join along. The cost is written into the module docstring rather than buried: it asserts what the source SAYS, not what RUNS, and tests/test_retailers.py already covers the other half
+- [Phase 06]: 06-02: RUNG_NUMERALS lives in tests/test_support_matrix.py, not boty/models.py — a numeral is a documentation fact about the ladder README publishes, models.Rung deliberately keeps itself out of monitor and Health, and the package has no consumer for it. It is a PIN in UNREAD_POSITIONS' sense, with rung 4's deliberate absence of a member quoted from models.Rung's own docstring
+- [Phase 06]: 06-02: the rule asserts set EQUALITY, not containment, so Best Buy's `3 (2 with a key)` needs no special case and an adapter taking a rung the cell does not name is caught too — a conditional cell falls out of a set comparison, and an exemption is a row that stops being checked
+- [Phase 06]: 06-02: _routing RAISES rather than returning an empty mapping when it cannot find _make_checker, the check closure or the fallthrough return — a static rule handed {} reports seven clean rows and every gate above it keeps passing. Watched raising all three ways
+- [Phase 06]: 06-02: "an adapter that states no rung" is reported as a DIFFERENT finding from "no adapter at all" — an empty set is exactly what a rung-4 row wants to see, so collapsing them would let an adapter this gate cannot read masquerade as a retailer nothing reads
+- [Phase 06]: 06-02: M19's anchor is the shortest UNIQUE extension of the naive one and its uniqueness is bound by a test, not observed once — the bare `rung=Rung.TLS,` occurs twice with check_html (GameStop, Walmart, Nintendo) first, so 06-PATTERNS.md's proposed anchor would have mutated three retailers while its breaks= sentence said Amazon
+- [Phase 06]: 06-02: REQ-18's `131` was RE-MEASURED (exit 0, 687 passed 1 skipped) and recorded beside the criterion rather than replacing it; REQ-18's inaccurate "Routing and Extraction are already pinned" parenthetical was NOT edited either — a criterion is not amended to make it meetable, and by the same rule not to make it accurate
 - [Phase 06]: 06-01: the re-measurement CORRECTS 06-01's own plan on Walmart — the plan predicted the watch keeps its alertability, but the only first-party Walmart capture in this repo resolves no shipping at all, so the honest answer for 06-06's checkpoint is "not demonstrated", not "yes". Two watches confirmed lost, a third unproven
 
 ### Blockers

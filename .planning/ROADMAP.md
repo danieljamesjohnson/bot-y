@@ -470,18 +470,35 @@ is now closed (registration rejected, 2026-08-10). The finding outlived the reta
 Walmart carries marketplace sellers, so a $54.99 listing with $45 shipping defeats one of
 only two reseller defences **today**.
 
-**Progress: 1 of 6 plans complete (06-01, 2026-08-10).** Criterion 1 is **built and gated in
-the tree** — the ceiling measures `price + shipping` and refuses an alert where that total
-cannot be established; `make verify-offline` exits 0 at **688 passed** and **18/18** mutations,
-up from 667 and 16/16, with M4 re-anchored and M17/M18 added. It is **NOT marked met and
-REQ-17 is left Pending**: 06-06 closes it by measuring what landed, and criterion 1 carries a
-user-visible cost that has not been put to a person yet. Measured against the built tree, of
-the four watches carrying a `max_price`: GameStop still alerts ($54.99 + $6.99 = $61.98, under
-80); **Nintendo and Amazon stop being able to page** — one publishes shipping as prose, the
-other's reader is a button; and **Walmart is "not demonstrated"**, correcting 06-01's own plan,
-because the only first-party Walmart capture in this repo resolves no shipping at all. No
-ceiling was raised and no watch edited to absorb any of it. The table goes to Dan at 06-06's
+**Progress: 2 of 6 plans complete (06-01 and 06-02, both 2026-08-10).** `make verify-offline`
+exits 0 at **701 passed** and **20/20** mutations, up from 667 and 16/16 at Phase 5's close.
+
+**Criterion 1 is built and gated in the tree** (06-01) — the ceiling measures `price + shipping`
+and refuses an alert where that total cannot be established; M4 re-anchored, M17/M18 added. It is
+**NOT marked met and REQ-17 is left Pending**: 06-06 closes it by measuring what landed, and
+criterion 1 carries a user-visible cost that has not been put to a person yet. Measured against
+the built tree, of the four watches carrying a `max_price`: GameStop still alerts ($54.99 + $6.99
+= $61.98, under 80); **Nintendo and Amazon stop being able to page** — one publishes shipping as
+prose, the other's reader is a button; and **Walmart is "not demonstrated"**, correcting 06-01's
+own plan, because the only first-party Walmart capture in this repo resolves no shipping at all.
+No ceiling was raised and no watch edited to absorb any of it. The table goes to Dan at 06-06's
 blocking checkpoint; full working in `.planning/phases/06-claims-with-gates-under-them/06-01-SUMMARY.md`.
+
+**Criterion 2 is built and gated in the tree** (06-02), and it is the one that was *literally a
+report that an existing gate could not go red*. **Re-measured before the gate was written:** the
+criterion's own mutation — `check_amazon` returning `Rung.BROWSER` against the shipped
+`| Amazon | 1 | dom |` row — left pytest at **exit 0, `687 passed, 1 skipped`**. The criterion's
+`131` is a pre-Phase-5 figure; **it was not edited**, and the newer number is recorded beside it
+as a measurement note. The Rung cell is now bound to the code across **both** joins —
+retailer→adapter out of `cli._make_checker`'s if-chain and adapter→rung out of `boty/retailers.py`,
+statically by AST — two-directionally, with nine red-watches and two mutations. **M19 and M20 are
+both observed CAUGHT by ident**, M19 by nine tests all of them the new gate. **REQ-18 is left
+Pending** for 06-06 on the same precedent. **A correction 06-06 must carry:** `06-CONTEXT.md` and
+REQ-18's own parenthetical both say Routing and Extraction are already pinned to the code;
+measured, neither is — `_extraction_mismatch` binds one README cell to another, and nothing in
+`tests/` bound a README cell to `boty/` at all. Both joins were therefore new construction.
+`REQUIREMENTS.md` was not edited. Full working in
+`.planning/phases/06-claims-with-gates-under-them/06-02-SUMMARY.md`.
 
 ## Open Questions
 
