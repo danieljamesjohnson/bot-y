@@ -458,6 +458,66 @@ MUTATIONS = (
         replace="        return self.price",
         breaks="drops the shipping addend from the sum, so the ceiling measures the item price again while every guard around it still looks correct — killed on CAPTURED GameStop numbers rather than synthetic ones: $54.99 + $6.99 fails a $60 ceiling and $54.99 alone clears it",
     ),
+    # M19 and M20 are REQ-18: the README support matrix's Rung cell, and the
+    # two joins that hold it up. Before 06-02 that column was bound to nothing —
+    # measured 2026-08-10 by applying M19's exact edit to a sandbox built from
+    # the tree of the day: pytest exit 0, `687 passed, 1 skipped`. REQ-18
+    # recorded the same measurement at an older suite size ("left 131 tests
+    # green"); the number moved and the fact did not.
+    #
+    # M19'S ANCHOR IS DISAMBIGUATED ON PURPOSE, and the naive version is a trap
+    # this harness would have walked straight into. `apply_mutation` does
+    # `before.replace(search, replace, 1)` — FIRST OCCURRENCE WINS — and the
+    # bare `rung=Rung.TLS,` occurs TWICE in boty/retailers.py, in `check_html`
+    # BEFORE `check_amazon`. Counted on the tree at 800b2a6: 2 for the bare
+    # form, 1 for the form below. So the obvious anchor would mutate the adapter
+    # serving GameStop, Walmart and Nintendo while the `breaks=` sentence
+    # described Amazon — a harness reporting a result about work it did not do,
+    # which is worse than no result.
+    #
+    # The disambiguator is the SHORTEST unique extension: the newline and the
+    # indented `#` that opens `check_amazon`'s `sku=` comment. It is one
+    # punctuation character of comment rather than comment prose, so rewording
+    # that comment cannot silently re-point this mutation, and deleting it
+    # outright raises HarnessError — the harness refusing to run rather than
+    # quietly checking something else. M2's re-anchoring lesson, applied ahead
+    # of the drift instead of after it.
+    #
+    # BOUND BY A TEST rather than by this comment:
+    # tests/test_support_matrix.py loads this registry, asserts M19's `search`
+    # occurs exactly once in the real source, and asserts that applying it moves
+    # `check_amazon` to rung 3 while `check_html` stays at rung 1. The day
+    # somebody adds a second `rung=Rung.TLS,` followed by a comment, that test
+    # goes red BEFORE this mutation starts measuring a different adapter.
+    Mutation(
+        ident="M19",
+        target="boty/retailers.py",
+        search="        rung=Rung.TLS,\n        #",
+        replace="        rung=Rung.BROWSER,\n        #",
+        breaks="`check_amazon` takes a browser rung while the README support matrix's Amazon row still reads `| Amazon | 1 | dom |`, so the table a reader consults BEFORE deciding what a reading is worth states a transport the code does not take — REQ-18's own measurement, and the one column of that table that used to be bound to nothing",
+    ),
+    # M20 is M19's other join and gets its own mutation for M6/M7's stated
+    # reason: they prove different things. M19 dying proves the ADAPTER→RUNG
+    # join exists. Only M20 proves the RETAILER→ADAPTER join is load-bearing —
+    # a tree that read `check_amazon`'s rung perfectly and stopped routing
+    # amazon to it would pass M19 while the matrix described an adapter nothing
+    # calls, and the retailer would be read at whatever rung the adapter that
+    # replaced it takes. That is the same false claim, moved one join along.
+    #
+    # `check_amazon` and `check_target_browser` take the identical
+    # `(watch, *, first_party_only)` signature, so the mutated tree imports,
+    # collects and runs rather than dying at collection — which would be a
+    # HarnessError and not a result. The anchor occurs once in boty/cli.py,
+    # counted on the tree at 800b2a6, and it is a call expression: no docstring,
+    # no comment, no `detail` prose. `_make_checker`'s arms are dense with
+    # recorded reasoning that a careless anchor would grab.
+    Mutation(
+        ident="M20",
+        target="boty/cli.py",
+        search="return check_target_browser(watch, first_party_only=cfg.first_party_only)",
+        replace="return check_amazon(watch, first_party_only=cfg.first_party_only)",
+        breaks="a target watch is routed to Amazon's adapter, so Target is read at rung 1 against a README row that says 3 — and `check_target_browser` is UNTOUCHED and still says `Rung.BROWSER`, so a gate that read only boty/retailers.py stays green while the transport claim is false",
+    ),
 )
 
 

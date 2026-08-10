@@ -235,6 +235,23 @@ must never say it. Otherwise `—` would become a blank that means nothing and
 answers everything — the escape hatch `unread` had to be pinned against, one
 column over.
 
+**The Rung cell is bound to the code that takes it**, in both directions and
+across both of the joins that hold it up — which it was not until 2026-08-10,
+and the measurement that prompted it is worth stating: changing Amazon's adapter
+to return a browser rung, in flat contradiction of the row above, left the entire
+test suite green. A working-rung row must have an adapter the router actually
+reaches that takes **exactly** the rungs its cell names, including Best Buy's
+conditional second one — dropping ` (2 with a key)` while the API adapter still
+exists is a red test — and a rung-4 row must have **no** adapter at all, so a
+dropped retailer that quietly gains one cannot go on claiming nothing reads it.
+The binding is static: `tests/test_support_matrix.py` reads the routing chain in
+`boty/cli.py` and the rung each adapter states in `boty/retailers.py` as source
+text, and compares both against this table. It therefore asserts what the source
+*says* rather than what *runs*, which is the right half to check here because the
+failure it guards against is itself a source edit — somebody changes an adapter's
+rung and forgets the table; `tests/test_retailers.py` covers the other half by
+driving the adapters. Mutations M19 and M20 break one join each.
+
 There is one temporary third state, for the same reason: a gate that makes the
 honest answer unrepresentable pressures the padding it was built to stop. A
 retailer newly brought into scope and not yet probed records

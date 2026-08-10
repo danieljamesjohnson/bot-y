@@ -82,6 +82,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -1580,3 +1581,85 @@ def test_a_deleted_row_fails_the_presence_rule() -> None:
     rows = _matrix(without_target)
 
     assert _missing(rows) == ["Target"]
+
+
+# --------------------------------------------------------------------------
+# The mutation anchors, bound to the source they claim to move
+# --------------------------------------------------------------------------
+
+
+def _mutation(ident: str) -> Any:
+    """One entry from `scripts/mutation_check.py`'s registry, loaded by path.
+
+    The same `spec_from_file_location` idiom `_load_evidence_check` uses, with
+    one addition: the module is registered in `sys.modules` BEFORE it is
+    executed. `evidence_check.py` has no dataclass in it and this file does, and
+    `@dataclass` resolves its annotations through `sys.modules[cls.__module__]`
+    — a module missing from that table raises `AttributeError: 'NoneType'
+    object has no attribute '__dict__'` from inside `dataclasses`, which names
+    nothing a reader could act on.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "mutation_check_for_matrix", REPO_ROOT / "scripts" / "mutation_check.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    found = [m for m in module.MUTATIONS if m.ident == ident]
+    assert len(found) == 1, (
+        f"expected exactly one mutation with ident {ident!r} in scripts/mutation_check.py, "
+        f"found {len(found)}. Idents are reserved across concurrent plans, not renumbered."
+    )
+    return found[0]
+
+
+def test_the_amazon_rung_mutation_moves_check_amazon_and_only_check_amazon() -> None:
+    """M19's anchor, bound to the source rather than observed once at execution.
+
+    `apply_mutation` replaces the FIRST occurrence, and the bare `rung=Rung.TLS,`
+    occurs twice in `boty/retailers.py` with `check_html` — GameStop, Walmart
+    and Nintendo — coming first. So M19's anchor carries a disambiguating
+    newline and `#`, and the uniqueness of that anchor is a fact this repository
+    is allowed to lose silently unless something checks it.
+
+    This is what it buys: the day somebody adds a second `rung=Rung.TLS,` line
+    followed by a comment, this test goes red BEFORE the mutation quietly starts
+    measuring a different adapter and reporting the result under Amazon's name.
+    `_corrupt_source` does the single-occurrence assertion; the AST comparison
+    does the rest, because a count says one place matched and not which.
+    """
+    mutation = _mutation("M19")
+
+    assert mutation.target == "boty/retailers.py"
+    assert mutation.search == AMAZON_RUNG_ANCHOR
+    assert mutation.replace == AMAZON_RUNG_MUTATED
+
+    rungs = _adapter_rungs(_corrupt_source(RETAILERS, mutation.search, mutation.replace))
+
+    assert rungs["check_amazon"] == ("3",), rungs
+    assert rungs["check_html"] == ("1",), (
+        "M19 moved the adapter serving GameStop, Walmart and Nintendo, while its `breaks=` "
+        f"sentence describes Amazon. {rungs}"
+    )
+    assert _rung_mismatch(_matrix(), rungs=rungs) == {"Amazon": ("1", "3")}
+
+
+def test_the_target_routing_mutation_moves_target_and_only_target() -> None:
+    """M20's anchor, bound the same way, on the other join.
+
+    A routing anchor has the same failure available to it: `_make_checker`'s
+    arms all end in a `return check_*(watch, first_party_only=...)` call, and an
+    anchor short enough to match two of them would re-route a retailer its
+    `breaks=` sentence does not name.
+    """
+    mutation = _mutation("M20")
+
+    assert mutation.target == "boty/cli.py"
+
+    routing = _routing(_corrupt_source(CLI, mutation.search, mutation.replace))
+
+    assert routing["target"] == ("check_amazon",), routing
+    assert routing["bestbuy"] == _routing()["bestbuy"], "M20 moved an arm it does not name"
+    assert routing["amazon"] == ("check_amazon",), routing
+    assert _rung_mismatch(_matrix(), routing=routing) == {"Target": ("3", "1")}
