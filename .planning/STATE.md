@@ -2,16 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-status: Executing Phase 5
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-08-10T16:50:08.358Z"
+status: Phase 5 complete — six criteria met against the tree, none deployed
+stopped_at: Completed 05-04-PLAN.md — Phase 5 closed
+last_updated: "2026-08-10T17:20:00.000Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  # percent is PHASE-based (1 of 2), not plan-based. Phase 6 is unplanned, so its
+  # plan count is unknown and a plan-based figure would read 100% on a half-done
+  # milestone — the exact overclaim this milestone exists to close.
+  percent: 50
 ---
 
 # State: bot-y
@@ -21,23 +24,39 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 5 — A Reading Means Something
+**Current focus:** Phase 6 — Claims With Gates Under Them (Phase 5 closed 2026-08-10; its one outstanding action is a service restart, not more work)
 
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 5 of 6 — *A Reading Means Something* — **EXECUTING**, 3 of 4 plans complete
-**Next command:** `/gsd-execute-phase 5` (05-04 next; it is `autonomous: false` and checkpoints for Dan)
+**Phase:** 5 of 6 — *A Reading Means Something* — **COMPLETE 2026-08-10**, 4 of 4 plans, closed on
+six of six criteria MET **against the tree** and **not one of them confirmed on the deployed
+daemon**
+**Next command:** `/gsd-plan-phase 6`
 
-**05-01, 05-02 and 05-03 are done and the phase is NOT.** `gsd-tools state advance-plan` wrote
-`status: Phase complete — ready for verification` after the first of four plans — it read the
-"Plan: 6 of 6 complete" line left behind by Phase 4 — and that was corrected by hand. **It did
-it again after 05-02 and a third time after 05-03**, for the same reason: the stale line lives
-in the archived v1.0.0 block at the bottom of this file, which is kept verbatim and therefore
-cannot be edited to fix the tool. Corrected by hand all three times; after 05-03 it also
-overwrote `stopped_at` with Phase 4's value, which was corrected with it. Recorded because a
-milestone about not overclaiming should not have its own state file claiming a phase closed at
-the halfway mark.
+**The most useful thing anyone can do to this project right now is restart `boty.service`.**
+Everything Phase 5 built is in the tree, gated and green offline; **none of it is running.**
+Dan was asked for his Walmart store number at 05-04's closing checkpoint and answered
+`defer` — verbatim, *"Defer — no restart"* — which was one of the three offered answers and is
+recorded rather than worked around. So: no pin was set (`grep -c '^WALMART_STORE_ID=' env` → `0`,
+a count and never a value), and no restart was made. Until one is, Walmart readings are still
+statements about an arbitrary store, the withdrawn *"the detector is probably broken"* sentence
+still reaches a person, and the backoff is still in-memory with the once-per-process paging
+defect. The work needed is `systemctl restart boty.service` — plus the pin first, if Walmart is
+to be alertable at all.
+
+**`gsd-tools state advance-plan` misfired a FOURTH time, and this run captured the mechanism in
+the tool's own words.** It returned `{"advanced": false, "reason": "last_plan", "current_plan": 6,
+"total_plans": 6, "status": "ready_for_verification"}` — Phase 5 has **four** plans, not six, so
+the 6-of-6 it read is the `Plan: 6 of 6 complete` line in the archived v1.0.0 block at the bottom
+of this file, which is kept verbatim and therefore cannot be edited to fix the tool. It again
+wrote `status: Phase complete — ready for verification` and again overwrote `stopped_at` with
+Phase 4's stale value; both corrected by hand, as after 05-01, 05-02 and 05-03. Two smaller
+misfires observed the same run and worth recording with it: `state update-progress` returned
+`{"updated": true, "percent": 75}` while leaving frontmatter `percent` at `0`, and
+`state record-metric` rejected the documented positional form with `phase, plan, and duration
+required`, so the Phase 05 P04 row below was written by hand. Recorded because a milestone about
+not overclaiming should not have its own state file claiming a phase closed at the halfway mark.
 
 **REQ-14 and REQ-15 are CLOSED by 05-02.** 05-01 shipped REQ-14's *recording* half — the pin,
 the reading, the publication. 05-02 shipped the *verdict* half (unpinned or mismatched ⇒
@@ -52,10 +71,31 @@ still asks once at full rate). Measured along the way and fixed: "pushed once" w
 refusal past the cap was re-paged at every subsequent check. Mutations rose 10/10 → 14/14;
 `make verify-offline` exits 0 at 642 passed.
 
-**Both Walmart watches read UNKNOWN on this host until 05-04's checkpoint.** `store_id:
-${WALMART_STORE_ID}` is unset here, so the config-gap guard fires and `boty check` shows
-Walmart unhealthy with the store-gap reason. That is criterion 2 working, not a regression —
-do not "fix" it by inventing a default.
+**Both Walmart watches read UNKNOWN in the tree, and the pin was deferred, so they stay that
+way.** `store_id: ${WALMART_STORE_ID}` is unset on this host, so the config-gap guard fires and
+`boty check` shows Walmart unhealthy with the store-gap reason. That is criterion 2 working, not
+a regression — **do not "fix" it by inventing a default.** Confirmed live on 2026-08-10 at 12:07:
+`make verify` runs in a shell with no `WALMART_STORE_ID`, Walmart **answered** rather than
+challenge-blocking, and the milk control read `unknown — no store_id pinned for this watch — set
+store_id in config/products.yaml`. The guard firing against a real page is the one live
+confirmation this phase obtained, and it came from the tree, not from the daemon.
+
+**Phase 5's six verdicts, in one line each** (full working: `docs/retailer-evidence.md`
+§ *Phase 5 closing record*; the table is in `ROADMAP.md`):
+
+| # | Verdict |
+|---|---|
+| 1 | MET in the tree — NOT DEPLOYED (the daemon's watch rows carry no `store` key) |
+| 2 | MET — the one criterion with a live confirmation |
+| 3 | MET — M9/M10 watched going red, 8/8 → 10/10 |
+| 4 | MET in the tree — demonstrably NOT YET TRUE ON THE WIRE |
+| 5 | MET — and it was already false *within* one process before 05-03 measured it |
+| 6 | MET — and explicitly NOT demonstrated by any restart, because there was none |
+
+**Nothing was reworded to reach that.** The ROADMAP's Phase 5 criteria list was renumbered
+`1, 0, 2, 3, 4, 5` → `1`–`6` on 2026-08-10 — a typing slip, not an amendment — and it was proved
+mechanically: both extractions yielded exactly six criterion bodies and the `diff` between them
+was empty.
 
 **v1.0.0 is open, untagged, and stays that way.** Its definition of done includes *"Dan has
 successfully bought a Pokémon GO Plus +"* — a market condition, not a work item — and the
@@ -86,10 +126,10 @@ four retailers that can alert on the GO Plus +. Phase 6 is gates over claims.
 
 ## Carried into this milestone
 
-- **`Pacer._state` is in-memory only.** A service restart resets every backoff to zero, so any page-once bookkeeping hung off it re-pages on restart. Phase 5 criterion 5. **FIXED IN THE TREE by 05-03 (2026-08-10)** — but not yet in the running daemon; see below.
-- **`boty.service` has been running pre-Phase-4 code since 2026-08-04 17:48.** No detector logic changed in Phase 4, so it is not urgent — but do NOT restart while a retailer is in backoff, for the reason above. **This warning still binds the RUNNING PROCESS**, which has no persistence: the fix is in the tree, not in the daemon, until 05-04 deploys it. Once 05-04 has restarted the service onto this tree the warning is void, and this entry should be struck rather than carried further.
+- **`Pacer._state` is in-memory only IN THE RUNNING DAEMON, and persisted in the tree.** Phase 5 criterion 6. **FIXED IN THE TREE by 05-03 (2026-08-10):** `refusals`, a wall-clock stamp and the paging memory round-trip through one gitignored `pacer-state.json` at the repo root (`settings.pacer_state_path`, resolved against the unit's `WorkingDirectory`); `due_at` is deliberately never persisted, so a restart still asks each retailer once at full rate. **Not in use anywhere on this host** — the file does not exist yet, because the daemon that would write it has never been started. An empty `{"retailers": {}, "version": 1, "warned": []}` is the healthy state of a monitor with nothing in backoff, not a fault.
+- **`boty.service` has been running pre-Phase-4 code since 2026-08-04 17:48:52 CDT, and 05-04 did NOT change that.** Re-measured at close on 2026-08-10: `MainPID=3059142`, `ActiveEnterTimestamp=Tue 2026-08-04 17:48:52 CDT`, `ActiveState=active` — identical before and after the plan, because Dan answered the restart checkpoint `defer`. **The do-NOT-restart-while-a-retailer-is-in-backoff warning therefore STILL BINDS, and must not be struck.** It is a statement about the *running process*, which has no persistence; 05-03 fixed the tree, not the daemon. What the first restart will cost, stated now so it is not a surprise later: the old code never wrote a state file, so there is nothing on disk to restore from and **that first restart loses the current backoff outright** — Amazon at 11 refusals and GameStop at 4 as of 12:00:34 on 2026-08-10 — and both retailers get asked at full rate again. That is a real, one-time politeness cost, bounded by the `retailer_intervals` floors that stay in force (`amazon: 1800`, `gamestop: 900` — 30 and 15 minutes, not 5). Every restart *after* that one inherits the depth. Strike this entry once the service has actually been restarted onto this tree, and not before.
 - **A browser IS available on this host, and nobody knew.** `boty/browser.py` searches PATH and finds nothing, but Playwright's Chromium is at `~/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` (Chrome for Testing 149.0.7827.55) and `BOTY_BROWSER_PATH` accepts it. With it set, `make verify` **runs all six controls** instead of skipping two — measured 2026-08-10. It still FAILS 3/6, but for diagnosable reasons rather than a missing binary: Best Buy and Target now throw a bare `fetch failed: Exception:` with an **empty message** (sandbox? nodriver vs Chrome 149?), and Amazon hits a challenge page. Worth chasing — the empty exception is itself a reporting defect, and this milestone is about not saying things you have not measured.
-- **`make verify` fails live** (`VERIFY: FAIL (live controls)`, exit 2): no Chrome/Chromium binary on this host, so Best Buy and Target cannot run at all; Walmart and Amazon hit challenge pages intermittently. All four read UNKNOWN, never a false verdict. `make verify-offline` exits 0 — 531 passed, 8/8 mutations.
+- **`make verify` fails live** (`VERIFY: FAIL (live controls)`, exit 2). **Re-measured once at Phase 5's close, 2026-08-10 12:07, and its composition has CHANGED — there are now three classes and one of them is ours.** (1) *Pre-existing:* `2/6 control(s) could not run on THIS HOST` — Best Buy and Target, `no Chrome/Chromium binary found`; the tool's own output says this "says nothing about the DETECTOR". (2) *Pre-existing, and it did NOT manifest this pass* — Amazon's control read IN_STOCK at $9.99 and Walmart served a page the store guard could judge, so **the challenge-blocking is intermittent, not permanent**; Walmart also answered normally at 09:22 the same morning. (3) **Caused by Phase 5 and CORRECT:** `FAIL — 1/6 control(s) not reading IN_STOCK` is Walmart reading UNKNOWN through 05-02's config-gap guard, because `make verify` runs in a shell with no `WALMART_STORE_ID`. Named separately here rather than folded in with the other two. The mutation stage does not run inside a failing live invocation — `make verify` exits at the control stage — so mutations are evidenced by `make verify-offline`, which exits **0** at **642 passed** and **14/14** (pre-phase baseline: 531 passed, 8/8). None of these classes is diagnosed here; classes 1 and 2 are pre-existing since 2026-08-06 and need their own plan.
 - **eBay is closed.** Developers Program registration was **rejected** 2026-08-10. See `.planning/research/ebay-CLOSED-registration-rejected.md`. The delivered-total ceiling finding survived it and is REQ-17.
 - **Do not put a real postal code or store id in a fixture or config without redaction.** Phase 3.1 spent seven re-verification rounds on that leak class, and Phase 5 works directly with store identifiers.
 
@@ -119,7 +159,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 **Milestone:** v1.0
 **Phase:** 04 of 5 (Open Source Ready) — **COMPLETE 2026-08-06**, closed on three of five criteria MET; 3 and 5 UNMET and deliberately not amended (Dan deferred publishing)
 **Plan:** 6 of 6 complete (04-01 … 04-06, all waves done)
-**Last session:** 2026-08-10T16:49:42.596Z
+**Last session:** 2026-08-10T17:12:13.945Z
 **Stopped At:** Completed 04-06-PLAN.md — Phase 4 closed
 
 1. **The § 0e history purge (2026-08-04).** Dan chose option 2. `filter-repo` over all 170 commits, force-pushed, verified against a fresh clone. Backup bundle at `~/CodeProjects/bot-y-prefilter-20260803-1745.bundle` is the only remaining copy of the values. Prevention shipped with it: `scripts/identity_check.py` scans **every tracked file** (the leak that mattered was in `.planning/`, not `tests/fixtures/`) and runs at commit time via a tracked `hooks/pre-commit` + `make hooks`, as well as inside `make verify`.
@@ -213,6 +253,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 05 P01 | 25min | 4 tasks | 19 files |
 | Phase 05 P02 | 20min | 3 tasks | 10 files |
 | Phase 05 P03 | 27min | 3 tasks | 9 files |
+| Phase 05 P04 | 45min | 3 tasks (1 checkpoint answered `defer`, 1 not entered) | 4 files |
 
 ## Decisions
 
@@ -307,6 +348,13 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 05]: monitor.CAUSE_UNKNOWN is carried by exactly the refusal and breakage arms and by neither the no-control nor the store-gap arm — saying 'the cause is not established' about a gap we can name is the same dishonesty pointed the other way
 - [Phase 05]: due_at is never persisted; refusals plus a wall-clock stamp are — watch_loop drives Pacer with a synthetic clock starting at 0.0 every process, so a persisted due_at either fires immediately or blocks a retailer for the age of the previous process. Not persisting it also KEEPS the withdrawn docstring's concession: a restart still tries once at full rate.
 - [Phase 05]: A cycle the pacer skipped does not end a failure episode — Measured 2026-08-10: warned was recomputed from health, and a paced-out retailer has no result and so no health entry, so it read as recovered. The paging memory survived exactly one cycle and a refusal past the cap was re-paged at every subsequent check - 2 pages in 120 cycles. watch_cycle now carries warned forward for retailers it did not check.
+- [Phase 05]: 05-04: Dan answered the store-pin checkpoint `defer` on 2026-08-10 — verbatim "Defer — no restart" — and the phase closed on offline evidence with every live row marked NOT OBTAINED, carrying its date and its reason. Not worked around, not softened, and no criterion reworded to absorb the gap. Deferring was one of three answers the card offered; the card also stated what it costs, which is that Walmart cannot alert until a store is pinned.
+- [Phase 05]: 05-04: `make verify` was NOT re-run under the service's EnvironmentFile, breaking with Phase 3.1's closing method deliberately — that recipe (systemd-run --property=EnvironmentFile=...) is still right for a browser-path question, but it would pull the real store number into a process Claude launched and reads, which is the one thing the checkpoint exists to prevent. The consequence is a feature: the pinless run's output is safe to quote verbatim, because the config-gap detail names a key rather than a number.
+- [Phase 05]: 05-04: the live `make verify` FAIL is recorded in THREE separated classes, with the one this phase caused named as ours — folding a self-caused failure in with two pre-existing ones is the omission this milestone exists to close, and the class we caused (Walmart UNKNOWN through the config-gap guard in a pinless shell) is criterion 2 working rather than a defect
+- [Phase 05]: 05-04: the ROADMAP's `1, 0, 2, 3, 4, 5` criteria numbering was fixed as a TYPO, proved mechanically rather than asserted — the six bodies were extracted from HEAD and from the working tree with the numeral stripped, both extractions were confirmed to yield exactly six lines (so the diff could not pass over an empty extraction), and the diff was empty. The instruction was to revert the whole edit if the diff showed anything beyond the numeral
+- [Phase 05]: 05-04: no code was written in the closing plan, deliberately — a criterion unmet at close is RECORDED unmet, because a closing plan that implemented its way to a green table would be a phase measuring work it did in the act of measuring
+- [Phase 05]: 05-04: `deploy/boty-secret` has no store subcommand (only telegram and bestbuy) although the store number needs the same three protections its docstring names — shell history, scrollback, chat transcript — for an identity reason rather than a credential one. Flagged for a later plan, NOT grown here: a closing plan adding a shell subcommand would ship code with nothing gating it
+- [Phase 05]: 05-04: the real store number was never obtained and commit 95f84a6 was explicitly not read — the pre-redaction Walmart capture in public history does carry a real store number, and reading it out would have been the exact leak QUESTIONS.md § 0e exists to close. bot-y never guesses where the user lives, and neither does the agent closing its phases
 
 ### Blockers
 
@@ -314,4 +362,4 @@ Working and deployed on danserver before this roadmap was written:
 - ~~Target: rung 3 is the only remaining route to its stock data, and it reaches that data only by making requests to redsky.target.com, which is Disallow:/ for every agent. Dan's 2026-08-03 reversal settled the Terms of Use, not robots.txt. Two options in QUESTIONS.md 0d; notify-dan sent.~~ **Cleared 2026-08-03.** Dan answered 0d explicitly and took option 2 — render the page, read the add-to-cart control, record it in the open. The ruling was then *measured* rather than left as a forecast: `performance.getEntriesByType('resource')` inside one rendered PDP found **31 hosts**, and **three** Target-owned hosts publish `Disallow: /`, not the one 0d named. The prohibition widened to match — no code here addresses `redsky.target.com`, `api.target.com` or `sapphire-api.target.com` directly.
 
 - **No open blockers.** The only thing still waiting on Dan is `QUESTIONS.md` § 0e (public git history carrying this host's ZIP in four fixtures), which is a decision rather than a blocker — nothing is stopped by it.
-- make verify FAILS live as of 2026-08-06: 'VERIFY: FAIL (live controls)', exit 2. Two classes — Best Buy and Target cannot run at all (no Chrome/Chromium binary on this host, though nodriver 0.50.3 is installed), and Walmart and Amazon are blocked by challenge pages at HTTP 200. Both read UNKNOWN not OUT_OF_STOCK, so the fail-safe is working, but real restocks are being missed. NOT a Phase 4 regression — no plan in Phase 4 touched a retailer, extractor or control. Needs its own plan: polite probing plus fixture re-capture. Detail in .planning/phases/04-open-source-ready/deferred-items.md
+- make verify FAILS live, first recorded 2026-08-06 and **re-measured once at Phase 5's close on 2026-08-10**: 'VERIFY: FAIL (live controls)', exit 2, in THREE classes now rather than two. Unchanged: Best Buy and Target cannot run at all (no Chrome/Chromium binary on this host, though nodriver 0.50.3 is installed, and STATE.md's 2026-08-10 entry records that Playwright's Chromium works when BOTY_BROWSER_PATH points at it). CHANGED: the Walmart/Amazon challenge-page class did NOT manifest on the 2026-08-10 pass — Amazon read IN_STOCK at $9.99 and Walmart served a judgeable page — so that class is intermittent rather than permanent. NEW, caused by Phase 5 and correct: 1/6 not reading IN_STOCK is Walmart through the config-gap guard, because make verify runs with no WALMART_STORE_ID. Everything still reads UNKNOWN rather than OUT_OF_STOCK, so the fail-safe is working, but real restocks are being missed. NOT a Phase 4 regression and NOT a Phase 5 regression — no plan in either phase touched a retailer, extractor or control. Still needs its own plan: polite probing plus fixture re-capture. Detail in .planning/phases/04-open-source-ready/deferred-items.md and docs/retailer-evidence.md § Phase 5 closing record

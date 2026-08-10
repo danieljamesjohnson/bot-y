@@ -3278,3 +3278,352 @@ configured the count is 6 and rule 3 is silent, and raising the threshold to
 match would arm a gate to fire the next time the honest answer is five. A gate
 that goes red on the truthful answer is a gate that pressures the next person
 into padding, which is the precise behaviour that file exists to prevent.
+
+## Phase 5 closing record (2026-08-10) — what the tree does, and what the wire still does
+
+The Phase 3 and Phase 3.1 closing records above are left exactly as they were
+written. This one sits beside them rather than over them, on the convention that
+file already states.
+
+**The one-sentence shape of this phase.** Everything the six criteria ask for is
+in the tree, gated, and watched going red. **None of it is running.** Dan was
+asked for his Walmart store number at the closing checkpoint and answered
+`defer` — verbatim, *"Defer — no restart"* — so no pin was set and
+`boty.service` was not restarted. It has run 2026-08-04 code since
+`ActiveEnterTimestamp=Tue 2026-08-04 17:48:52 CDT`, and it still does: `MainPID`
+was `3059142` before this plan and `3059142` after it. That is a legitimate
+answer, it was offered as one of three, and this record's job is to say which
+lines it left unmeasured rather than to imply they were measured.
+
+### 1. The alert text, live — a before-picture with no after beside it
+
+This is the strongest artefact in the phase, and it is strongest because it is
+the system saying something to a person rather than a test asserting about it.
+
+**Read off the deployed daemon's own published cycle at `updated: 1786381234`
+(2026-08-10T12:00:34), the day this phase closed**, for the `target` retailer:
+
+> control product is not reading IN_STOCK — the detector is probably broken, so
+> real restocks would be missed silently
+
+That is REQ-15's own counterexample, still on the wire. The requirement exists
+because that sentence fired while the detector demonstrably worked, and the
+detector question is not what makes it a defect — the defect is that the code
+never established the cause and said it anyway.
+
+**In the tree, all four withdrawn fragments are gone**, and the gate that keeps
+them gone was watched reporting every one of them before the edit — the verbatim
+red is in `05-02-SUMMARY.md`. The replacements, quoted in full so this record
+cites what the system now says rather than paraphrasing it
+(`monitor.CAUSE_UNKNOWN` is `"the cause is not established"`):
+
+- **Refusal arm** — *the retailer is refusing us — a challenge page or a 403
+  came back instead of a product page, so the extractor was never reached and
+  nothing here says whether it works; the cause is not established*
+- **Breakage arm** — *a control product did not read IN_STOCK and was not
+  refused, so readings from this retailer are unverified and a real restock
+  could be missed silently; the cause is not established*
+- **Store-gap arm**, which deliberately does **not** carry `CAUSE_UNKNOWN`
+  because its cause *was* measured — *a control reading cannot be shown to come
+  from the store this watch is about — store_id is unset in
+  config/products.yaml, or the page answered for a different store*
+- **The notification title** — `f"bot-y: {len(unhealthy)} retailer(s) unverified"`
+
+**There is no after-picture on the wire, and there will not be one until the
+service is restarted.** The two readings that exist are both *before*, and both
+are kept rather than one overwriting the other:
+
+| Read at | `target` health reason | Amazon refusals | GameStop refusals | Watches published |
+|---|---|---|---|---|
+| 2026-08-10 **09:22:56** (`updated: 1786371776`) | carries `probably broken` | 10 | 4 | 6 of 13 configured |
+| 2026-08-10 **12:00:34** (`updated: 1786381234`) | carries `probably broken` | **11** | 4 | 6 of 13 configured |
+
+Two dated readings of a flapping system are worth more than one, so the earlier
+is not replaced by the later. The six-of-thirteen is pacing, not loss: Amazon and
+GameStop were both backed off, and a paced-out retailer is published as such.
+
+### 2. What the store pin changed on the deployed system: nothing, and that is the finding
+
+Stated as properties, because no store number appears in this document, in any
+file this phase wrote, or in any commit message it made.
+
+- **In the tree:** a Walmart reading that cannot be shown to come from the pinned
+  store is `Availability.UNKNOWN` before any stock verdict can form, and the
+  health message names `store_id` and `config/products.yaml`.
+- **On the wire:** both Walmart watches are still producing **verdicts about an
+  arbitrary store**, exactly as they were on 2026-08-09 when this phase opened.
+  The daemon has no store guard, because it is running code written before the
+  guard existed.
+- **The pin itself was never set.** `grep -c '^WALMART_STORE_ID=' "$HOME/.config/boty/env"`
+  → `0`. A count, never a value; it is the only command this phase ran against
+  that file.
+
+**One thing was measured that nobody had measured before, and it is a live
+confirmation for criterion 2** — from `make verify` running **the tree**, not
+from the daemon. `make verify` executes in a shell with no `WALMART_STORE_ID`,
+because that variable lives in the systemd `EnvironmentFile` that only the daemon
+loads. On 2026-08-10 at 12:07 Walmart **answered** rather than challenge-blocking,
+so `_verdict_from_html` was actually reached, and the config-gap guard fired
+against a real page:
+
+```
+  unknown       walmart   CONTROL — Great Value whole milk           —  no store_id pinned for this watch — set store_id in config/products.ya
+```
+
+That output is safe to quote verbatim **precisely because the shell had no pin**:
+the config-gap detail names a key, not a number. Phase 3.1's close re-ran
+`make verify` under the service's `EnvironmentFile` with
+`systemd-run --property=EnvironmentFile=...`, and that recipe is still right for
+a browser-path question — but it was **deliberately not used here**, and the
+reason is recorded so the departure looks like a decision rather than an
+omission: it would pull the real store number into a process Claude launched and
+whose output Claude reads, which is the one thing the checkpoint exists to
+prevent.
+
+### 3. Where the phase landed against the ROADMAP's six criteria
+
+| # | Criterion | Verdict | What settles it |
+|---|---|---|---|
+| 1 | Every Walmart `Result` records the store it came from, and that store is published in `status.json` | **MET in the tree — NOT DEPLOYED** | `parse.nextdata_store` reads `product.location.storeIds`, the same `__NEXT_DATA__` node the offer comes from, so a price and a store cannot come from different subtrees and disagree; the page-layout candidate was rejected in writing and a payload carrying only it reads `None`. `Result.store` is on **6 of 6** `return Result(...)` paths in `_verdict_from_html` including both UNKNOWNs — a bulk edit missed two and the tests written first caught it. `status.json` carries `store` and `store_pinned`, null-not-zero, asserted at both the producing and consuming ends. **Live confirmation NOT OBTAINED, 2026-08-10, reason: the restart was deferred** — the daemon's published watch rows carry no `store` key at all |
+| 2 | Store pinning is required config with no default; unset means UNKNOWN with a health message saying so | **MET — the one criterion with a live confirmation** | `store_id: ${WALMART_STORE_ID}` on **both** Walmart watches, no default anywhere; an absent pin loads as data rather than refusing the file, so one Walmart watch cannot take down five healthy retailers. The verdict half returns `Availability.UNKNOWN` from the **first** return in `_verdict_from_html`, with a fourth `assess_health` arm detected from facts rather than from `detail` prose — both watched going red by **M9** and **M10**. **Live, 2026-08-10 12:07:** the pinless `make verify` shell drove the config-gap guard against a Walmart page that answered. The tree, not the daemon |
+| 3 | A reading from an unpinned or unexpected store is UNKNOWN, never a verdict — **watched going red** | **MET** | The criterion asks for the red-watch in as many words, and it is quoted rather than described: `CAUGHT M9 boty/retailers.py: 3 test(s) failed — test_an_unpinned_walmart_watch_is_unknown_not_a_verdict, test_the_two_store_guards_say_different_things, test_the_store_guards_return_before_any_stock_verdict_can_form` and `CAUGHT M10 boty/retailers.py: 3 test(s) failed — test_a_page_answering_for_another_store_is_unknown_not_a_verdict, test_a_page_that_names_no_store_reaches_the_same_refusal, test_the_two_store_guards_say_different_things`. Mutations rose **8/8 → 10/10**, and stand at **14/14** at close. Neither mutation anchors on any message text, so the alert rewrite happening in the same phase could not have made them pass vacuously |
+| 4 | No alert text names a cause the code has not established; where the cause is unknown the alert says so | **MET in the tree — demonstrably NOT YET TRUE ON THE WIRE** | An `ast` scan of `monitor.py` and `notify.py`, written and run **before** the edit, reported all four fragments and then went green; paired with a `CAUSE_UNKNOWN` partition so it cannot be satisfied by deleting every explanation. **The live half is the opposite of a confirmation:** at 12:00:34 on 2026-08-10 the daemon was still publishing `the detector is probably broken` for `target`. Recorded as measured, with the date and the reason — the deploy was deferred |
+| 5 | A refusal the backoff is handling is recorded but not pushed; one that outlasts the cap is pushed once | **MET** | Four restart tests plus a **permanent negative control** that deletes the state file and asserts two pushes, so the single push in the positive test is evidence of persistence rather than of nothing happening. The measurement beat the plan: "pushed once" was already false **within one process** — **2 pushes in 120 cycles**, climbing to one notification every six hours forever at the cap. Fixed in `watch_cycle`, gated by **M14**. Still false on the wire, same reason as criterion 4 |
+| 6 | The page-once state survives a service restart | **MET — and explicitly NOT demonstrated by any restart in this phase** | `refusals`, a wall-clock stamp and the paging memory round-trip through one gitignored `pacer-state.json`, defensively parsed against 21 malformed shapes that each assert on both `load` **and** the `record()` that follows it. `due_at` is never persisted, so a restart still asks once at full rate. Mutations **M11–M14**, none of which moves an availability, a price or an alert verdict. **No restart happened**, so nothing was lost and nothing was migrated: the backoff is still in memory on 2026-08-04 code, and `pacer-state.json` is not in use anywhere on this host |
+
+**Six of six met against the tree; zero confirmed on the deployed daemon.** No
+criterion was reworded, shortened, merged or amended to reach that, and the one
+edit made to the criteria list — the `1, 0, 2, 3, 4, 5` numbering becoming `1`–`6`
+— was proved mechanically to be a renumbering: both extractions yielded exactly
+six lines and the `diff` between them was empty.
+
+### 4. The phase gate, run once, live, at close — verbatim, including the FAIL
+
+`make verify` → **`VERIFY: FAIL (live controls)`**, exit **2**. Run once, after a
+daemon cycle had published so two full retailer passes were not in flight at once,
+and **not** re-run to get a better answer.
+
+```
+control check: 6 control(s), live
+  in_stock      gamestop  CONTROL — PS5 console                $549.99  ld+json: InStock from GameStop
+  unknown       walmart   CONTROL — Great Value whole milk           —  no store_id pinned for this watch — set store_id in config/products.ya
+  unknown       bestbuy   CONTROL — Pokémon Let's Go, Pikach         —  fetch failed: no Chrome/Chromium binary found — set BOTY_BROWSER_PATH
+  in_stock      nintendo  CONTROL — Nintendo HDMI cable          $7.99  ld+json: InStock from Nintendo of America Inc.
+  unknown       target    CONTROL — up&up microfiber dust cl         —  fetch failed: no Chrome/Chromium binary found — set BOTY_BROWSER_PATH
+  in_stock      amazon    CONTROL — Amazon Basics AA batteri     $9.99  add-to-cart control: add-to-cart enabled from Amazon.com
+
+control check: 2/6 control(s) could not run on THIS HOST
+control check: FAIL — 1/6 control(s) not reading IN_STOCK
+VERIFY: FAIL (live controls)
+```
+
+**Three classes, and only one of them is this phase's.** They are separated here
+because a record that folded them together would be the omission this milestone
+exists to close.
+
+1. **Pre-existing, not caused by this phase, since 2026-08-06.** Best Buy and
+   Target — `no Chrome/Chromium binary found`, both rung 3. `control_check.py`
+   classifies these itself and says of them, in its own output, that this "says
+   nothing about the DETECTOR". STATE.md also records that Playwright's Chromium
+   at `~/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` works when
+   `BOTY_BROWSER_PATH` points at it; that was not set for this run, deliberately,
+   because the run is a measurement and not an attempt to improve the number.
+2. **Pre-existing, and it did not manifest this pass — which is itself a
+   finding.** The 2026-08-06 record has Walmart and Amazon both `blocked:
+   challenge page` at HTTP 200. On this pass **neither was blocked**: Amazon's
+   control read IN_STOCK at $9.99, and Walmart served a page the store guard was
+   able to judge. Walmart also answered normally at 09:22 the same morning. **The
+   challenge-blocking is intermittent, not permanent**, which is exactly why this
+   phase treated every live Walmart read as a bonus and never as proof.
+3. **Caused by this phase, and correct.** `1/6 control(s) not reading IN_STOCK` is
+   Walmart, reading UNKNOWN through the config-gap guard because the `make verify`
+   shell has no `WALMART_STORE_ID`. This is criterion 2 executing in production
+   conditions. It is **not** trimmed, and it is **not** presented as pre-existing.
+
+**The mutation stage did not run inside this live invocation** — `make verify`
+exits at the control stage on failure — so the mutation evidence comes from
+`make verify-offline`, which is the phase gate proper and which exits **0**:
+
+```
+identity check: PASS — 178 file(s), no host identity found
+642 passed in 9.70s
+mutation check: 14/14 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)
+```
+
+The rise is **shown**, not claimed, with every intermediate count read off the
+plan summaries rather than remembered:
+
+| Point | Tests | Mutations | Tracked files scanned |
+|---|---|---|---|
+| Pre-phase baseline | 531 | **8/8** | 153 (Phase 4 CI run) |
+| After 05-01 | 568 | 8/8 — deliberately unchanged | 173 |
+| After 05-02 | 595 | **10/10** | 175 |
+| After 05-03 | 642 | **14/14** | 177 |
+| At close (05-04) | **642** | **14/14** | **178** |
+
+05-01 adding no mutation was a decision rather than an omission: the store moves
+no verdict, and a mutation must break something a test asserts about a verdict.
+
+### 5. What waves 1–3 flagged for this record
+
+Each is a lesson rather than a status line, which is why each gets its own
+subsection instead of a row.
+
+#### 5a. The identity rule exists twice, and the two copies have already drifted
+
+`_identity_leaks` is defined in `scripts/identity_check.py` — the copy the
+pre-commit hook and `make verify` actually run — and again in
+`tests/test_fetch.py`. Measured by diffing the two function sources on
+2026-08-10, they differ **behaviourally** in two ways: the shipped script's
+`allowed` vocabulary contains `"ZZ"` and the test copy's does not, and the
+shipped script's reserved-IP test calls `_is_reserved_ip(...)` (RFC 5737 + RFC
+1918 + loopback) where the test copy does a bare
+`match.group(1).startswith("192.0.2.")`. This contradicts the script's own stated
+design, *"one rule, three callers"*.
+
+**Only the shipped script was widened**, and the drift was **deliberately not
+reconciled**: adding `"ZZ"` to the test copy's vocabulary would redden the
+`{"stateOrProvinceCode":"ZZ"}` grid cell in
+`test_each_rule_fires_on_a_value_of_the_REAL_shape_not_just_the_synthetic_one`,
+and that is a decision with its own argument to make rather than a side effect of
+a store-pin plan. It is recorded here in the same form the ROADMAP numbering typo
+was: flagged in the open, for a later plan.
+
+Two things worth keeping beside it. The widened rule **caught something real, in
+this repo, by accident**: a comment drafted in `tests/test_config.py` quoted a
+four-digit store number as an example, `identity_check --all` reported
+`tests/test_config.py: store number 4174`, and the commit was refused. The
+literal was changed and **nothing was added to the allow-list**, which is what
+the mutation `test_the_allow_list_cannot_absorb_a_real_value` exists to catch.
+And the rule has **two measured residuals**, both commented beside the
+measurement that established each: a `#`-commented line is not scanned, which is
+why the comment paragraph beside `store_id` in `config/products.yaml` carries no
+digits at all; and `restore_id` is over-caught, accepted fail-closed on the
+standing precedent that a false positive costs one redaction while a false
+negative costs a public address.
+
+#### 5b. Four deviations from the outline's file table, argued at the site rather than silently taken
+
+All four are recorded, with the argument 05-02 made where it made it.
+
+- **`STORE_SCOPED` landed in `boty/models.py`, not `retailers.py`.** The
+  predicate has two readers — `retailers._verdict_from_html` and
+  `monitor.assess_health` — and they must agree, "because a guard that fires
+  where the health arm stays quiet produces an UNKNOWN nobody is ever told
+  about." It could not live in `retailers.py`: `monitor.py` would then have to
+  import that module to read it, "dragging `curl_cffi` and the browser stack into
+  a file that keeps even `Pacer` behind `TYPE_CHECKING`."
+- **`tests/test_alert_text.py` in place of the outline's expected
+  `tests/test_notify.py`.** "REQ-15 is one requirement over two modules:
+  `monitor.py` composes the sentence, `notify.py` titles it, and the requirement
+  is a claim about what reaches a person — a property of the pair. A
+  `test_notify.py` holding an `ast` scan of `monitor.py` would be misfiled, and
+  the positive and negative halves of one requirement belong in one place, on
+  `test_dashboard.py`'s precedent of one module for one surface."
+- **`tests/test_pacing.py`** — absent from the outline's file-contention table
+  entirely and assigned in its per-plan sketch to **05-03**, not 05-02. 05-02
+  entered it because three of its assertions pinned the withdrawn claims by their
+  **prose**: "Leaving them alone would have made this plan land red; deleting
+  them would have deleted the pin on a defect rather than update it." They were
+  rewritten to the property in every case, and every test's name and docstring is
+  unchanged, because the subject did not change — only the sentence.
+- **`tests/test_monitor.py`** — named in 05-02's own per-plan file list but absent
+  from the contention table, "so that table understated the plan's real
+  footprint."
+
+**The lesson all four share, and the reason they belong in a closing record
+rather than only in a diff: the 2026-08-04 health fix had been pinned by its
+prose rather than by its property.** The tests asserting that fix was still in
+place did so by requiring the exact sentences REQ-15 exists to remove. A suite
+written that way makes the *next* correction land red for the right reason and
+the wrong one at once — the red says "the sentence changed", not "the property
+broke". That is why withdrawing one sentence reached into files nobody had
+planned to open.
+
+05-01 recorded two smaller table omissions under the same rule
+(`tests/test_fetch.py` and `tests/test_models.py`, neither contested by any other
+plan), so the phase's audit reconciles against what was actually touched rather
+than against what the table claimed.
+
+#### 5c. Persisting `refusals` alone would have made REQ-16 worse, and the plan's premise about the tree was wrong
+
+05-03's plan asserted that `warned` is "the once-per-episode gate and is a
+`watch_loop` local". **The first half is not true of the tree.** `warned` is
+recomputed every cycle as `{h.retailer for h in pageable}`, and `health` derives
+from `results` — of which a retailer the pacer skipped has **none**, by design,
+because a synthetic UNKNOWN for a check we chose not to make is the bug one level
+up. So an unchecked retailer produced no health entry, which read as no longer
+pageable, which erased the memory. Measured before any fix, the memory survived
+**exactly one cycle** — the one it was set on.
+
+Two consequences, both inside REQ-16:
+
+- **Persisting `warned` alone would have been decorative.** The empty set is what
+  reached disk unless the process happened to die on the single cycle that paged.
+- **"Pushed once" was already false within one process** — measured at **2 pushes
+  in 120 cycles** for one retailer, at refusals 5 and 6, climbing to one
+  notification every six hours forever once the cap binds. That is the
+  20-pages-in-24-hours failure `boty/pacing.py` exists to prevent, rebuilt from
+  the other end and at a slower cadence.
+
+Had only `refusals` been persisted, a restart would have restored a **deep
+backoff into a process with no memory of having already paged** — REQ-16's "once"
+becoming "once per process" while the backoff looked perfectly fixed. Both are
+persisted, the fix is two lines in `watch_cycle`, and **M14** is its permanent
+red-watch: M13 dying proves the memory crosses a *process* boundary, M14 dying
+proves it survives a paced-out *cycle*.
+
+#### 5d. A tooling finding: `gsd-tools state advance-plan` misfired in all four plans
+
+Recorded because a milestone about not overclaiming should not have its own state
+file claiming a phase closed at the halfway mark. After each of 05-01, 05-02 and
+05-03 the tool wrote `status: Phase complete — ready for verification` at 1, 2
+and 3 of 4 plans, and after 05-03 it also overwrote `stopped_at` with Phase 4's
+stale value. The cause is documented and unfixable in place: the tool reads a
+`Plan: 6 of 6 complete` line that lives in the archived v1.0.0 block at the bottom
+of `STATE.md`, which is kept verbatim and therefore cannot be edited to correct
+the tool. Corrected by hand every time, this plan included.
+
+### 6. What this phase did NOT establish
+
+Stated plainly, because a closing record's worth is its worst row.
+
+1. **Nothing in this phase is running.** Six criteria are met against the tree and
+   **not one** was confirmed on the deployed daemon. `boty.service` runs
+   2026-08-04 code and has since before Phase 4. Until it is restarted: Walmart
+   readings are still statements about an arbitrary store, the withdrawn
+   `probably broken` sentence still reaches a person, and the backoff is still
+   in-memory with the once-per-process paging defect. **The single highest-value
+   action outstanding on this project is a service restart**, and it needs no
+   further work — only the pin, if Dan wants Walmart alertable, and `systemctl
+   restart boty.service`.
+2. **This phase's restart did not demonstrate criterion 6, and no restart could
+   have.** It is worth being exact, because the temptation to claim it is real:
+   the old code never wrote a state file, so the *first* restart would have had
+   nothing on disk to restore and would have lost the current backoff outright —
+   a one-time politeness cost bounded by the `retailer_intervals` floors, which
+   stay in force at 30 and 15 minutes rather than 5. Criterion 6 rests on 05-03's
+   restart tests and their permanent negative control. Since Dan deferred, even
+   that one-time cost was not paid: nothing was lost, and nothing was migrated.
+3. **The live `make verify` failure classes are recorded, not diagnosed.** The
+   missing Chrome binary and the intermittent challenge pages are pre-existing
+   since 2026-08-06, explicitly out of this phase's scope, and they need their own
+   plan — polite probing plus fixture re-capture. Nothing here attempted to fix
+   them, and the run was not repeated to get a better verdict.
+4. **The store number was never obtained, and deliberately so.** Not from a
+   postal code, not from a live read, and not from commit `95f84a6` — the
+   pre-redaction Walmart capture that still carries a real three-digit store
+   number in public history, fourteen times over, and which is the exact leak
+   `QUESTIONS.md` § 0e exists to close. Reading it out would have technically
+   answered the question. It is not a source this project will use, and § 0e
+   remains open and untouched by this phase.
+5. **`deploy/boty-secret` has no store subcommand, and this plan did not add
+   one.** It has exactly two — `telegram` and `bestbuy` — and its mechanism is
+   already right for this value: a hidden `read -s`, nothing passed as an
+   argument, and a mode-600 temp-file swap, "so nothing lands in `ps` output or
+   `~/.bash_history` either". The store number needs the same three protections
+   for an *identity* reason rather than a credential one. It is flagged for a
+   later plan rather than grown here, because a closing plan shipping a new shell
+   subcommand would be shipping code with nothing gating it — in a phase whose
+   entire subject is claims with nothing under them.

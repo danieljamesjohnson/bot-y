@@ -385,11 +385,58 @@ publishing was deferred: nothing was ever tagged or uploaded.
 **Success Criteria** (what must be TRUE):
 
   1. Every Walmart `Result` records the store it came from, and that store is published in `status.json`
-  0. **Store pinning is required config with no default** (decided 2026-08-10): a per-watch `store_id` in `config/products.yaml`; unset means UNKNOWN with a health message saying so, never a guessed location and never a verdict
-  2. A reading from an unpinned or unexpected store is UNKNOWN, never a verdict — watched going red
-  3. No alert text names a cause the code has not established; where the cause is unknown the alert says so
-  4. A refusal the backoff is handling is recorded but not pushed; one that outlasts the cap is pushed once
-  5. The page-once state survives a service restart — `Pacer._state` is in-memory today, so a restart currently resets every backoff to zero
+  2. **Store pinning is required config with no default** (decided 2026-08-10): a per-watch `store_id` in `config/products.yaml`; unset means UNKNOWN with a health message saying so, never a guessed location and never a verdict
+  3. A reading from an unpinned or unexpected store is UNKNOWN, never a verdict — watched going red
+  4. No alert text names a cause the code has not established; where the cause is unknown the alert says so
+  5. A refusal the backoff is handling is recorded but not pushed; one that outlasts the cap is pushed once
+  6. The page-once state survives a service restart — `Pacer._state` is in-memory today, so a restart currently resets every backoff to zero
+
+**The list above was renumbered on 2026-08-10 by 05-04, and nothing else about it
+changed.** It read `1, 0, 2, 3, 4, 5` — the entry now numbered **`2.` previously read
+`0.`** — which was a typing slip, not a sixth criterion missing or a criterion withdrawn.
+`05-CONTEXT.md` had recorded the same six as 1–6 since the phase was scoped, and every plan
+in the phase used that numbering, so the ROADMAP was the copy that was wrong. **No
+criterion's text was reworded, shortened, merged or amended**, and that is proved rather
+than asserted: the six criterion bodies were extracted from `HEAD` and from the working
+tree with the leading numeral stripped, both extractions yielded exactly six lines, and
+`diff` between them was empty. A reader who remembers the `0.` can see this was a typo fix
+and not the kind of edit Phase 3.1 declined.
+
+**Outcome, recorded 2026-08-10 by 05-04 — six of six MET against the tree, and NOT ONE of
+them confirmed on the deployed daemon, because Dan answered the store-pin checkpoint
+`defer`.** `boty.service` still runs 2026-08-04 code (`MainPID=3059142`,
+`ActiveEnterTimestamp=Tue 2026-08-04 17:48:52 CDT`, both re-measured at close and both
+unchanged), so no store pin was set and no restart was made. One live confirmation was
+obtained and it is criterion 2's: it comes from `make verify` running **the tree** against
+a live Walmart page, not from the daemon. Every other live row reads NOT OBTAINED with its
+date and its reason, and no criterion was reworded to absorb one:
+
+| # | Verdict | Measurement or reason |
+|---|---|---|
+| 1 | **MET in the tree — NOT DEPLOYED** | `parse.nextdata_store` reads `product.location.storeIds`, the same `__NEXT_DATA__` node the offer comes from, so a price and a store cannot come from different subtrees and disagree; the page-layout path was rejected in writing. `Result.store` is carried on **6 of 6** `return Result(...)` paths in `_verdict_from_html` including both UNKNOWNs — a bulk edit missed two of them and the tests written first caught it. `status.json` publishes `store` and `store_pinned`, null-not-zero, asserted at the producing **and** consuming ends. **Live confirmation NOT OBTAINED, 2026-08-10:** the restart was deferred, and the daemon's published watch rows at 12:00:34 that day carry no `store` key at all |
+| 2 | **MET — and the one criterion carrying a live confirmation** | Config half: `store_id: ${WALMART_STORE_ID}` on **both** Walmart watches, no default anywhere, an absent pin loading as data rather than refusing the file. Verdict half: an unpinned or unexpected store returns `Availability.UNKNOWN` from the **first** `return` in `_verdict_from_html`, with a fourth `assess_health` arm naming `store_id` — both watched going red by mutations **M9** and **M10**. **Live, 2026-08-10 12:07:** `make verify` ran in a shell with no `WALMART_STORE_ID`, Walmart **answered** rather than challenge-blocking, and the control read `unknown — no store_id pinned for this watch — set store_id in config/products.yaml`. The guard fired against a real page. This is the tree running, **not** the daemon |
+| 3 | **MET** | Watched going red, which the criterion demands in as many words. `CAUGHT M9 boty/retailers.py: 3 test(s) failed` and `CAUGHT M10 boty/retailers.py: 3 test(s) failed`; the mutation count rose **8/8 → 10/10**, and stands at **14/14** at close. Both mutations flip only their guard's `Availability.UNKNOWN` to `OUT_OF_STOCK`; neither anchors on any message text, so the alert rewrite in the same phase could not have made them pass vacuously |
+| 4 | **MET in the tree — and demonstrably NOT YET TRUE ON THE WIRE** | An `ast` gate over `monitor.py` and `notify.py` was written and run **before** the edit and reported all four withdrawn fragments — `we are asking too often`, `probably fine`, `probably broken`, `detector problem` — then went green, paired with a `CAUSE_UNKNOWN` partition so it cannot be satisfied by deleting every explanation. **The live half is the opposite of a confirmation and is recorded as such:** at 12:00:34 on 2026-08-10, the day this phase closed, the deployed daemon was still publishing `control product is not reading IN_STOCK — the detector is probably broken, so real restocks would be missed silently` for `target`. That is REQ-15's own counterexample, still reaching a person, because the deploy was deferred. The before-picture has **no after beside it** |
+| 5 | **MET** | Four restart tests plus a **permanent negative control** that deletes the state file and asserts the same scenario pushes twice — so the single push in the positive test is evidence of persistence rather than of nothing happening. Measurement beat the plan here: `warned` was recomputed every cycle from health, so a retailer the pacer *skipped* read as *recovered*, and "pushed once" was already false **within one process** — measured at **2 pushes in 120 cycles**, climbing to one notification every six hours forever once the cap binds. Fixed in `watch_cycle` and gated by **M14**. Still false on the wire, for the same reason as criterion 4 |
+| 6 | **MET — and explicitly NOT demonstrated by any restart in this phase** | `refusals` plus a wall-clock stamp and the paging memory round-trip through one gitignored `pacer-state.json`; `due_at` is deliberately never persisted, so a restart still asks once at full rate. Proved by 05-03's restart tests and mutations **M11–M14**, each of which moves no availability, price or alert verdict — a verdict-only suite passes all four straight through. **No restart happened:** on `defer` nothing was lost and nothing was migrated, the backoff is still in memory on 2026-08-04 code (Amazon at 11 refusals, GameStop at 4, measured 12:00:34), and `pacer-state.json` is not yet in use anywhere |
+
+**The phase gate, run once, live, at close:** `make verify` → **`VERIFY: FAIL (live
+controls)`**, exit 2. Recorded verbatim rather than trimmed or re-run until green, and its
+composition has **changed** since the 2026-08-06 reading in a way that matters. Two classes
+are pre-existing and untouched by this phase: `2/6 control(s) could not run on THIS HOST` —
+Best Buy and Target, `no Chrome/Chromium binary found` — which the tool itself says "says
+nothing about the DETECTOR". The third class is **caused by this phase and is correct**:
+`FAIL — 1/6 control(s) not reading IN_STOCK`, and that one is Walmart reading UNKNOWN
+through 05-02's config-gap guard, because `make verify` runs in a shell that has no
+`WALMART_STORE_ID`. It is named separately here rather than folded into the other two.
+Worth recording because it contradicts a standing assumption: on this pass **neither
+Walmart nor Amazon was challenge-blocked** — Amazon's control read IN_STOCK at $9.99 and
+Walmart served a page the guard could judge — so the 2026-08-06 challenge class did not
+manifest at all, which makes it intermittent rather than permanent. `make verify-offline`,
+the phase gate proper, exits **0** at **642 passed** and **14/14 mutations**, up from a
+pre-phase **531 passed, 8/8**.
+
+Full working in `docs/retailer-evidence.md` § *Phase 5 closing record*.
 
 **Why this first.** It is the only item in the milestone that touches what a *product*
 reading means. Walmart is one of four retailers that can alert on the GO Plus +, and its

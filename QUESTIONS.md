@@ -1,8 +1,10 @@
 # Blocked on Dan
 
 Two credentials I cannot obtain myself. The one open decision (0d, Target/RedSky)
-was answered 2026-08-03 and is kept below as the record. **Two open decisions:
-0f (Walmart store pin, blocking Phase 5's close) and 0e — every `tests/fixtures/` file is clean *now*, but the pushed public
+was answered 2026-08-03 and is kept below as the record. **§ 0f was answered `defer` on
+2026-08-10 and is no longer blocking anything — the pin and the restart remain available as
+actions, and Phase 5 closed without them, on the record.** **One open decision:
+0e — every `tests/fixtures/` file is clean *now*, but the pushed public
 history is not.** (0e claimed a clean tree twice before it was true. The phase
 verifier caught both. Both corrections are recorded inside 0e rather than
 overwritten, and the only files still naming the leaked values are 0e itself and
@@ -18,7 +20,27 @@ number was your reversal of a written-terms reading, not a new technical
 finding, and a record that quietly agrees with itself afterwards is worth less
 than one that shows the turn.
 
-## 0f. Your Walmart store number — OPEN, blocking Phase 5's close (2026-08-10)
+## 0f. Your Walmart store number — ANSWERED 2026-08-10: `defer`. Still outstanding as an action.
+
+**Your answer, verbatim: "Defer — no restart."** Recorded exactly as given, and the phase
+closed on offline evidence with every live row marked NOT OBTAINED, carrying its date and
+its reason. Nothing was reworded to make a missing confirmation look met, and nothing was
+worked around. `grep -c '^WALMART_STORE_ID=' "$HOME/.config/boty/env"` → `0` — a count,
+never a value, and the only command run against that file.
+
+**What that leaves true right now.** `boty.service` still runs 2026-08-04 code
+(`MainPID=3059142`, `ActiveEnterTimestamp=Tue 2026-08-04 17:48:52 CDT`, both re-measured at
+close and both unchanged). So Walmart readings are still statements about an arbitrary
+store, the withdrawn *"the detector is probably broken"* sentence is still what the daemon
+publishes, and the backoff is still in-memory. **The question below stays on the page
+because the action is still available**, not because anything is blocked — take it whenever
+you like, or never. The recipe in it is unchanged and still correct.
+
+Phase 5's own record of all this: `docs/retailer-evidence.md` § *Phase 5 closing record*.
+
+---
+
+### The original question, as it stood (2026-08-10)
 
 **What I need:** the store number for the Walmart you actually shop, set as
 `WALMART_STORE_ID` in `/home/dan/.config/boty/env` (the mode-600 `EnvironmentFile`
