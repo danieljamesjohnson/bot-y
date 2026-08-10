@@ -470,9 +470,10 @@ is now closed (registration rejected, 2026-08-10). The finding outlived the reta
 Walmart carries marketplace sellers, so a $54.99 listing with $45 shipping defeats one of
 only two reseller defences **today**.
 
-**Progress: 3 of 6 plans complete (06-01, 06-02 and 06-03, all 2026-08-10).** `make verify-offline`
-exits 0 at **711 passed** and **20/20** mutations, up from 667 and 16/16 at Phase 5's close. The
-mutation ratio is **unchanged by 06-03, deliberately** — see criterion 3 below.
+**Progress: 4 of 6 plans complete (06-01, 06-02, 06-03 and 06-04, all 2026-08-10).**
+`make verify-offline` exits 0 at **737 passed** and **20/20** mutations, up from 667 and 16/16 at
+Phase 5's close. The mutation ratio is **unchanged by 06-03 and 06-04, deliberately** — see
+criteria 3 and 4 below, and note the resulting ident gap at **M21-M24**.
 
 **Criterion 1 is built and gated in the tree** (06-01) — the ceiling measures `price + shipping`
 and refuses an alert where that total cannot be established; M4 re-anchored, M17/M18 added. It is
@@ -521,6 +522,34 @@ yet is outside the harness by construction; 06-06 must not read the gap as a los
 exit-code rule `_flattened_exit_codes`; no such function exists — it is `_flattening`. Neither
 document was edited. Full working in
 `.planning/phases/06-claims-with-gates-under-them/06-03-SUMMARY.md`.
+
+**Criterion 4 is built and gated in the tree** (06-04) — and, like criterion 3, **the defect was
+executed on disk before the gate existed.** `CHANGELOG.md` is the one shipped document in this
+repository with nothing reading its body: `scripts/release_check.py` asserts the file *exists*,
+reads one heading, and needs the network, so it sits outside `make verify` by design. The exact
+document that shipped with two lines of leaked agent tool-call markup — recovered byte-for-byte
+from `2ac965f^`, never retyped — was restored to disk with no contents rule in the tree and left
+`pytest tests/` at **exit 0, 711 passed**. `tests/test_changelog.py` now carries **eight rules as
+pure functions of text** (two borrowed from `tests/test_contributor_docs.py` rather than
+re-implemented), and **the identical bytes and command afterwards: exit 1, 2 failed, 735 passed**,
+naming both offending lines and both shapes that caught them; the file restored with
+`git checkout --` in a `finally`, tree clean after every run. Three properties this criterion turns
+on, each measured rather than asserted: the markup rule is shaped around the **defect** and not
+around angle brackets, because the shipped file's only angle-bracket token is a legitimate
+backticked `<script>` at line 138 — so **the green side is the precision proof and must never be
+softened, nor `CHANGELOG.md` edited to satisfy it**; every prohibition is **paired with a presence
+rule in the same commit**, because an empty file satisfies all of them otherwise; and **the
+criterion is not met by a skip line** — `CHANGELOG.md` is absent from `SANDBOX_CONTENTS` and was
+deliberately **not** added, so the file-reading half skips there while an unconditional half was
+**observed** running inside a real `build_sandbox()` at **7 passed, 19 skipped**. Two rules were
+deliberately refused with their reasons in the code: version *ordering* (06-05's roll writes
+`## [0.2.0]` above `## [1.0.0]` because the roll is the correction) and any requirement that
+`## [Unreleased]` carry entries. **06-04 registers NO mutation and leaves M23-M24 deliberately
+unallocated**, joining 06-03's M21-M22, so the ident sequence carries a gap at **M21-M24** — 06-05
+keeps M25-M26 and **06-06 must not read four lost mutations**. **REQ-19 remains Pending:** 06-03
+shipped the workflow half, 06-04 the `CHANGELOG.md` half, and 06-06 closes it by measuring what
+landed. Full working in
+`.planning/phases/06-claims-with-gates-under-them/06-04-SUMMARY.md`.
 
 ## Open Questions
 

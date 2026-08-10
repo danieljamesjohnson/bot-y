@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-status: Executing Phase 6 — 3 of 6 plans complete
-stopped_at: Completed 06-03-PLAN.md — criterion 3 of five built, watched red on disk, and removed
-last_updated: "2026-08-10T21:54:21.253Z"
+status: Executing Phase 6 — 4 of 6 plans complete
+stopped_at: Completed 06-04-PLAN.md — criterion 4 of five built, watched red on disk, and restored
+last_updated: "2026-08-10T22:24:46.049Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 10
-  completed_plans: 7
+  completed_plans: 8
   # percent is PHASE-based (1 of 2 complete), not plan-based, for the reason
-  # this milestone exists: Phase 6 is three plans into six, and a plan-based
+  # this milestone exists: Phase 6 is four plans into six, and a plan-based
   # figure would move on every commit while the phase criterion it serves is
-  # still unmet. `state update-progress` reported 70% on a plan basis this run
+  # still unmet. `state update-progress` reported 80% on a plan basis this run
   # and left this field alone; 50 is the phase figure and is deliberate. The
   # basis is stated so the next reader does not adopt the wrong one. This
-  # comment has now been stripped by the tool and restored by hand three times.
+  # comment has now been stripped by the tool and restored by hand four times.
   percent: 50
 ---
 
@@ -33,10 +33,54 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 3 of 6 plans complete
-(06-01, 06-02 and 06-03, all 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six of six
-criteria MET **against the tree**, with **not one of them confirmed on the deployed daemon**
-**Next command:** `/gsd-execute-phase 6` (next plan: 06-04)
+**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 4 of 6 plans complete
+(06-01, 06-02, 06-03 and 06-04, all 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six
+of six criteria MET **against the tree**, with **not one of them confirmed on the deployed daemon**
+**Next command:** `/gsd-execute-phase 6` (next plan: 06-05)
+
+**06-04 landed criterion 4, and the defect was executed on disk before the gate existed.**
+`CHANGELOG.md` shipped with two literal lines of leaked agent tool-call markup for the whole of
+Phase 4 — `MANIFEST.in` puts the file in the sdist and `[project.urls] Changelog` points every
+installer at it — because nothing read the body: `scripts/release_check.py` asserts the file
+*exists*, reads one heading, and needs the network, so it sits outside `make verify` by design.
+Measured on this tree, not inferred: `git show 2ac965f^:CHANGELOG.md` restored to disk with no
+contents rule anywhere left `pytest tests/` at **exit 0, 711 passed**. `tests/test_changelog.py`
+now carries **eight rules as pure functions of text** (two borrowed from
+`tests/test_contributor_docs.py` rather than re-implemented), and the identical bytes and command
+afterwards give **exit 1, 2 failed, 735 passed**, naming both offending lines and both shapes that
+caught them. The file was restored with `git checkout --` in a `finally` after every run and
+`git status --porcelain` was clean each time. `make verify-offline` exits 0 at **737 passed** and
+**20/20**.
+
+**Three things about that gate worth carrying rather than rediscovering.** (1) **The green side is
+an assertion, not a formality:** `CHANGELOG.md` line 138 carries a backticked `<script>` token —
+measured as the *only* angle-bracket token in the file — so a markup rule written over angle
+brackets is red on the shipped tree on arrival. The rule is three shapes around the *defect*
+instead. **Never fix a red green-side by editing `CHANGELOG.md`.** (2) **Every prohibition is
+paired with a presence rule in the same commit**, because no markup, no placeholders and a single
+trailing newline are all satisfied by an *empty* file — the rule set is watched biting on the empty
+and preamble-only documents. (3) **The criterion is not met by a skip line.** `CHANGELOG.md` is
+absent from `SANDBOX_CONTENTS` and was **not** added to it; the file-reading half skips there and
+an unconditional half runs, **observed** inside a real `build_sandbox()` at **7 passed, 19
+skipped**. That run was not a formality either — it caught a defect no in-tree run could have
+shown, recorded as deviation 1 in `06-04-SUMMARY.md`.
+
+**06-04 registers NO mutation, and M23-M24 are deliberately UNALLOCATED — joining 06-03's
+M21-M22, so the sequence now carries a gap at M21-M24.** The harness mutates `boty/` and this plan
+writes no production code; `apply_mutation` cannot reach a file the sandbox does not copy; and
+adding `CHANGELOG.md` to `SANDBOX_CONTENTS` so a mutation could exist would create an entry
+provable load-bearing only by the mutation that motivated it, failing Phase 4's own rule for that
+constant. **06-05 should keep M25-M26 rather than renumbering into the gap, and 06-06 must not read
+four lost mutations.** The full four-reason argument is in `06-04-SUMMARY.md`.
+
+**Two forward bindings 06-05 is on the hook for.** The `## [0.2.0]` heading it writes must carry a
+real ISO date (validity, not just `\d{4}-\d{2}-\d{2}` — `2026-13-45` is checked) and a non-empty
+body, or the new gate bites. **No ordering rule exists**, deliberately, so `## [0.2.0]` above
+`## [1.0.0]` is accepted — the roll is the correction, not a bump. And `CHANGELOG.md`'s preamble
+still says `scripts/release_check.py` is what binds its top heading to `pyproject.toml`; that
+sentence becomes incomplete the moment 06-05 adds an offline binding. **It was deliberately not
+edited by 06-04** — `CHANGELOG.md` is 06-05's file, and editing prose about a mechanism before that
+mechanism exists is the overclaim this milestone corrects.
 
 **06-03 landed criterion 3, and the gap was executed before the gate was written.** Every rule in
 `tests/test_ci_workflow.py` but `_pr_triggered_privilege` was keyed to a filename —
@@ -170,6 +214,22 @@ row** to the Performance Metrics table, and `add-decision` prefixes every entry 
 regardless of input, which is why this file's decisions are still written by hand. Six prior plans
 wrote these fields by hand assuming the verbs were simply broken; they are broken in a narrower way
 than that, and the next plan should not waste the same twenty minutes rediscovering it.
+
+**An EIGHTH misfire, at 06-04, identical in all three parts, and this run adds one more data
+point.** `advance-plan` returned the same `{"reason": "last_plan", "current_plan": 6,
+"total_plans": 6, "status": "ready_for_verification"}` after the FOURTH plan of a six-plan phase,
+again wrote `status: Phase complete — ready for verification`, and again overwrote `stopped_at`
+with Phase 4's stale value. `update-progress` again stripped the comment recording that `percent`
+is phase-based, reporting `80%` on a plan basis while leaving the frontmatter field at `50`. **The
+flag form 06-03 discovered does get accepted and still does not write:**
+`state.record-metric --phase "Phase 06" --plan "P04" --duration "47min" --tasks "3 tasks" --files
+"1 file"` returned a populated object echoing every value and wrote **no row** to the Performance
+Metrics table — the row below was written by hand, as after 06-03. **New this run:**
+`roadmap.update-plan-progress 6` returned `{"status": "In Progress", "complete": false}` and left
+the ROADMAP's *"Progress: 3 of 6 plans complete"* line untouched; that was corrected by hand too.
+All fields corrected by hand, for the eighth time. Nothing about this pattern has changed since
+06-01 and the cause is still the archived `Plan: 6 of 6 complete` line in the v1.0.0 block at the
+bottom of this file, which is kept verbatim and therefore cannot be edited to fix the tool.
 
 **REQ-14 and REQ-15 are CLOSED by 05-02.** 05-01 shipped REQ-14's *recording* half — the pin,
 the reading, the publication. 05-02 shipped the *verdict* half (unpinned or mismatched ⇒
@@ -370,7 +430,9 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 06 P01 | 44min | 3 tasks (2 TDD, so 5 code commits) | 11 files |
 | Phase 06 P02 | 41min | 3 tasks | 3 files |
 | Phase 06 P03 | 38min | 3 tasks | 1 file |
+| Phase 06 P04 | 47min | 3 tasks (2 commits — the green side was never committed alone) | 1 file |
 | Phase Phase 06 PP03 | 38min | 3 tasks tasks | 1 file files |
+| Phase Phase 06 PP04 | 47min | 3 tasks tasks | 1 file files |
 
 ## Decisions
 
