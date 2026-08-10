@@ -35,15 +35,145 @@ narrow hand parser below. It is the same trade `_matrix` makes against README
 markdown one file over: parse the one shape this repository actually writes, and
 fail loudly rather than widen quietly.
 
-WHY README IS NOT READ HERE
----------------------------
-`README.md` also claims MIT, in prose, under ``## License``. That claim is not
-asserted here on purpose. The README is edited by several plans in this phase —
-the contributor-docs section, the `make verify` stage table — and a licence rule
-bound to prose those plans keep moving would go red for reasons that have nothing
-to do with the licence. It would also put a second machine-read binding into a
-file that already carries `tests/test_support_matrix.py`'s. The coupling with
-legal weight is metadata <-> file, and that is the one asserted.
+WHY THE README'S *LICENCE* CLAIM IS STILL NOT READ HERE — AND ITS *VERSION*
+CLAIM NOW IS
+---------------------------------------------------------------------------
+This section originally said "WHY README IS NOT READ HERE". It is amended rather
+than deleted, because half of it was right and the half that was wrong is worth
+seeing corrected — `boty/models.py` and `boty/pacing.py` set the house style for
+a reversal: argue it where the old argument lives, name what overruled it, keep
+the original.
+
+**The original argument, kept verbatim, and it still stands — for the licence:**
+
+    `README.md` also claims MIT, in prose, under ``## License``. That claim is
+    not asserted here on purpose. The README is edited by several plans in this
+    phase — the contributor-docs section, the `make verify` stage table — and a
+    licence rule bound to prose those plans keep moving would go red for reasons
+    that have nothing to do with the licence. It would also put a second
+    machine-read binding into a file that already carries
+    `tests/test_support_matrix.py`'s. The coupling with legal weight is
+    metadata <-> file, and that is the one asserted.
+
+That was, and is, an argument about a **licence** claim bound to **prose that
+several plans keep moving**. Nothing below weakens it: the README's ``## License``
+heading is still read by nothing here.
+
+**What overruled it for the version claim.** Three measurements, none of which
+the licence argument answers:
+
+* The README's version claim is not moving prose. It is **one specific sentence
+  naming one specific tag** — ``Publication happens from the `v0.2.0` tag`` —
+  and ``grep -n 'v[0-9]\\+\\.[0-9]' README.md`` returns exactly one line. A rule
+  can anchor on that sentence and on nothing else.
+* That sentence is **false the moment the version rolls**. It has to be edited by
+  the plan that rolls it whether or not anything gates it, so gating it costs one
+  rule and buys the claim a reader acts on first.
+* It is the **only** statement of this project's version that the mutation
+  sandbox can see. `CHANGELOG.md` and `.planning/` are both absent from
+  ``scripts/mutation_check.SANDBOX_CONTENTS``; `README.md` and `pyproject.toml`
+  are both in it. Without this binding, every version rule in this file would
+  skip under `make mutation` and the criterion would be met by two skip lines.
+
+**The cost, named rather than glossed:** two test files now read `README.md`.
+They cannot collide. `tests/test_support_matrix.py` locates its subject by the
+seven-cell header row ``| Retailer | Rung | Extraction | robots.txt | Terms |
+Method | Status |`` and asserts that exactly one such row exists; a prose
+sentence in the install section cannot hijack a table locator that matches on
+seven exact cells. The two rules read disjoint parts of one file, and each says
+so.
+
+THE VERSION BINDING: FOUR STATEMENTS, ONE REFERENT
+--------------------------------------------------
+Phase 6 criterion 5, quoted rather than paraphrased:
+
+    `pyproject.toml` reads `0.2.0`, agrees with the project's milestone version,
+    and cannot silently diverge
+
+**"Cannot silently diverge" is the whole requirement.** A one-time edit satisfies
+nothing. This project states its own version in four places, and before this file
+gained the rules below, **nothing offline read any of them** — grepped: this file
+never touched ``[project] version``, `boty/__init__.py` is a zero-byte file with
+no ``__version__`` to bind to, and the only cross-check in the tree was
+`scripts/release_check.py`'s five-way comparison, which needs the network and
+sits outside `make verify` on purpose. They had already diverged: `pyproject.toml`
+said ``1.0.0`` while `.planning/STATE.md` said ``milestone: v0.2``, in a
+repository whose entire subject is claims with nothing checking them.
+
+**`pyproject.toml` is authoritative, and the direction is written down.** Three
+reasons rather than a preference:
+
+1. It is the only one that **becomes the artifact** — the wheel filename, the
+   wheel ``METADATA`` and what ``pip install bot-y==0.2.0`` resolves all derive
+   from it. The other three are records *about* it.
+2. `scripts/release_check.py` **already treats it as the referent**: its
+   comparison computes disagreement as everything that differs from ``declared``,
+   and ``declared`` is pyproject's. A different referent here would put two
+   disagreeing definitions of "the version" into one repository, which is the
+   defect this criterion names.
+3. It is the only one of the four inside the sdist, inside ``SANDBOX_CONTENTS``,
+   and read by the build.
+
+So `README.md`, `CHANGELOG.md` and `.planning/STATE.md` are each checked
+*against* pyproject and the finding says which one moved. Never the reverse, and
+never a majority vote.
+
+**Normalisation is a rule, not an implicit ``startswith``.** Three shapes:
+the README states a git tag (``v`` plus a full triple, ``v`` stripped, all three
+components compared); the changelog states a full triple (all three compared);
+the milestone states ``v`` plus **two** components, and is compared only on the
+components it actually states, because a milestone names a *minor line* and a
+patch release inside it must not redden the tree. That leniency is stated out
+loud instead of being discovered.
+
+**And the trap that makes it a rule.** ``"0.2.0".startswith("0.2")`` is ``True``
+— and so is ``"0.21.0".startswith("0.2")``. A string-prefix comparison silently
+accepts a milestone that describes a different minor line entirely, and looks
+like it is working while it does it. Components are compared as **lists of
+integers-as-strings**, never as string prefixes, and the ``v0.2`` versus
+``0.21.0`` case has its own corruption test so the shortcut cannot come back.
+
+**Absence is a finding.** Three of these four rules are trivially satisfied by
+*removing* the statement: delete the README sentence, delete the changelog
+heading, delete the ``milestone`` key, and a naive comparator finds nothing to
+disagree with and reports clean. That is `_extraction_mismatch`'s *"one-directional
+would be worthless"*, applied to a version. So every reader returns a value **or
+a named absence**, and an absence in a file that is *present* is reported as a
+finding naming the file. The only case that is not a finding is the file itself
+being absent, which is the sandbox — and that is what the two skips below are
+for. The classifier rule is the one deliberate exception, and its reason is in
+its own docstring: a removed classifier makes no claim, and 04-02 shipped with
+none on purpose.
+
+**Which rules skip, and why that does not hollow the gate out.** `CHANGELOG.md`
+and `.planning/` are absent from ``SANDBOX_CONTENTS``, so `build_sandbox()` never
+copies them; a test that read either unconditionally would raise at the
+*baseline*, ``run_baseline`` would turn that into a ``HarnessError``, and
+`make verify` would die at the mutation stage for a reason with nothing to do
+with any mutation. Those two rules therefore carry file-presence skips, on
+`tests/test_identity_check.py`'s ``needs_repo`` and `tests/test_config.py`'s
+precedent. **The sandbox is NOT widened** — Phase 4's rule for that constant is
+that an entry lands in the same commit as the file it names and is proven
+load-bearing by removal, which neither entry could satisfy, and `.planning/` is
+2.9 MB across 101 tracked files copied once per mutation plus a baseline.
+
+This file already refused exactly that trade once, for `MANIFEST.in`, and named
+the failure mode in as many words: *"``addopts = "-ra"`` printed a skip line
+nobody reads as a defect."* The reason it is acceptable here and was not there is
+that **the always-on rule exists**: the ``pyproject.toml`` <-> ``README.md``
+binding reads two files that are both in ``SANDBOX_CONTENTS``, so something real
+still runs where the other two cannot. That pairing is **pinned rather than
+promised** — `test_every_version_rule_is_exercised_where_the_absent_files_are_absent`
+walks this module's own AST, discovers every rule named ``_version_*``, and fails
+if one of them is named by no undecorated test.
+
+**A correction to this phase's own outline, recorded because it is load-bearing.**
+`06-PLAN-OUTLINE.md` § *Finding 7* proposed pairing the STATE rule with a
+``pyproject.toml`` <-> ``CHANGELOG.md`` binding, on the grounds that the latter is
+*"entirely inside the shipped tree and runs everywhere"*. **Measured false:**
+`CHANGELOG.md` is not in ``SANDBOX_CONTENTS``, so that pairing would have had
+*both* of its rules skipping under `make mutation` — precisely the defect the
+pairing exists to prevent. `README.md` replaced it.
 
 WHY THE SANDBOX HAS A GIT INDEX
 -------------------------------
@@ -84,15 +214,20 @@ this plan's verification — never from inside this suite. A test here that call
 ``build_sandbox()`` would build a sandbox inside the sandbox, whose suite would
 build another one, without bound.
 
-Nothing here touches the network. It reads three files off disk and shells out to
-``git ls-files`` once.
+Nothing here touches the network. It reads `pyproject.toml`, `LICENSE`,
+`MANIFEST.in` and `README.md` off disk unconditionally, `CHANGELOG.md` and
+`.planning/STATE.md` only where they exist, and shells out to ``git ls-files``
+once.
 """
 
 from __future__ import annotations
 
+import ast
+import importlib.util
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -100,6 +235,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 LICENSE_PATH = REPO_ROOT / "LICENSE"
 MANIFEST = REPO_ROOT / "MANIFEST.in"
+
+#: In `SANDBOX_CONTENTS`, so this one is always there. That is the whole reason
+#: the always-on version binding is the one that reads it.
+README_PATH = REPO_ROOT / "README.md"
+
+#: NOT in `SANDBOX_CONTENTS`. Read only behind `needs_changelog`.
+CHANGELOG_PATH = REPO_ROOT / "CHANGELOG.md"
+
+#: NOT in `SANDBOX_CONTENTS`, and a first in this repository: **nothing under
+#: `tests/` or `scripts/` has ever read `.planning/` before this line.** The
+#: consequence is deliberate rather than incidental — the `milestone` key in this
+#: file's first frontmatter block is now a machine-read fact, so editing it is a
+#: gate-visible act and `make verify-offline` will say so. Any plan that moves the
+#: milestone must move `pyproject.toml`'s version with it, or the other way round.
+STATE_PATH = REPO_ROOT / ".planning" / "STATE.md"
 
 #: The SPDX expression the metadata must declare, and which the shipped file
 #: must be. One constant, used from both sides, so the two cannot be made to
@@ -149,6 +299,125 @@ FORBIDDEN_CLASSIFIER_PREFIX = "License ::"
 #: ``tests/test_*.py`` into the sdist and left out the fixtures and the conftest
 #: they need, publishing a test suite that cannot run.
 PACKAGED_DIRECTORY = "boty"
+
+
+# --------------------------------------------------------------------------
+# The two skips, and why neither is a shrug
+# --------------------------------------------------------------------------
+
+needs_changelog = pytest.mark.skipif(
+    not CHANGELOG_PATH.is_file(),
+    reason=(
+        "no CHANGELOG.md here, so this is the mutation sandbox — which deliberately does "
+        "not copy one: `CHANGELOG.md` is absent from "
+        "scripts/mutation_check.SANDBOX_CONTENTS, and an unconditional read would raise "
+        "at the baseline, become a HarnessError, and kill `make verify` at the mutation "
+        "stage for a reason unrelated to any mutation. SANDBOX_CONTENTS is NOT widened to "
+        "buy this rule green there: Phase 4's rule for that constant requires an entry to "
+        "be proven load-bearing by removal, which needs a mutation targeting CHANGELOG.md, "
+        "and none can exist while the file is uncopied. So this follows "
+        "tests/test_identity_check.py's `needs_repo` and tests/test_config.py's precedent "
+        "instead. THE SKIP IS ONLY SOUND BECAUSE THE ALWAYS-ON RULE EXISTS: "
+        "test_the_readme_publication_instruction_names_the_declared_version carries no "
+        "skip marker and reads pyproject.toml and README.md, BOTH of which are in "
+        "SANDBOX_CONTENTS, so the version binding really does run where this one cannot — "
+        "and every _version_ rule is exercised against in-module text besides."
+    ),
+)
+
+needs_state = pytest.mark.skipif(
+    not STATE_PATH.is_file(),
+    reason=(
+        "no .planning/STATE.md here, so this is the mutation sandbox — which deliberately "
+        "does not copy `.planning/`: it is absent from "
+        "scripts/mutation_check.SANDBOX_CONTENTS, and an unconditional read would raise at "
+        "the baseline, become a HarnessError, and kill `make verify` at the mutation stage "
+        "for a reason unrelated to any mutation. SANDBOX_CONTENTS is NOT widened for it, "
+        "and this entry has a cost the CHANGELOG.md one does not: `.planning/` is 2.9 MB "
+        "across 101 tracked files, and build_sandbox() copies the whole set once per "
+        "mutation plus once for the baseline — so widening is not a small price even "
+        "before Phase 4's load-bearing-by-removal rule for that constant is considered. "
+        "This follows tests/test_identity_check.py's `needs_repo` and tests/test_config.py's "
+        "precedent. THE SKIP IS ONLY SOUND BECAUSE THE ALWAYS-ON RULE EXISTS: "
+        "test_the_readme_publication_instruction_names_the_declared_version carries no "
+        "skip marker and reads two files that ARE in SANDBOX_CONTENTS, so the version "
+        "binding still runs here — and every _version_ rule is exercised against in-module "
+        "text besides."
+    ),
+)
+
+
+# --------------------------------------------------------------------------
+# The trove Development Status vocabulary, pinned rather than pattern-matched
+# --------------------------------------------------------------------------
+
+#: The `Development Status` values that claim shipped, battle-tested software.
+#:
+#: WHY THIS IS A PIN AND NOT A RULE, in `UNREAD_POSITIONS`' sense: there is no
+#: parseable property of the string `5 - Production/Stable` that says "this is a
+#: claim to have shipped". The trove list is a fixed vocabulary maintained by
+#: PyPI, so the honest implementation is to enumerate the members with the
+#: justification inline, and make widening the set an edit to a red test rather
+#: than a default. A rule that inferred the meaning from the leading digit would
+#: silently accept a seventh status invented tomorrow.
+PRODUCTION_STATUSES = (
+    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 6 - Mature",
+)
+
+#: The values that say, in the vocabulary's own words, that this is not shipped
+#: yet. Enumerated for the same reason and with the same consequence.
+#:
+#: `7 - Inactive` is in neither tuple deliberately: it is a claim about
+#: maintenance rather than about maturity, and it can honestly sit beside any
+#: version number at all.
+PRERELEASE_STATUSES = (
+    "Development Status :: 1 - Planning",
+    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
+)
+
+#: The prefix every trove status shares. Named once so the reader below and the
+#: two tuples above cannot drift apart in spelling.
+DEVELOPMENT_STATUS_PREFIX = "Development Status :: "
+
+
+# --------------------------------------------------------------------------
+# The changelog heading reader, borrowed rather than written twice
+# --------------------------------------------------------------------------
+
+
+def _load_release_check() -> Any:
+    """Import `scripts/release_check.py` by path, for `_changelog_version`.
+
+    The `spec_from_file_location` idiom this repository uses in six other places,
+    and borrowed for the reason `tests/test_ci_workflow.py` records about this
+    very file: **two readers of one document drift.** `scripts/release_check.py`
+    already owns *"the version in the first ``## [x.y.z]`` heading that is not
+    Unreleased"*, and `make release-check`'s five-way comparison and this file's
+    four-way one must not be able to disagree about what `CHANGELOG.md` says.
+
+    THE MEASURED COST, named rather than discovered later. Importing that module
+    executes ``sys.path.insert(0, <scripts dir>)`` at module scope and then
+    imports `identity_check`. So `scripts/` is on ``sys.path`` for the rest of the
+    pytest session, which nothing else in this suite does today. `scripts` IS in
+    ``SANDBOX_CONTENTS``, so the import resolves inside the mutation sandbox too,
+    and this suite already loads `control_check.py`, `evidence_check.py` and
+    `identity_check.py` by path — the *class* of side effect is established even
+    though this particular directory insertion is new. Accepted, and observed
+    working inside a real ``build_sandbox()`` before it was trusted.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "release_check_for_packaging_metadata", REPO_ROOT / "scripts" / "release_check.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+RELEASE_CHECK: Any = _load_release_check()
 
 
 class NotATrackedTree(RuntimeError):
@@ -388,6 +657,306 @@ def _tracked_top_level_dirs(root: Path) -> set[str]:
             "the sdist prune rule pass by not running."
         )
     return {e.split("/", 1)[0] for e in entries if "/" in e}
+
+
+# --------------------------------------------------------------------------
+# The version binding: four readers, one comparator, one classifier rule
+#
+# EVERY RULE BELOW IS NAMED `_version_*`, AND THAT PREFIX IS THE DISCOVERY
+# CONVENTION, not a stylistic choice. `test_every_version_rule_is_exercised_where_
+# the_absent_files_are_absent` walks this module's AST, collects the functions
+# whose names start with it, and fails if one of them is named by no undecorated
+# test. A rule added OUTSIDE the convention escapes that pin in silence — which is
+# exactly the trap 06-03 recorded when a rule slipped past a hand-maintained
+# tuple, and it is this criterion's own defect one level up. If a version rule
+# ever needs a different name, change the pin in the same commit.
+# --------------------------------------------------------------------------
+
+
+class AmbiguousVersionClaim(RuntimeError):
+    """`README.md` states its publication tag more than once, so there is no answer.
+
+    Raised rather than reported as a value, in `NotATrackedTree`'s spirit: two
+    publication instructions naming two tags is a document with two answers, and
+    silently taking the first would let a second instruction rot unnoticed behind
+    a green gate. The binding refuses to run instead of running on half the file.
+    """
+
+
+#: The one sentence in `README.md` that states this project's version.
+#:
+#: ANCHORED ON THE SENTENCE, NOT ON A TAG-SHAPED TOKEN, and the difference
+#: matters. A rule that matched any backticked ``v<digits>`` would fire on a
+#: changelog link, a git example or a quoted release note the moment one is added,
+#: and its finding would then describe a claim nobody made. Measured on the tree
+#: this rule was written against: ``grep -n 'v[0-9]\+\.[0-9]' README.md`` returns
+#: exactly one line, and it is this sentence.
+README_PUBLICATION_RE = re.compile(r"Publication happens from the `([^`]+)` tag")
+
+
+class _FileAbsent:
+    """The statement's FILE is not on disk, so there is nothing to check.
+
+    Distinct from ``None``, which means *the file is here and says nothing* — and
+    that is a finding. Conflating the two is how a binding reports agreement it
+    never checked, so the two are different objects with different consequences.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - diagnostics only
+        return "<file absent>"
+
+
+FILE_ABSENT = _FileAbsent()
+
+
+def _version_declared(pyproject_text: str) -> str | None:
+    """``[project] version``, the referent every other statement is checked against.
+
+    Read through `_project_table` and `_string` above rather than through a second
+    parser, for the reason `tests/test_ci_workflow.py` records about this same
+    table: two readers of one `pyproject.toml` drift.
+    """
+    return _string(_project_table(pyproject_text).get("version"))
+
+
+def _version_in_readme(readme_text: str) -> str | None:
+    """The tag `README.md`'s publication instruction names, ``v`` and all.
+
+    The leading ``v`` is deliberately **not** stripped here: the finding has to be
+    able to quote what the file actually says, and the file says a git tag. The
+    normalisation belongs in `_version_components`, in one place, with its reason.
+
+    Raises `AmbiguousVersionClaim` when more than one publication sentence exists
+    — see that class. Returns ``None`` when there is none, which is a finding
+    rather than agreement.
+    """
+    found = README_PUBLICATION_RE.findall(readme_text)
+    if len(found) > 1:
+        raise AmbiguousVersionClaim(
+            f"README.md carries {len(found)} publication instructions naming {found}. "
+            "There is no single tag this package would be built as, so this binding "
+            "refuses to answer rather than silently taking the first one."
+        )
+    return found[0] if found else None
+
+
+def _version_in_changelog(changelog_text: str) -> str | None:
+    """The top non-``Unreleased`` release heading, read through `release_check`.
+
+    Borrowed, not re-implemented — see `_load_release_check`.
+    """
+    version: str | None = RELEASE_CHECK._changelog_version(changelog_text)
+    return version
+
+
+def _version_in_state(state_text: str) -> str | None:
+    """``milestone`` from the **first** frontmatter block of `.planning/STATE.md`.
+
+    THE FIRST BLOCK ONLY, and that is load-bearing rather than tidy.
+    `.planning/STATE.md` keeps the whole of the previous milestone's state verbatim
+    below a horizontal rule — including a ``# Previous milestone — v1.0.0`` heading
+    and its own milestone prose. A rule that scanned the entire file would read the
+    archive and report that this project's current milestone is the one it finished
+    two phases ago, which is a wrong answer delivered confidently.
+    """
+    lines = state_text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return None
+        match = re.match(r"^milestone:\s*(\S+)\s*$", line)
+        if match is not None:
+            return match.group(1)
+    return None
+
+
+def _version_components(raw: str | None) -> list[int] | None:
+    """``"v0.2"`` -> ``[0, 2]``. ``None`` if it is not a dotted numeric version.
+
+    One optional leading ``v`` is stripped, because the README states a git tag and
+    a tag is not a version until the ``v`` comes off.
+
+    THE TRAP THIS FUNCTION EXISTS TO CLOSE. ``"0.2.0".startswith("0.2")`` is
+    ``True`` — and so is ``"0.21.0".startswith("0.2")``. A string-prefix comparison
+    would let a ``v0.2`` milestone agree with a ``0.21.0`` package, silently, while
+    looking exactly like a working rule. So versions are compared as **lists of
+    components** and never as strings, and `_version_disagreements` compares those
+    lists element by element.
+
+    Components come back as ``int`` rather than ``str`` so that a leading zero
+    cannot manufacture a disagreement (``0.02`` and ``0.2`` are the same minor
+    line) while ``0.2`` and ``0.21`` still are one.
+    """
+    if raw is None:
+        return None
+    text = raw.strip()
+    if text[:1] == "v":
+        text = text[1:]
+    parts = text.split(".")
+    if not all(part.isdigit() for part in parts):
+        return None
+    return [int(part) for part in parts]
+
+
+def _version_disagreements(
+    declared: str | None,
+    readme: str | _FileAbsent | None = FILE_ABSENT,
+    changelog: str | _FileAbsent | None = FILE_ABSENT,
+    state: str | _FileAbsent | None = FILE_ABSENT,
+) -> list[str]:
+    """Every way the three records disagree with `pyproject.toml`, named.
+
+    ``declared`` is the referent — see the module docstring's three reasons. Each
+    finding says which file moved, what it says, and what `pyproject.toml` says.
+    There is no majority vote and no reverse direction.
+
+    ``FILE_ABSENT`` is the default for the three records rather than ``None``
+    because the two mean different things and only one of them is acceptable:
+    ``FILE_ABSENT`` says *the file is not on disk* (the mutation sandbox, and the
+    only case that is not a finding), while ``None`` says *the file is here and
+    states nothing*, which IS a finding. Passing ``FILE_ABSENT`` for a file that
+    exists would be buying a green by not looking, so the callers below pass it
+    only from behind the matching skip marker.
+
+    THE MILESTONE IS COMPARED LENIENTLY, ON PURPOSE AND OUT LOUD. A milestone
+    names a *minor line*, not a release: ``v0.2`` agrees with ``0.2.0`` and with a
+    future ``0.2.7``, because a patch release inside a milestone is expected and
+    must not redden the tree. It is compared only on the components it actually
+    states — which is a prefix comparison over *component lists*, and is precisely
+    not `str.startswith`.
+    """
+    if declared is None:
+        return [
+            "pyproject.toml states no [project] version, so the three records about it "
+            "have nothing to agree with. UNKNOWN is not a verdict here: a version this "
+            "gate cannot read is reported as a finding, never as agreement"
+        ]
+    declared_parts = _version_components(declared)
+    if declared_parts is None:
+        return [
+            f"pyproject.toml declares version {declared!r}, which is not a dotted numeric "
+            "version. Nothing can be compared against it, and reporting agreement would be "
+            "reporting a check that did not run"
+        ]
+
+    findings: list[str] = []
+    subjects: tuple[tuple[str, str, str | _FileAbsent | None, bool], ...] = (
+        ("README.md", "its publication instruction", readme, True),
+        ("CHANGELOG.md", "its top released heading", changelog, True),
+        (".planning/STATE.md", "its frontmatter milestone", state, False),
+    )
+
+    for source, where, value, exact in subjects:
+        if isinstance(value, _FileAbsent):
+            continue
+        if value is None:
+            findings.append(
+                f"{source} is present but {where} states no version at all, while "
+                f"pyproject.toml declares {declared!r}. A DELETED STATEMENT IS A FINDING, "
+                "not agreement — removing the claim is the cheapest way to satisfy a naive "
+                "binding, and it leaves a reader with one fewer answer rather than a "
+                "consistent one"
+            )
+            continue
+        parts = _version_components(value)
+        if parts is None:
+            findings.append(
+                f"{source} states {value!r} in {where}, which is not a dotted numeric "
+                f"version, so it cannot be compared with pyproject.toml's {declared!r}. "
+                "Unreadable is not agreement"
+            )
+            continue
+        if exact:
+            if parts != declared_parts:
+                findings.append(
+                    f"{source} states {value!r} in {where} but pyproject.toml declares "
+                    f"{declared!r}. pyproject.toml is the referent, so {source} is what "
+                    "moved — unless pyproject.toml moved and this record did not, which is "
+                    "the same finding read the other way and needs the same fix"
+                )
+        elif len(parts) > len(declared_parts) or parts != declared_parts[: len(parts)]:
+            findings.append(
+                f"{source} states {value!r} in {where} but pyproject.toml declares "
+                f"{declared!r}. A milestone names a minor line, so it is compared only on "
+                f"the {len(parts)} component(s) it states — and those do not match "
+                f"{declared_parts[: len(parts)]}. Compared as component lists rather than "
+                'as a string prefix, because "0.21.0".startswith("0.2") is True'
+            )
+    return findings
+
+
+def _version_status_disagreement(pyproject_text: str) -> str | None:
+    """Why the ``Development Status`` classifier contradicts the version, or ``None``.
+
+    A trove classifier is a claim made to everyone who installs this, and
+    development status is a claim *about the version number*. So the two can
+    disagree, and before this rule existed the disagreement was prose in a comment
+    block that nobody would re-read at the next bump — which is the exact failure
+    this phase is about, so it is a rule instead.
+
+    TWO DIRECTIONS, because one would be worthless:
+
+    * major component ``0`` refuses `PRODUCTION_STATUSES` — a package nobody has
+      published, tagged or installed cannot be Production/Stable;
+    * major component ``1`` or above refuses `PRERELEASE_STATUSES` — this is Phase
+      4's own recorded reasoning made executable, *"tagging 1.0.0 while classifying
+      the package Beta is exactly the asserted-versus-real disagreement this phase
+      exists to close"*. Without it, a rule that only stopped Production/Stable at
+      0.x would be perfectly satisfied by a 2.0.0 classified Alpha.
+
+    THE DELIBERATE EXCEPTION: no ``Development Status`` classifier at all returns
+    ``None``. A removed classifier makes no claim, and 04-02 shipped with none on
+    purpose while the version was 0.1.0. This rule polices disagreement, not
+    completeness — that is a different rule, and it is not this one's to smuggle in.
+
+    Named `_version_status_disagreement` rather than `_status_version_disagreement`
+    (which is what 06-05's plan called it) so the `_version_` discovery convention
+    picks it up. A rule outside the convention escapes the pairing pin silently,
+    which is the trap the convention exists for.
+    """
+    statuses = [
+        c
+        for c in _string_list(_project_table(pyproject_text).get("classifiers"))
+        if c.startswith(DEVELOPMENT_STATUS_PREFIX)
+    ]
+    if not statuses:
+        return None
+    if len(statuses) > 1:
+        return (
+            f"pyproject.toml carries {len(statuses)} Development Status classifiers "
+            f"({statuses}). Two statuses are two claims about one version, and a reader is "
+            "left to decide which to believe"
+        )
+    status = statuses[0]
+
+    declared = _version_declared(pyproject_text)
+    parts = _version_components(declared)
+    if parts is None:
+        return (
+            f"pyproject.toml classifies itself {status!r} while its [project] version reads "
+            f"{declared!r}, which this gate cannot parse. A status is a claim about a "
+            "version number, and there is no readable number here for it to be about"
+        )
+    major = parts[0]
+
+    if major == 0 and status in PRODUCTION_STATUSES:
+        return (
+            f"pyproject.toml classifies itself {status!r} at version {declared!r}. Major "
+            "version 0 says the interface is not settled and the package is not shipped; "
+            "the classifier tells every installer it is battle-tested. That is the "
+            "asserted-versus-real disagreement this milestone exists to close, and it "
+            "leaves a reader to decide which of the two to believe"
+        )
+    if major >= 1 and status in PRERELEASE_STATUSES:
+        return (
+            f"pyproject.toml classifies itself {status!r} at version {declared!r}. Phase 4 "
+            "refused exactly this in writing: tagging 1.0.0 while classifying the package "
+            "Beta is the same disagreement pointed the other way"
+        )
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -649,3 +1218,535 @@ def test_the_prune_rule_answers_for_real_inside_a_git_tree(tmp_path: Path) -> No
 
     assert _tracked_top_level_dirs(tmp_path) == {"boty", "tests"}
     assert _unpruned_directories("", _tracked_top_level_dirs(tmp_path)) == ["tests"]
+
+
+# --------------------------------------------------------------------------
+# The version binding, against the shipped tree
+# --------------------------------------------------------------------------
+
+
+def _real_changelog_heading_line(changelog_text: str) -> str:
+    """The exact top released heading line, read from the file rather than typed.
+
+    That heading carries a date, so its text is not a fixed string this module can
+    hardcode. `_corrupt_line` asserts the line it is given exists; handing it a
+    guess would turn a rotted anchor into a red test with a misleading message,
+    and handing it a derived line turns the same rot into `_corrupt_line`'s own
+    "the real file moved out from under this test".
+    """
+    for line in changelog_text.splitlines():
+        match = re.match(r"^##\s*\[([^\]]+)\]", line)
+        if match and match.group(1).lower() != "unreleased":
+            return line
+    raise AssertionError("CHANGELOG.md carries no released heading to derive a corruption from")
+
+
+def _real_state_milestone_line(state_text: str) -> str:
+    """The exact ``milestone:`` line of the first frontmatter block, derived not typed.
+
+    Same reason as `_real_changelog_heading_line`, with one extra: this plan is
+    about a version that moves, so the literal text of this line is guaranteed to
+    change and a hardcoded copy would rot on the very next milestone.
+    """
+    lines = state_text.splitlines()
+    assert lines and lines[0].strip() == "---", ".planning/STATE.md opens with no frontmatter block"
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if re.match(r"^milestone:\s*\S+\s*$", line):
+            return line
+    raise AssertionError("the first frontmatter block of .planning/STATE.md carries no milestone key")
+
+
+def test_the_declared_version_is_readable_at_all() -> None:
+    """The referent, before anything is compared to it.
+
+    Everything below is a statement about this value, so a `pyproject.toml` whose
+    version this file cannot parse would make three rules vacuous at once — the
+    quiet way a binding stops binding.
+    """
+    declared = _version_declared(PYPROJECT.read_text(encoding="utf-8"))
+
+    assert declared is not None, "pyproject.toml states no readable [project] version"
+    assert _version_components(declared) is not None, declared
+
+
+def test_the_readme_publication_instruction_names_the_declared_version() -> None:
+    """THE ALWAYS-ON BINDING. No skip marker, and that is the point of it.
+
+    `README.md` and `pyproject.toml` are the only two of this project's four
+    version statements that are BOTH in `scripts/mutation_check.SANDBOX_CONTENTS`,
+    so this is the one version rule that runs in both of the places this suite
+    executes. The other two skip under `make mutation`, and a criterion met by two
+    skip lines is met by nothing — this rule is what makes those skips sound, and
+    it is observed passing inside a real `build_sandbox()` rather than assumed to.
+
+    What it protects is not academic: this sentence tells a stranger which tag
+    produced the thing they just installed. It is false the moment the version
+    rolls and nothing else in the tree would notice.
+    """
+    pyproject_text = PYPROJECT.read_text(encoding="utf-8")
+    findings = _version_disagreements(
+        _version_declared(pyproject_text),
+        readme=_version_in_readme(README_PATH.read_text(encoding="utf-8")),
+    )
+
+    assert not findings, findings
+
+
+@needs_changelog
+def test_the_changelog_top_release_heading_names_the_declared_version() -> None:
+    """The published record of what changed, bound to the number it changed to.
+
+    Read through `scripts/release_check.py`'s own `_changelog_version`, so the
+    network release check's comparison and this offline one cannot disagree about
+    what this file's top heading says.
+    """
+    pyproject_text = PYPROJECT.read_text(encoding="utf-8")
+    findings = _version_disagreements(
+        _version_declared(pyproject_text),
+        changelog=_version_in_changelog(CHANGELOG_PATH.read_text(encoding="utf-8")),
+    )
+
+    assert not findings, findings
+
+
+@needs_state
+def test_the_projects_own_milestone_names_the_declared_version() -> None:
+    """THE ONE THAT WAS RED ON ARRIVAL, and the reason this gate was written first.
+
+    Measured before anything was rolled: `pyproject.toml` said ``1.0.0`` and
+    `.planning/STATE.md` said ``milestone: v0.2``. Both are tracked, both are this
+    project's own statement about itself, they had been disagreeing since the
+    milestone was scoped, and **nothing in the tree read either one**. That is
+    criterion 5's own defect, sitting in a repository whose entire subject is
+    claims with nothing checking them.
+
+    This test was committed red on purpose and the roll turned it green. Same
+    command on both sides; the only thing that changed between them was the
+    version.
+    """
+    pyproject_text = PYPROJECT.read_text(encoding="utf-8")
+    findings = _version_disagreements(
+        _version_declared(pyproject_text),
+        state=_version_in_state(STATE_PATH.read_text(encoding="utf-8")),
+    )
+
+    assert not findings, findings
+
+
+def test_the_development_status_classifier_does_not_contradict_the_version() -> None:
+    """A trove status is a claim about the version, so the two can disagree.
+
+    Unconditional: both halves live in `pyproject.toml`, which is in the sandbox.
+    """
+    reason = _version_status_disagreement(PYPROJECT.read_text(encoding="utf-8"))
+
+    assert reason is None, reason
+
+
+@needs_changelog
+@needs_state
+def test_all_four_statements_of_the_version_agree_right_now() -> None:
+    """The shipped-tree guard, in the position this file already uses it.
+
+    Without it, every corruption test below could be passing because the tree was
+    already broken — a corrupted copy of an inconsistent file is inconsistent for
+    reasons that have nothing to do with the corruption.
+    """
+    findings = _version_disagreements(
+        _version_declared(PYPROJECT.read_text(encoding="utf-8")),
+        readme=_version_in_readme(README_PATH.read_text(encoding="utf-8")),
+        changelog=_version_in_changelog(CHANGELOG_PATH.read_text(encoding="utf-8")),
+        state=_version_in_state(STATE_PATH.read_text(encoding="utf-8")),
+    )
+
+    assert not findings, findings
+
+
+# --------------------------------------------------------------------------
+# The same rules, watched going red — in BOTH directions, on copies derived
+# from the real files
+#
+# Three of the four bindings are satisfied by DELETING the statement, so each
+# deletion gets its own test. A binding that reports clean when a claim is
+# removed is a binding that rewards removing claims.
+# --------------------------------------------------------------------------
+
+
+@needs_changelog
+@needs_state
+def test_a_pyproject_version_that_moves_away_from_all_three_records_is_caught() -> None:
+    """Direction one: `pyproject.toml` moves and the three records do not.
+
+    One corruption, three findings, each asserted individually — a comparator that
+    reported only the first would leave two silent disagreements behind a red test
+    that looked like it had found everything.
+    """
+    pyproject_text = PYPROJECT.read_text(encoding="utf-8")
+    declared = _version_declared(pyproject_text)
+    assert declared is not None
+    moved = _corrupt_line(pyproject_text, f'version = "{declared}"', 'version = "9.9.9"')
+
+    findings = _version_disagreements(
+        _version_declared(moved),
+        readme=_version_in_readme(README_PATH.read_text(encoding="utf-8")),
+        changelog=_version_in_changelog(CHANGELOG_PATH.read_text(encoding="utf-8")),
+        state=_version_in_state(STATE_PATH.read_text(encoding="utf-8")),
+    )
+
+    assert len(findings) == 3, findings
+    assert any("README.md" in f for f in findings), findings
+    assert any("CHANGELOG.md" in f for f in findings), findings
+    assert any(".planning/STATE.md" in f for f in findings), findings
+    assert all("9.9.9" in f for f in findings), findings
+
+
+def test_a_readme_that_moves_away_from_pyproject_is_caught() -> None:
+    """Direction two for the always-on binding: the record moves, pyproject does not.
+
+    Unconditional, like the rule it watches — this red-watch runs inside the
+    mutation sandbox too, which is where M26 needs it to.
+    """
+    readme_text = README_PATH.read_text(encoding="utf-8")
+    stated = _version_in_readme(readme_text)
+    assert stated is not None
+    moved = readme_text.replace(f"`{stated}` tag", "`v8.8.8` tag", 1)
+    assert moved != readme_text
+
+    findings = _version_disagreements(
+        _version_declared(PYPROJECT.read_text(encoding="utf-8")),
+        readme=_version_in_readme(moved),
+    )
+
+    assert len(findings) == 1, findings
+    assert "README.md" in findings[0] and "v8.8.8" in findings[0], findings
+
+
+@needs_changelog
+def test_a_changelog_that_moves_away_from_pyproject_is_caught() -> None:
+    """The published record of what changed, naming a version nothing built."""
+    changelog_text = CHANGELOG_PATH.read_text(encoding="utf-8")
+    heading = _real_changelog_heading_line(changelog_text)
+    moved = _corrupt_line(changelog_text, heading, "## [7.7.7] - 2026-01-01")
+
+    findings = _version_disagreements(
+        _version_declared(PYPROJECT.read_text(encoding="utf-8")),
+        changelog=_version_in_changelog(moved),
+    )
+
+    assert len(findings) == 1, findings
+    assert "CHANGELOG.md" in findings[0] and "7.7.7" in findings[0], findings
+
+
+@needs_state
+def test_a_milestone_that_moves_away_from_pyproject_is_caught() -> None:
+    """The project's own record of what it is, disagreeing with what it declares."""
+    state_text = STATE_PATH.read_text(encoding="utf-8")
+    milestone_line = _real_state_milestone_line(state_text)
+    moved = _corrupt_line(state_text, milestone_line, "milestone: v6.6")
+
+    findings = _version_disagreements(
+        _version_declared(PYPROJECT.read_text(encoding="utf-8")),
+        state=_version_in_state(moved),
+    )
+
+    assert len(findings) == 1, findings
+    assert ".planning/STATE.md" in findings[0] and "v6.6" in findings[0], findings
+
+
+def test_deleting_the_readme_publication_instruction_is_a_finding_not_a_pass() -> None:
+    """Deletion case one. The cheapest way to satisfy a naive binding is to remove
+    the claim, and a gate that rewards that is worse than no gate."""
+    readme_text = README_PATH.read_text(encoding="utf-8")
+    stated = _version_in_readme(readme_text)
+    assert stated is not None
+    deleted = readme_text.replace(f"Publication happens from the `{stated}` tag", "", 1)
+    assert _version_in_readme(deleted) is None
+
+    findings = _version_disagreements(
+        _version_declared(PYPROJECT.read_text(encoding="utf-8")), readme=None
+    )
+
+    assert len(findings) == 1, findings
+    assert "README.md" in findings[0] and "DELETED STATEMENT IS A FINDING" in findings[0], findings
+
+
+@needs_changelog
+def test_deleting_every_changelog_release_heading_is_a_finding_not_a_pass() -> None:
+    """Deletion case two, and the one a version comparator is most likely to miss:
+    a changelog with only an `## [Unreleased]` section states no released version
+    at all, and there is then nothing to disagree with."""
+    changelog_text = CHANGELOG_PATH.read_text(encoding="utf-8")
+    # EVERY released heading, not just the top one: after this milestone's roll
+    # there are two, and removing only the first would leave `_version_in_changelog`
+    # answering with the one below it — a deletion test that deleted nothing.
+    def _is_release_heading(line: str) -> bool:
+        match = re.match(r"^##\s*\[([^\]]+)\]", line)
+        return match is not None and match.group(1).lower() != "unreleased"
+
+    deleted = "\n".join(
+        "## Older releases" if _is_release_heading(line) else line
+        for line in changelog_text.splitlines()
+    )
+    assert deleted != changelog_text
+    assert _version_in_changelog(deleted) is None
+
+    findings = _version_disagreements(
+        _version_declared(PYPROJECT.read_text(encoding="utf-8")), changelog=None
+    )
+
+    assert len(findings) == 1, findings
+    assert "CHANGELOG.md" in findings[0] and "DELETED STATEMENT IS A FINDING" in findings[0], findings
+
+
+@needs_state
+def test_deleting_the_milestone_key_is_a_finding_not_a_pass() -> None:
+    """Deletion case three, and the easiest of the three to do by accident — the
+    `milestone` line sits in a frontmatter block a tool rewrites."""
+    state_text = STATE_PATH.read_text(encoding="utf-8")
+    milestone_line = _real_state_milestone_line(state_text)
+    deleted = _corrupt_line(state_text, milestone_line, "gsd_state_note: none")
+    assert _version_in_state(deleted) is None
+
+    findings = _version_disagreements(
+        _version_declared(PYPROJECT.read_text(encoding="utf-8")), state=None
+    )
+
+    assert len(findings) == 1, findings
+    assert ".planning/STATE.md" in findings[0], findings
+    assert "DELETED STATEMENT IS A FINDING" in findings[0], findings
+
+
+def test_a_milestone_that_is_only_a_string_prefix_of_the_version_is_a_disagreement() -> None:
+    """THE NORMALISATION TRAP, pinned so the shortcut cannot come back.
+
+    ``"0.21.0".startswith("0.2")`` is ``True``. A milestone of ``v0.2`` beside a
+    package version of ``0.21.0`` describes a different minor line entirely, and a
+    prefix comparison would accept it while looking exactly like a working rule.
+    The leniency this rule DOES grant is asserted alongside it, so the fix for
+    this test cannot be to make the milestone comparison exact and redden every
+    patch release.
+    """
+    assert _version_components("v0.2") == [0, 2]
+    assert _version_components("0.21.0") == [0, 21, 0]
+
+    caught = _version_disagreements("0.21.0", state="v0.2")
+    assert len(caught) == 1, caught
+    assert "startswith" in caught[0], caught
+
+    # The other half: the leniency is real, and a patch release inside the
+    # milestone must not redden the tree.
+    assert _version_disagreements("0.2.0", state="v0.2") == []
+    assert _version_disagreements("0.2.7", state="v0.2") == []
+
+
+def _real_status_classifier_line(pyproject_text: str) -> str:
+    """The exact `Development Status` classifier line, derived rather than typed.
+
+    Which status the shipped file carries is exactly what this milestone changes,
+    so a hardcoded copy would rot at the roll — and it would rot into a
+    `_corrupt_line` failure whose message pointed at the corruption rather than at
+    the classifier. Derived, the same rot reads as "the real file moved out from
+    under this test", which is true and actionable.
+    """
+    for line in pyproject_text.splitlines():
+        if line.strip().strip(",").strip('"').startswith(DEVELOPMENT_STATUS_PREFIX):
+            return line
+    raise AssertionError("pyproject.toml carries no Development Status classifier line")
+
+
+def _restated(pyproject_text: str, version: str, status: str) -> str:
+    """The real file with its version line and its status line both replaced.
+
+    Both, together, because the rule is about the RELATIONSHIP between them: a
+    corruption that moved only one would pass or fail depending on which side of
+    this milestone's roll the tree happens to be on, and a red-watch whose verdict
+    depends on the day is not a red-watch.
+    """
+    declared = _version_declared(pyproject_text)
+    assert declared is not None, "pyproject.toml states no readable version to restate"
+    status_line = _real_status_classifier_line(pyproject_text)
+    text = _corrupt_line(pyproject_text, f'version = "{declared}"', f'version = "{version}"')
+    indent = status_line[: len(status_line) - len(status_line.lstrip())]
+    return _corrupt_line(text, status_line, f'{indent}"{status}",')
+
+
+def test_a_production_status_beside_a_major_zero_version_is_caught() -> None:
+    """Classifier direction one, derived from the real file rather than a fixture."""
+    text = _restated(
+        PYPROJECT.read_text(encoding="utf-8"), "0.2.0", "Development Status :: 5 - Production/Stable"
+    )
+
+    reason = _version_status_disagreement(text)
+
+    assert reason is not None
+    assert "Production/Stable" in reason and "Major version 0" in reason, reason
+
+
+def test_a_prerelease_status_beside_a_major_one_version_is_caught() -> None:
+    """Classifier direction two — Phase 4's own recorded reasoning, executable.
+
+    A rule that only refused Production/Stable below 1.0 would be perfectly
+    satisfied by a 2.0.0 classified Alpha, which is the same false claim with the
+    sign flipped.
+    """
+    text = _restated(
+        PYPROJECT.read_text(encoding="utf-8"), "1.0.0", "Development Status :: 4 - Beta"
+    )
+
+    reason = _version_status_disagreement(text)
+
+    assert reason is not None
+    assert "Beta" in reason and "1.0.0" in reason, reason
+    assert "Phase 4 refused exactly this in writing" in reason, reason
+
+
+# --------------------------------------------------------------------------
+# The unconditional half: every rule exercised against text this module owns,
+# with no file read at all, so the whole set runs where `CHANGELOG.md` and
+# `.planning/` do not exist
+# --------------------------------------------------------------------------
+
+#: A `[project]` table with one of everything the version rules read. Deliberately
+#: NOT a copy of the real file: a fixture that quoted the shipped one would go red
+#: every time the shipped one moved, for reasons unrelated to any rule here.
+WELL_FORMED_PYPROJECT = """[project]
+name = "bot-y"
+version = "0.2.0"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+]
+"""
+
+WELL_FORMED_README = (
+    "## Install\n\nPublication happens from the `v0.2.0` tag. If that command reports no "
+    "matching\ndistribution, the tag has not been pushed yet.\n"
+)
+
+WELL_FORMED_CHANGELOG = (
+    "# Changelog\n\n## [Unreleased]\n\nNothing yet.\n\n## [0.2.0] - 2026-08-10\n\nA body.\n"
+)
+
+#: Two frontmatter-shaped blocks, because the archive below the rule is the whole
+#: reason `_version_in_state` reads the first block only.
+WELL_FORMED_STATE = (
+    "---\ngsd_state_version: 1.0\nmilestone: v0.2\nstatus: Executing\n---\n\n"
+    "# State\n\n---\n\n# Previous milestone — v1.0.0\n\nmilestone: v1.0\n"
+)
+
+
+def test_every_version_rule_is_green_on_documents_this_module_owns() -> None:
+    """The unconditional green side: all four readers and both comparators, on
+    text held in this file, so they run inside the mutation sandbox."""
+    declared = _version_declared(WELL_FORMED_PYPROJECT)
+    readme = _version_in_readme(WELL_FORMED_README)
+    changelog = _version_in_changelog(WELL_FORMED_CHANGELOG)
+    state = _version_in_state(WELL_FORMED_STATE)
+
+    assert (declared, readme, changelog, state) == ("0.2.0", "v0.2.0", "0.2.0", "v0.2")
+    assert _version_components(readme) == [0, 2, 0]
+    assert _version_disagreements(declared, readme=readme, changelog=changelog, state=state) == []
+    assert _version_status_disagreement(WELL_FORMED_PYPROJECT) is None
+
+
+def test_every_version_rule_bites_on_a_corruption_of_those_documents() -> None:
+    """The unconditional red side. Without it the sandbox would run six rules that
+    have only ever been watched passing, which is the artefact this phase refuses."""
+    assert _version_declared('[project]\nname = "bot-y"\n') is None
+    assert _version_in_readme("no publication instruction here\n") is None
+    assert _version_in_changelog("# Changelog\n\n## [Unreleased]\n\nNothing yet.\n") is None
+    assert _version_in_state("no frontmatter at all\n") is None
+    assert _version_in_state("---\nstatus: Executing\n---\nmilestone: v0.2\n") is None
+    assert _version_components("not.a.version") is None
+    assert _version_components("") is None
+
+    assert _version_disagreements("0.2.0", readme="v0.3.0")
+    assert _version_disagreements("0.2.0", changelog="0.3.0")
+    assert _version_disagreements("0.2.0", state="v0.3")
+    assert _version_disagreements(None)
+    assert _version_disagreements("not-a-version", readme="v0.2.0")
+    assert _version_disagreements("0.2.0", readme="the tag")
+    assert _version_status_disagreement(
+        WELL_FORMED_PYPROJECT.replace("4 - Beta", "5 - Production/Stable")
+    )
+    assert _version_status_disagreement(
+        WELL_FORMED_PYPROJECT.replace('version = "0.2.0"', 'version = "1.0.0"')
+    )
+
+
+def test_a_missing_development_status_classifier_is_not_a_disagreement() -> None:
+    """The deliberate exception, exercised so it cannot be quietly tightened.
+
+    A removed classifier makes no claim, and 04-02 shipped with none on purpose.
+    This rule polices disagreement, not completeness.
+    """
+    no_status = WELL_FORMED_PYPROJECT.replace('    "Development Status :: 4 - Beta",\n', "")
+
+    assert "Development Status" not in no_status
+    assert _version_status_disagreement(no_status) is None
+
+
+def test_two_publication_instructions_refuse_to_answer_rather_than_guessing() -> None:
+    """`README.md` with two publication sentences has two answers, so the reader
+    raises instead of silently taking the first — the shape `NotATrackedTree`
+    already uses in this file for an input that cannot be answered."""
+    doubled = WELL_FORMED_README + "\nPublication happens from the `v9.9.9` tag.\n"
+
+    with pytest.raises(AmbiguousVersionClaim) as excinfo:
+        _version_in_readme(doubled)
+
+    assert "v9.9.9" in str(excinfo.value), excinfo.value
+
+
+def test_the_state_reader_reads_the_current_milestone_and_not_the_archive() -> None:
+    """`.planning/STATE.md` keeps the previous milestone's state verbatim below a
+    horizontal rule. A reader that scanned the whole file would report the
+    milestone this project finished two phases ago, confidently."""
+    assert _version_in_state(WELL_FORMED_STATE) == "v0.2"
+    assert "v1.0" in WELL_FORMED_STATE.split("---", 3)[-1]
+
+
+def test_every_version_rule_is_exercised_where_the_absent_files_are_absent() -> None:
+    """THE PAIRING PIN. No version rule may run only where a skipped file exists.
+
+    Two of the four bindings read files that `scripts/mutation_check.SANDBOX_CONTENTS`
+    does not copy, so they skip under `make mutation`. A rule whose only exercise
+    carries a skip marker therefore stops running in one of the two places this
+    suite executes, while ``addopts = "-ra"`` prints a skip line nobody reads as a
+    defect — this file's own words, about this file's own earlier refusal of the
+    same trade for `MANIFEST.in`.
+
+    The rules are DISCOVERED from this module's AST by the `_version_` prefix
+    rather than listed in a tuple. 06-03 recorded a rule escaping a hand-maintained
+    tuple in silence, and a registry somebody has to remember to update is this
+    criterion's defect one level up.
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    module = ast.parse(source)
+
+    rules = [
+        node.name
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("_version_")
+    ]
+    unconditional = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name.startswith("test_")
+        and not node.decorator_list
+    ]
+    exercised = "\n".join(ast.get_source_segment(source, node) or "" for node in unconditional)
+
+    assert len(rules) >= 5, (
+        f"only {rules} discovered — the version rule set is too thin, or a rule was named "
+        "outside the `_version_` convention and this pin cannot see it"
+    )
+    missing = [rule for rule in rules if rule not in exercised]
+    assert not missing, (
+        f"these version rules are named by no unconditional test: {missing}. They run only "
+        "where CHANGELOG.md or .planning/ exists, which is not where `make mutation` runs, "
+        "so criterion 5 would be met there by a skip line."
+    )
