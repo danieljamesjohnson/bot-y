@@ -55,7 +55,43 @@ is not a gate. `tests/test_packaging_metadata.py` reached the same conclusion in
 reader by path rather than writing a second one, so the two cannot drift into
 disagreeing about what `pyproject.toml` says.
 
-Nothing here touches the network. It reads four files off disk.
+WHY THE RULES ARE KEYED TO A DIRECTORY AND NOT TO A FILENAME
+------------------------------------------------------------
+They were not, until 06-03. Every rule but `_pr_triggered_privilege` read
+`CI = WORKFLOWS / "ci.yml"`, and when `release.yml` arrived the four families
+that matter — pin, exit-code, timeout, runner — were written out a SECOND time
+against `RELEASE`. So the coverage followed a list of filenames somebody
+maintained by hand, and a THIRD workflow file was guarded by nothing at all.
+
+That is measured rather than argued. On 2026-08-10, with `NONCOMPLIANT_WORKFLOW`
+below written into the real `.github/workflows/` — a floating action tag, a
+swallowed exit code, no `timeout-minutes` and `runs-on: ubuntu-latest`, one
+violation per family — `pytest tests/` returned **exit 0, 701 passed**. Not one
+test noticed. The rule functions were not broken: called by hand on the same
+text they reported every violation. Nothing called them with it.
+
+So `DIRECTORY_RULES` hands each family `_all_workflow_texts()` and prefixes each
+finding with the filename it came from. NO RULE'S JUDGEMENT CHANGED. Three of
+the four are wrapped, not rewritten; the fourth (`_bad_timeouts`) had never been
+extracted from its two tests and its bound is copied verbatim.
+
+WHY THE GREEN SIDE OF THAT GATE IS THE ASSERTION, NOT A FORMALITY
+------------------------------------------------------------------
+Generalising these rules is exactly where the two views above get lost, and the
+shipped tree detects both mistakes for free:
+
+  * A directory pin rule reading `_code(text)` would strip `# v7.0.1` from all
+    seven shipped pins and report every one of them as comment-less.
+  * A directory exit-code rule reading the raw text would match the `|| true`
+    inside `ci.yml`'s own decision record.
+
+Either mistake reddens
+`test_every_workflow_in_this_directory_passes_every_directory_rule` against the
+real tree, immediately. That test passing is the proof both views survived
+generalisation — it is not a smoke test.
+
+Nothing here touches the network. It reads every file in `.github/workflows/`,
+plus `README.md`, `pyproject.toml` and this file's own source.
 """
 
 from __future__ import annotations
@@ -63,6 +99,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -140,6 +177,72 @@ jobs:
       - run: echo build-and-publish
 """
 
+#: THE FILENAME THE ON-DISK RED-WATCH USES, DEFINED EXACTLY ONCE.
+#:
+#: `.yaml` rather than `.yml` on purpose and by measurement: GitHub reads both
+#: suffixes, `_all_workflow_texts()` reads both, and neither shipped file uses
+#: this one — so the probe exercises the reader's second branch as a side
+#: effect of doing its main job.
+#:
+#: The name sorts last and could not be mistaken for real work. It is a
+#: constant rather than a literal because 06-03 writes this file to disk once,
+#: and the in-suite red-watch, the on-disk observation and the removal gate
+#: below must all be talking about the same filename or the removal gate is
+#: guarding a file nobody creates.
+RED_WATCH_NAME = "zzz-red-watch.yaml"
+
+#: A THIRD WORKFLOW CARRYING EXACTLY ONE VIOLATION PER RULE FAMILY.
+#:
+#: In `PUBLISH_WORKFLOW`'s idiom — a synthetic workflow as a string, doing a job
+#: no real file in this directory can do. `PUBLISH_WORKFLOW` stands in for a
+#: file that did not exist yet; this one stands in for the file that does not
+#: exist yet EITHER, which is the whole of criterion 3: "A workflow file added
+#: under `.github/workflows/` is covered by the pin, exit-code, timeout and
+#: runner rules."
+#:
+#: Line by line, and there is nothing here that is not a violation:
+#:
+#:   `uses: actions/checkout@v4`      PIN. A mutable tag owned by somebody
+#:                                    else, and no trailing version comment.
+#:                                    The owner is `actions`, already trusted —
+#:                                    the finding is the REF, which is the half
+#:                                    the `tj-actions` incident was about.
+#:   `make verify-offline || true`    EXIT-CODE. Reports TWICE, measured: an
+#:                                    or-fallback, and a pipe on the line
+#:                                    invoking make, because `||` contains `|`.
+#:                                    Correct behaviour; assert substrings.
+#:   no `timeout-minutes:`            TIMEOUT. The GitHub default is six hours.
+#:   `runs-on: ubuntu-latest`         RUNNER. A moving alias.
+#:
+#: And nothing else. `on: push` with no pull-request trigger and
+#: `permissions: contents: read` are deliberate: a probe that ALSO tripped
+#: `_pr_triggered_privilege` would make the red unattributable to the four
+#: families this criterion names. No `twine`, no `gh release`, no `${{ }}`, and
+#: NO THIRD-PARTY ACTION OWNER — writing `some-vendor/...` into a public
+#: repository's real workflow directory, even for ten seconds, to test a rule
+#: about a supply-chain attack is not a trade this project makes. The
+#: untrusted-owner direction is watched IN-SUITE ONLY, on a variant derived
+#: from this constant with `.replace()`.
+#:
+#: THIS TEXT IS WRITTEN TO DISK EXACTLY ONCE, by 06-03's on-disk observation,
+#: and removed in a `finally`. It must never exist in a commit;
+#: `test_the_red_watch_workflow_is_not_in_this_directory` makes that a gate
+#: rather than a habit.
+NONCOMPLIANT_WORKFLOW = """
+name: red-watch
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make verify-offline || true
+"""
+
 
 class NoTriggerBlock(RuntimeError):
     """A workflow with no `on:` key at all, in either of YAML's two spellings.
@@ -148,6 +251,21 @@ class NoTriggerBlock(RuntimeError):
     `NotATrackedTree` for: a rule that reports "no triggers" for a file it could
     not read passes by not running, and every trigger rule downstream would then
     be green about nothing.
+    """
+
+
+class UnreadableWorkflow(RuntimeError):
+    """A file under `.github/workflows/` `yaml.safe_load` will not give a mapping for.
+
+    Empty, a bare scalar, a list — any of them. Raised for the reason
+    `NoTriggerBlock` above is raised, one level further out: a directory rule
+    that returned `[]` for a file it could not read would report a CLEAN
+    directory it never looked at, and the entire point of keying these rules to
+    the directory is that a new file cannot slip through. An unreadable file is
+    not a checked file.
+
+    This is this project's `UNKNOWN is never a verdict` rule applied to a gate
+    rather than to a stock reading.
     """
 
 
@@ -194,6 +312,31 @@ def _code(text: str) -> str:
 # --------------------------------------------------------------------------
 # The rules, each a pure function so the corruption tests run the same one
 # --------------------------------------------------------------------------
+
+
+def _parsed(name: str, text: str) -> dict[Any, Any]:
+    """One workflow's text as a mapping, or `UnreadableWorkflow` naming the file.
+
+    Every YAML-reading directory rule goes through here. Returning `{}` for a
+    file PyYAML could not make a mapping of is the vacuous pass this whole file
+    is written against: `_jobs({})` is `{}`, so the timeout and runner rules
+    would both iterate nothing and report nothing, and a workflow with a syntax
+    error would read as a workflow with no problems.
+
+    The filename is a parameter rather than something inferred, because a
+    directory rule that raises without saying WHICH file it choked on sends a
+    contributor to read all of them.
+    """
+    try:
+        loaded = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise UnreadableWorkflow(f"{name}: PyYAML could not parse it: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise UnreadableWorkflow(
+            f"{name}: parses as {type(loaded).__name__} {loaded!r}, not a mapping. A workflow "
+            "this gate cannot read is not a workflow it has checked."
+        )
+    return dict(loaded)
 
 
 def _triggers(wf: dict[Any, Any]) -> dict[str, Any]:
@@ -420,6 +563,30 @@ def _floating_runners(wf: dict[Any, Any]) -> list[str]:
     ]
 
 
+def _bad_timeouts(wf: dict[Any, Any]) -> list[str]:
+    """Every job whose `timeout-minutes` is missing, non-integer or outside the bound.
+
+    Extracted in 06-03 from the two tests that had inlined it — the only one of
+    criterion 3's four families with no function to hand a directory to. THE
+    BOUND IS COPIED, NOT RE-DERIVED: `isinstance(t, int) and 0 < t <= 30`,
+    character for character what
+    `test_the_job_is_time_limited_and_runs_on_a_pinned_image` and
+    `test_the_publish_workflow_runs_on_a_pinned_image_within_a_time_limit`
+    already asserted, and the finding string is the one the second of those
+    already produced.
+
+    Missing and absurd are both findings. The GitHub default is SIX HOURS, so an
+    absent key is not a mild omission; and a rule that only checked presence
+    would let `timeout-minutes: 360` through while looking like it covered this.
+    """
+    findings: list[str] = []
+    for name, job in _jobs(wf).items():
+        timeout = (job or {}).get("timeout-minutes")
+        if not (isinstance(timeout, int) and 0 < timeout <= 30):
+            findings.append(f"{name}: timeout-minutes={timeout!r}")
+    return findings
+
+
 def _pr_triggered_privilege(workflows: dict[str, str]) -> list[str]:
     """Every workflow a pull request can trigger that also holds real privilege.
 
@@ -443,6 +610,98 @@ def _pr_triggered_privilege(workflows: dict[str, str]) -> list[str]:
         for where, scope, level in _write_grants(_permission_grants(wf)):
             findings.append(f"{name}: pull-request-triggerable and grants {scope}: {level} ({where})")
     return findings
+
+
+# --------------------------------------------------------------------------
+# The same four families, keyed to the DIRECTORY rather than to a filename
+# --------------------------------------------------------------------------
+#
+# `_pr_triggered_privilege` above is the shape, and its own docstring says so:
+# it is "the only rule here that looks beyond `ci.yml`, and the one that will
+# still be doing work in a year." Everything below copies it — `dict[str, str]`
+# in, `sorted(...)` iteration, a `list[str]` of findings each prefixed with the
+# filename it came from — rather than inventing a second shape.
+#
+# Three of the four WRAP an existing rule and change nothing about its
+# judgement. The defect criterion 3 names is not that the rules are wrong; it
+# is what they were being handed.
+
+
+def _directory_unpinned_actions(workflows: dict[str, str]) -> list[str]:
+    """Every action pin in the directory that is tag-pinned, untrusted or uncommented.
+
+    Reads the RAW text, and that is not an oversight — it is the version-comment
+    convention. `_action_pins` needs the trailing `# v7.0.1` beside each SHA, so
+    a wrapper that helpfully passed `_code(text)` here would strip the comment
+    off all seven shipped pins and report every one of them as comment-less.
+    That mistake reddens `test_every_workflow_in_this_directory_passes_every_directory_rule`
+    against the real tree the moment it is made.
+    """
+    return [
+        f"{name}: {finding}"
+        for name, text in sorted(workflows.items())
+        for finding in _unpinned_actions(_action_pins(text))
+    ]
+
+
+def _directory_flattened_exit_codes(workflows: dict[str, str]) -> list[str]:
+    """Every construct in the directory that can turn a failing check into a green run.
+
+    Reads the COMMENT-STRIPPED view, and that is the mirror of the rule above.
+    Both shipped workflows NAME `|| true`, `continue-on-error` and
+    `pull_request_target` in their decision records in order to explain their
+    absence, so a wrapper reading the raw text would report the documentation
+    and could never fail on the code.
+    """
+    return [
+        f"{name}: {finding}"
+        for name, text in sorted(workflows.items())
+        for finding in _flattening(_code(text))
+    ]
+
+
+def _directory_missing_timeouts(workflows: dict[str, str]) -> list[str]:
+    """Every job in the directory with no usable `timeout-minutes`."""
+    return [
+        f"{name}: {finding}"
+        for name, text in sorted(workflows.items())
+        for finding in _bad_timeouts(_parsed(name, text))
+    ]
+
+
+def _directory_floating_runners(workflows: dict[str, str]) -> list[str]:
+    """Every `runs-on` in the directory naming a moving alias.
+
+    The filename prefix is added HERE rather than inside `_floating_runners`,
+    deliberately: `test_a_floating_runner_image_is_reported` asserts that rule
+    returns `["ubuntu-latest"]` exactly, and prefixing inside it would break a
+    shipped test to make a new one convenient.
+    """
+    return [
+        f"{name}: {finding}"
+        for name, text in sorted(workflows.items())
+        for finding in _floating_runners(_parsed(name, text))
+    ]
+
+
+#: CRITERION 3, AS A REGISTRY. The ROADMAP's sentence, verbatim:
+#:
+#:   "A workflow file added under `.github/workflows/` is covered by the pin,
+#:    exit-code, timeout and runner rules"
+#:
+#: The four keys are that sentence's own four words, and
+#: `test_the_four_rules_the_criterion_names_are_the_four_directory_rules` pins
+#: the key set both ways. This is a PIN, not a rule, in the sense
+#: `TRUSTED_ACTION_OWNERS` and `UNREAD_POSITIONS` are pins: the criterion is
+#: quoted inline, so widening or narrowing it means deliberately editing a red
+#: test rather than counting rules by eye. A fifth family is a one-line
+#: addition here instead of a fifth thing to remember.
+DIRECTORY_RULES: dict[str, Callable[[dict[str, str]], list[str]]] = {
+    "pin": _directory_unpinned_actions,
+    "exit-code": _directory_flattened_exit_codes,
+    "timeout": _directory_missing_timeouts,
+    "runner": _directory_floating_runners,
+}
 
 
 # --------------------------------------------------------------------------
@@ -630,12 +889,17 @@ def test_nothing_caches_the_workspace() -> None:
 
 
 def test_the_job_is_time_limited_and_runs_on_a_pinned_image() -> None:
-    job = next(iter(_jobs(_workflow()).values()))
-    timeout = job.get("timeout-minutes")
-    assert isinstance(timeout, int) and 0 < timeout <= 30, (
-        f"timeout-minutes is {timeout!r}; the GitHub default is six hours"
+    # Rewritten in 06-03 to call the extracted `_bad_timeouts`. Same name, same
+    # bound, and STRICTLY STRONGER than what it replaced: the old body read
+    # `next(iter(_jobs(...).values()))` — the FIRST job only. `ci.yml` has one
+    # job today, so this is behaviour-identical now and covers a second job the
+    # day somebody adds one. A strengthening is allowed here; a weakening is
+    # not, and the difference is meant to be visible to a reviewer.
+    wf = _workflow()
+    assert _bad_timeouts(wf) == [], (
+        f"{_bad_timeouts(wf)}; the GitHub default is six hours"
     )
-    assert _floating_runners(_workflow()) == [], _floating_runners(_workflow())
+    assert _floating_runners(wf) == [], _floating_runners(wf)
 
 
 def test_the_readme_documents_the_target_the_workflow_actually_runs() -> None:
@@ -700,10 +964,72 @@ def test_this_file_does_not_import_tomllib() -> None:
 
 
 # --------------------------------------------------------------------------
+# The whole directory, asserted against the four families criterion 3 names
+# --------------------------------------------------------------------------
+
+
+def test_the_four_rules_the_criterion_names_are_the_four_directory_rules() -> None:
+    """Criterion 3, quoted: "A workflow file added under `.github/workflows/` is
+    covered by the pin, exit-code, timeout and runner rules."
+
+    Asserted BOTH ways — every word of the criterion has a rule, and every rule
+    is a word of the criterion — so the registry cannot quietly grow a fifth
+    entry that nobody promised or lose one that somebody did. Counting four
+    rules by eye is what left the fifth file uncovered in the first place.
+    """
+    named = {"pin", "exit-code", "timeout", "runner"}
+    assert set(DIRECTORY_RULES) == named, sorted(DIRECTORY_RULES)
+    for family in named:
+        assert callable(DIRECTORY_RULES[family]), family
+
+
+def test_every_workflow_in_this_directory_passes_every_directory_rule() -> None:
+    """The shipped tree, and this green is the assertion rather than a formality.
+
+    Generalising these rules is exactly where the raw / comment-stripped split
+    gets lost, and both mistakes are self-detecting HERE:
+
+      * a pin rule reading `_code` reports all seven shipped pins as having no
+        version comment, because it just stripped the comments off;
+      * an exit-code rule reading the raw text reports `ci.yml`'s own decision
+        record, which has to name `|| true` in order to explain its absence.
+
+    So if this test is green, both views survived. If somebody "simplifies" the
+    two wrappers into one, it goes red here, on the real files, before any
+    corruption test runs.
+    """
+    workflows = _all_workflow_texts()
+    assert len(workflows) >= 2, sorted(workflows)
+    for family, rule in DIRECTORY_RULES.items():
+        assert rule(workflows) == [], f"{family}: {rule(workflows)}"
+
+
+def test_the_directory_reader_sees_every_workflow_file_under_both_yaml_spellings() -> None:
+    """The rules are only as wide as the reader that feeds them.
+
+    A reader that silently narrowed — to `.yml` alone, to a hard-coded pair of
+    names, to the first entry `iterdir` yields — would leave every directory
+    rule above reporting a clean directory it never looked at, which is
+    criterion 3's defect rebuilt inside its own fix. GitHub reads both suffixes,
+    so this asserts against the filesystem rather than against a list.
+    """
+    on_disk = {p.name for p in WORKFLOWS.iterdir() if p.suffix in (".yml", ".yaml")}
+    assert set(_all_workflow_texts()) == on_disk, sorted(on_disk)
+    assert len(on_disk) >= 2, sorted(on_disk)
+
+
+# --------------------------------------------------------------------------
 # The same rules, run against deliberately broken copies of the real file
 # --------------------------------------------------------------------------
 
 #: The rule functions asserted not to read anything off disk.
+#:
+#: HAND-MAINTAINED, AND THEREFORE THE SAME TRAP THIS FILE IS BUSY FIXING ONE
+#: LEVEL UP. `test_no_rule_function_in_this_file_reads_a_file` only checks
+#: functions named here, so a new rule left out of this tuple escapes the
+#: property silently — which is precisely criterion 3's defect (coverage keyed
+#: to a hand-maintained list of names) living inside the file that closes it.
+#: Every rule function added below goes in here in the same commit.
 RULES = (
     "_code",
     "_strip_yaml_comment",
@@ -725,6 +1051,15 @@ RULES = (
     "_declared_floor",
     "_mypy_python_version",
     "_documented_ci_target",
+    # Added by 06-03 with the directory rules themselves. `_bad_timeouts` is
+    # here too, though the plan enumerated five: it is a rule function like the
+    # rest, and leaving it out would be the omission this comment warns about.
+    "_parsed",
+    "_bad_timeouts",
+    "_directory_unpinned_actions",
+    "_directory_flattened_exit_codes",
+    "_directory_missing_timeouts",
+    "_directory_floating_runners",
 )
 
 
@@ -1084,11 +1419,12 @@ def test_nothing_in_the_publish_workflow_can_flatten_an_exit_code() -> None:
 
 
 def test_the_publish_workflow_runs_on_a_pinned_image_within_a_time_limit() -> None:
+    # Rewritten in 06-03 to call the extracted `_bad_timeouts`. Behaviour-
+    # identical: this test's own loop is what `_bad_timeouts` was extracted
+    # FROM, down to the finding string.
     wf = _release()
     assert _floating_runners(wf) == [], _floating_runners(wf)
-    for name, job in _jobs(wf).items():
-        timeout = (job or {}).get("timeout-minutes")
-        assert isinstance(timeout, int) and 0 < timeout <= 30, f"{name}: timeout-minutes={timeout!r}"
+    assert _bad_timeouts(wf) == [], _bad_timeouts(wf)
 
 
 def test_the_publish_workflow_builds_on_the_declared_floor() -> None:
