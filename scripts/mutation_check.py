@@ -324,6 +324,62 @@ MUTATIONS = (
         replace="        if store != watch.store_id:\n            return Result(\n                watch,\n                Availability.OUT_OF_STOCK,",
         breaks="the 2026-08-09 measurement itself ships: one store's OUT_OF_STOCK at $3.17 published as a verdict about a watch pinned to a store that had it IN_STOCK at $2.42",
     ),
+    # M11-M14 guard the phase-5 persistence contract: the backoff, and the
+    # memory of having paged about it, outlive the process.
+    #
+    # THIS IS M6/M7 TERRITORY IN THE PUREST FORM THIS HARNESS HAS SEEN. Not one
+    # of these four changes an availability, a price or an alert VERDICT. A
+    # verdict-only suite passes every one of them straight through while the
+    # monitor comes back from each restart hammering a retailer that walled it
+    # and re-notifying a human about a refusal they were already told about.
+    # M6's comment already states the rule these four are here to serve: a flag
+    # nothing asserts on is a flag that can be silently cleared.
+    #
+    # FOUR AND NOT ONE, on the same precedent, because they are independent
+    # halves that fail in different directions and each ships a different
+    # regression. Every `search` is anchored on the STATEMENT THAT DOES THE
+    # WORK — the assignment applying the restored count, the comparison bounding
+    # the age, the expression producing the restored memory, the union that
+    # carries it forward — and on nothing else. `boty/pacing.py` is now dense
+    # with the prose of a reversed decision and 05-04 may still edit it, so M2's
+    # re-anchoring lesson applies here with extra force: no `search` below
+    # contains a fragment of a docstring, a comment or a log message.
+    Mutation(
+        ident="M11",
+        target="boty/pacing.py",
+        search="                st.refusals = min(refusals, MAX_PERSISTED_REFUSALS)",
+        replace="                st.refusals = 0",
+        breaks="the restored refusal count never reaches the schedule — every restart climbs the backoff again from 2x against a retailer that has already walled us, and asks once at full rate on the way",
+    ),
+    Mutation(
+        ident="M12",
+        target="boty/pacing.py",
+        search="                if not 0.0 <= now - float(refused_at) <= STATE_MAX_AGE_SECONDS:",
+        replace="                if False:",
+        breaks="stale state is applied regardless of its stamp — a file written before a machine was off for a week pins a retailer at the cap on startup, which is the exact objection the withdrawn docstring paragraph raised",
+    ),
+    Mutation(
+        ident="M13",
+        target="boty/pacing.py",
+        search="        return {w for w in warned if isinstance(w, str)}",
+        replace="        return set()",
+        breaks="the paging memory does not cross the restart while the backoff itself keeps working perfectly — REQ-16's 'pushed once' silently reverts to 'pushed once per process', and the only symptom is a duplicate notification that reads exactly like a legitimate one",
+    ),
+    # M14 is M13's other half and gets its own mutation for the reason M7 does.
+    # M13 dying proves the memory crosses a PROCESS boundary. Only M14 proves it
+    # survives a paced-out CYCLE — and it was measured not to on 2026-08-10: a
+    # retailer skipped by its own backoff has no result, so no health entry, so
+    # it read as recovered, and the memory was erased by the cycle after the one
+    # that paged. A tree that persisted `warned` faithfully and dropped this
+    # union would write an EMPTY set to disk and pass M13 while shipping the
+    # duplicate page intact, both across a restart and within one process.
+    Mutation(
+        ident="M14",
+        target="boty/cli.py",
+        search="    still_unhealthy = {h.retailer for h in pageable} | (warned - checked)",
+        replace="    still_unhealthy = {h.retailer for h in pageable}",
+        breaks="a cycle the backoff skipped counts as the retailer recovering, so a refusal past the cap is re-paged at every subsequent check — one notification every six hours, forever, about a refusal somebody was already told about",
+    ),
 )
 
 

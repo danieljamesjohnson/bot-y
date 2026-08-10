@@ -312,6 +312,20 @@ def test_the_shipped_config_still_loads() -> None:
     )
 
 
+_GITIGNORE = Path(__file__).resolve().parent.parent / ".gitignore"
+
+
+@pytest.mark.skipif(
+    not _GITIGNORE.is_file(),
+    reason=(
+        "no .gitignore here, so this is the mutation sandbox — which deliberately "
+        "does not copy one (scripts/mutation_check.py's _IGNORE comment argues the "
+        "rejection at length). This rule is about THIS repository's tracked surface, "
+        "which a copy genuinely has nothing to say about, so it skips on "
+        "tests/test_identity_check.py's `needs_repo` precedent rather than being "
+        "bought green by widening SANDBOX_CONTENTS."
+    ),
+)
 def test_the_default_pacer_state_file_is_gitignored() -> None:
     """A new basename inherits nothing from the `state.json` line (T-05-16).
 
@@ -323,7 +337,7 @@ def test_the_default_pacer_state_file_is_gitignored() -> None:
     change gets committed by accident beside it.
     """
     root = Path(__file__).resolve().parent.parent
-    ignored = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    ignored = _GITIGNORE.read_text(encoding="utf-8").splitlines()
     default = Config.load(root / "config" / "products.yaml").pacer_state_path
 
     assert default.name in [line.strip() for line in ignored], (
