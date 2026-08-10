@@ -242,14 +242,22 @@ def _verdict_from_html(
     # the results of the requests actually made, so a retailer that silently
     # stopped being asked would drift out of the backoff accounting. Politeness
     # is a hard constraint here, but not at the price of blinding the control.
+    #
+    # THE COMMENTS BELOW SIT ABOVE THEIR `if`, NOT INSIDE IT, ON PURPOSE. Each
+    # guard's condition line is immediately followed by its `return Result(` and
+    # `Availability.UNKNOWN`, so M9 and M10 in `scripts/mutation_check.py` can
+    # anchor on the condition and the verdict and on NOTHING ELSE. M2's comment
+    # records why that matters: it was re-anchored once already when the prose on
+    # its branch moved, and "matching the message text would tie a mutation to
+    # prose that is edited far more often than the verdict is."
     if watch.retailer in STORE_SCOPED:
+        # The config gap, reported as a config gap — the shape the
+        # no-first-party-list UNKNOWN below uses, for the same reason: a
+        # missing piece of configuration is not a stock fact, and laundering
+        # one into the other is what UNKNOWN exists to prevent. The message
+        # names the key by the name a user types and the file they type it
+        # in, so it is a fix instruction rather than a complaint.
         if watch.store_id is None:
-            # The config gap, reported as a config gap — the shape the
-            # no-first-party-list UNKNOWN below uses, for the same reason: a
-            # missing piece of configuration is not a stock fact, and laundering
-            # one into the other is what UNKNOWN exists to prevent. The message
-            # names the key by the name a user types and the file they type it
-            # in, so it is a fix instruction rather than a complaint.
             return Result(
                 watch,
                 Availability.UNKNOWN,
@@ -264,17 +272,20 @@ def _verdict_from_html(
                 extraction=extraction,
                 store=store,
             )
+        # `store is None` is handled INSIDE the mismatch guard rather than as a
+        # third one. "The page did not name a store" and "the page named a
+        # different store" are the same fact for the purposes of the verdict:
+        # neither can be SHOWN to come from the pinned store.
+        #
+        # `!r` and not bare interpolation: `store` is a string read out of a
+        # retailer's own JSON and this sentence reaches a plain-text notification
+        # body, so a value carrying whitespace or a newline could otherwise
+        # silently restructure the message.
+        #
+        # Rendered before the branch, not inside it, so that the condition line
+        # and the verdict are adjacent — see the anchoring note above.
+        answered = f"store {store!r}" if store is not None else "no store"
         if store != watch.store_id:
-            # `store is None` is handled INSIDE this guard rather than as a third
-            # one. "The page did not name a store" and "the page named a
-            # different store" are the same fact for the purposes of the verdict:
-            # neither can be SHOWN to come from the pinned store.
-            #
-            # `!r` and not bare interpolation: `store` is a string read out of a
-            # retailer's own JSON and this sentence reaches a plain-text
-            # notification body, so a value carrying whitespace or a newline
-            # could otherwise silently restructure the message.
-            answered = f"store {store!r}" if store is not None else "no store"
             return Result(
                 watch,
                 Availability.UNKNOWN,

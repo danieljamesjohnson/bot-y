@@ -288,6 +288,42 @@ MUTATIONS = (
         replace="    available = disabled",
         breaks="inverts the add-to-cart availability decision — a disabled (out-of-stock) Target button reads as buyable and an enabled one reads as sold out",
     ),
+    # M9 and M10 guard the phase-5 store contract: a Walmart reading that cannot
+    # be shown to come from the store the watch is about is UNKNOWN, never a
+    # verdict. The measurement behind it, 2026-08-09: the daemon recorded the
+    # milk control OUT_OF_STOCK at $3.17 while three live reads minutes later
+    # returned IN_STOCK at $2.42 — same URL, same parser. A parser bug does not
+    # change a price; two different stores answered.
+    #
+    # Both are anchored on the guard's own condition line plus the verdict, and
+    # on NOTHING ELSE — no part of either `detail` message appears in a `search`
+    # string. M2's comment records why: it had to be re-anchored in 2026-08-04
+    # when the prose on its branch moved, and "matching the message text would
+    # tie a mutation to prose that is edited far more often than the verdict is."
+    # `_verdict_from_html` keeps each condition adjacent to its `return` so these
+    # anchors can stay prose-free.
+    #
+    # TWO MUTATIONS AND NOT ONE, on M6/M7's precedent: they prove different
+    # things. M9 dying proves the config-gap guard EXISTS. Only M10 proves the
+    # COMPARISON is load-bearing — a tree that checked the pin was present and
+    # then never compared it against what actually answered would pass M9 while
+    # shipping the 2026-08-09 defect completely intact. Both also die if
+    # `models.STORE_SCOPED` is ever emptied, which is what makes that constant
+    # load-bearing rather than decorative.
+    Mutation(
+        ident="M9",
+        target="boty/retailers.py",
+        search="        if watch.store_id is None:\n            return Result(\n                watch,\n                Availability.UNKNOWN,",
+        replace="        if watch.store_id is None:\n            return Result(\n                watch,\n                Availability.OUT_OF_STOCK,",
+        breaks="an unpinned Walmart watch produces a stock verdict about whichever store the page chose to answer for — a statement about an arbitrary location, published as a fact about yours",
+    ),
+    Mutation(
+        ident="M10",
+        target="boty/retailers.py",
+        search="        if store != watch.store_id:\n            return Result(\n                watch,\n                Availability.UNKNOWN,",
+        replace="        if store != watch.store_id:\n            return Result(\n                watch,\n                Availability.OUT_OF_STOCK,",
+        breaks="the 2026-08-09 measurement itself ships: one store's OUT_OF_STOCK at $3.17 published as a verdict about a watch pinned to a store that had it IN_STOCK at $2.42",
+    ),
 )
 
 
