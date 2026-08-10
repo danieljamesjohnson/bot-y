@@ -17,11 +17,8 @@ can contribute to.
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [x] **Phase 1: Detector Safety Net** - Tests, fixtures and types, so new adapters can't silently break each other (completed 2026-08-02)
-- [x] **Phase 2: Five Retailers Green** - Best Buy, Pokémon Center, Nintendo — the tractable ones; hits the MVP bar (completed 2026-08-03)
-- [x] **Phase 3: The Hard Two** - Target and Amazon, both known to resist; escalate or document honestly (completed 2026-08-03)
-- [x] **Phase 3.1: Target and Amazon, Supported** - INSERTED 2026-08-03. Reverses Phase 3's drop-on-terms decision at Dan's direction (completed 2026-08-03)
-- [x] **Phase 4: Open Source Ready** - Contributor docs, CI, packaging, release (completed 2026-08-06)
+Phases 1–4 and 3.1 belong to **v1.0.0** — their checklist and details are together
+under *Milestone v1.0.0 — Phase Details* below. v1.0.0 remains open and untagged.
 
 ### Milestone v0.2 — Say Only What You Measured (scoped 2026-08-10)
 
@@ -65,7 +62,17 @@ works. Record which rung each retailer landed on in the support matrix.
 4. **Drop, with evidence** — documented as unreachable in the support matrix,
    including what was tried. Never left silently broken.
 
-## Phase Details
+## Milestone v1.0.0 — Phase Details
+
+Open and untagged. Its definition of done includes *"Dan has successfully bought a
+Pokémon GO Plus +"* — a market condition, not a work item — so the milestone audit
+recommended against tagging it shipped. All five phases below are complete.
+
+- [x] **Phase 1: Detector Safety Net** - Tests, fixtures and types, so new adapters can't silently break each other (completed 2026-08-02)
+- [x] **Phase 2: Five Retailers Green** - Best Buy, Pokémon Center, Nintendo — the tractable ones; hits the MVP bar (completed 2026-08-03)
+- [x] **Phase 3: The Hard Two** - Target and Amazon, both known to resist; escalate or document honestly (completed 2026-08-03)
+- [x] **Phase 3.1: Target and Amazon, Supported** - INSERTED 2026-08-03. Reverses Phase 3's drop-on-terms decision at Dan's direction (completed 2026-08-03)
+- [x] **Phase 4: Open Source Ready** - Contributor docs, CI, packaging, release (completed 2026-08-06)
 
 ### Phase 1: Detector Safety Net
 
@@ -359,7 +366,7 @@ Deliberately excluded — see PROJECT.md for reasoning:
 
 ---
 
-## Milestone v0.2 — Say Only What You Measured
+## Milestone v0.2 — Say Only What You Measured (Phase Details)
 
 **Scoped 2026-08-10, from four days of live operation after Phase 4.** Every phase below
 closes a claim the system was making without having measured it. v1.0.0 stays open and
@@ -372,8 +379,7 @@ publishing was deferred: nothing was ever tagged or uploaded.
 
 ### Phase 5: A Reading Means Something
 
-**Goal**: A Walmart reading is a statement about a known store, and every alert names only
-what was measured — or says it does not know.
+**Goal**: A Walmart reading is a statement about a known store, and every alert names only what was measured — or says it does not know.
 **Depends on**: Phase 4
 **Requirements**: REQ-14, REQ-15, REQ-16
 **Success Criteria** (what must be TRUE):
@@ -397,8 +403,7 @@ stores answered. Detail in `.planning/seeds/walmart-store-assignment-is-unpinned
 
 ### Phase 6: Claims With Gates Under Them
 
-**Goal**: Every claim this project publishes — a price filter, a matrix row, a shipped
-file, a version number — has a gate under it that has been watched going red.
+**Goal**: Every claim this project publishes — a price filter, a matrix row, a shipped file, a version number — has a gate under it that has been watched going red.
 **Depends on**: Phase 5
 **Requirements**: REQ-17, REQ-18, REQ-19, REQ-20
 **Success Criteria** (what must be TRUE):
