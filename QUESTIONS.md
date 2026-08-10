@@ -1,8 +1,8 @@
 # Blocked on Dan
 
 Two credentials I cannot obtain myself. The one open decision (0d, Target/RedSky)
-was answered 2026-08-03 and is kept below as the record. **One new open decision:
-0e, below — every `tests/fixtures/` file is clean *now*, but the pushed public
+was answered 2026-08-03 and is kept below as the record. **Two open decisions:
+0f (Walmart store pin, blocking Phase 5's close) and 0e — every `tests/fixtures/` file is clean *now*, but the pushed public
 history is not.** (0e claimed a clean tree twice before it was true. The phase
 verifier caught both. Both corrections are recorded inside 0e rather than
 overwritten, and the only files still naming the leaked values are 0e itself and
@@ -17,6 +17,55 @@ each carry a dated correction rather than a deletion, because what moved the
 number was your reversal of a written-terms reading, not a new technical
 finding, and a record that quietly agrees with itself afterwards is worth less
 than one that shows the turn.
+
+## 0f. Your Walmart store number — OPEN, blocking Phase 5's close (2026-08-10)
+
+**What I need:** the store number for the Walmart you actually shop, set as
+`WALMART_STORE_ID` in `/home/dan/.config/boty/env` (the mode-600 `EnvironmentFile`
+the unit already loads). Then a service restart.
+
+**Why I cannot get it myself, and did not try.** Two independent reasons, and either
+alone settles it:
+
+1. **The standing rule.** bot-y never guesses where the user lives. Deriving a store
+   from a postal code was one of the two alternatives you explicitly rejected on
+   2026-08-10 when you decided store pinning is required config with no default.
+2. **It isn't reachable anyway.** Walmart is challenge-blocked at HTTP 200 on this
+   host, and has been since 2026-08-06.
+
+There is a third path I deliberately did not take: commit `95f84a6` — the
+pre-redaction Walmart fixture capture — still carries a real three-digit store
+number in public history. Reading it out would have technically answered the
+question. Doing so would also have been the exact leak §0e exists to close, so
+the number in this repo's history is not a source I will use.
+
+**Do not paste the number to me.** It is a geolocator that resolves to one street
+address, and anything you type at me lands in a transcript. Set it in a shell:
+
+```
+umask 077
+read -s -p 'WALMART_STORE_ID: ' v && printf 'WALMART_STORE_ID=%s\n' "$v" >> /home/dan/.config/boty/env && unset v
+sudo systemctl restart boty
+```
+
+Then just tell me it's done — I confirm through `status.json` using derived booleans
+(`store_present` / `pin_present` / `match`), never by printing the value.
+
+**What is already true without you.** Waves 1–3 are shipped and green — 642 tests,
+14/14 mutations, `make verify-offline` exit 0. Both Walmart watches currently read
+UNKNOWN with a health message saying the pin is unset, **which is criterion 2 working
+as designed**, not a fault. Nothing is broken while this sits open.
+
+**If you'd rather not.** Two other answers are fine and both are recorded rather than
+worked around:
+
+- **restart-anyway** — deploy the new code unpinned. Walmart stays UNKNOWN-for-want-of-a-pin
+  and that gets recorded as the measured state.
+- **defer** — no restart at all. The service keeps running 2026-08-04 code; the phase
+  closes with every live row marked NOT OBTAINED, with the date and the reason.
+
+Criteria 1 and 2 rest on offline evidence either way. No criterion gets reworded to
+make a missing live confirmation look met.
 
 ## 0e. Public history carried host geolocation and this host's public IP — ANSWERED 2026-08-03, EXECUTED 2026-08-04
 
