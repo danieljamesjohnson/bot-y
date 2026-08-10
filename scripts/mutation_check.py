@@ -518,6 +518,55 @@ MUTATIONS = (
         replace="return check_amazon(watch, first_party_only=cfg.first_party_only)",
         breaks="a target watch is routed to Amazon's adapter, so Target is read at rung 1 against a README row that says 3 — and `check_target_browser` is UNTOUCHED and still says `Rung.BROWSER`, so a gate that read only boty/retailers.py stays green while the transport claim is false",
     ),
+    # ------------------------------------------------------------------
+    # M25 and M26 are THE FIRST MUTATIONS IN THIS REPOSITORY THAT TARGET
+    # SOMETHING OTHER THAN A FILE UNDER boty/, and that deserves saying out
+    # loud rather than being noticed later in a diff.
+    #
+    # This module's docstring says the harness breaks THE CODE on purpose, and
+    # M1-M20 all honour that: every one of them mutates a `.py` file under
+    # boty/. REQ-20's subject is not code. It is a NUMBER this project states
+    # about itself in four places — pyproject.toml, README.md's publication
+    # instruction, CHANGELOG.md's top released heading and the project's own
+    # milestone — where nothing offline read any of the four and two of them had
+    # already diverged. A mutation that broke a function could not express that;
+    # the thing to break is a statement.
+    #
+    # BOTH TARGETS ARE IN SANDBOX_CONTENTS ALREADY, for reasons argued in that
+    # constant's own comment block, so neither is here to make a mutation
+    # possible — which is the trap Phase 4's rule for that tuple exists to close
+    # ("an entry lands in the same commit as the file it names, and is proven
+    # load-bearing by removal"). CHANGELOG.md and .planning/ are NOT in it and
+    # are NOT added: the two version rules that read them skip here, and the
+    # pyproject <-> README rule is precisely the one that does not.
+    #
+    # WHICH TEST IS EXPECTED TO CATCH EACH: the always-on binding
+    # tests/test_packaging_metadata.test_the_readme_publication_instruction_names_
+    # the_declared_version, which is the ONLY version rule whose two files both
+    # reach this sandbox. If either of these ever SURVIVES, the first thing to
+    # check is whether that test acquired a skip decorator — a surviving
+    # mutation here means criterion 5 is being met by a skip line.
+    #
+    # BOTH ANCHORS WERE COUNTED BEFORE THEY WERE WRITTEN, because
+    # `apply_mutation` replaces the FIRST occurrence and a non-unique anchor
+    # mutates a line the `breaks=` sentence is not describing — M19's recorded
+    # trap. Measured on the tree these were registered against:
+    # `grep -o 'version = "0.2.0"' pyproject.toml | wc -l` -> 1, and
+    # `grep -o 'Publication happens from the \`v0.2.0\` tag' README.md | wc -l` -> 1.
+    Mutation(
+        ident="M25",
+        target="pyproject.toml",
+        search='version = "0.2.0"',
+        replace='version = "0.3.0"',
+        breaks="silently changes the version this package would publish under — the wheel filename, its METADATA and what `pip install bot-y==<v>` resolves — while README.md's publication instruction, CHANGELOG.md's top released heading and the project's own milestone all keep stating the old one. Before REQ-20 nothing offline read `[project] version` at all, so this edit was invisible to the entire suite",
+    ),
+    Mutation(
+        ident="M26",
+        target="README.md",
+        search="Publication happens from the `v0.2.0` tag",
+        replace="Publication happens from the `v0.9.0` tag",
+        breaks="the README tells a stranger to install from a tag this package was never built as. It is the other direction of the same binding — M25 moves the declaration away from the records, this moves a record away from the declaration — and one direction alone would be satisfied by a gate that only ever watched pyproject.toml move",
+    ),
 )
 
 
