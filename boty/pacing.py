@@ -102,7 +102,14 @@ MAX_BACKOFF_SECONDS = 6 * 60 * 60
 #: `BACKOFF_FACTOR` and the cap — so a future version that changed either and
 #: then restored an old file under the new units would pin a retailer at a wait
 #: nobody chose. One integer against that is cheap.
-STATE_VERSION = 1
+#:
+#: BUMPED TO 2 on 2026-08-10 (05-REVIEW WR-01): `warned` changed from a list of
+#: names to a mapping of name to the wall clock its paging episode began, so
+#: that `load` can age it the way it already ages the refusal counts. A v1 file
+#: is treated as absent, which costs one repeated notification and one shallow
+#: backoff — the same price the config comment already quotes for deleting the
+#: file, and cheaper than reading a dateless list as if it were dated.
+STATE_VERSION = 2
 
 #: Persisted state older than this is discarded rather than applied. DERIVED
 #: from `MAX_BACKOFF_SECONDS` rather than re-chosen, so the two cannot drift
@@ -179,6 +186,18 @@ class Pacer:
     default_interval: float
     overrides: dict[str, float] = field(default_factory=dict)
     _state: dict[str, _RetailerState] = field(default_factory=dict, repr=False)
+    #: WHEN each paging episode began — retailer to wall clock. Not the paging
+    #: decision, which `cli.watch_cycle` still owns and still passes through:
+    #: this is the same thing `_RetailerState.refused_at` is for the other half
+    #: of the document, a timestamp on the EVIDENCE that exists only to be
+    #: written down, so that a later process can date it and throw it away.
+    #:
+    #: IT HAS TO BE THE FIRST TIME, not the last, and that is the whole reason
+    #: this field exists rather than a `time.time()` inside `save`. `save` runs
+    #: every cycle, so stamping at write time would refresh the record forever
+    #: and the age-out would never fire once — a bound that cannot bind is worse
+    #: than no bound, because it reads like one in the file.
+    _warned_since: dict[str, float] = field(default_factory=dict, repr=False)
     #: Where the backoff survives a restart, or `None` for "do not persist".
     #:
     #: Declared LAST and with a default for the reason `Result.rung` and
@@ -330,10 +349,37 @@ class Pacer:
                 st.refusals = min(refusals, MAX_PERSISTED_REFUSALS)
                 st.refused_at = float(refused_at)
 
+        # THE PAGING MEMORY IS AGED EXACTLY LIKE THE REFUSAL COUNTS ABOVE, and
+        # until 2026-08-10 it was not aged at all: `STATE_MAX_AGE_SECONDS` was
+        # applied to `retailers[*].refused_at` and to nothing else, so `warned`
+        # was restored unconditionally whatever the file's age. Combined with
+        # `cli.watch_cycle`'s `still_unhealthy = ... | (warned - checked)`, an
+        # entry only leaves the set when the retailer is CHECKED and no longer
+        # pageable — which, for a genuinely broken detector, never happens. A
+        # file written months ago carrying one name suppressed that retailer's
+        # health warning indefinitely, from evidence this module's own docstring
+        # calls outlived, and re-wrote it every cycle. The alert this project
+        # exists to send, silenced permanently by a stale runtime artifact.
+        #
+        # Same window, same both-ended bound, same reasoning as the counts: past
+        # the cap the record has outlived what produced it, and a stamp in the
+        # FUTURE is a clock that jumped backwards.
         warned = doc.get("warned")
-        if not isinstance(warned, list):
+        if not isinstance(warned, dict):
             return set()
-        return {w for w in warned if isinstance(w, str)}
+        restored: set[str] = set()
+        for name, stamp in warned.items():
+            if not isinstance(name, str):
+                continue
+            if not isinstance(stamp, (int, float)) or isinstance(stamp, bool):
+                continue
+            if not 0.0 <= now - float(stamp) <= STATE_MAX_AGE_SECONDS:
+                continue
+            # Carried, not re-stamped, so the episode keeps its own age across
+            # this process's whole life and the next restart can still discard it.
+            self._warned_since[name] = float(stamp)
+            restored.add(name)
+        return restored
 
     def save(self, warned: set[str]) -> None:
         """Commit the backoff depth and the paging memory in one write.
@@ -341,8 +387,16 @@ class Pacer:
         Retailers at zero refusals are omitted, so only a retailer currently in
         a backoff appears: one that started answering again drops out, and one
         deleted from the config ages out rather than accumulating forever.
-        `warned` is a sorted list because a set is not JSON and an unsorted one
-        would make every write a spurious diff.
+
+        `warned` is written as a MAPPING of retailer to the wall clock at which
+        its episode began, not as the sorted list it used to be, and the change
+        is the whole of WR-01's fix. The old shape carried no date, so `load`
+        had nothing to age it by; this one is stamped exactly as
+        `retailers[*].refused_at` is, and `load` applies the identical window.
+        Each entry keeps the stamp it already had — `_warned_since.get(name,
+        now)` — because `save` runs every cycle and re-stamping would refresh
+        the record forever. `sort_keys=True` on the dump makes the write stable,
+        which is what the sorted list was buying.
 
         Plain `write_text`, NOT `status.write`'s temp-and-replace, and the
         difference is the reason: `status.json` is atomic because it is served
@@ -377,6 +431,12 @@ class Pacer:
         if self.state_path is None:
             return
         try:
+            now = time.time()
+            # Rebuilt from the caller's set every write, so a retailer that left
+            # `warned` leaves the stamps too and nothing accumulates. `.get`
+            # preserves the episode's ORIGINAL start; only a name that was not
+            # already being tracked is stamped now.
+            self._warned_since = {name: self._warned_since.get(name, now) for name in warned}
             doc = {
                 "version": STATE_VERSION,
                 "retailers": {
@@ -384,7 +444,7 @@ class Pacer:
                     for name, st in self._state.items()
                     if st.refusals
                 },
-                "warned": sorted(warned),
+                "warned": self._warned_since,
             }
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
             self.state_path.write_text(json.dumps(doc, indent=2, sort_keys=True))

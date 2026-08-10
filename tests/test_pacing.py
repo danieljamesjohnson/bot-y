@@ -491,12 +491,19 @@ def test_an_empty_paging_memory_round_trips(tmp_path: Path) -> None:
     assert _pacer(path).load() == set()
 
 
-def _document(refusals: int, age: float, warned: list[str] | None = None) -> str:
+def _document(refusals: int, age: float, warned_age: float | None = None) -> str:
+    """A well-formed document. `warned_age` stamps `amazon` that many seconds ago.
+
+    `warned` is a MAPPING of retailer to the wall clock its paging episode
+    began, not the list it was before 05-REVIEW's WR-01 — a list carries no
+    date, so `load` had nothing to age it by and never did.
+    """
+    warned = {} if warned_age is None else {"amazon": time.time() - warned_age}
     return json.dumps(
         {
             "version": STATE_VERSION,
             "retailers": {"amazon": {"refusals": refusals, "refused_at": time.time() - age}},
-            "warned": warned or [],
+            "warned": warned,
         }
     )
 
@@ -517,6 +524,107 @@ def test_state_older_than_the_backoff_cap_is_discarded(tmp_path: Path) -> None:
         "state older than one full cap-length window was applied — it has "
         "outlived the reasoning that produced it"
     )
+
+
+def test_a_paging_memory_older_than_the_backoff_cap_is_discarded(tmp_path: Path) -> None:
+    """WR-01. The age-out was applied to the refusal counts and to nothing else.
+
+    `warned` was restored unconditionally, whatever the file's age. Combined
+    with `cli.watch_cycle`'s `still_unhealthy = ... | (warned - checked)`, an
+    entry only leaves the set when the retailer is CHECKED and no longer
+    pageable — which for a genuinely broken detector never happens: it stays
+    `pageable`, `fresh` excludes it because it is already in `warned`,
+    `still_unhealthy` re-adds it, and it is re-written every cycle.
+
+    So a `pacer-state.json` written months ago and left on disk suppressed that
+    retailer's health warning INDEFINITELY, from evidence this module's own
+    docstring says "has outlived the reasoning that produced it" — silencing the
+    one alert this project exists to send, and looking exactly like a healthy
+    quiet monitor while it did.
+
+    The sibling of `test_state_older_than_the_backoff_cap_is_discarded`, which
+    is where IN-04 said this belonged.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=1, age=1.0, warned_age=STATE_MAX_AGE_SECONDS + 1))
+
+    assert _pacer(path).load() == set(), (
+        "a paging memory older than one full cap-length window was restored — the "
+        "retailer it names can never be paged about again"
+    )
+
+
+def test_a_paging_memory_younger_than_the_cap_is_restored(tmp_path: Path) -> None:
+    """Bounded on both sides, so the age-out cannot pass by discarding everything.
+
+    Discarding every entry would restore REQ-16's "pushed once per process" from
+    the other end, which is the regression M13 exists to catch.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=1, age=1.0, warned_age=1.0))
+
+    assert _pacer(path).load() == {"amazon"}
+
+
+def test_a_paging_stamp_in_the_future_is_discarded(tmp_path: Path) -> None:
+    """A clock that jumped backwards must not hold the memory forever.
+
+    The same argument the refusal counts make: with only an upper bound,
+    `now - stamp` goes negative and stays inside it for as long as the skew
+    lasts, which is no expiry at all.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=1, age=1.0, warned_age=-STATE_MAX_AGE_SECONDS))
+
+    assert _pacer(path).load() == set()
+
+
+def test_saving_does_not_refresh_an_episodes_stamp(tmp_path: Path) -> None:
+    """The property that lets the age-out ever fire, asserted directly.
+
+    `save` runs once per cycle. If it stamped `time.time()` each write, the
+    record would be refreshed roughly every five minutes forever and the window
+    above could never close — a bound that cannot bind, which is worse than no
+    bound because the file reads as though it were dated.
+    """
+    path = tmp_path / "pacer-state.json"
+    began = time.time() - 600.0
+    path.write_text(
+        json.dumps(
+            {
+                "version": STATE_VERSION,
+                "retailers": {},
+                "warned": {"amazon": began},
+            }
+        )
+    )
+
+    p = _pacer(path)
+    assert p.load() == {"amazon"}
+    p.save({"amazon"})
+    p.save({"amazon"})
+
+    written = json.loads(path.read_text())["warned"]["amazon"]
+    assert written == pytest.approx(began), (
+        "the episode was re-stamped on write, so it can never age out"
+    )
+
+
+def test_a_retailer_that_leaves_the_paging_memory_leaves_the_stamps_too(
+    tmp_path: Path,
+) -> None:
+    """The other half of self-cleaning: the document must not accumulate.
+
+    `save`'s docstring already claimed the retailers half self-cleans. The
+    paging half did not — a retailer deleted from the config stayed in `warned`
+    forever and nothing bounded the list's length.
+    """
+    path = tmp_path / "pacer-state.json"
+    p = _pacer(path)
+    p.save({"amazon", "gamestop"})
+    p.save({"amazon"})
+
+    assert set(json.loads(path.read_text())["warned"]) == {"amazon"}
 
 
 def test_state_younger_than_the_cap_is_restored(tmp_path: Path) -> None:

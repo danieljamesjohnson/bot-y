@@ -358,10 +358,15 @@ MUTATIONS = (
         replace="                if False:",
         breaks="stale state is applied regardless of its stamp — a file written before a machine was off for a week pins a retailer at the cap on startup, which is the exact objection the withdrawn docstring paragraph raised",
     ),
+    # Re-anchored 2026-08-10 (05-REVIEW WR-01): the expression producing the
+    # restored memory used to be a one-line set comprehension over a list. It is
+    # now a loop with an age filter, so the statement that DOES THE WORK is the
+    # return of what the loop accumulated. Same claim, same regression, new line
+    # — M2's lesson, applied deliberately rather than discovered.
     Mutation(
         ident="M13",
         target="boty/pacing.py",
-        search="        return {w for w in warned if isinstance(w, str)}",
+        search="        return restored",
         replace="        return set()",
         breaks="the paging memory does not cross the restart while the backoff itself keeps working perfectly — REQ-16's 'pushed once' silently reverts to 'pushed once per process', and the only symptom is a duplicate notification that reads exactly like a legitimate one",
     ),
@@ -393,6 +398,22 @@ MUTATIONS = (
         search="    return c.store is not None and c.store != c.watch.store_id",
         replace="    return c.store != c.watch.store_id",
         breaks="a fetch that produced NO PAGE — a timeout, a DNS failure, an HTTP 500, or a payload that stopped naming a store — is reported as a store-pin config gap, so the alert names a cause nobody measured and points the operator at a `store_id` that is set correctly. REQ-15's own defect, rebuilt inside the arm added to serve REQ-15",
+    ),
+    # M16 is M12's counterpart for the OTHER half of the same document, and the
+    # asymmetry it pins is the whole of WR-01: before 05-REVIEW,
+    # STATE_MAX_AGE_SECONDS was applied to `retailers[*].refused_at` and to
+    # nothing else, so a 90-day-old file correctly discarded a refusal count of
+    # 9 and restored `warned` regardless. Measured against the tree at 1328c0e.
+    # It gets its own mutation for M7's reason: M12 dying proves the counts are
+    # aged, and only this proves the memory is — a tree that aged one and not
+    # the other passes M12 and M13 together while silencing a broken detector
+    # forever.
+    Mutation(
+        ident="M16",
+        target="boty/pacing.py",
+        search="            if not 0.0 <= now - float(stamp) <= STATE_MAX_AGE_SECONDS:",
+        replace="            if False:",
+        breaks="a paging memory of any age is restored, so a `pacer-state.json` left on disk from months ago permanently suppresses the health warning for the retailer it names — the alert this project exists to send, silenced by a stale runtime artifact, with a green dashboard over it",
     ),
 )
 
