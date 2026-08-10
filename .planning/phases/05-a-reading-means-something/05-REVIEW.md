@@ -800,3 +800,36 @@ Stated so the fixer does not re-litigate ground that holds:
 _Reviewed: 2026-08-10T13:05:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
+
+---
+
+## Post-fix note: the "operator's pinned store" escalation was a FALSE ALARM
+
+**Recorded 2026-08-10 by the orchestrator, because an unfounded leak claim left
+standing is the same defect this milestone exists to close — one level up.**
+
+The code-fixer escalated that this file had carried *"the operator's pinned
+store"* into a tracked public file, and asked whether a history rewrite was
+needed (the §0e class). It measured three things and none of them holds:
+
+1. **There is no operator pinned store.** `WALMART_STORE_ID` is not set in
+   `/home/dan/.config/boty/env` — Dan answered `defer` to Phase 5's checkpoint
+   on 2026-08-10 and never set it. No such value exists to leak.
+2. **`4521` was synthetic**, invented by the code-reviewer to reproduce CR-03.
+   It is not this host's store and never was.
+3. **Its hits in older commits are coincidental substrings.** `95f84a6`,
+   `74ec742` and `2ee51d6` match inside SVG path coordinates — `3.34521` — not
+   store numbers.
+
+**No history rewrite is needed and none was done.** `QUESTIONS.md` § 0e is
+unaffected and stays open on its own merits.
+
+**The redaction that was applied is still correct**, and is kept: the identity
+gate cannot distinguish a synthetic store number from a real one, and refusing
+both is the fail-closed behaviour this project wants. The gate doing its job on
+a made-up value is evidence it works, not evidence of a leak.
+
+**Still open, and genuinely worth doing** — the fixer's second point stands:
+`scripts/identity_check.py` has no rule for the `store '<n>'` *prose* carrier,
+which is the shape CR-03 actually leaked through. Adding one needs a sweep of
+the tracked tree first, so it was recorded rather than switched on blind.
