@@ -403,6 +403,212 @@ def test_the_store_is_read_from_the_same_node_as_the_offer(walmart_milk: str) ->
 
 
 # --------------------------------------------------------------------------
+# Offer.shipping — what each retailer actually publishes about shipping cost
+# --------------------------------------------------------------------------
+#
+# ONE SECTION AND NOT FOUR, unlike the per-retailer blocks above, because the
+# thing being pinned here is a COMPARISON between retailers rather than one
+# reader's behaviour. Three readers fill this field, and what makes the field
+# safe is that the same key means completely different things on two of them:
+# GameStop publishes `shippingDetails` as an object carrying a number, Nintendo
+# publishes it as an English sentence. Splitting these tests apart would put
+# those two facts in two places and let a later edit satisfy one while breaking
+# the other.
+#
+# WHAT `None` MEANS HERE, and it is the whole of REQ-17: nobody read a shipping
+# cost. It is never `0.0`. `0.0` is a positive claim that this offer ships free;
+# `None` is the absence of any claim at all, and `Result.alertable` refuses to
+# authorise an alert on it rather than guessing.
+#
+# Every assertion below runs against a SHIPPED CAPTURE. Nothing here is
+# synthetic except the type-discipline test at the end, which is testing the
+# reader's refusals rather than a retailer's payload.
+
+
+def test_gamestop_publishes_a_shipping_cost_and_it_is_read(gamestop_goplusplus: str) -> None:
+    """$6.99, off `OfferShippingDetails` — the only real shipping number in the corpus.
+
+    GameStop's offer publishes
+    `shippingDetails.shippingRate.value == "6.99"` as a schema.org
+    `MonetaryAmount`, which is a structured claim rather than presentation
+    text. With the $54.99 item price this is the one delivered total in this
+    repository that can be computed from captured data: $61.98.
+    """
+    offers = ldjson_offers(gamestop_goplusplus)
+    assert offers is not None
+    assert offers[0].shipping == 6.99
+
+
+def test_nintendos_prose_shipping_yields_no_number(nintendo_goplusplus: str) -> None:
+    """The most important test here: it pins a WRONG VERDICT out of existence.
+
+    Nintendo publishes `shippingDetails` under the identical key GameStop
+    publishes an object under, and its value is an English sentence:
+
+        "Standard UPS Ground Shipping: $6.99, 3-9 business days.
+         Free UPS Ground Shipping on orders over $50."
+
+    The item is $54.99, which is over $50, so **the true shipping cost is
+    zero**. A regex over that sentence pulls out `$6.99` and produces a
+    delivered total of $61.98 for an item that ships free — an inflated total
+    that can suppress a genuine MSRP restock at the one retailer that makes the
+    product, lists it at MSRP to the cent, and has no marketplace attached.
+
+    That is not a missed feature, it is a wrong answer, and it is the same
+    class as 05-01's rejected `"0"` sentinel: reading presentation text as a
+    fact. No shipping figure is parsed out of prose anywhere in `boty.parse`,
+    and this test is what keeps it that way. `None` — "nobody read a shipping
+    cost" — is the honest answer, and it costs Nintendo its alertability rather
+    than costing it a correct verdict.
+    """
+    offers = ldjson_offers(nintendo_goplusplus)
+    assert offers is not None
+    assert offers[0].shipping is None
+
+
+def test_walmart_resolves_shipping_at_zero_when_both_signals_agree(
+    walmart_goplusplus: str,
+) -> None:
+    """Two independent fields, both present and agreeing, so `0.0` is a claim.
+
+    On this capture `fulfillmentOptions[type=SHIPPING].speedDetails
+    .freeFulfillment` is `True` and
+    `priceInfo.additionalFees.shippingAndImportFee.price` is `0`. Neither alone
+    resolves anything — one field agreeing with itself is one field — but a
+    fulfilment record and a fee record saying the same thing is a measurement.
+    """
+    offers = nextdata_offers(walmart_goplusplus)
+    assert offers is not None
+    assert offers[0].shipping == 0.0
+
+
+def test_walmart_stays_unresolved_when_the_two_signals_do_not_agree(
+    walmart_milk: str,
+) -> None:
+    """The milk control resolves nothing, and that is the correct answer.
+
+    Its `shippingAndImportFee.price` is `0` like the other capture's, but its
+    SHIPPING option carries `speedDetails: null` — so there is no
+    `freeFulfillment` to agree with it, and one signal is not two. Unresolved
+    is the fail-safe direction and it costs nothing: milk is a control and
+    carries no `max_price`, so no verdict here can change.
+
+    THE `7.95` IN THIS SAME PAYLOAD IS DELIBERATELY NOT READ.
+    `fulfillmentOptions[type=DELIVERY].speedDetails.fulfillmentPrice` on this
+    capture is `{"price": 7.95, "priceString": None}` — a from-store DELIVERY
+    fee on a pickup/delivery item, not a shipping charge. Reading it as
+    shipping would invent a $7.95 shipping cost out of a real field, which is
+    the same error as reading Nintendo's sentence, arrived at from the other
+    direction. The same key is `None` on the other capture and a dict here, so
+    anything that ever does read it must type-check first.
+    """
+    offers = nextdata_offers(walmart_milk)
+    assert offers is not None
+    assert offers[0].shipping is None
+
+
+def test_amazons_button_carries_no_shipping_cost(amazon_goplusplus: str) -> None:
+    """`add_to_cart_offers` reads a button, an availability line and a seller name.
+
+    None of those is a shipping cost, so this reader claims nothing about one —
+    permanently, and by construction rather than by oversight.
+    """
+    offers = add_to_cart_offers(amazon_goplusplus)
+    assert offers is not None
+    assert offers[0].shipping is None
+
+
+def test_no_capture_in_the_corpus_yields_a_negative_or_non_float_shipping(
+    gamestop_goplusplus: str,
+    gamestop_ps5: str,
+    walmart_goplusplus: str,
+    walmart_milk: str,
+    nintendo_goplusplus: str,
+    nintendo_hdmi: str,
+    bestbuy_pikachu: str,
+    bestbuy_unresolved_sku: str,
+    target_dust_cloths: str,
+    amazon_aa_batteries: str,
+    amazon_goplusplus: str,
+) -> None:
+    """T-06-01, swept across every shipped page rather than argued about.
+
+    A negative shipping cost would pull a delivered total BELOW the item price
+    and turn REQ-17's new defence into a new hole, and a non-float would reach
+    the arithmetic as whatever the retailer sent. `Result.delivered_total`
+    refuses both, but the readers are the first place either could enter, so
+    this asserts that nothing captured produces one today.
+    """
+    pages = (
+        gamestop_goplusplus,
+        gamestop_ps5,
+        walmart_goplusplus,
+        walmart_milk,
+        nintendo_goplusplus,
+        nintendo_hdmi,
+        bestbuy_pikachu,
+        bestbuy_unresolved_sku,
+        target_dust_cloths,
+        amazon_aa_batteries,
+        amazon_goplusplus,
+    )
+    for page in pages:
+        for reader in (ldjson_offers, nextdata_offers, add_to_cart_offers):
+            for offer in reader(page) or []:
+                if offer.shipping is None:
+                    continue
+                assert isinstance(offer.shipping, float), (
+                    f"{reader.__name__} produced a non-float shipping: {offer.shipping!r}"
+                )
+                assert offer.shipping >= 0.0, (
+                    f"{reader.__name__} produced a negative shipping: {offer.shipping!r}"
+                )
+
+
+def test_every_shape_shipping_details_could_take_that_is_not_a_rate_is_none() -> None:
+    """Type-checked BEFORE it digs, and none of these raises.
+
+    The `str` case is Nintendo's, pinned above against the real page and
+    restated here as a type rule. The others are the shapes schema.org permits
+    that no capture in this repository shows:
+
+    - a **list** of `OfferShippingDetails`, which schema.org allows and which
+      would make "which destination region is this?" a guess;
+    - a bare **number**, which is not the shape the standard describes;
+    - a dict whose `shippingRate` is a string rather than a `MonetaryAmount`.
+
+    Each is `None` rather than a best effort, because a shipping cost that was
+    guessed is worth less than no shipping cost at all: `None` refuses the
+    alert, and a guess authorises one.
+    """
+    shapes: tuple[object, ...] = (
+        "Free UPS Ground Shipping on orders over $50.",
+        [{"@type": "OfferShippingDetails", "shippingRate": {"value": "6.99"}}],
+        6.99,
+        0,
+        None,
+        {"@type": "OfferShippingDetails", "shippingRate": "6.99"},
+        {"@type": "OfferShippingDetails", "shippingRate": {"value": "free"}},
+        {"@type": "OfferShippingDetails"},
+    )
+    for shape in shapes:
+        page = _ldjson_page(
+            {
+                "@type": "Product",
+                "name": "thing",
+                "offers": [{"price": "54.99", "availability": "InStock", "shippingDetails": shape}],
+            }
+        )
+        offers = ldjson_offers(page)
+        assert offers is not None and len(offers) == 1
+        assert offers[0].shipping is None, f"{shape!r} produced a shipping cost"
+        # The offer itself still reads: a shipping cost nobody could read must
+        # not cost us the price and the availability we CAN read.
+        assert offers[0].price == MSRP
+        assert offers[0].available is True
+
+
+# --------------------------------------------------------------------------
 # Cross-extractor
 # --------------------------------------------------------------------------
 
