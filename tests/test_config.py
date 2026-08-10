@@ -202,6 +202,45 @@ def test_the_documented_interval_is_accepted(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------
+# where the runtime files land
+# --------------------------------------------------------------------------
+
+
+def test_the_pacer_state_path_has_a_default(tmp_path: Path) -> None:
+    """A setting nobody has to set. The daemon must persist its backoff anyway.
+
+    Every deployment that predates this key has no line for it, and a monitor
+    that silently stopped remembering its backoff because a setting was absent
+    would be the in-memory regression rebuilt as a config default.
+    """
+    cfg = Config.load(_write(tmp_path, _WATCH))
+
+    assert cfg.pacer_state_path == Path("pacer-state.json")
+
+
+def test_the_pacer_state_path_can_be_set(tmp_path: Path) -> None:
+    cfg = Config.load(
+        _write(tmp_path, f"settings:\n  pacer_state_path: {tmp_path / 'p.json'}\n" + _WATCH)
+    )
+
+    assert cfg.pacer_state_path == tmp_path / "p.json"
+
+
+def test_the_state_paths_are_three_separate_files(tmp_path: Path) -> None:
+    """`state.json` was rejected as a home for this, and the reason is structural.
+
+    Its whole document is `State.seen` (`monitor.py` parses the entire file as
+    that map), so a second top-level key there is a schema change with a
+    migration behind it — and `run_once` saves it BEFORE delivery is attempted,
+    which is exactly the wrong moment to commit a paging memory whose only job
+    is to be rolled back when a delivery fails.
+    """
+    cfg = Config.load(_write(tmp_path, _WATCH))
+
+    assert len({cfg.state_path, cfg.status_path, cfg.pacer_state_path}) == 3
+
+
+# --------------------------------------------------------------------------
 # an unresolved ${VAR} must be visible
 # --------------------------------------------------------------------------
 
@@ -270,6 +309,25 @@ def test_the_shipped_config_still_loads() -> None:
     assert all(
         w.store_id is None or (isinstance(w.store_id, str) and w.store_id)
         for w in cfg.watches
+    )
+
+
+def test_the_default_pacer_state_file_is_gitignored() -> None:
+    """A new basename inherits nothing from the `state.json` line (T-05-16).
+
+    `.gitignore` matches basenames literally, so `state.json` does not cover
+    `pacer-state.json`: without its own line the first `boty watch` on a
+    developer's machine offers the file for commit. Not a leak — it holds
+    retailer names already public in this same config and integers — but an
+    untracked runtime artifact sitting in `git status` is how an unrelated
+    change gets committed by accident beside it.
+    """
+    root = Path(__file__).resolve().parent.parent
+    ignored = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    default = Config.load(root / "config" / "products.yaml").pacer_state_path
+
+    assert default.name in [line.strip() for line in ignored], (
+        f"{default.name} has no .gitignore line of its own"
     )
 
 

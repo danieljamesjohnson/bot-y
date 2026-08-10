@@ -20,6 +20,7 @@ cycle *after* something went wrong.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 
@@ -42,6 +43,17 @@ def cfg(tmp_path: Path) -> Config:
         interval_seconds=300,
         state_path=tmp_path / "state.json",
         status_path=tmp_path / "status.json",
+        # Not tidiness. `pacer_state_path` defaults to a REPO-RELATIVE
+        # `pacer-state.json`, so without this line every `watch_loop` test in
+        # this file writes one into the process's working directory — the
+        # repository root under `make verify-offline`, and the sandbox root
+        # under `scripts/mutation_check.py`, where the sandboxes are built after
+        # `git add -A` has already run. `_check_config` below makes the same
+        # argument about `status_path` clobbering the deployed dashboard, and
+        # `mutation_check.py`'s `_IGNORE` comment makes it again about a
+        # nondeterministic runtime artifact inside a harness whose entire claim
+        # is reproducibility.
+        pacer_state_path=tmp_path / "pacer-state.json",
     )
 
 
@@ -308,12 +320,17 @@ def _check_config(tmp_path: Path) -> Path:
     `status_path` matters: without it `boty check` would write over the real
     `served/boty/status.json` that the deployed dashboard serves, so running
     the test suite would clobber the live monitor's published state.
+
+    `pacer_state_path` is here even though `boty check` builds no pacer and so
+    writes no such file. A defence that depends on a code path staying absent is
+    a defence with a countdown on it.
     """
     config = tmp_path / "products.yaml"
     config.write_text(
         "settings:\n"
         f"  state_path: {tmp_path / 'state.json'}\n"
         f"  status_path: {tmp_path / 'status.json'}\n"
+        f"  pacer_state_path: {tmp_path / 'pacer-state.json'}\n"
         "watches:\n"
         "  - name: goplusplus\n"
         "    retailer: gamestop\n"
@@ -443,3 +460,203 @@ def test_capture_fixture_still_needs_no_config_file(
 
     assert cli.main(["capture-fixture", "gamestop", "goplusplus", "https://x/1"]) == 7
     assert capsys.readouterr().err == ""
+
+
+# --------------------------------------------------------------------------
+# REQ-16 across a RESTART: recorded not pushed, and pushed once — not once
+# per process
+#
+# A restart is modelled as two `watch_loop` calls sharing one
+# `pacer_state_path`, and that is a faithful model rather than a convenience:
+# `watch_loop` constructs its own `Pacer`, its own `warned` and its own
+# `scheduled_now`, so a second call is a second process in every respect these
+# criteria are about. Only the file crosses between them.
+#
+# THE CYCLE COUNTS ARE MEASURED, NOT GUESSED. The loop sleeps
+# `interval_seconds * uniform(0.85, 1.15)` and the backoff doubles, so a
+# refusal is only RECORDED on a cycle where the retailer is due. Over 300 seeds:
+# 10 cycles yields exactly 3 refusals, the fifth refusal lands at cycle 30-32
+# and the sixth at 61-65. Hence 10 for "below the cap" and 40 for "past it",
+# with the resulting count asserted off the file rather than assumed.
+# --------------------------------------------------------------------------
+
+CONTROL = Watch(name="ctl", retailer="gamestop", target="https://x/2", control=True)
+
+
+@pytest.fixture
+def restart_cfg(tmp_path: Path) -> Config:
+    """A config whose watch is a CONTROL, which the `cfg` fixture's is not.
+
+    Without one `assess_health` reports gamestop unhealthy for *no control watch
+    configured*, `Health.refused` is never set, and every assertion below would
+    be testing the wrong arm — looking right and proving nothing.
+    """
+    return Config(
+        watches=[CONTROL],
+        notify_urls=["tgram://token/chat"],
+        interval_seconds=300,
+        state_path=tmp_path / "state.json",
+        status_path=tmp_path / "status.json",
+        pacer_state_path=tmp_path / "pacer-state.json",
+    )
+
+
+def _refuses(watch: Watch) -> Result:
+    """The shape `tests/test_pacing.py` already uses for a wall."""
+    return Result(watch, Availability.UNKNOWN, detail="blocked: challenge page", refused=True)
+
+
+def _run(cfg: Config, cycles: int, checker=_refuses) -> None:
+    """One process: a fresh State, a fresh Pacer, a fresh `warned`."""
+    cli.watch_loop(cfg, checker, State.load(cfg.state_path), cycles=cycles, sleep=lambda s: None)
+
+
+def _persisted(cfg: Config) -> dict:
+    return json.loads(cfg.pacer_state_path.read_text())
+
+
+def _refusals(cfg: Config) -> int:
+    return _persisted(cfg)["retailers"]["gamestop"]["refusals"]
+
+
+def test_a_refusal_the_backoff_is_handling_is_recorded_not_pushed_across_a_restart(
+    restart_cfg: Config, sent: dict[str, list], caplog: pytest.LogCaptureFixture
+) -> None:
+    """REQ-16 clause 1, across the restart.
+
+    "Recorded, not pushed" is a claim about a record EXISTING, so both halves
+    are asserted: the log line saying why we are not paging, and the count on
+    disk. Asserting only the absence of a push would pass for a loop that had
+    silently stopped noticing the refusals at all.
+    """
+    caplog.set_level(logging.INFO, logger="boty.cli")
+
+    _run(restart_cfg, cycles=10)
+    assert _refusals(restart_cfg) == 3, "10 cycles is measured to yield 3 refusals"
+
+    _run(restart_cfg, cycles=1)
+
+    assert _refusals(restart_cfg) == 4, (
+        "the second process started counting from one — the refusal it recorded "
+        "was its first rather than the run's fourth"
+    )
+    assert sent["health"] == [], (
+        "a refusal the backoff is still handling was pushed. Below the cap, "
+        "backing off IS the whole response"
+    )
+    assert "not paging" in caplog.text, "the refusal was not recorded anywhere a human can see"
+
+
+def test_a_refusal_past_the_cap_is_pushed_once_not_once_per_process(
+    restart_cfg: Config, sent: dict[str, list]
+) -> None:
+    """REQ-16's headline clause, and the reason this plan exists.
+
+    Process 1 climbs past `REFUSALS_BEFORE_PAGING` and pages. Process 2 starts
+    with a fresh `warned` by construction — `watch_loop` builds its own — and
+    must NOT page again, because both the refusal count and the paging memory
+    came back off disk. Before this, "pushed once" meant "pushed once per
+    process", and under a systemd unit with `Restart=` semantics that is not a
+    rare event.
+    """
+    _run(restart_cfg, cycles=40)
+    assert _refusals(restart_cfg) >= cli.REFUSALS_BEFORE_PAGING, "process 1 passed the cap"
+    assert sent["health"] == [["gamestop"]], "process 1 pages exactly once"
+
+    _run(restart_cfg, cycles=40)
+
+    assert sent["health"] == [["gamestop"]], (
+        "the retailer was paged again after the restart. REQ-16 says a refusal "
+        "that outlasts the cap is pushed ONCE, and this is how that quietly "
+        "became once per process"
+    )
+
+
+def test_the_same_scenario_pushes_twice_when_the_state_file_is_deleted(
+    restart_cfg: Config, sent: dict[str, list]
+) -> None:
+    """The permanent negative control for the test above, and it does not decay.
+
+    Without it, that test passes for a tree where nothing was ever persisted and
+    nothing was ever pushed twice for some unrelated reason. Delete the one
+    thing that crosses between the processes and the second page comes back —
+    so if persistence ever stops working the test above goes red, and if that
+    test ever stops testing persistence this one does.
+    """
+    _run(restart_cfg, cycles=40)
+    assert sent["health"] == [["gamestop"]]
+
+    restart_cfg.pacer_state_path.unlink()
+    _run(restart_cfg, cycles=40)
+
+    assert sent["health"] == [["gamestop"], ["gamestop"]], (
+        "deleting the state file changed nothing, so the single push in the "
+        "test above was not evidence of persistence"
+    )
+
+
+def test_the_backoff_comes_back_deep_rather_than_shallow(
+    restart_cfg: Config, sent: dict[str, list]
+) -> None:
+    """The politeness half, which no verdict-level test can see.
+
+    Read off the persisted document rather than inferred from how many cycles
+    were skipped, so the assertion names the quantity that actually matters: the
+    first refusal after a restart must multiply from the restored depth, not
+    from one.
+    """
+    _run(restart_cfg, cycles=40)
+    before = _refusals(restart_cfg)
+
+    _run(restart_cfg, cycles=1)
+
+    assert _refusals(restart_cfg) == before + 1, (
+        f"after the restart the count is {_refusals(restart_cfg)}, not {before + 1} — "
+        f"the backoff climbed again from the bottom against a retailer that has "
+        f"refused us {before} times in a row"
+    )
+    # `due_at` is deliberately NOT restored, so the withdrawn docstring's
+    # concession survives: the restarted process really did ask once, at full
+    # rate, on its very first cycle. That is what produced the increment above.
+    assert _persisted(restart_cfg)["retailers"]["gamestop"]["refused_at"] > 0
+
+
+def test_a_restored_paging_memory_does_not_silence_a_new_breakage(
+    restart_cfg: Config, sent: dict[str, list]
+) -> None:
+    """REQ-16 clause 3 across the restart: a wrong verdict still pages immediately.
+
+    The restore has to be checked for over-reach as well as under-reach. A
+    `load` that returned every retailer it had ever heard of would pass the
+    pushed-once test above and silence the alarm this project exists to raise —
+    there is no cap for a breakage to outlast, so it pages on the first cycle it
+    appears in.
+    """
+    _run(restart_cfg, cycles=10)
+    assert sent["health"] == [], "refusals below the cap paged nobody, so `warned` is empty"
+
+    def _broken(watch: Watch) -> Result:
+        return Result(watch, Availability.UNKNOWN, detail="no structured stock data found")
+
+    _run(restart_cfg, cycles=1, checker=_broken)
+
+    assert sent["health"] == [["gamestop"]], (
+        "a control that stopped reading IN_STOCK — not a refusal — was not "
+        "pushed on the first cycle of the new process"
+    )
+
+
+def test_boty_check_writes_no_pacer_state_at_all(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`check` is one pass with no schedule, so it builds no pacer to persist.
+
+    Pinned rather than assumed: `_check_config` points the path at `tmp_path`
+    precisely so this test can tell "nothing was written" from "something was
+    written somewhere else".
+    """
+    _offline(monkeypatch)
+
+    assert cli.main(["check", "-c", str(_check_config(tmp_path))]) == 0
+
+    assert not (tmp_path / "pacer-state.json").exists()
