@@ -1255,6 +1255,184 @@ def test_a_readme_that_stops_documenting_a_ci_entry_point_reports_nothing() -> N
 
 
 # --------------------------------------------------------------------------
+# A THIRD workflow arriving in the directory — the gate watched going red
+# --------------------------------------------------------------------------
+#
+# Every corruption below is DERIVED from `NONCOMPLIANT_WORKFLOW` or from the
+# real files, never hand-typed a second time, for the reason `_corrupt` exists:
+# a red-watch whose subject has drifted from the thing it claims to watch is
+# green about nothing.
+#
+# `_flattening` returns TWO findings for a `|| true` on a `make` line — an
+# or-fallback and a pipe, because `||` contains `|`. Measured, correct, and the
+# reason the exit-code assertions below match substrings and prefixes rather
+# than whole lists.
+
+
+def _corrupt_probe(old: str, new: str) -> str:
+    """`NONCOMPLIANT_WORKFLOW` with one exact substitution applied.
+
+    Third of this file's `_corrupt` family, and it fails loudly on a missing or
+    ambiguous anchor for the same reason the other two do.
+    """
+    count = NONCOMPLIANT_WORKFLOW.count(old)
+    assert count == 1, f"expected exactly one {old!r} in NONCOMPLIANT_WORKFLOW, found {count}"
+    return NONCOMPLIANT_WORKFLOW.replace(old, new)
+
+
+def test_a_non_compliant_workflow_added_to_this_directory_is_reported_by_every_rule() -> None:
+    """CRITERION 3, STATED AS A TEST. "A workflow file added under
+    `.github/workflows/` is covered by the pin, exit-code, timeout and runner
+    rules."
+
+    Watches the direction that was measured FAILING on 2026-08-10: the identical
+    text, in the identical directory, left `pytest tests/` at exit 0 with 701
+    tests green. Without this test that is the state the repository returns to
+    the moment somebody re-keys a rule to a filename.
+
+    Each family is asserted to report the file BY NAME and to report the
+    specific violation, so the test proves which rule bit rather than that
+    something somewhere did. The clean side is asserted in the same test: a rule
+    that reported every file would satisfy the first half and mean nothing.
+    """
+    workflows = {**_all_workflow_texts(), RED_WATCH_NAME: NONCOMPLIANT_WORKFLOW}
+    prefix = f"{RED_WATCH_NAME}: "
+    findings = {family: rule(workflows) for family, rule in DIRECTORY_RULES.items()}
+
+    for family, found in findings.items():
+        assert any(f.startswith(prefix) for f in found), (
+            f"the {family} rule reported nothing for {RED_WATCH_NAME}: {found}"
+        )
+
+    assert any(
+        f == f"{prefix}actions/checkout: ref 'v4' is not a 40-character commit SHA"
+        for f in findings["pin"]
+    ), findings["pin"]
+    assert any(f.startswith(prefix) and "or-fallback" in f for f in findings["exit-code"]), (
+        findings["exit-code"]
+    )
+    assert findings["timeout"] == [f"{prefix}sweep: timeout-minutes=None"], findings["timeout"]
+    assert findings["runner"] == [f"{prefix}ubuntu-latest"], findings["runner"]
+
+    for family, found in findings.items():
+        clean = [f for f in found if not f.startswith(prefix)]
+        assert clean == [], f"the {family} rule also reported the shipped workflows: {clean}"
+
+
+def test_every_directory_rule_reports_every_file_rather_than_only_the_first() -> None:
+    """A rule that `return`ed at its first finding passes the test above.
+
+    It would also leave every file after the first uncovered — criterion 3's own
+    defect, moved one loop iteration along, and invisible in a directory that is
+    clean apart from the newest file. So: make EVERY file non-compliant and
+    require each family's findings to name the whole key set.
+    """
+    names = (*_all_workflow_texts(), RED_WATCH_NAME)
+    assert len(names) >= 3, names
+    workflows = dict.fromkeys(names, NONCOMPLIANT_WORKFLOW)
+    for family, rule in DIRECTORY_RULES.items():
+        reported = {finding.split(":", 1)[0] for finding in rule(workflows)}
+        assert reported == set(names), f"{family} named {sorted(reported)}, not {sorted(names)}"
+
+
+def test_the_pin_rule_still_reads_the_raw_view_and_still_wants_the_version_comment() -> None:
+    """The half a comment-stripped wrapper would silently destroy.
+
+    A SHA pin with no trailing `# vX` is a finding, and it can only be a finding
+    on the RAW text — strip the comments first and every pin in the repository
+    looks exactly like this one. If `_directory_unpinned_actions` were
+    "simplified" to read `_code(text)`, the shipped-tree test would go red and
+    this test would go GREEN for the wrong reason; both are needed, which is why
+    this asserts the exact finding rather than merely that something appeared.
+    """
+    pinned = _corrupt_probe("actions/checkout@v4", f"actions/checkout@{'0' * 40}")
+    findings = _directory_unpinned_actions({RED_WATCH_NAME: pinned})
+    assert findings == [
+        f"{RED_WATCH_NAME}: actions/checkout: no trailing comment naming the version behind the SHA"
+    ], findings
+
+
+def test_an_untrusted_action_owner_in_a_new_workflow_is_reported_across_the_directory() -> None:
+    """The `tj-actions` half of the pin rule, on a file that is not `ci.yml`.
+
+    IN-SUITE ONLY, and deliberately: this string is never written to disk. The
+    on-disk red-watch uses `actions/checkout@v4` — a trusted owner at a mutable
+    ref — because typing a plausible third-party publisher into a public
+    repository's real workflow directory, even for the seconds it takes to run
+    pytest, is the shape of the incident this rule exists to prevent. A rule can
+    be watched biting without staging the attack.
+    """
+    vendored = _corrupt_probe("actions/checkout@v4", f"some-vendor/checkout@{'0' * 40}")
+    workflows = {**_all_workflow_texts(), RED_WATCH_NAME: vendored}
+    findings = _directory_unpinned_actions(workflows)
+    assert findings == [
+        f"{RED_WATCH_NAME}: some-vendor/checkout: owner 'some-vendor' is not in the "
+        "trusted-publisher allow-list ['actions', 'pypa']"
+    ], findings
+
+
+def test_a_timeout_outside_the_bound_is_reported_not_only_a_missing_one() -> None:
+    """Missing and absurd are two different violations of the same rule.
+
+    The probe's job has no `timeout-minutes` at all, so the test above would
+    pass against a rule that only checked presence — and a six-hour job would
+    walk through it, which is exactly the GitHub default the bound exists to
+    refuse. The bound was copied verbatim out of the two tests `_bad_timeouts`
+    was extracted from; this is the assertion that it came with them.
+    """
+    slow = _corrupt_probe(
+        "    runs-on: ubuntu-latest\n", "    runs-on: ubuntu-latest\n    timeout-minutes: 360\n"
+    )
+    assert _directory_missing_timeouts({RED_WATCH_NAME: slow}) == [
+        f"{RED_WATCH_NAME}: sweep: timeout-minutes=360"
+    ]
+
+
+def test_a_workflow_this_gate_cannot_parse_raises_rather_than_reporting_it_clean() -> None:
+    """An unreadable file is not a checked file.
+
+    `_jobs({})` is `{}`, so both YAML-reading families would iterate nothing and
+    report nothing for a file PyYAML choked on — a clean verdict on a directory
+    the gate never read, which is the vacuous pass this whole file is written
+    against. The message must name the file, or a contributor is sent to read
+    all of them.
+
+    Four shapes: empty, a bare scalar, a list, and YAML that does not parse.
+    """
+    unreadable = ("", "   \n", "a bare scalar", "- one\n- two\n", "jobs: [unclosed\n")
+    for text in unreadable:
+        for family in ("timeout", "runner"):
+            message: str | None = None
+            try:
+                DIRECTORY_RULES[family]({RED_WATCH_NAME: text})
+            except UnreadableWorkflow as exc:
+                message = str(exc)
+            if message is None:
+                raise AssertionError(
+                    f"the {family} rule reported {text!r} clean instead of raising"
+                )
+            assert RED_WATCH_NAME in message, message
+
+
+def test_the_red_watch_workflow_is_not_in_this_directory() -> None:
+    """The removal of 06-03's on-disk probe, as a gate rather than as a habit.
+
+    `NONCOMPLIANT_WORKFLOW` is written into the real `.github/workflows/` once,
+    to observe this suite going red on it, and removed in a `finally`. This test
+    is what makes that removal permanent: leave the file behind, or add one like
+    it later, and `make verify-offline` fails naming exactly that file instead of
+    the tree quietly acquiring a workflow that violates all four families.
+
+    Do not delete this as noise. It is the other half of the proof mechanism.
+    """
+    present = _all_workflow_texts()
+    assert RED_WATCH_NAME not in present, (
+        f"{RED_WATCH_NAME} is in {WORKFLOWS}. It is a deliberately non-compliant workflow written "
+        "for one measurement and must never survive it — delete it."
+    )
+
+
+# --------------------------------------------------------------------------
 # The boundary between this workflow and the one 04-05 will write
 # --------------------------------------------------------------------------
 
