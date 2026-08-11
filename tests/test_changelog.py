@@ -189,14 +189,85 @@ needs_changelog = pytest.mark.skipif(
 #:
 #:     git show 2ac965f^:CHANGELOG.md | tail -2
 #:
-#: `git diff --stat 2ac965f -- CHANGELOG.md` is empty — the shipped file has not
-#: moved since the fix — so today's `CHANGELOG.md` plus this tail *is*, byte for
-#: byte, the document that shipped. That is what makes the corruption tests below
-#: the incident executed rather than a shape resembling it.
+#: **Corrected 2026-08-11.** This comment used to claim `git diff --stat 2ac965f --
+#: CHANGELOG.md` is empty, and conclude that today's file plus this tail *is*, byte
+#: for byte, the document that shipped. That was true when written and is not now:
+#: `ac8155b` (06-05, the `1.0.0` → `0.2.0` roll) moved the file, and the diff reads
+#: `103 insertions(+), 2 deletions(-)`. The claim was a sentence in a comment with
+#: nothing checking it — this phase's own subject, inside this phase's own
+#: deliverable, found by Phase 6's verifier.
+#:
+#: What is still true is the half that matters, and it now has a gate under it:
+#: **these bytes are `2ac965f^`'s bytes**, pinned by
+#: `test_the_historical_tail_is_the_incidents_own_bytes` below. So the corruption
+#: tests append the real tail to the current file — the incident's bytes executed
+#: against today's document, rather than a shape resembling them.
 HISTORICAL_TAIL = '</content>\n</invoke>\n'
 
 #: The commit that removed it, named beside the bytes so neither travels alone.
 FIX_COMMIT = "2ac965f"
+
+#: The repository itself, needed to ask git what `2ac965f^` actually held. Absent
+#: in the mutation sandbox, which copies no `.git`, so the binding below skips
+#: there on the same `needs_changelog` reasoning.
+needs_git_history = pytest.mark.skipif(
+    not (REPO_ROOT / ".git").exists(),
+    reason=(
+        "no .git here, so this is the mutation sandbox — build_sandbox() copies "
+        "no repository, and git cannot be asked what a commit held. The rules "
+        "themselves are still exercised there against HISTORICAL_TAIL by the "
+        "unconditional tests; what skips is only the provenance binding."
+    ),
+)
+
+
+@needs_git_history
+def test_the_historical_tail_is_the_incidents_own_bytes() -> None:
+    """`HISTORICAL_TAIL` is what `2ac965f` removed — asked, not asserted.
+
+    The constant's own comment claims it was recovered from git rather than
+    retyped, and until 2026-08-11 nothing checked that. A hardcoded literal
+    carrying a provenance claim in a comment is a claim asserted at the producing
+    end with nothing checking it at the consuming one — which is the defect class
+    this whole phase exists to close, sitting inside the module that closes half
+    of it. Phase 6's verifier found it.
+
+    It matters beyond tidiness: every corruption test below is only "the incident
+    executed" rather than "a shape resembling it" *because* these bytes are the
+    incident's. If the constant were edited to something plausible, the gate would
+    still pass and the claim in the docstrings would quietly become false.
+    """
+    import subprocess
+
+    removed = subprocess.run(
+        ["git", "show", f"{FIX_COMMIT}^:CHANGELOG.md"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    kept = subprocess.run(
+        ["git", "show", f"{FIX_COMMIT}:CHANGELOG.md"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+    assert removed.endswith(HISTORICAL_TAIL), (
+        f"HISTORICAL_TAIL is not the tail of {FIX_COMMIT}^:CHANGELOG.md. Either the "
+        f"constant was edited away from the incident's real bytes, or the commit "
+        f"named by FIX_COMMIT is not the one that stripped them. Re-derive with: "
+        f"git show {FIX_COMMIT}^:CHANGELOG.md | tail -2"
+    )
+    assert removed == kept + HISTORICAL_TAIL, (
+        f"{FIX_COMMIT} did not remove exactly HISTORICAL_TAIL and nothing else, so "
+        f"the constant does not describe that commit's change."
+    )
+    assert not kept.endswith(HISTORICAL_TAIL), (
+        f"{FIX_COMMIT} was supposed to strip the markup; the fixed file still ends "
+        f"with it."
+    )
 
 # --------------------------------------------------------------------------
 # The pins
