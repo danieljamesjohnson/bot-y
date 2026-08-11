@@ -2,37 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-# `state advance-plan` wrote `Phase complete — ready for verification` here and
-# `Completed 04-06-PLAN.md — Phase 4 closed` below, both wrong: 06-06 has not run,
-# and Phase 4 closed two phases ago. Corrected by hand, and recorded rather than
-# silently overwritten, because a state file that misstates its own position is
-# the defect this milestone is about.
-status: Executing Phase 6 — 5 of 6 plans complete
+status: Executing Phase 6 — 6 of 7 plans complete (06-07 landed; 06-06 still to run)
 stopped_at: Completed 06-05-PLAN.md — criterion 5 built, red before the roll and green after
-last_updated: "2026-08-10T23:03:51.949Z"
-last_activity: 2026-08-10
+last_updated: "2026-08-11T14:07:46.772Z"
+last_activity: 2026-08-11
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 10
-  completed_plans: 9
-  # percent is PHASE-based (1 of 2 complete), not plan-based, for the reason
-  # this milestone exists: Phase 6 is five plans into six, and a plan-based
-  # figure would move on every commit while the phase criterion it serves is
-  # still unmet. `state update-progress` reported 90% on a plan basis this run
-  # and left this field alone; 50 is the phase figure and is deliberate. The
-  # basis is stated so the next reader does not adopt the wrong one. This
-  # comment has now been stripped by the tool and restored by hand FIVE times.
+  total_plans: 11
+  completed_plans: 10
   percent: 50
-#
-# THE `milestone:` LINE ABOVE IS MACHINE-READ AS OF 06-05 (`30cb977`).
-# `tests/test_packaging_metadata.py` binds it to `pyproject.toml`'s
-# `[project] version`, so changing one without the other turns
-# `make verify-offline` red naming both files. Nothing under `tests/` or
-# `scripts/` had ever read `.planning/` before that commit. The comparison is
-# lenient in exactly one way: a milestone names a MINOR LINE, so `v0.2` agrees
-# with `0.2.0` and would agree with `0.2.7` — but NOT with `0.21.0`, because the
-# components are compared as lists and not as a string prefix.
 ---
 
 # State: bot-y
@@ -47,11 +26,43 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 ## Status
 
 **Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 5 of 6 plans complete
-(06-01 … 06-05, all 2026-08-10). Phase 5 closed 2026-08-10 on 4 of 4 plans and six
+**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 6 of 7 plans complete
+(06-01 … 06-05 on 2026-08-10; **06-07 on 2026-08-11**, an unplanned seventh plan added when
+Dan reversed 06-01's rule). Phase 5 closed 2026-08-10 on 4 of 4 plans and six
 of six criteria MET **against the tree**, with **not one of them confirmed on the deployed daemon**
 **Next command:** `/gsd-execute-phase 6` (next plan: 06-06 — the closing plan; it marks REQ-17
-through REQ-20 by measuring what landed, and **all four are still Pending on purpose**)
+through REQ-20 by measuring what landed, and **all four are still Pending on purpose**).
+**06-06 NEEDS A REPLAN BEFORE IT RUNS** — its blocking checkpoint card asks Dan a question he
+answered on 2026-08-11, and it names the lenient rule as *"a rejection with its reason rather
+than an option"* when he has since chosen a variant of it.
+
+**06-07 REVERSED 06-01, BECAUSE DAN DID, AND THE HOLE REQ-17 NAMES IS DELIBERATELY REOPENED.**
+His words, verbatim, 2026-08-11: *"I think where we don't know just send it. If the user gets
+there and it's 50 dollar shipping that's disappointing but it's worse to feel like you 'missed
+out'."* So where a shipping cost cannot be established the ceiling now measures the **item price**
+and the alert goes out; where it CAN be established the ceiling still measures the delivered total
+and a resolvable total above it is still suppressed — 06-01's main win is intact. **A $54.99
+listing with $45 of unread shipping now pages him, and he will not be told the $45.** The whole
+mitigation is a field: the push reads `price: $54.99   shipping: unknown`, two labelled fields in
+the same shape either way, and **no delivered total is stated in any body** — you cannot add a
+number to `unknown`. `REQUIREMENTS.md` was **not edited**; REQ-17's text stands and the revision is
+recorded beside it in `06-07-SUMMARY.md` in Phase 3.1's format, for 06-06 to apply.
+
+**Re-measured against the built tree, and all four product watches move.** GameStop **YES**
+(unchanged, on the delivered total); **Nintendo YES** and **Amazon YES** — the two 06-01 silenced,
+back on the item price; and **Walmart moves off "not demonstrated" to YES**, on the same unchanged
+measurement (its only first-party capture resolves no shipping, which is no longer a reason it
+cannot alert). **06-01's measurements were all right; only the conclusion drawn from them changed.**
+`make verify-offline` exits 0 at **768 passed** and **24/24**, with **M4 and M17 re-pointed, M18
+re-anchored, and M27/M28 added**. M17's re-point is the one to read: it pinned the item-price
+fallback as *REJECTED*, Dan chose a version of it, and it was **re-pointed rather than deleted** —
+onto `established_shipping` collapsing an unread cost into `$0.00`, the one reading of his decision
+he did not choose. It now guards the CLAIM where it used to guard the VERDICT. **M21–M24 are still
+unallocated.**
+
+**And the first assertions ever made about `send_restock`'s body landed with it.** Every reference
+to it under `tests/` was a monkeypatch until 2026-08-11, so the one push a person receives when
+this project SUCCEEDS was the only unguarded surface in the alerting path.
 
 **06-05 landed criterion 5, and this project's version is no longer a claim only one file makes.**
 `pyproject.toml` reads **`0.2.0`**, and the roll is recorded in the file as **the correction, not a
@@ -376,7 +387,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 2. **Pacing and backoff (2026-08-04), in response to a live alert.** Amazon and GameStop had been refusing us for a day. Not a detector bug: `interval_seconds` is per PASS, so load is `watches x 288/day` — Amazon 576, GameStop 1,440 — with no backoff at all. Worse, every failing control was reported as "the detector is probably broken", which is false for a refusal and sent 20 pages in 24 hours. Added `Result.refused` / `fetch.is_refusal`, split the health message, added `boty/pacing.py` (per-retailer cadence + exponential backoff, capped, reset on a good read), and stopped paging for refusals until they outlast the backoff. Verified live: 0 pages while both retailers refused, both published as `paced` rather than dropped.
 
-**Last Activity:** 2026-08-10
+**Last Activity:** 2026-08-11
 **Last Activity Description:** Phase 6 execution started
 
 3. **Two live detector failures (2026-08-04 evening), both caught by control products within a cycle, neither a broken detector.** Best Buy began serving its JSON-LD **JavaScript-escaped** — `\'` inside strings, literal `\n` outside them — so `json.loads` refused all three blocks, `parse.py` skipped them silently, and the control read UNKNOWN with a detail naming the wrong cause. Proven against the shipped fixture, which parses 3/3 on the same SKU with no backslashes at all. `ldjson_read` now parses strictly first and only then offers an already-failed block to a string-state-aware repair; it reports `blocks`/`unparseable`/`repaired`, and a repaired read publishes as `ld+json (repaired)` so it cannot look ordinary. **Not claimed:** that the repair restored the live reading — Best Buy was serving valid markup again by 17:45 and the live read carried no `(repaired)` marker. The escaping is intermittent; a clean probe does not disprove it. Separately, **Target's UNKNOWN was our own render race**: ~35 KB of markup carrying the add-to-cart control arrives between 1s and 3s (measured: absent at `settle=1.0`, present at 3.0 and 6.0), and `fetch_rendered`'s default is exactly 3.0. `check_target_browser` now re-renders once at 10.0s before concluding — in the adapter, because it is a layout question and `boty/browser.py` is deliberately ignorant of layout. **M2's anchor was re-pointed** because this change moved the line it named, and the harness refused to run rather than quietly drop to seven mutations. Verified: mypy clean, 419 passed, 8/8 mutations, `VERIFY: PASS (OFFLINE)`, both new gates watched failing in both directions (removing the repair reddens 3 tests, making it over-reach reddens 22), **service restarted onto the fixed code** and publishing **6/6 retailers healthy**, 13 watches, 47.1s of REQ-08's 120s.
@@ -471,6 +482,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase Phase 06 PP03 | 38min | 3 tasks tasks | 1 file files |
 | Phase Phase 06 PP04 | 47min | 3 tasks tasks | 1 file files |
 | Phase 06 P05 | 31min | 3 tasks | 6 files |
+| Phase 06 P07 | 32min | 3 tasks (2 TDD, so 5 code commits) | 11 files |
 
 ## Decisions
 
@@ -595,6 +607,9 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 06]: 06-05: pyproject.toml rolled 1.0.0 -> 0.2.0 as a CORRECTION, not a bump — safe only because nothing was ever tagged or uploaded, re-measured at execution (0 tags, 0 refs, PyPI 404, 404)
 - [Phase 06]: 06-05: four statements of one version bound to pyproject.toml as the referent; the always-on rule is pyproject <-> README, correcting the outline's false 'runs everywhere' claim for CHANGELOG.md
 - [Phase 06]: 06-05: Development Status 5 - Production/Stable -> 4 - Beta, argued in place with Phase 4's rejection kept verbatim, and made a two-directional rule so it cannot go stale at the next bump
+- [Phase 06]: 06-07: where a shipping cost cannot be established the ceiling measures the ITEM PRICE and the alert goes out — Dan's reversal of 06-01, 2026-08-11, verbatim; the delivered-total ceiling is unchanged where shipping resolves
+- [Phase 06]: 06-07: the mitigation for the reopened hole is a visible field, not a suppressed alert — 'price: <x>   shipping: unknown', same shape either way, and NO delivered total stated in any body
+- [Phase 06]: 06-07: M17 was re-pointed rather than deleted when its subject reversed — deleting a mutation to make a suite green is forbidden here; it now guards the claim where it guarded the verdict
 
 ### Blockers
 
