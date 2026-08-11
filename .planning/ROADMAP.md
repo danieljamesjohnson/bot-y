@@ -23,7 +23,7 @@ under *Milestone v1.0.0 — Phase Details* below. v1.0.0 remains open and untagg
 ### Milestone v0.2 — Say Only What You Measured (scoped 2026-08-10)
 
 - [x] **Phase 5: A Reading Means Something** - Pin the store, name the cause, page only when it matters (completed 2026-08-10 — six criteria met in the tree, none confirmed on the deployed daemon; Dan deferred the restart)
-- [ ] **Phase 6: Claims With Gates Under Them** - Delivered-total ceiling, bind the matrix, gate what ships
+- [x] **Phase 6: Claims With Gates Under Them** - Delivered-total ceiling, bind the matrix, gate what ships (completed 2026-08-11 — four of five criteria MET as written; criterion 1 MET IN PART as written, its second half REVISED by Dan on 2026-08-11 and met as revised. Nothing reworded)
 
 ## Retailer Scope
 
@@ -470,86 +470,122 @@ is now closed (registration rejected, 2026-08-10). The finding outlived the reta
 Walmart carries marketplace sellers, so a $54.99 listing with $45 shipping defeats one of
 only two reseller defences **today**.
 
-**Progress: 4 of 6 plans complete (06-01, 06-02, 06-03 and 06-04, all 2026-08-10).**
-`make verify-offline` exits 0 at **737 passed** and **20/20** mutations, up from 667 and 16/16 at
-Phase 5's close. The mutation ratio is **unchanged by 06-03 and 06-04, deliberately** — see
-criteria 3 and 4 below, and note the resulting ident gap at **M21-M24**.
+**Outcome, recorded 2026-08-11 by 06-06 — four of five MET as written; criterion 1 MET IN PART
+as written, its second half REVISED by Dan on 2026-08-11 and met as revised. No criterion text
+anywhere in this document was reworded, shortened, merged or amended, and that is asserted by
+command rather than left to the eye:**
 
-**Criterion 1 is built and gated in the tree** (06-01) — the ceiling measures `price + shipping`
-and refuses an alert where that total cannot be established; M4 re-anchored, M17/M18 added. It is
-**NOT marked met and REQ-17 is left Pending**: 06-06 closes it by measuring what landed, and
-criterion 1 carries a user-visible cost that has not been put to a person yet. Measured against
-the built tree, of the four watches carrying a `max_price`: GameStop still alerts ($54.99 + $6.99
-= $61.98, under 80); **Nintendo and Amazon stop being able to page** — one publishes shipping as
-prose, the other's reader is a button; and **Walmart is "not demonstrated"**, correcting 06-01's
-own plan, because the only first-party Walmart capture in this repo resolves no shipping at all.
-No ceiling was raised and no watch edited to absorb any of it. The table goes to Dan at 06-06's
-blocking checkpoint; full working in `.planning/phases/06-claims-with-gates-under-them/06-01-SUMMARY.md`.
+| # | Verdict | Measurement or reason |
+|---|---|---|
+| 1 | **MET IN PART AS WRITTEN — first half MET, second half REVISED BY DAN 2026-08-11 and MET AS REVISED** | **The half that is MET as written:** the ceiling measures the delivered total wherever a shipping cost can be read — GameStop's `OfferShippingDetails` object yields `6.99`, `54.99 + 6.99 = 61.980000000000004`, and a resolvable total over the ceiling is still suppressed ($229.99 Walmart reseller, refused before the seller filter is consulted). Nothing is guessed: Nintendo's `shippingDetails` **prose** yields no number (a regex over it returns $6.99 for an item that ships **free**), Walmart's real `7.95` `fulfillmentPrice` is a from-store **delivery fee** and is read nowhere, a negative figure is refused in one place, and `None` never collapses to `$0.00`. The refusal lands on `alertable` and **`Availability` was deliberately untouched**. **The half that is REVISED:** *"an unresolvable shipping cost is UNKNOWN, not a pass"* was reversed by Dan on 2026-08-11 — verbatim, *"I think where we don't know just send it. If the user gets there and it's 50 dollar shipping that's disappointing but it's worse to feel like you 'missed out'."* An unresolvable cost now falls back to the **item price** and the alert goes out carrying `price: $54.99   shipping: unknown`. **The hole REQ-17's second sentence names is therefore knowingly REOPENED by the user**, with a visible empty field as the whole of the mitigation. Shipped by 06-07 (`717015b`…`b9e39bc`). The criterion's text is **not edited**; the revision is recorded beside it below, in Phase 3.1's format. **The measured cost, which is what went to a person:** under 06-01's strict rule Nintendo and Amazon stopped being able to page and Walmart was *not demonstrated*; under the reversal **all four GO Plus + watches can alert again**. M4 and M17 re-pointed with their subjects' changes written into the harness, M18 re-anchored, M17 **re-pointed rather than deleted** when its subject reversed, M18/M27/M28 CAUGHT |
+| 2 | **MET** | The criterion was *literally a report that an existing gate could not go red*, and it was **re-measured before a line of the gate was written**: `check_amazon` returning `Rung.BROWSER` against the shipped `\| Amazon \| 1 \| dom \|` row left pytest at **exit 0, `687 passed, 1 skipped`**. The criterion's `131` is a pre-Phase-5 figure; it was **not edited** and the newer number stands beside it as a measurement note. The Rung cell is now bound across **both** joins — retailer→adapter out of `cli._make_checker`'s if-chain, adapter→rung out of `boty/retailers.py` — statically by AST, two-directionally, with nine red-watches. `CAUGHT M19 boty/retailers.py: 9 test(s) failed`, every one of the nine the new gate; `CAUGHT M20 boty/cli.py: 8 test(s) failed`, one of them pre-existing, which 06-02 recorded rather than hid. **The code side was NEW CONSTRUCTION, not a column copy:** `06-CONTEXT.md` and REQ-18's own parenthetical both say Routing and Extraction were already pinned to the code; measured, neither was — `_extraction_mismatch` binds one README cell to another, and before 06-02 nothing under `tests/` imported `boty.models` or bound a README cell to `boty/` at all |
+| 3 | **MET** | The criterion was **executed**, not argued. A third workflow carrying one violation per family (`actions/checkout@v4`, `make verify-offline \|\| true`, no `timeout-minutes`, `runs-on: ubuntu-latest`) was written into the real `.github/workflows/` with no directory rule in the tree: `pytest tests/` → **exit 0, 701 passed**. Not one of the 701 noticed. The same file and the same command after the gate: **exit 1, 2 failed, 709 passed**, naming the file and — after 06-03 fixed its own in-loop assertion — **all four families in one assertion**. Three of four rules were **wrapped, not rewritten**, so no rule's judgement changed, and **zero `test_*` names were removed or renamed** (67 → 77), proven by comparison against the base commit rather than promised. Probe removed in a `finally`; its absence is now a permanent test. **06-03 registers NO mutation, by design** — see the ident-gap note below |
+| 4 | **MET** | Also executed before the gate existed. The exact document that shipped with leaked agent tool-call markup for the whole of Phase 4 was recovered **byte-for-byte from `2ac965f^` and never retyped**, restored to disk with no contents rule in the tree, and left `pytest tests/` at **exit 0, 711 passed**. Identical bytes, identical command, after the gate: **exit 1, 2 failed, 735 passed**, naming both offending lines and both shapes that caught them. Eight rules as pure functions of text, two **borrowed** rather than re-implemented. Three properties the criterion turns on, each measured: the markup rule is shaped around the **defect** and not around angle brackets (a naive any-tag rule scores exactly **1 hit, line 138**, on a legitimate backticked `<script>` token — so the green side is a precision proof and `CHANGELOG.md` must never be edited to satisfy it); every prohibition is **paired with a presence rule in the same commit**, because an empty file satisfies all of them otherwise; and the criterion is **not met by a skip line** — the unconditional half was observed running inside a real `build_sandbox()` at **7 passed, 19 skipped**, a run that did not confirm a premise but **caught a defect** (`MINIMAL` cited a path the sandbox does not copy). **06-04 registers NO mutation, by design** |
+| 5 | **MET** | The gate was written **first**, against a tree that disagreed with itself, and went red on exactly the binding that was already broken: `pytest tests/` at **exit 1, 2 failed, 757 passed**, `pyproject.toml` saying `1.0.0` while this project's own `STATE.md` said `milestone: v0.2` — a disagreement sitting in the open since the milestone was scoped, with **757 other tests having nothing to say about it**. The commit carrying that red says `TREE IS DELIBERATELY RED` in its subject line. After the roll, same command: **exit 0, 759 passed**. Four statements of one version are bound to `pyproject.toml` as the referent, compared **component-wise rather than by string prefix** (`"0.21.0".startswith("0.2")` is `True`, and that trap has its own test), with all three deletion cases watched biting. The roll is recorded as **the correction, not a bump**, and all four safety facts were **re-measured at execution**: `git tag -l` 0 tags, `git ls-remote --tags origin` 0 refs against a remote that answered `refs/heads/main`, HTTP 404 for both `bot-y` and `bot-y/1.0.0`. `CAUGHT M25 pyproject.toml` and `CAUGHT M26 README.md` — this repository's **first mutations outside `boty/`** — both by the always-on `pyproject` ↔ `README` binding, which is the only version rule whose two files both reach the mutation sandbox |
 
-**Criterion 2 is built and gated in the tree** (06-02), and it is the one that was *literally a
-report that an existing gate could not go red*. **Re-measured before the gate was written:** the
-criterion's own mutation — `check_amazon` returning `Rung.BROWSER` against the shipped
-`| Amazon | 1 | dom |` row — left pytest at **exit 0, `687 passed, 1 skipped`**. The criterion's
-`131` is a pre-Phase-5 figure; **it was not edited**, and the newer number is recorded beside it
-as a measurement note. The Rung cell is now bound to the code across **both** joins —
-retailer→adapter out of `cli._make_checker`'s if-chain and adapter→rung out of `boty/retailers.py`,
-statically by AST — two-directionally, with nine red-watches and two mutations. **M19 and M20 are
-both observed CAUGHT by ident**, M19 by nine tests all of them the new gate. **REQ-18 is left
-Pending** for 06-06 on the same precedent. **A correction 06-06 must carry:** `06-CONTEXT.md` and
-REQ-18's own parenthetical both say Routing and Extraction are already pinned to the code;
-measured, neither is — `_extraction_mismatch` binds one README cell to another, and nothing in
-`tests/` bound a README cell to `boty/` at all. Both joins were therefore new construction.
-`REQUIREMENTS.md` was not edited. Full working in
-`.planning/phases/06-claims-with-gates-under-them/06-02-SUMMARY.md`.
+Full working in `docs/retailer-evidence.md` § *Phase 6 closing record*.
 
-**Criterion 3 is built and gated in the tree** (06-03), and the gap was **executed before the gate
-was written** rather than argued. Every rule in `tests/test_ci_workflow.py` but
-`_pr_triggered_privilege` was keyed to a filename — `CI = WORKFLOWS / "ci.yml"`, then the same four
-families written out again for `RELEASE` — so a **third** workflow file was guarded by nothing. A
-workflow carrying a floating action tag, a swallowed exit code, no `timeout-minutes` and
-`runs-on: ubuntu-latest` was written into the real `.github/workflows/` and `pytest tests/` returned
-**exit 0, 701 passed**. The four families are now `DIRECTORY_RULES` over `_all_workflow_texts()`,
-each a pure function of `dict[str, str]` returning filename-prefixed findings, keyed on the
-criterion's own four words. **The same file and the same command afterwards: exit 1, 2 failed, 709
-passed**, naming all four families and the file; probe removed in a `finally`, tree clean, absence
-now a permanent test. Three of four rules were **wrapped, not rewritten** — no rule's judgement
-changed — and **zero `test_*` names were removed or renamed** (67 → 77), proven by comparison
-against HEAD rather than promised. **06-03 registers NO mutation and leaves M21-M22 deliberately
-unallocated:** `apply_mutation` cannot add a file, so a criterion about a file that does not exist
-yet is outside the harness by construction; 06-06 must not read the gap as a lost mutation.
-**REQ-19 is left Pending** — this plan ships the workflow half, 06-04 the `CHANGELOG.md` half.
-**A correction 06-06 must carry:** `06-PATTERNS.md` and `06-PLAN-OUTLINE.md` both name the
-exit-code rule `_flattened_exit_codes`; no such function exists — it is `_flattening`. Neither
-document was edited. Full working in
-`.planning/phases/06-claims-with-gates-under-them/06-03-SUMMARY.md`.
+**REQ-17 revised by Dan's decision, 2026-08-11 — recorded in Phase 3.1's format: the original
+quoted intact, the reversal beside it, never over it.** This is the house form for a *user*
+reversing a decision, and it is deliberately a different act from an agent rewording a criterion
+so finished work looks successful — which Phase 3.1 was offered and declined, and which this plan
+does not get to do either.
 
-**Criterion 4 is built and gated in the tree** (06-04) — and, like criterion 3, **the defect was
-executed on disk before the gate existed.** `CHANGELOG.md` is the one shipped document in this
-repository with nothing reading its body: `scripts/release_check.py` asserts the file *exists*,
-reads one heading, and needs the network, so it sits outside `make verify` by design. The exact
-document that shipped with two lines of leaked agent tool-call markup — recovered byte-for-byte
-from `2ac965f^`, never retyped — was restored to disk with no contents rule in the tree and left
-`pytest tests/` at **exit 0, 711 passed**. `tests/test_changelog.py` now carries **eight rules as
-pure functions of text** (two borrowed from `tests/test_contributor_docs.py` rather than
-re-implemented), and **the identical bytes and command afterwards: exit 1, 2 failed, 735 passed**,
-naming both offending lines and both shapes that caught them; the file restored with
-`git checkout --` in a `finally`, tree clean after every run. Three properties this criterion turns
-on, each measured rather than asserted: the markup rule is shaped around the **defect** and not
-around angle brackets, because the shipped file's only angle-bracket token is a legitimate
-backticked `<script>` at line 138 — so **the green side is the precision proof and must never be
-softened, nor `CHANGELOG.md` edited to satisfy it**; every prohibition is **paired with a presence
-rule in the same commit**, because an empty file satisfies all of them otherwise; and **the
-criterion is not met by a skip line** — `CHANGELOG.md` is absent from `SANDBOX_CONTENTS` and was
-deliberately **not** added, so the file-reading half skips there while an unconditional half was
-**observed** running inside a real `build_sandbox()` at **7 passed, 19 skipped**. Two rules were
-deliberately refused with their reasons in the code: version *ordering* (06-05's roll writes
-`## [0.2.0]` above `## [1.0.0]` because the roll is the correction) and any requirement that
-`## [Unreleased]` carry entries. **06-04 registers NO mutation and leaves M23-M24 deliberately
-unallocated**, joining 06-03's M21-M22, so the ident sequence carries a gap at **M21-M24** — 06-05
-keeps M25-M26 and **06-06 must not read four lost mutations**. **REQ-19 remains Pending:** 06-03
-shipped the workflow half, 06-04 the `CHANGELOG.md` half, and 06-06 closes it by measuring what
-landed. Full working in
-`.planning/phases/06-claims-with-gates-under-them/06-04-SUMMARY.md`.
+> **REQ-17** *(original, unedited in `REQUIREMENTS.md`)*: The price ceiling applies to the
+> **delivered total**, not the item price, and a shipping cost that cannot be resolved produces
+> UNKNOWN rather than a pass. A $54.99 listing with $45 shipping currently defeats one of only two
+> defences against a reseller alert.
+
+Dan, 2026-08-11, verbatim: *"I think where we don't know just send it. If the user gets there and
+it's 50 dollar shipping that's disappointing but it's worse to feel like you 'missed out'."* And on
+the alert format, also his: *"Instead of 'unverified', why don't you say price: &lt;price&gt;
+shipping: &lt;unknown&gt;"*. **What is reversed** is the second half of the first sentence, and the
+hole the second sentence names is reopened knowingly, by the user. **What still stands** is the
+first half entire, plus every rule that nothing is guessed, plus that this touches `alertable` and
+never `Availability`. **06-01's measurements were all correct and not one was re-taken, softened or
+re-interpreted — only the conclusion drawn from them changed, and it was changed by the person the
+tool pages.**
+
+**The phase gate, offline — exit 0, and the rise is shown rather than claimed.** Run once at close,
+allowed to finish:
+
+```
+identity check: PASS — 199 file(s), no host identity found
+768 passed in 10.71s
+mutation check: 24 mutation(s), sandboxed (the working tree is never touched)
+  baseline  unmutated sandbox passes (740 passed, 28 skipped in 11.27s)
+mutation check: 24/24 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)
+```
+
+Pre-milestone (Phase 4's close) **531 passed, 8/8**; Phase 5's close **667 passed, 16/16**; this
+phase closes at **768 passed, 24/24**. **The registry runs `M1`–`M20`, `M25`–`M28`, and the gap at
+`M21`–`M24` is DELIBERATE, not four lost mutations** — 06-03 and 06-04 each register none by
+design, each with its reasons recorded at the time: `apply_mutation` string-replaces inside an
+existing file and **cannot add one**, so a criterion about a workflow file *that does not exist
+yet* is outside the harness by construction; and the harness mutates `boty/`, while 06-04's
+deliverable is a gate over a data file the sandbox does not copy, so *"a mutation that survives is
+never explained away; a mutation that cannot exist is recorded as not existing."* The idents were
+**read from the registry with comment lines filtered**, not counted or assumed.
+
+**The phase gate, live, run ONCE at close — verbatim, including its FAIL.** Started only after a
+daemon cycle had published (`updated` 2026-08-11T14:20:41Z, `duration_seconds` 43.4) so two full
+retailer passes were not in flight at once, and **not** re-run to get a better answer, and **not**
+run under the service's `EnvironmentFile` — 05-04's recorded departure, whose reason still binds.
+
+```
+control check: 6 control(s), live
+  in_stock      gamestop  CONTROL — PS5 console                $549.99  ld+json: InStock from GameStop
+  unknown       walmart   CONTROL — Great Value whole milk           —  no store_id pinned for this watch — set store_id in config/products.ya
+  unknown       bestbuy   CONTROL — Pokémon Let's Go, Pikach         —  fetch failed: no Chrome/Chromium binary found — set BOTY_BROWSER_PATH
+  in_stock      nintendo  CONTROL — Nintendo HDMI cable          $7.99  ld+json: InStock from Nintendo of America Inc.
+  unknown       target    CONTROL — up&up microfiber dust cl         —  fetch failed: no Chrome/Chromium binary found — set BOTY_BROWSER_PATH
+  in_stock      amazon    CONTROL — Amazon Basics AA batteri     $9.99  add-to-cart control: add-to-cart enabled from Amazon.com
+
+control check: 2/6 control(s) could not run on THIS HOST
+control check: FAIL — 1/6 control(s) not reading IN_STOCK
+VERIFY: FAIL (live controls)
+```
+
+Exit **2**. **Three classes, and NOT ONE of them is this phase's.** (1) *Pre-existing since
+2026-08-06:* Best Buy and Target, `no Chrome/Chromium binary found`, which `control_check.py`
+itself says "says nothing about the DETECTOR". (2) *Pre-existing, and it did NOT manifest again:*
+the Walmart/Amazon challenge class was absent on 2026-08-10 and is absent here too — Amazon read
+IN_STOCK at $9.99 and Walmart served a judgeable page — so **two consecutive passes now support
+"intermittent" rather than "permanent"**. (3) *Phase 5's, and correct:* Walmart reading UNKNOWN
+through 05-02's config-gap guard, because `make verify` runs in a shell with no `WALMART_STORE_ID`.
+**Nothing new appeared, which is a prediction confirmed rather than an absence assumed:** 06-01's F1
+measured that every `max_price` in `config/products.yaml` is on a GO Plus + product watch and
+**every control carries none** — re-confirmed at close, exactly four `max_price: 80` entries and no
+others — so `alertable` short-circuits before any ceiling rule and no control's verdict could move
+under criterion 1 in either its strict or its reversed form. The mutation stage does not run inside
+a failing live invocation, so mutations are evidenced by `make verify-offline` above and never by
+this run.
+
+**Plans**: 7 plans, in 7 waves. *(06-07 was inserted at Dan's direction on 2026-08-11, after the
+phase was planned as six.)*
+
+Plans:
+
+- [x] 06-01: The ceiling measures what you would pay — `Offer.shipping`/`Result.shipping`, the derived `delivered_total`, three per-retailer readers that fill the field **or refuse to**, M4 re-anchored plus M17/M18 *(wave 1)*
+- [x] 06-02: A claim that could not go red — the README Rung cell bound to the code across both joins, statically by AST, two-directionally; M19 and M20 *(wave 2)*
+- [x] 06-03: The workflow rules keyed to the **directory** rather than to `ci.yml`, proven by executing the gap; **no mutation, M21-M22 left unallocated by design** *(wave 3)*
+- [x] 06-04: `CHANGELOG.md` gated on its **contents**, watched red against the byte-exact document that shipped; **no mutation, M23-M24 left unallocated by design** *(wave 4)*
+- [x] 06-05: `pyproject.toml` at `0.2.0` bound to four records with `pyproject` authoritative, watched red against the real tree before the roll; M25 and M26 *(wave 5)*
+- [x] 06-07: Alert when shipping is unknown, and show it as a field — Dan's reversal of 06-01 argued in place, `price:`/`shipping:` in the push body, M4/M17 re-pointed and M27/M28 added *(wave 6 — **inserted 2026-08-11**, out of numeric order because plan numbers are creation order and waves are execution order, as Phase 3.1 records)*
+- [x] 06-06: Close the phase — the gates measured, the five verdicts, REQ-17's revision applied to the record, and the `Plans:` list no earlier planner wrote *(wave 7, `autonomous: false`)*
+
+### Why every wave in Phase 6 is serial, and why that is not the usual reason
+
+**File ownership is not what serialised this phase; a single whole-tree gate is.** 06-03, 06-04 and
+06-05 touch disjoint files — `tests/test_ci_workflow.py`, a new `tests/test_changelog.py`, and
+`tests/test_packaging_metadata.py` — and are **the first plans in this project that could have run
+concurrently** if the gate were per-plan. They could not, because `make verify-offline` is one
+verdict over the whole tree: a plan that lands red blocks every sibling's acceptance regardless of
+which file it touched, and 06-05 deliberately committed a red tree for one commit. Phases 2, 3, 3.1
+and 4 all serialised on contested files (`boty/retailers.py`, `config/products.yaml`,
+`pyproject.toml`); this one did not, and that is forward-useful: a per-plan gate is what would buy
+parallelism here, not a better file-ownership table.
 
 ## Open Questions
 

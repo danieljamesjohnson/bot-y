@@ -2,16 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-status: Executing Phase 6 — 6 of 7 plans complete (06-07 landed; 06-06 still to run)
-stopped_at: Completed 06-05-PLAN.md — criterion 5 built, red before the roll and green after
-last_updated: "2026-08-11T14:07:46.772Z"
+status: Phase 6 complete — milestone v0.2 ready for verification (7 of 7 plans)
+stopped_at: Completed 06-06-PLAN.md — the phase closed; four of five criteria MET as written, criterion 1 met in part as written and in part as revised by Dan
+last_updated: "2026-08-11T14:40:00.000Z"
 last_activity: 2026-08-11
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
-  completed_plans: 10
-  percent: 50
+  completed_plans: 11
+  # percent is PHASE-based, not plan-based: 2 of 2 phases in v0.2 are complete.
+  # (Phase 5 = 4 plans, Phase 6 = 7 plans, so 11 of 11 plans agree with it here.)
+  percent: 100
 ---
 
 # State: bot-y
@@ -25,16 +27,46 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 ## Status
 
-**Milestone:** v0.2 (scoped 2026-08-10)
-**Phase:** 6 of 6 — *Claims With Gates Under Them* — **IN PROGRESS**, 6 of 7 plans complete
+**Milestone:** v0.2 (scoped 2026-08-10) — **BOTH PHASES COMPLETE 2026-08-11**
+**Phase:** 6 of 6 — *Claims With Gates Under Them* — **COMPLETE 2026-08-11**, 7 of 7 plans
 (06-01 … 06-05 on 2026-08-10; **06-07 on 2026-08-11**, an unplanned seventh plan added when
-Dan reversed 06-01's rule). Phase 5 closed 2026-08-10 on 4 of 4 plans and six
-of six criteria MET **against the tree**, with **not one of them confirmed on the deployed daemon**
-**Next command:** `/gsd-execute-phase 6` (next plan: 06-06 — the closing plan; it marks REQ-17
-through REQ-20 by measuring what landed, and **all four are still Pending on purpose**).
-**06-06 NEEDS A REPLAN BEFORE IT RUNS** — its blocking checkpoint card asks Dan a question he
-answered on 2026-08-11, and it names the lenient rule as *"a rejection with its reason rather
-than an option"* when he has since chosen a variant of it.
+Dan reversed 06-01's rule; **06-06**, the close, on 2026-08-11). Phase 5 closed 2026-08-10 on
+4 of 4 plans and six of six criteria MET **against the tree**, with **not one of them confirmed
+on the deployed daemon**.
+**Next command:** `/gsd-audit-milestone` — v0.2's two phases are both closed. **Do not read that
+as "shipped":** none of the eleven gates this milestone built is running on the deployed daemon,
+and `QUESTIONS.md` § 0e and § 0f are both still open and untouched.
+
+**Phase 6 closed on four of five criteria MET AS WRITTEN, and criterion 1 MET IN PART.** Its
+second half — *"an unresolvable shipping cost is UNKNOWN, not a pass"* — is met only against a
+**revision Dan made on 2026-08-11**, and the closing record says so rather than rounding it up.
+Nothing anywhere was reworded to pass, and that is asserted by command rather than by eye: every
+criterion body in `ROADMAP.md` was extracted from `HEAD` and from the working tree with the
+leading numeral stripped (**40 lines at baseline, 40 now, zero removed**), and Phase 5's eight-line
+closing table came out **byte-identical**. `make verify-offline` exits **0** at **768 passed** and
+**24/24**, up from **667 / 16/16** at Phase 5's close and **531 / 8/8** pre-milestone. Full working
+in `docs/retailer-evidence.md` § *Phase 6 closing record*.
+
+**THE ONE FINDING THIS PHASE'S OWN CLOSE PRODUCED, because no later plan would have caught it.**
+06-06's plan states that a third *committed* instance of the REQ-19 leaked-markup class "is not
+established by the tree". Measured at close, **it is**: `06-07-SUMMARY.md` was committed at
+`a71e79b` ending in two whole-line agent tool-call tags after its closing metadata line — not in a
+fence, introduced by no prose — which is byte-shape for byte-shape the `CHANGELOG.md` incident
+06-04 built its gate for, **in the plan that reversed REQ-17, one day after that gate landed**.
+Removed at `7355034` and recorded rather than quietly fixed, on 06-04's and 06-05's precedent; the
+evidence is permanent at `a71e79b`. **Nothing in this repository's gates would have caught it** —
+`leaked_markup` is deliberately scoped to `CHANGELOG.md`, `.planning/` is covered by no contents
+rule at all, and `identity_check.py` scans for host identity. There are now **three** candidates of
+this shape logged and unbuilt: invisible characters (06-04), leaked markup outside `CHANGELOG.md`
+(06-05), and this instance, which is the one that turns the class from a near-miss into a hit.
+
+**THIS FILE IS NOW MACHINE-READ, and editing it is a gate-visible act.** As of `30cb977`,
+`tests/test_packaging_metadata.py` reads the `milestone:` key in the frontmatter above; changing it
+without changing `pyproject.toml`'s version turns `make verify-offline` red naming both files. The
+comparison is lenient in exactly one way — a milestone names a *minor line*, so `v0.2` agrees with
+`0.2.0` and would agree with a future `0.2.7`, but **not** with `0.21.0`, because the rule compares
+component lists rather than string prefixes. 06-06 edited this file and re-ran
+`tests/test_packaging_metadata.py` immediately afterwards; it was green.
 
 **06-07 REVERSED 06-01, BECAUSE DAN DID, AND THE HOLE REQ-17 NAMES IS DELIBERATELY REOPENED.**
 His words, verbatim, 2026-08-11: *"I think where we don't know just send it. If the user gets
@@ -350,7 +382,8 @@ four retailers that can alert on the GO Plus +. Phase 6 is gates over claims.
 - **`Pacer._state` is in-memory only IN THE RUNNING DAEMON, and persisted in the tree.** Phase 5 criterion 6. **FIXED IN THE TREE by 05-03 (2026-08-10):** `refusals`, a wall-clock stamp and the paging memory round-trip through one gitignored `pacer-state.json` at the repo root (`settings.pacer_state_path`, resolved against the unit's `WorkingDirectory`); `due_at` is deliberately never persisted, so a restart still asks each retailer once at full rate. **Not in use anywhere on this host** — the file does not exist yet, because the daemon that would write it has never been started. An empty `{"retailers": {}, "version": 1, "warned": []}` is the healthy state of a monitor with nothing in backoff, not a fault.
 - **`boty.service` has been running pre-Phase-4 code since 2026-08-04 17:48:52 CDT, and 05-04 did NOT change that.** Re-measured at close on 2026-08-10: `MainPID=3059142`, `ActiveEnterTimestamp=Tue 2026-08-04 17:48:52 CDT`, `ActiveState=active` — identical before and after the plan, because Dan answered the restart checkpoint `defer`. **The do-NOT-restart-while-a-retailer-is-in-backoff warning therefore STILL BINDS, and must not be struck.** It is a statement about the *running process*, which has no persistence; 05-03 fixed the tree, not the daemon. What the first restart will cost, stated now so it is not a surprise later: the old code never wrote a state file, so there is nothing on disk to restore from and **that first restart loses the current backoff outright** — Amazon at 11 refusals and GameStop at 4 as of 12:00:34 on 2026-08-10 — and both retailers get asked at full rate again. That is a real, one-time politeness cost, bounded by the `retailer_intervals` floors that stay in force (`amazon: 1800`, `gamestop: 900` — 30 and 15 minutes, not 5). Every restart *after* that one inherits the depth. Strike this entry once the service has actually been restarted onto this tree, and not before.
 - **A browser IS available on this host, and nobody knew.** `boty/browser.py` searches PATH and finds nothing, but Playwright's Chromium is at `~/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` (Chrome for Testing 149.0.7827.55) and `BOTY_BROWSER_PATH` accepts it. With it set, `make verify` **runs all six controls** instead of skipping two — measured 2026-08-10. It still FAILS 3/6, but for diagnosable reasons rather than a missing binary: Best Buy and Target now throw a bare `fetch failed: Exception:` with an **empty message** (sandbox? nodriver vs Chrome 149?), and Amazon hits a challenge page. Worth chasing — the empty exception is itself a reporting defect, and this milestone is about not saying things you have not measured.
-- **`make verify` fails live** (`VERIFY: FAIL (live controls)`, exit 2). **Re-measured once at Phase 5's close, 2026-08-10 12:07, and its composition has CHANGED — there are now three classes and one of them is ours.** (1) *Pre-existing:* `2/6 control(s) could not run on THIS HOST` — Best Buy and Target, `no Chrome/Chromium binary found`; the tool's own output says this "says nothing about the DETECTOR". (2) *Pre-existing, and it did NOT manifest this pass* — Amazon's control read IN_STOCK at $9.99 and Walmart served a page the store guard could judge, so **the challenge-blocking is intermittent, not permanent**; Walmart also answered normally at 09:22 the same morning. (3) **Caused by Phase 5 and CORRECT:** `FAIL — 1/6 control(s) not reading IN_STOCK` is Walmart reading UNKNOWN through 05-02's config-gap guard, because `make verify` runs in a shell with no `WALMART_STORE_ID`. Named separately here rather than folded in with the other two. The mutation stage does not run inside a failing live invocation — `make verify` exits at the control stage — so mutations are evidenced by `make verify-offline`, which exits **0** at **642 passed** and **14/14** (pre-phase baseline: 531 passed, 8/8). None of these classes is diagnosed here; classes 1 and 2 are pre-existing since 2026-08-06 and need their own plan.
+- **`.planning/STATE.md` is an INPUT TO AN EXECUTABLE GATE as of `30cb977`.** `tests/test_packaging_metadata.py` reads the `milestone:` key in this file's frontmatter and compares it component-wise against `pyproject.toml`'s version. It is the first time a planning file has been machine-read in this project, so an edit here is no longer free: change that line without changing the package version and `make verify-offline` goes red naming both files. Re-run `.venv/bin/python -m pytest tests/test_packaging_metadata.py -q` after editing this file, and if it is red, fix the edit rather than the gate.
+- **`make verify` fails live** (`VERIFY: FAIL (live controls)`, exit 2). **Re-measured once at Phase 6's close, 2026-08-11 14:21, and the composition is UNCHANGED from Phase 5's close — three classes, and NOT ONE of them is Phase 6's.** (1) *Pre-existing since 2026-08-06:* `2/6 control(s) could not run on THIS HOST` — Best Buy and Target, `no Chrome/Chromium binary found`; `control_check.py`'s own output says this "says nothing about the DETECTOR". (2) *Pre-existing, and it did NOT manifest again:* Amazon read IN_STOCK at $9.99 and Walmart served a judgeable page, exactly as on 2026-08-10 — **two consecutive passes now support "intermittent" rather than "permanent"** for the challenge-blocking class. (3) *Phase 5's, and correct:* `FAIL — 1/6 control(s) not reading IN_STOCK` is Walmart through 05-02's config-gap guard, because `make verify` runs in a shell with no `WALMART_STORE_ID`. **Nothing new appeared, and that is a prediction confirmed rather than an absence assumed:** 06-01's F1 measured that every `max_price` in `config/products.yaml` sits on a GO Plus + product watch and every control carries none — re-confirmed at close (**exactly four `max_price: 80` entries and no others**) — so `alertable` short-circuits before any ceiling rule and no control's verdict could move under criterion 1 in either its strict or its reversed form. Run **once**, after a daemon cycle had published, not re-run for a better answer, and deliberately **not** run under the service's `EnvironmentFile` (05-04's recorded departure; the reason still binds). The mutation stage does not run inside a failing live invocation, so mutations come from `make verify-offline`, which exits **0** at **768 passed** and **24/24**. *Phase 5's own reading of this line, kept for the history it records:* **Re-measured once at Phase 5's close, 2026-08-10 12:07, and its composition had CHANGED — three classes and one of them ours.** (1) *Pre-existing:* `2/6 control(s) could not run on THIS HOST` — Best Buy and Target, `no Chrome/Chromium binary found`; the tool's own output says this "says nothing about the DETECTOR". (2) *Pre-existing, and it did NOT manifest this pass* — Amazon's control read IN_STOCK at $9.99 and Walmart served a page the store guard could judge, so **the challenge-blocking is intermittent, not permanent**; Walmart also answered normally at 09:22 the same morning. (3) **Caused by Phase 5 and CORRECT:** `FAIL — 1/6 control(s) not reading IN_STOCK` is Walmart reading UNKNOWN through 05-02's config-gap guard, because `make verify` runs in a shell with no `WALMART_STORE_ID`. Named separately here rather than folded in with the other two. The mutation stage does not run inside a failing live invocation — `make verify` exits at the control stage — so mutations are evidenced by `make verify-offline`, which exits **0** at **642 passed** and **14/14** (pre-phase baseline: 531 passed, 8/8). None of these classes is diagnosed here; classes 1 and 2 are pre-existing since 2026-08-06 and need their own plan.
 - **eBay is closed.** Developers Program registration was **rejected** 2026-08-10. See `.planning/research/ebay-CLOSED-registration-rejected.md`. The delivered-total ceiling finding survived it and is REQ-17.
 - **Do not put a real postal code or store id in a fixture or config without redaction.** Phase 3.1 spent seven re-verification rounds on that leak class, and Phase 5 works directly with store identifiers.
 
@@ -483,6 +516,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase Phase 06 PP04 | 47min | 3 tasks tasks | 1 file files |
 | Phase 06 P05 | 31min | 3 tasks | 6 files |
 | Phase 06 P07 | 32min | 3 tasks (2 TDD, so 5 code commits) | 11 files |
+| Phase 06 P06 | 42min | 3 tasks (1 checkpoint, already answered 2026-08-11 and shipped as 06-07) | 5 files |
 
 ## Decisions
 
@@ -610,6 +644,13 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 06]: 06-07: where a shipping cost cannot be established the ceiling measures the ITEM PRICE and the alert goes out — Dan's reversal of 06-01, 2026-08-11, verbatim; the delivered-total ceiling is unchanged where shipping resolves
 - [Phase 06]: 06-07: the mitigation for the reopened hole is a visible field, not a suppressed alert — 'price: <x>   shipping: unknown', same shape either way, and NO delivered total stated in any body
 - [Phase 06]: 06-07: M17 was re-pointed rather than deleted when its subject reversed — deleting a mutation to make a suite green is forbidden here; it now guards the claim where it guarded the verdict
+- [Phase 06]: 06-06: **THE M21-M24 IDENT GAP IS DELIBERATE AND IS NOT FOUR LOST MUTATIONS** — the registry runs M1-M20, M25-M28, read from the file with comment lines filtered rather than counted. 06-03 registers none because `apply_mutation` string-replaces inside an existing file and CANNOT ADD ONE, so a criterion about a workflow file that does not exist yet is outside the harness by construction; 06-04 registers none because the harness mutates `boty/` while its deliverable is a gate over a data file the sandbox does not copy, and widening `SANDBOX_CONTENTS` to manufacture one would create an entry provable load-bearing only by the mutation that motivated it. A mutation that SURVIVES is never explained away; a mutation that CANNOT EXIST is recorded as not existing. Anyone meeting `… M20, M25 …` should stop looking for four deleted gates
+- [Phase 06]: 06-06: criterion 1 is recorded MET IN PART AS WRITTEN with its second half met only AS REVISED, rather than rounded up to MET — Phase 3.1 declined a rewrite that would have made its criterion 1 meetable, Phase 4 recorded two UNMET, Phase 5 marked every live row NOT OBTAINED, and a closing plan that rounded a half-met criterion up would be the defect this milestone exists to close, committed in the document that certifies its absence
+- [Phase 06]: 06-06: Dan's REQ-17 reversal is recorded in Phase 3.1's format — original quoted intact, reversal beside it, never over it — because a USER reversing a decision and an AGENT rewording a criterion so finished work looks successful are different acts, and the only thing that keeps them apart in the record is the original surviving verbatim beside the new sentence
+- [Phase 06]: 06-06: the live `make verify` FAIL was recorded verbatim with its three classes separated and NONE claimed as this phase's — 06-01's F1 predicted no control could move under criterion 1 (no control carries a `max_price`), and the live run CONFIRMED the prediction rather than being read as confirming it, with the four ceiling-carrying watches re-counted at close
+- [Phase 06]: 06-06: no code was written to close the phase, on 05-04's precedent — a closing plan that implemented its way to a green table would be a phase measuring work it did in the act of measuring. The one edit outside the four record files is the removal of committed leaked markup from `06-07-SUMMARY.md`, which is the defect REQ-19 names sitting in this milestone's own documentation, and it was committed separately (`7355034`) so the closing record's own diff stays four files
+- [Phase 06]: 06-06: the leaked-markup sweep was RE-RUN at close rather than its remembered figure repeated — 21 matching lines in 7 files, against the outline's 9-in-4. The outline's four files are UNCHANGED at 9; of the twelve new lines, ten are `tests/test_changelog.py` (4) and `06-04-SUMMARY.md` (6) carrying the shapes on purpose, and two are the real hit in `06-07-SUMMARY.md`. Repeating a number nobody re-measured is the defect this milestone exists to close
+- [Phase 06]: 06-06: REQ-18's two stale claims (`131`, and "Routing and Extraction are already pinned") are FLAGGED in the requirement's own entry and in its traceability cell, and NEITHER IS EDITED — a requirement's text is the record of why the work was done and must survive it; a criterion is not amended to make it meetable, and by the same rule not to make it accurate
 
 ### Blockers
 

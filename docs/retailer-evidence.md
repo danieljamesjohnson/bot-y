@@ -3627,3 +3627,438 @@ Stated plainly, because a closing record's worth is its worst row.
    later plan rather than grown here, because a closing plan shipping a new shell
    subcommand would be shipping code with nothing gating it — in a phase whose
    entire subject is claims with nothing under them.
+## Phase 6 closing record (2026-08-11) — what has a gate under it, and what the gate does not cover
+
+The Phase 3, Phase 3.1 and Phase 5 closing records above are left exactly as they
+were written. This one sits beside them rather than over them, on the convention
+that file already states.
+
+**The one-sentence shape of this phase.** Five claims this project publishes — a
+price filter, a matrix row, a workflow directory, a shipped document, a version
+number — now each have a gate under them that was **watched going red**, and in
+three cases the gate was watched going red against the *real defect on disk*
+rather than against a synthetic one. **Nothing here is running.** `boty.service`
+has published 2026-08-04 code since before Phase 4, and no plan in this phase
+restarted it.
+
+**And one thing this record has to say about itself before anything else.** A
+verdict table is a claim like any other, and this is the phase that put gates
+under claims. Every row below carries a measurement or a reason; where the
+measurement is a transcript it is **quoted from the SUMMARY that took it** rather
+than paraphrased here, because a record that summarises a transcript it could have
+quoted is a claim *about* a measurement instead of the measurement.
+
+### 1. Where the phase landed against the ROADMAP's five criteria
+
+| # | Criterion | Verdict | What settles it |
+|---|---|---|---|
+| 1 | The price ceiling applies to the delivered total; an unresolvable shipping cost is UNKNOWN, not a pass | **MET IN PART AS WRITTEN — first half MET, second half REVISED BY DAN 2026-08-11 and MET AS REVISED** | **Met as written:** the ceiling measures the delivered total wherever a shipping cost can be read. GameStop's `OfferShippingDetails` **object** yields `shipping=6.99` and `54.99 + 6.99 = 61.980000000000004`; a *resolvable* total over the ceiling is still suppressed, so the $229.99 Walmart marketplace listing is still refused before the seller filter is even consulted. Nothing is guessed anywhere: Nintendo's prose yields no number, Walmart's `fulfillmentPrice` is read nowhere, a negative figure is refused in exactly one place, and `None` never collapses to `$0.00`. The refusal lands on `alertable`; **`Availability` was deliberately untouched**, so no reading became OUT_OF_STOCK and no UNKNOWN was resolved into a verdict because a shipping cost could not be read. **Revised:** *"an unresolvable shipping cost is UNKNOWN, not a pass"* was reversed by Dan on 2026-08-11 — an unresolvable cost now falls back to the **item price** and the alert goes out. **The hole the requirement's second sentence names is therefore reopened, knowingly, by the user**, and the whole of the mitigation is a visible field reading `shipping: unknown`. See § 4 for his words and § 3 for what it cost and returned. M4/M17 re-pointed with their subjects' changes written into the harness, M18 re-anchored, M27 and M28 added |
+| 2 | Mutating an adapter's `Rung` against a contradicting README row turns a test red — today it leaves 131 green | **MET** | The criterion was literally *a report that an existing gate could not go red*, and it was re-measured before a line of the gate was written, inside the mutation harness's own sandbox so the working tree was never touched: `anchor occurrences: 1`, `pytest exit: 0`, **`687 passed, 1 skipped`**, and under `--- FAILED lines ---` there were none. Nothing in the tree opposed the edit at all. The Rung cell is now bound across **both** joins — retailer→adapter out of `cli._make_checker`'s if-chain, adapter→rung out of `boty/retailers.py` — statically by AST, two-directionally, using set **equality** so Best Buy's `3 (2 with a key)` needs no exemption. `CAUGHT M19 boty/retailers.py: 9 test(s) failed`, all nine the new gate; `CAUGHT M20 boty/cli.py: 8 test(s) failed`, one of them pre-existing. M19's anchor is the **shortest unique extension** of the naive one **and its uniqueness is a gated fact rather than an execution-day observation** — a test asserts by AST that applying it leaves `check_html` at `("1",)` and moves `check_amazon` to `("3",)`, because a string count says one place matched but not which |
+| 3 | A workflow file added under `.github/workflows/` is covered by the pin, exit-code, timeout and runner rules | **MET** | Proved by **executing the criterion**, not by arguing it. `PRE-GATE exit 0 / 701 passed in 10.78s / git: (clean)` with a deliberately non-compliant third workflow sitting in the real directory and no directory rule in the tree. *"Seven hundred and one tests watched a deliberately non-compliant workflow arrive in the one directory in this repository that runs on somebody else's computer holding this repository's token, and not one of them said anything."* Same file, same command, after: `POST-GATE exit 1 / 2 failed, 709 passed`, naming the file and — after 06-03 fixed its own in-loop assertion — **all four families in a single assertion**. Three of four rules **wrapped, not rewritten**, so no rule's judgement changed; the pin family keeps the RAW view and the exit-code family the comment-stripped one, and either mistake reddens the shipped-tree test immediately, which is why the green side is an assertion rather than a formality. **Zero `test_*` names removed or renamed** (67 → 77), proven by comparison against the base commit. Probe removed in a `finally`; its absence is now a permanent test rather than a habit |
+| 4 | `CHANGELOG.md` is gated on its **contents**, not its existence — the leaked-markup class cannot ship again | **MET** | Also executed rather than argued, and against the real document: `git show 2ac965f^:CHANGELOG.md` — the byte-exact file that shipped for the whole of Phase 4 — restored to disk with no contents rule in the tree gave `PRE-GATE exit 0 / 711 passed`. The same bytes after the gate: `POST-GATE exit 1 / 2 failed, 735 passed`, with the failure naming the lines and both shapes that caught them. **The corruption was recovered from git and substituted mechanically, never retyped** — *"a retyped corruption is an impression of the incident, not the incident."* Three properties the criterion turns on, each measured: the markup rule is three shapes around the **defect** rather than one regex over angle brackets, because a naive rule scores exactly **1 hit, line 138**, on a legitimate backticked token — so **the green side is a precision proof and `CHANGELOG.md` must never be edited to satisfy it**; every prohibition is **paired with a presence rule in the same commit**, because an empty file satisfies all of them otherwise; and the criterion is **not met by a skip line** — see § 2 |
+| 5 | `pyproject.toml` reads `0.2.0`, agrees with the project's milestone version, and cannot silently diverge | **MET** | The gate was written **first**, against a tree that disagreed with itself, and went red on exactly the binding that was already broken: `PRE-ROLL exit 1 / 2 failed, 757 passed`, both failures carrying *"`.planning/STATE.md` states 'v0.2' in its frontmatter milestone but pyproject.toml declares '1.0.0'"*. That disagreement had been sitting in the open since the milestone was scoped, and **757 other tests had nothing to say about it**. The commit carrying that red says `TREE IS DELIBERATELY RED` in its own subject line, because a silent red commit in a phase about claims with gates under them would have been the defect committed inside the plan closing it. After the roll, same command: `POST-ROLL exit 0 / 759 passed`. Four statements of one version bound to `pyproject.toml` as the referent, compared **component-wise rather than by string prefix** (`"0.21.0".startswith("0.2")` is `True`, and the trap has its own test), with all three deletion cases watched biting because *absence is a finding*. `CAUGHT M25 pyproject.toml` and `CAUGHT M26 README.md` — the first mutations in this repository outside `boty/` |
+
+**Four of five met as written; criterion 1 met in part.** No criterion was
+reworded, shortened, merged or amended to reach that, and it is asserted by
+command rather than by eye: every criterion body in `ROADMAP.md` was extracted
+from `HEAD` and from the working tree with the leading numeral stripped — **40
+lines at baseline, 40 now, none removed** — and Phase 5's eight-line closing table
+came out **byte-identical**. Both commands exit non-zero naming what moved.
+
+### 2. The gates, and the ident gap that is not a gap in coverage
+
+`make verify-offline`, run once at close and allowed to finish, **exit 0**:
+
+```
+identity check: PASS — 199 file(s), no host identity found
+All checks passed!
+768 passed in 10.71s
+Success: no issues found in 18 source files
+mutation check: 24 mutation(s), sandboxed (the working tree is never touched)
+  baseline  unmutated sandbox passes (740 passed, 28 skipped in 11.27s)
+mutation check: 24/24 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)
+```
+
+The rise is **shown**, not claimed, with every intermediate count read off the plan
+summaries rather than remembered:
+
+| Point | Tests | Mutations | Tracked files scanned |
+|---|---|---|---|
+| Pre-milestone (Phase 4's close) | 531 | **8/8** | 153 |
+| Phase 5's close | 667 | **16/16** | 178 |
+| After 06-01 | 688 | **18/18** | 190 |
+| After 06-02 | 701 | **20/20** | 192 |
+| After 06-03 | 711 | 20/20 — deliberately unchanged | 193 |
+| After 06-04 | 737 | 20/20 — deliberately unchanged | 195 |
+| After 06-05 | 759 | **22/22** | 196 |
+| After 06-07 | 768 | **24/24** | 198 |
+| At close (06-06) | **768** | **24/24** | **199** |
+
+**The full ident list, read from the registry rather than assumed.** Taken with
+comment lines filtered out, because `grep -c` over an unfiltered file counts
+comment prose and this project has been bitten by exactly that self-invalidating
+class:
+
+```
+M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 M15 M16 M17 M18 M19 M20 M25 M26 M27 M28
+```
+
+**Twenty-four idents, and a gap at M21-M24 that is DELIBERATE.** A reader meeting
+`… M20, M25 …` with no note goes looking for four deleted gates and concludes the
+harness was weakened. It was not. Both plans that left their reservations
+unallocated recorded why at the time:
+
+- **06-03:** *"`apply_mutation` cannot add a file. It performs `before.replace(search, replace, 1)` on an existing file inside the sandbox. The criterion is about *a workflow file that does not exist yet*, so the defect it names is outside the harness's reach **by construction**, not by oversight."* And the alternative would have been worse than nothing: a mutation such as `runs-on: ubuntu-24.04` → `ubuntu-latest` in `release.yml` *"would die against `test_the_publish_workflow_runs_on_a_pinned_image_within_a_time_limit`, which existed before 06-03 — it would raise the ratio while proving nothing this plan built."*
+- **06-04:** *"The harness mutates `boty/`… This plan writes no production code; its deliverable **is** a gate over a data file. There is nothing in `boty/` for it to break."* And widening the sandbox to manufacture one was refused for a structural reason rather than a convenient one: it *"would create an entry provable load-bearing only by the mutation that motivated it"*, failing Phase 4's own recorded rule for `SANDBOX_CONTENTS`.
+
+Both plans state the same principle in the same words, and it is the one worth
+keeping: **a mutation that SURVIVES is never explained away; a mutation that
+CANNOT EXIST is recorded as not existing.**
+
+**The criterion is not met by a skip line, and that was measured rather than
+argued in both plans that could have cheated it.** 06-04 ran a real
+`build_sandbox()` and got `CHANGELOG.md in sandbox: False`, `sandbox exit 0
+PASSED 7 SKIPPED 19` — and that run *"did not merely confirm the premise, it
+**found a defect**"* (§ 5f). 06-05 did the same and got `PASSED 33 SKIPPED 8`,
+with the always-on README binding named among the 33.
+
+### 3. The four-watch alertability table, and what the reversal moved
+
+Measured offline against the built tree by driving each shipped capture through
+its real adapter with `retailers.get` monkeypatched, Walmart pinned to store `"0"`
+(this repo's redaction placeholder). **No retailer was probed to obtain any of
+this.** Exactly four watches in `config/products.yaml` carry a `max_price`, all
+four are the GO Plus + product watch, and **every control carries none** —
+re-confirmed at close, four `max_price: 80` entries and no others.
+
+The question the counterfactual column asks is the one that matters: *if this
+retailer's page came back with a genuine first-party offer at the $54.99 MSRP, in
+the shape the shipped capture shows, could the watch page Dan?*
+
+| GO Plus + watch | Delivered total establishable? | Could alert BEFORE 06-01 | Under 06-01's strict rule | **NOW, after Dan's reversal** |
+|---|---|---|---|---|
+| **GameStop** | **Yes** — `shipping=6.99` off `OfferShippingDetails`; `54.99 + 6.99 = 61.98`, under 80 | yes | **YES** (measured `alertable=True`) | **YES** — on the **delivered total**, unchanged |
+| **Walmart** | **Shape-dependent** — its only first-party capture resolves none (`speedDetails: null`, so nothing agrees with the zero fee) | yes | **NOT DEMONSTRATED** | **YES** — on the **item price** |
+| **Nintendo** | **No** — `shippingDetails` is prose | yes | **NO — this watch stopped being alertable** | **YES** — on the **item price** |
+| **Amazon** | **No** — the reader is an add-to-cart button | yes | **NO — this watch stopped being alertable** | **YES** — on the **item price** |
+
+**Two things about that table that a summary would have flattened.**
+
+First, **06-01 corrected its own plan and the correction was load-bearing.** The
+plan predicted Walmart keeps its alertability; measured, *"the **only first-party
+Walmart capture in this repository resolves NO shipping cost**, because its
+SHIPPING fulfilment option carries `speedDetails: null`"*, and the capture that
+*does* resolve is the marketplace-reseller one the seller filter suppresses first.
+So the honest answer was **"not demonstrated", not "yes"** — *"Claiming 'yes' would
+be the same unmeasured assertion this milestone exists to close."* The exposure put
+to a person was therefore **two watches confirmed lost and a third unproven**.
+
+Second, **all four watches moved under the reversal, and Walmart moved off *not
+demonstrated* on the same unchanged measurement.** Resolving no shipping is no
+longer a reason a watch cannot alert; it is the branch that alerts on the item
+price. **Nothing about Walmart's payload was re-read or re-captured; only the
+conclusion drawn from it changed.**
+
+**What the push actually says**, captured from the real `send_restock` with its
+client monkeypatched, because Dan was asked to accept a reopened hole on the
+strength of one word in a notification body:
+
+```
+--- GameStop (shipping resolved) ---
+price: $54.99   shipping: $6.99
+
+--- Nintendo (shipping is prose, never parsed) ---
+price: $54.99   shipping: unknown
+
+--- Walmart, marketplace capture (shipping resolved as free) ---
+price: $54.99   shipping: $0.00
+```
+
+**No delivered total appears in any body, in either branch** — you cannot add a
+number to `unknown`, and stating a total in one case and not the other would make
+the two shapes disagree exactly where a reader is least able to notice.
+
+### 4. The decision, in Dan's words, and what it cost
+
+The design 06-01 shipped was settled by a **recorded tiebreaker** rather than by a
+preference: `REQUIREMENTS.md` § *Non-Functional* — *"**Trustworthiness over
+coverage.** Where they conflict, correctness wins. … This is the tiebreaker for
+every scoping decision."* What went to Dan was therefore not the design but the
+**cost**, which this milestone exists so that consequences are stated rather than
+absorbed.
+
+**He was shown the measured table above and chose a fourth option none of the
+three on the card offered.** His words, verbatim, 2026-08-11:
+
+> *"I think where we don't know just send it. If the user gets there and it's 50
+> dollar shipping that's disappointing but it's worse to feel like you 'missed
+> out'."*
+
+And on the alert format, also his:
+
+> *"Instead of 'unverified', why don't you say price: &lt;price&gt; shipping:
+> &lt;unknown&gt;"*
+
+**Say it plainly, because the record is worth what its worst row is worth: this
+reopens the hole REQ-17 was written to close.** A $54.99 listing with $45 of
+shipping the page does not publish readably **now pages Dan**, and the push will
+not warn him about the $45 — it will show him an empty field. That is not a defect
+discovered here; it is the trade he chose, having been shown what the strict rule
+cost. It is stated in `alertable`'s comment, in `Watch.max_price`'s comment, in a
+test that pins the $54.99-plus-$45 case, in `config/products.yaml`, in
+`docs/adding-a-retailer.md` and in the shipped `README.md`, and it is not softened
+in any of them.
+
+**What still stands, so the reversal is not read as wider than it is:** a
+*resolvable* delivered total above the ceiling is still suppressed; an item price
+above the ceiling is still refused even when shipping is unknown; an unreadable
+price is still refused in both branches; the seller filter is untouched; and **no
+`Availability` verdict moved**.
+
+**And the sentence that keeps the two kinds of reversal apart.** 06-01's
+measurements were right, and only the conclusion drawn from them changed. Nintendo
+really does publish its shipping as prose; Amazon's reader really is a button; the
+only first-party Walmart capture really does resolve no shipping. **Not one of
+those measurements was re-taken, softened or re-interpreted.** What changed is what
+the system does about them, and it was changed by the person the tool pages. That
+is a different act from an agent rewording a criterion so finished work looks
+successful — which Phase 3.1 was offered and declined — and the only thing that
+keeps them apart in the record is REQ-17's original sentence surviving verbatim
+beside the new one. It does.
+
+### 5. What waves 1-7 corrected, each with the SUMMARY that measured it
+
+Each of these is a lesson rather than a status line, which is why each gets its own
+subsection.
+
+#### 5a. `06-CONTEXT.md` was wrong twice, and measurement caught both
+
+Both are **drafting errors, not withdrawn decisions**, and the distinction matters:
+`06-CONTEXT.md` was auto-generated under `workflow.skip_discuss`, so nobody chose
+either sentence and neither is Dan changing his mind.
+
+1. It states that `tests/test_support_matrix.py` *"already binds the README's
+   **Routing** and **Extraction** cells to the code in both directions"*. Measured
+   false, and re-confirmed against the tree before anything was built:
+   `_extraction_mismatch` binds one README cell to **another README cell** — both
+   of its directions are *inside the table* — `grep -n "Rung\." tests/test_support_matrix.py`
+   returned **nothing**, and the file did not import `boty.models` at all. *"There
+   was **no README-cell → code binding of any kind** anywhere in `tests/`."* So
+   **both** joins were new construction in 06-02, which is why the routing join got
+   a mutation of its own rather than riding on the rung one.
+2. It frames an unresolvable shipping cost as the edge case. **On Walmart it is the
+   common path:** in both shipped fixtures *every* numeric shipping field is `null`,
+   and **no payload this repo has ever captured shows what Walmart emits for paid
+   marketplace shipping** — which is precisely the case the requirement exists for.
+
+#### 5b. REQ-18's own text carries the same stale claim, and it is flagged rather than edited
+
+*"Routing and Extraction are already pinned; Rung is the gap."* False for Extraction
+in the sense that matters, for 5a's reason. Its `131` is likewise a pre-Phase-5
+figure, re-measured at **exit 0, `687 passed, 1 skipped`**. **Neither was edited.**
+06-02 stated the rule this record follows: *"a criterion is never amended to make it
+meetable; the same rule points the other way — it is not amended to make it
+*accurate* either."* A requirement's text is the record of why the work was done and
+has to survive the work.
+
+#### 5c. Two near-inventions, both the same class as 05-01's rejected `"0"` sentinel
+
+Reading presentation data as a fact.
+
+- **$61.98 out of a sentence.** Nintendo publishes `shippingDetails` as English
+  prose under the identical key GameStop publishes an object under: *"Standard UPS
+  Ground Shipping: $6.99 … Free UPS Ground Shipping on orders over $50."* The item
+  is $54.99, so the true shipping cost is **zero**. A regex over that sentence
+  produces a delivered total of **$61.98 for an item that ships free** — a wrong
+  *verdict* rather than a missing feature. The reader type-checks the container
+  before digging into it, and **no shipping figure is parsed out of prose anywhere**.
+- **$7.95 out of a real field.** `fulfillmentOptions[type=DELIVERY].speedDetails.fulfillmentPrice`
+  carries a genuine `7.95` on the Walmart milk control — a **from-store delivery fee
+  on a pickup item**, not shipping. Reading it *"would have **invented a $7.95
+  shipping charge out of a real field**. It is read nowhere."*
+
+#### 5d. The outline's Walmart free-shipping rule resolves one fixture, not two — and that cost nothing
+
+Two agreeing signals resolve `goplusplus` → `0.0` and leave `milk-control`
+**unresolved**, which is the correct fail-safe answer and costs nothing, because
+milk carries no ceiling. One refinement in the same direction: the outline said the
+agreeing key is *absent* on `milk-control`; measured, *"the whole of `speedDetails`
+is `null` there, so the key is absent because its container is"* — same outcome, and
+the reader type-checks `speedDetails` before reading into it for exactly that reason.
+
+#### 5e. 06-03 proved the gap by executing it, and named a function that does not exist
+
+The pre-gate/post-gate pair in § 1 is the criterion run rather than described. Beside
+it, a correction to two planning documents: **`06-PATTERNS.md` and
+`06-PLAN-OUTLINE.md` both name the exit-code rule `_flattened_exit_codes`. No such
+function exists — it is `_flattening`.** Neither document was edited. **And the trap
+06-03 warned about is now literally in the tree:** the new *wrapper* is
+`_directory_flattened_exit_codes`, so a future reader grepping the remembered name
+finds three real hits and no definition of the rule itself.
+
+#### 5f. 06-04's sandbox run found a real defect, which is why it beats the mutation it does not register
+
+`MINIMAL` — the fixture whose entire job is to exercise every rule where
+`CHANGELOG.md` does **not** exist — cited `CHANGELOG.md` in its own preamble.
+`stale_path_citations` resolves that in the repository and **cannot** resolve it
+inside the sandbox, so *"the test whose entire job is to run where `CHANGELOG.md`
+does not exist **failed in the one place it was written for**"* (`sandbox exit 1
+PASSED 6 SKIPPED 19`). The lesson generalises past this file: **an "unconditional"
+fixture that cites an uncopied path is coupled to `SANDBOX_CONTENTS` while looking as
+though it is not**, and it would have surfaced later as a harness error attributable
+to nothing. Fixed in `MINIMAL`, **not** by widening the sandbox.
+
+#### 5g. 06-05 corrected the outline's pairing, which would have left both rules skipping
+
+`06-PLAN-OUTLINE.md` § *Finding 7* proposed pairing the STATE rule with a
+`pyproject.toml` ↔ `CHANGELOG.md` binding *"entirely inside the shipped tree and
+runs everywhere"*. **False, and re-confirmed false by building a sandbox and
+stat-ing it: `CHANGELOG.md in sandbox: False`.** The proposed pairing would have had
+**both** of its rules skipping under `make mutation` — the exact defect a pairing
+exists to prevent, and criterion 5 met by two skip lines. Re-anchored on `README.md`,
+which *is* in `SANDBOX_CONTENTS` and states the version in exactly one line. **That
+single fact is also what makes M25 and M26 possible at all.**
+
+A second, sharper finding came with it, and it is the more transferable one: the
+pairing pin **does not redden when a rule is renamed out of the discovery
+convention — it goes blind.** Renaming `_version_status_disagreement` out of the
+`_version_` prefix produced eight `NameError` failures and *"the pin itself **went
+quiet**"*. That is why the classifier rule is named inside the convention rather than
+as the plan specified.
+
+#### 5h. The REQ-19 defect recurred inside this milestone's own planning — three instances, measured at close
+
+This is the strongest evidence the requirement was needed, and because it is a
+**claim about counts in a phase about claims**, the sweep was re-run at close rather
+than its remembered figure repeated.
+
+| Instance | Evidence | Committed? |
+|---|---|---|
+| `05-02-PLAN.md` written with a stray tool-call tag pair at its end | caught by a planning agent **before commit** (`06-CONTEXT.md` § *Specific Ideas*) | **No — a near-miss.** It leaves no trace in the tree, so the evidence is the note, not a sweep hit |
+| `06-PATTERNS.md` | became a sweep hit **in the act of measuring the sweep** (`06-PLAN-OUTLINE.md` § *Finding 3*) | **Yes**, 3 lines |
+| `06-07-SUMMARY.md` | committed at **`a71e79b`** ending in two whole-line tool-call closing tags after its final metadata line — not in a fence, introduced by no prose. **Byte-shape for byte-shape the `CHANGELOG.md` incident**, in the plan that reversed REQ-17, **one day after 06-04's gate landed** | **Yes**, 2 lines. Removed at `7355034` by 06-06 and recorded rather than quietly fixed, on 06-04's and 06-05's precedent; the evidence is permanent at `a71e79b` |
+
+06-06's plan states that a third *committed* instance *"is not established by the
+tree"*. **At close it is established.** And 06-04 § F4's counter-measurement is kept
+rather than smoothed over, because it is true and it is the useful half: *"`06-01-PLAN.md`,
+`06-02-PLAN.md` and `06-03-PLAN.md` were written since that measurement and none
+became a hit"* — the discipline of naming the tag shapes without reproducing them
+worked, and it held for every document written *about* the gate. It failed on a
+document written *by* a tool at the end of a long plan, which is a different failure
+mode and needs a different control.
+
+**The sweep, re-run at close over the tracked tree.** Pattern used — five shapes,
+named rather than reproduced: the closing `invoke` and `content` tags, the opening
+`function_calls` tag, the `parameter` tag prefix, and the agent namespace prefix.
+
+```
+MEASURED: 21 matching lines in 7 files
+    .planning/phases/04-open-source-ready/04-REVIEW.md                  3
+    .planning/phases/06-claims-with-gates-under-them/06-04-SUMMARY.md   6
+    .planning/phases/06-claims-with-gates-under-them/06-07-SUMMARY.md   2
+    .planning/phases/06-claims-with-gates-under-them/06-CONTEXT.md      1
+    .planning/phases/06-claims-with-gates-under-them/06-PATTERNS.md     3
+    .planning/seeds/nothing-reads-the-changelog-body.md                 2
+    tests/test_changelog.py                                             4
+```
+
+**Against the outline's 9-in-4, and the difference is stated rather than reconciled
+away.** The outline's four files are **unchanged at exactly 9 lines** — 04-REVIEW 3,
+seeds 2, 06-CONTEXT 1, 06-PATTERNS 3. Of the twelve new lines, **ten are deliberate
+and one file is deliberate by construction**: `tests/test_changelog.py` (4) *must*
+carry the shapes it forbids or it could not forbid them, which 06-04 made executable
+rather than promised, and `06-04-SUMMARY.md` (6) quotes its own failure output. The
+remaining **two are the real hit** above.
+
+**Applying the narrower rule — 06-04's shape (a), a line whose *entire* content is a
+tool-call tag, which is the shape that shipped — separates them cleanly:**
+
+```
+SHAPE (a) whole-line tool-call tag: 6 line(s) in 3 file(s)
+   .planning/phases/04-open-source-ready/04-REVIEW.md:113-114     (inside a fence, quoting the incident)
+   .planning/seeds/nothing-reads-the-changelog-body.md:15-16      (indented block, quoting the incident)
+   .planning/phases/06-.../06-07-SUMMARY.md:416-417               <-- AT END OF FILE, the defect itself
+```
+
+**Nothing in this repository's gates would have caught any of it**, and that is the
+finding rather than the sweep count. `leaked_markup` is deliberately scoped to
+`CHANGELOG.md` — 06-04 argued that scope from a measurement and made the argument
+executable, so widening it is a decision with an exemption attached rather than a
+default — `.planning/` is covered by no contents rule at all, and
+`scripts/identity_check.py` scans for host identity, not for markup. **There are now
+three candidates of this shape logged and unbuilt:** invisible characters (06-04
+escaped a nested backtick with `U+200B` and a hook caught it), leaked markup outside
+`CHANGELOG.md` (06-05 caught it in its own SUMMARY before commit), and this one,
+which is the instance that turns the class from a near-miss into a hit.
+
+#### 5i. `README.md` was cut from 503 lines to 183 after the plans were written
+
+`d6d16fe` (503 → 190) and `8b205fe` (190 → 183), both landing **after** every plan in
+this phase was written, then 189 at close after 06-07 added its one honest ceiling
+paragraph. Measured with `git show <ref>:README.md | wc -l` rather than repeated from
+the commit subjects. The consequence was real: two of the three README paragraphs
+06-07's plan targets **no longer existed**, and 06-07 *"followed the tree. Nothing was
+restored to make the plan's line numbers true."* Worth carrying, because it is the
+same class as everything else here — a document asserting a location that the tree
+had already moved.
+
+#### 5j. A tooling finding: `gsd-tools state advance-plan` has now misfired nine times
+
+Recorded because a milestone about not overclaiming should not have its own state file
+claiming a phase closed at the halfway mark. After every plan in Phases 5 and 6 the
+tool returned `{"reason": "last_plan", "current_plan": 6, "total_plans": 6}` and wrote
+`status: Phase complete — ready for verification` plus a stale `stopped_at`. The cause
+is documented and unfixable in place: it reads a `Plan: 6 of 6 complete` line out of
+the **archived v1.0.0 block at the bottom of `STATE.md`**, which is kept verbatim and
+therefore cannot be edited to correct the tool. 06-03 found the useful part — the
+documented *positional* form is rejected and the *flag* form is accepted — and 06-04
+found its limit: the flag form echoes a populated object and still writes no row.
+Corrected by hand every time, this plan included.
+
+### 6. What this phase did NOT establish
+
+Stated plainly, because a closing record's worth is its worst row.
+
+1. **Not one of these five gates is running on the deployed daemon.** `boty.service`
+   has published 2026-08-04 code since before Phase 4 and no plan in this phase
+   restarted it. Everything above is a property of the tree. The single
+   highest-value action outstanding on this project is still a service restart —
+   which is now Phase 5's outstanding item *and* Phase 6's.
+2. **Walmart's paid-marketplace shipping shape remains UNOBSERVED.** No payload this
+   repository has ever captured shows what Walmart emits for a paid marketplace
+   shipping cost, which is precisely the case criterion 1 exists for. The criterion's
+   central case is therefore **guarded by a refusal rather than demonstrated against a
+   capture** — and that gap is exactly why the lenient item-price fallback was
+   rejected as a *design* in 06-01: *"publishes nothing"* and *"publishes something we
+   did not read"* are indistinguishable on the one retailer that carries marketplace
+   sellers. Dan then chose that fallback anyway, with the reasoning in § 4 on the
+   record, and **the gap it rests on has not closed just because the decision changed.**
+3. **The live `make verify` failure classes are recorded, not diagnosed.** Two
+   controls cannot run for want of a Chrome binary (pre-existing since 2026-08-06,
+   and STATE.md records that Playwright's Chromium works when `BOTY_BROWSER_PATH`
+   points at it — that is a later plan's work); the challenge-page class did not
+   manifest on either of the last two passes, which supports *intermittent* rather
+   than *permanent* without establishing it; and the Walmart class is Phase 5's guard
+   working correctly in a shell with no pin. Nothing here attempted to fix any of
+   them, and the run was not repeated to get a better verdict.
+4. **No retailer was probed and no fixture was re-captured.** Every gate in this phase
+   was watched going red offline, by design. The alertability table and the rendered
+   push bodies both come from shipped captures driven through real adapters with the
+   transport monkeypatched.
+5. **Criterion 2's binding is STATIC, and the cost is stated rather than buried.** It
+   asserts what the source *says*, not what *runs*. The runtime half is covered by
+   `tests/test_retailers.py`'s existing `_make_checker` / `result.rung` assertions,
+   and that split is written into the module docstring rather than left to be
+   discovered.
+6. **`deploy/boty-secret` still has no store subcommand, `_identity_leaks` still
+   exists twice and has still drifted, and `QUESTIONS.md` § 0e and § 0f are both still
+   open.** Each was flagged by an earlier phase for a plan of its own and each stays
+   flagged; none was touched here.
+7. **`scripts/mutation_check.py`'s module docstring still says "three mutations"**
+   while the registry holds 24. Logged as `D-06-01-a` in this phase's
+   `deferred-items.md` and deliberately not fixed — it is pre-existing drift rather
+   than something this phase broke. It is nonetheless exactly this milestone's
+   subject, and the count has now drifted **seven** times without anybody noticing,
+   which argues for a test that reads `len(MUTATIONS)` rather than a fresh
+   hand-written number.
