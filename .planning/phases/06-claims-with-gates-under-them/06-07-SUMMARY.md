@@ -413,5 +413,3 @@ T-06-70 is an **accept** disposition with the accepter named, the decision quote
 ---
 *Phase: 06-claims-with-gates-under-them*
 *Completed: 2026-08-11*
-</content>
-</invoke>
