@@ -39,6 +39,24 @@ looking yourself.
 - ✓ YAML product config — adding a watch is editing a file, not a type union
 - ✓ Deployed on danserver: `boty.service` + `boty-web.service`, status page behind the Mission Control `/tools/boty` proxy
 
+<!-- v0.2's seven requirements are complete and gated, but four of them are BEHAVIOURAL and
+     none of those four is running. They are listed apart from the block above rather than
+     folded into it, because that block says "confirmed working against live retailer pages"
+     and these are confirmed against the tree. -->
+
+**Built and gated in v0.2 — in the tree, NOT in effect on the deployed daemon:**
+
+- ⧗ Walmart store pinning — required config, no default; an unpinned or unexpected store is UNKNOWN, never a verdict (REQ-14, v0.2) — *needs `WALMART_STORE_ID` and a restart*
+- ⧗ No alert names a cause that was not measured; where the cause is unknown the alert says so (REQ-15, v0.2) — *needs a restart*
+- ⧗ Notify only when a human decision changes the outcome; backoff and paging memory survive a restart (REQ-16, v0.2) — *needs a restart*
+- ⧗ The price ceiling measures the delivered total wherever shipping can be read; where it cannot, the alert goes out showing `shipping: unknown` (REQ-17 **as revised by Dan, 2026-08-11**, v0.2) — *needs a restart*
+
+**Built and gated in v0.2 — in effect, because they are test-suite gates:**
+
+- ✓ The README support matrix's `Rung` cell bound to the code across both joins, two-directionally, by AST — v0.2
+- ✓ `CHANGELOG.md` and `.github/workflows/` gated on their **contents**, watched going red against the byte-exact documents that shipped — v0.2
+- ✓ One version, four records, `pyproject.toml` authoritative, compared component-wise — v0.2
+
 ### Active
 
 <!-- v1 scope. Done = 5+ retailers with green controls, AND Dan gets a GO Plus +. -->
@@ -49,6 +67,7 @@ looking yourself.
 - [ ] Type hints throughout
 - [ ] Contributor-facing docs: how to add a retailer, why controls are mandatory
 - [ ] Dan successfully buys a Pokémon GO Plus +
+- [ ] **Deploy v0.2** — `sudo systemctl restart boty` deploys REQ-15/16/17 (editable install); REQ-14 additionally needs `WALMART_STORE_ID`. Until then the running monitor makes every claim v0.2 fixed
 
 ### Out of Scope
 
@@ -60,7 +79,48 @@ looking yourself.
 - **Forking changedetection.io** — it's Apache-2.0 and actively maintained (last push 2 days ago, external PRs merged at a 2-day median). Forking means permanently diverging from a fast-moving upstream to add one concept — control products — that its per-watch architecture has no place for.
 - **Aggressive polling** — 5-minute default with jitter. A drought lasts weeks; sub-minute polling buys nothing and is what gets an IP blocked.
 
-## Current Milestone: v0.2 — Say Only What You Measured
+## Current State
+
+_As of 2026-08-11, after milestone v0.2 closed._
+
+**Milestone v0.2 — Say Only What You Measured — is COMPLETE IN THE TREE, and none of it is
+running.** Two phases, 11 plans, 84 commits, +30,483/−568 across 75 files. The gate went from
+**531 passed / 8 mutations** at the start to **769 passed / 24 mutations** at close
+(`make verify-offline`, exit 0, identity PASS over 201 files). Archived in
+[`.planning/milestones/v0.2-ROADMAP.md`](milestones/v0.2-ROADMAP.md),
+[`v0.2-REQUIREMENTS.md`](milestones/v0.2-REQUIREMENTS.md) and
+[`v0.2-MILESTONE-AUDIT.md`](milestones/v0.2-MILESTONE-AUDIT.md) (audit status `passed`; it
+opened `gaps_found` on one item, closed at `0d6d1b8`).
+
+**NOT DEPLOYED. This is the sentence that matters.** Dan answered `defer` on 2026-08-10, so
+`boty.service` still runs 2026-08-04 code (`MainPID=3059142`, up since 2026-08-04 17:48:52
+CDT). The daemon that is actually watching for restocks still publishes *"the detector is
+probably broken"* for `target`, still holds Amazon's backoff in memory with no
+`pacer-state.json` anywhere, and still publishes a Walmart GO Plus + verdict about a store
+nobody chose — the very defects v0.2 fixed. **The gap is one command wide:** `boty` is an
+**editable install**, so `sudo systemctl restart boty` deploys REQ-15, REQ-16 and REQ-17
+today with no store pin required. Only REQ-14 additionally needs `WALMART_STORE_ID`, which is
+still unset and is Dan's to give or not. The deferral was priced as one decision; it is two.
+
+**NOT TAGGED, NOT PUBLISHED.** Zero git tags exist, locally or on the remote — deliberate,
+and unchanged by the v0.2 archival. PyPI returns 404 for `bot-y`. `pyproject.toml` reads
+**`0.2.0`**, rolled down from the aspirational `1.0.0` as **the correction, not a bump**, and
+safe only because publishing was deferred: nobody can be pinned to a 1.0.0 that exists. The
+`Development Status` classifier is `4 - Beta`, bound to the version in both directions.
+
+**v1.0.0 is still open and untagged, and was NOT archived.** Its definition of done includes
+*"Dan has successfully bought a Pokémon GO Plus +"* — a market condition, not a work item —
+and its audit recommended against tagging it shipped. Its phases (1–4 and 3.1) and their
+details stay in `.planning/ROADMAP.md`. REQ-11 (`pip install bot-y` from PyPI, plus a v1.0.0
+tag) remains **descoped from v1.0**, not complete.
+
+**Codebase:** ~18 source files under `boty/` (mypy clean), six retailers registered and
+control-verified, 13 watches, a full `boty check` pass in ~43 s of REQ-08's 120 s budget.
+**Known live-gate state:** `make verify` exits 2 on this host for three pre-existing reasons —
+two controls cannot run at all (no Chrome/Chromium binary on PATH: Best Buy and Target) and
+Walmart reads UNKNOWN for want of a store pin. None is a detector defect; none is owned yet.
+
+## Milestone v0.2 — Say Only What You Measured (closed 2026-08-11)
 
 **Goal:** every claim bot-y makes — in an alert, in a reading, in the README, in its
 own version number — is backed by something it actually measured.
@@ -147,6 +207,12 @@ when they disagree — retailers' JSON-LD does lie. Worth adopting.
 | Primary paths must work from a fresh clone | Best Buy's official API needs manual approval and a non-free email domain — most people cloning the repo cannot get one, so building Best Buy support on it would make the retailer a footnote rather than supported. Credential-gated paths are optional enhancements only | — Pending |
 | Fixtures frozen, not auto-refreshed | Auto-refreshing in CI would let a real breakage land disguised as a fixture update — the exact silent failure this project exists to catch. Fixtures catch code regressions; live control products catch reality | — Pending |
 | Tests + type hints in scope | Follows from choosing a real open-source project — a contributor's PR must not be able to silently break a detector | — Pending |
+| Store pinning is required config with no default (Dan, 2026-08-10) | A default leaves a reading as a statement about an arbitrary store, which is the bug. Geolocating from a ZIP was rejected too: bot-y never guesses where the user lives | ✓ Good — one setup step, deliberately accepted |
+| Renumber v1.0.0 → v0.2 | The v1.0 numbering was itself the overclaim this milestone corrects — declared before the project had shipped, published or bought anything. Safe only because publishing was deferred and nothing was ever tagged or uploaded | ✓ Good |
+| Defer the deploy (Dan, 2026-08-10) | Answered `defer` at the store-pin checkpoint. Priced as one decision — later measured to be two, with three of four requirements deployable by a plain restart | ⚠️ Revisit — the running monitor still makes every claim v0.2 fixed |
+| REQ-17 reversed: alert even when shipping is unresolvable (Dan, 2026-08-11) | *"where we don't know just send it … it's worse to feel like you 'missed out'."* Recorded beside the original, never over it, after the cost was measured and shown to him | ⚠️ Revisit — the hole REQ-17 names is knowingly reopened; the mitigation is a visible empty field |
+| A criterion is never amended to make it meetable — and by the same rule not to make it accurate either | Established when Phase 3.1 declined a rewrite; upheld through Phase 4's two UNMET, Phase 5's NOT OBTAINED rows and Phase 6's MET IN PART. Stale figures inside REQ-18 were flagged and left unedited | ✓ Good |
+| Verification is an exit code, not a judgement | `make verify` / `make verify-offline`. 531 passed / 8 mutations at v0.2's start, 769 / 24 at its close, every new gate watched going red before it was trusted | ✓ Good |
 
 ---
-*Last updated: 2026-08-02 at project bootstrap, after shipping a working two-retailer MVP*
+*Last updated: 2026-08-11 at the v0.2 milestone close — v0.2 complete in the tree and not deployed; v1.0.0 still open and untagged*

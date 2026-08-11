@@ -1,10 +1,14 @@
 ---
 gsd_state_version: 1.0
+# `milestone:` is MACHINE-READ by tests/test_packaging_metadata.py against pyproject.toml's
+# version (0.2.0), component-wise. It STAYS at v0.2 through this archival: v0.2 is the version
+# in the tree, nothing was tagged or published, and no next milestone has been scoped. Change
+# it only together with pyproject.toml, and re-run that test file.
 milestone: v0.2
 milestone_name: — Say Only What You Measured
-status: Phase 6 complete — milestone v0.2 ready for verification (7 of 7 plans)
-stopped_at: Completed 06-06-PLAN.md — the phase closed; four of five criteria MET as written, criterion 1 met in part as written and in part as revised by Dan
-last_updated: "2026-08-11T14:40:00.000Z"
+status: Milestone v0.2 ARCHIVED 2026-08-11 — 2 of 2 phases, 11 of 11 plans, complete IN THE TREE; not deployed, not tagged, not published
+stopped_at: Archived milestone v0.2 — ROADMAP and REQUIREMENTS extracted to .planning/milestones/, REQUIREMENTS.md removed for the next milestone, no git tag created
+last_updated: "2026-08-11T16:00:00.000Z"
 last_activity: 2026-08-11
 progress:
   total_phases: 2
@@ -20,22 +24,64 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-08-10)
+See: `.planning/PROJECT.md` (updated 2026-08-11, with a `## Current State` section)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 6 — Claims With Gates Under Them
+**Current focus:** Nothing in flight. v0.2 is archived; the next milestone is unscoped. The one
+outstanding action from v0.2 is not planning work — it is `sudo systemctl restart boty`.
 
 ## Status
 
-**Milestone:** v0.2 (scoped 2026-08-10) — **BOTH PHASES COMPLETE 2026-08-11**
-**Phase:** 6 of 6 — *Claims With Gates Under Them* — **COMPLETE 2026-08-11**, 7 of 7 plans
-(06-01 … 06-05 on 2026-08-10; **06-07 on 2026-08-11**, an unplanned seventh plan added when
-Dan reversed 06-01's rule; **06-06**, the close, on 2026-08-11). Phase 5 closed 2026-08-10 on
-4 of 4 plans and six of six criteria MET **against the tree**, with **not one of them confirmed
-on the deployed daemon**.
-**Next command:** `/gsd-audit-milestone` — v0.2's two phases are both closed. **Do not read that
-as "shipped":** none of the eleven gates this milestone built is running on the deployed daemon,
-and `QUESTIONS.md` § 0e and § 0f are both still open and untouched.
+**Milestone v0.2 — ARCHIVED 2026-08-11.** 2 of 2 phases, 11 of 11 plans, 84 commits from the
+scoping commit `79e0c84`, 75 files changed, +30,483 / −568. Audit status `passed` (it opened
+`gaps_found` on one item — `CHANGELOG.md` still asserting the rule Dan reversed — closed at
+`0d6d1b8`). Archive:
+
+- `.planning/milestones/v0.2-ROADMAP.md` — both phases, both closing outcome tables, intact
+- `.planning/milestones/v0.2-REQUIREMENTS.md` — REQ-14…REQ-20 with outcomes, and REQ-17's
+  revision recorded beside its unedited original
+- `.planning/milestones/v0.2-MILESTONE-AUDIT.md` — moved here from `.planning/`
+
+`.planning/REQUIREMENTS.md` was **removed** at close; a fresh one comes with the next
+milestone. `.planning/ROADMAP.md` now carries v0.2 as one line with a link, and **v1.0.0's
+material is untouched** — it is open, untagged and not archived.
+
+**NO GIT TAG WAS CREATED, and none exists.** `git tag -l` → 0; `git ls-remote --tags origin`
+→ 0 refs. That decision is being handled separately and this archival did not touch it.
+
+**"Archived" is not "shipped", and the distinction is the whole milestone.** None of the
+eleven criteria this milestone met is in effect on the deployed daemon. `boty.service` still
+runs 2026-08-04 code (`MainPID=3059142`) because Dan answered `defer` on 2026-08-10 — so the
+process actually watching for restocks still says *"the detector is probably broken"*, still
+holds Amazon's backoff in memory, and still publishes a Walmart GO Plus + verdict about a
+store nobody chose. **The audit's one new fact reframes the price of fixing that:** `boty` is
+an **editable install** (`.pth` → this working tree; the unit runs that tree's venv from that
+tree's directory), so **`sudo systemctl restart boty` deploys REQ-15, REQ-16 and REQ-17 today
+with no store pin needed**. Only REQ-14 additionally needs `WALMART_STORE_ID` (still unset —
+measured as a count, `0`, never a value). The deferral was priced as one decision; it is two,
+and three of four requirements sit on the cheap side.
+
+**Next command:** `/gsd-new-milestone` when there is a next milestone to scope.
+`QUESTIONS.md` § 0e and § 0f are both still open and untouched.
+
+## Deferred Items
+
+Acknowledged and deferred at milestone close on 2026-08-11:
+
+| Category | Item | Status |
+|---|---|---|
+| deploy | Restart `boty.service` onto this tree (REQ-15/16/17) | Open — one command, no prerequisite |
+| deploy | `WALMART_STORE_ID` in the EnvironmentFile (REQ-14) | Open — Dan's to give or not (`QUESTIONS.md` § 0f) |
+| verification | Phase 05 — `05-VERIFICATION.md` | `human_needed` — all three items are the deferred deploy above |
+| verification | Phase 02 — `02-VERIFICATION.md` | `human_needed` — **v1.0.0**, not this milestone |
+| verification | Phase 03 — `03-VERIFICATION.md` | `human_needed` — **v1.0.0**, not this milestone |
+| verification | Phase 03.1 — `03.1-VERIFICATION.md` | `gaps_found` — **v1.0.0**, not this milestone |
+| verification | Phase 04 — `04-VERIFICATION.md` | `human_needed` — **v1.0.0**, not this milestone |
+| security | `QUESTIONS.md` § 0e — pushed public history carries host geolocation and this host's public IP | Open, untouched by v0.2. The working tree is clean; the history is not |
+| tech-debt | Seven items carried in the audit's `tech_debt` block — no `.planning/` contents gate, `identity_check` has no `store '<n>'` prose rule, `mutation_check.py`'s "three mutations" docstring, `README.md:327`, `boty/cli.py`'s comment, `M21`–`M24` (by design, not debt), the unowned live-`make verify` classes | Open — see `.planning/milestones/v0.2-MILESTONE-AUDIT.md` |
+
+Four of the five open verifications belong to **v1.0.0**, which is not being archived; they
+are listed so the count is not read as v0.2's.
 
 **Phase 6 closed on four of five criteria MET AS WRITTEN, and criterion 1 MET IN PART.** Its
 second half — *"an unresolvable shipping cost is UNKNOWN, not a pass"* — is met only against a

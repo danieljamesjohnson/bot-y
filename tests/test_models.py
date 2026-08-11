@@ -190,8 +190,12 @@ def test_the_ceiling_bites_on_the_delivered_total_and_on_nothing_else() -> None:
 def test_an_unresolved_shipping_cost_under_a_ceiling_is_alertable() -> None:
     """REVERSED BY DAN, 2026-08-11. Where shipping is unknown, the alert goes out.
 
-    REQ-17's own sentence stands unedited in `REQUIREMENTS.md` and is quoted
-    here intact, because a criterion is never reworded to fit the code:
+    REQ-17's own sentence stands unedited in
+    `.planning/milestones/v0.2-REQUIREMENTS.md` (it lived in
+    `.planning/REQUIREMENTS.md` until the v0.2 milestone was archived on
+    2026-08-11, which moved the file and changed not one character of the
+    requirement) and is quoted here intact, because a criterion is never
+    reworded to fit the code:
 
         "The price ceiling applies to the delivered total, not the item price,
         and a shipping cost that cannot be resolved produces UNKNOWN rather
