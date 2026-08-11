@@ -42,15 +42,26 @@ install can break. Nothing was tagged or uploaded by this release either.
 
 ### Added
 
-- **The price ceiling measures the delivered total.** `max_price` compares
-  `price + shipping` rather than the item price, and a shipping cost that cannot
-  be resolved produces UNKNOWN instead of a pass. Measured against the built
-  tree: of the four watches carrying a ceiling, GameStop still alerts
-  ($54.99 + $6.99 = $61.98 under 80), Nintendo and Amazon stop being able to page
-  because one publishes shipping as prose and the other's is behind a button, and
-  Walmart is *not demonstrated* — the only first-party Walmart capture here
-  resolves no shipping at all. No ceiling was raised to absorb that. Watched going
-  red by two mutations in `scripts/mutation_check.py`.
+- **The price ceiling measures the delivered total** where the retailer publishes
+  a shipping cost readably: `max_price` compares `price + shipping` rather than
+  the item price, and a resolvable total above the ceiling is still suppressed.
+  GameStop is the worked case — $54.99 + $6.99 = $61.98, under 80. Watched going
+  red by mutations in `scripts/mutation_check.py`.
+- **Where shipping cannot be resolved, the alert is sent anyway and says so.**
+  The body carries two separate fields, the same shape either way —
+  `price: $54.99   shipping: unknown` — and states no delivered total, because
+  none was established. **This means a listing with large unread shipping can
+  reach you**: a $54.99 item with $45 of shipping the retailer does not publish
+  will page you, and you are not told the $45.
+
+  This reverses the rule as first shipped, at the maintainer's direction on
+  2026-08-11: *"where we don't know just send it. If the user gets there and it's
+  50 dollar shipping that's disappointing but it's worse to feel like you 'missed
+  out'."* The first implementation suppressed those alerts, which cost Nintendo —
+  the only first-party GO Plus + listing here, at MSRP — and Amazon. All four
+  watches carrying a ceiling can page again. The requirement that asked for
+  suppression is recorded unedited beside the reversal in `.planning/`, rather
+  than reworded to match what shipped.
 - **The README support matrix's Rung cell is bound to the code.** Both joins —
   retailer to adapter out of the command-line dispatcher, adapter to rung out of
   `boty/retailers.py`, read statically rather than by running anything — with
