@@ -21,7 +21,13 @@ pages you as loudly as a real restock.
 **2. "In stock" from a scalper is not a restock.** The $54.99 GO Plus + sits on
 Walmart at $229.99 from a third-party seller while Walmart itself has none. bot-y
 reads the seller on each offer, defaults to first-party only, and keeps a price
-ceiling as a second, independent defence.
+ceiling as a second, independent defence. That ceiling measures the **delivered
+total** — item price plus shipping — where the retailer publishes a shipping cost
+readably, and the item price alone where it does not. In that second case the
+alert still goes out and the body says `shipping: unknown`, which means **a
+listing with large unread shipping can reach you**: a deliberate choice, made on
+2026-08-11, because missing a real restock was judged worse than being
+disappointed at the checkout page.
 
 **3. Fetching: TLS first, browser last.** Anti-bot systems read your TLS
 ClientHello *before any HTTP header arrives*, so header spoofing is theatre and a

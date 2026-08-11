@@ -20,7 +20,15 @@ from urllib.parse import quote_plus
 from . import parse
 from .browser import BROWSER_PATH_ENV, fetch_rendered
 from .fetch import Blocked, FetchError, get, is_refusal
-from .models import STORE_SCOPED, Availability, Extraction, Result, Rung, Watch
+from .models import (
+    STORE_SCOPED,
+    Availability,
+    Extraction,
+    Result,
+    Rung,
+    Watch,
+    established_shipping,
+)
 
 log = logging.getLogger(__name__)
 
@@ -406,10 +414,19 @@ def _verdict_from_html(
 
     state = Availability.IN_STOCK if offer.available else Availability.OUT_OF_STOCK
     seller = offer.seller or "first-party"
-    # WHAT YOU WOULD PAY, not just what the item costs, and the suffix says so
-    # when it cannot be worked out. Only when a ceiling is configured: a watch
-    # with no `max_price` never consults the delivered total, so telling its
-    # reader that one is missing would be noise about a decision nobody makes.
+    # WHAT THE CEILING MEASURED, which since 2026-08-11 is a live question
+    # rather than a refusal. Where no shipping cost could be established the
+    # ceiling is applied to the item price alone and the alert goes out (Dan's
+    # decision), so the suffix says WHICH figure was measured instead of saying
+    # the ceiling could not be evaluated — it can. Only when a ceiling is
+    # configured: a watch with no `max_price` consults neither figure, so
+    # telling its reader about one would be noise about a decision nobody makes.
+    #
+    # THE CONDITION NOW CATCHES A NEGATIVE SHIPPING COST TOO. It used to read
+    # `offer.shipping is None`, which meant a negative figure produced no suffix
+    # at all while the ceiling treated it as unestablished — the suffix and the
+    # decision disagreeing about the same reading. `established_shipping` is the
+    # one predicate all three consumers ask.
     #
     # The healthy string stays BYTE-IDENTICAL. 03.1-04 verified
     # `ld+json: InStock from Best Buy` character-for-character against live
@@ -417,13 +434,14 @@ def _verdict_from_html(
     # constraint by naming the repair in `source` rather than appending here.
     #
     # NO MUTATION MAY ANCHOR ON THIS SENTENCE. It is prose, it will be reworded,
-    # and Phase 5 had to re-anchor two mutations for exactly that. M4, M17 and
-    # M18 anchor on control flow and expressions in `boty/models.py`.
+    # and Phase 5 had to re-anchor two mutations for exactly that — as did this
+    # plan, for M4, M17 and M18. M4, M17, M18, M27 and M28 all anchor on control
+    # flow or expressions in `boty/models.py`.
     detail = f"{source}: {offer.raw_availability} from {seller}"
-    if watch.max_price is not None and offer.shipping is None:
+    if watch.max_price is not None and established_shipping(offer.shipping) is None:
         detail += (
-            " — delivered total not established: no shipping cost was read, "
-            "so the configured ceiling cannot be evaluated"
+            " — no shipping cost was read, so the ceiling was applied to the "
+            "item price alone and no delivered total is stated"
         )
     return Result(
         watch,

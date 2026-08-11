@@ -16,9 +16,17 @@ import logging
 import re
 from typing import Any
 
-from .models import Health, Result
+from .models import Health, Result, established_shipping
 
 log = logging.getLogger(__name__)
+
+#: The one spelling of a field nobody read, in one constant, for the reason
+#: `monitor.CAUSE_UNKNOWN` records: a property stated three ways cannot be
+#: checked mechanically at all, and three paraphrases drift — which is how the
+#: two withdrawn sentences in `monitor.py` came to be wrong in the first place.
+#: `tests/test_alert_text.py` counts occurrences of THIS value rather than
+#: matching prose.
+FIELD_UNKNOWN = "unknown"
 
 #: `store '00000'` / `store "00000"` — the shape `retailers._verdict_from_html`'s
 #: mismatch guard writes. It renders both numbers with `!r`, and `repr` switches
@@ -83,8 +91,58 @@ def _client(urls: list[str]) -> Any | None:
     return client
 
 
+def _field(value: float | None) -> str:
+    """A two-decimal dollar figure, or the one word for "nobody read this".
+
+    ONE FORMATTER FOR BOTH FIELDS, so price and shipping cannot drift into
+    different shapes. That is the whole content of the format Dan asked for:
+    two fields, each showing its own actual state, in the same shape either way.
+    """
+    return f"${value:.2f}" if value is not None else FIELD_UNKNOWN
+
+
 def send_restock(urls: list[str], results: list[Result]) -> bool:
-    """Alert that something is buyable. Includes the price and a direct link."""
+    """Alert that something is buyable: the two fields, and a direct link.
+
+    THE BODY CARRIES `price:` AND `shipping:` AS TWO SEPARATE FIELDS, in the
+    shape Dan asked for on 2026-08-11 — *"Instead of 'unverified', why don't you
+    say price: <price> shipping: <unknown>"* — and in the same shape whether or
+    not shipping resolved. This is the mitigation for the hole his other
+    decision of that date reopened: where no shipping cost could be read the
+    alert now goes out, so the unread cost has to be VISIBLE at the moment
+    somebody decides to click, rather than explained afterwards.
+
+    NO DELIVERED TOTAL IS STATED, in either case, and that is not an omission.
+    You cannot add a number to `unknown`, so where shipping is unknown there is
+    nothing to total and nothing is claimed; and where it is known, both addends
+    are already on the screen. A total that appeared in one case and vanished in
+    the other would be exactly the special-casing this format avoids.
+
+    THE SHIPPING FIGURE IS READ THROUGH `models.established_shipping`, NEVER OFF
+    `r.shipping`. A negative cost is one the code has already refused to trust —
+    `delivered_total` is `None` for it — and printing `$-5.00` would put a
+    figure on a phone that no decision here would accept. Reading
+    `delivered_total is None` instead would be wrong the other way: a reading
+    with an unreadable price and a perfectly good $6.99 shipping cost would
+    report `shipping: unknown` about a number that WAS measured. Three consumers
+    ask one question; the predicate is the answer.
+
+    THIS FUNCTION STILL COMPOSES NO DIAGNOSIS OF ITS OWN, the standing
+    prohibition `send_health_warning` records. Rendering a field and its actual
+    state subtracts a claim rather than adding one — the same standard
+    `_redact_store_numbers` meets — and it cannot make this body assert
+    something the reading did not.
+
+    THE `"price unknown"` PROSE THIS USED TO WRITE IS WITHDRAWN in favour of the
+    field vocabulary. `models.Result.alertable`'s comment cited that exact
+    string as the reason an unreadable price must not clear a ceiling; it was
+    rewritten in the same commit, and the refusal it argued for is still there.
+
+    A TRANSPORT THAT COLLAPSES RUNS OF WHITESPACE will render the two fields one
+    space apart. That is still both fields, still labelled, still legible — the
+    shape survives collapsing, which is why the separator carries no meaning of
+    its own.
+    """
     if not urls or not results:
         return False
     client = _client(urls)
@@ -93,8 +151,11 @@ def send_restock(urls: list[str], results: list[Result]) -> bool:
 
     lines: list[str] = []
     for r in results:
-        price = f"${r.price:.2f}" if r.price is not None else "price unknown"
-        lines.append(f"{r.watch.name} — {price} at {r.watch.retailer}\n{r.url}")
+        lines.append(
+            f"{r.watch.name} at {r.watch.retailer}\n"
+            f"price: {_field(r.price)}   shipping: {_field(established_shipping(r.shipping))}\n"
+            f"{r.url}"
+        )
     body = "\n\n".join(lines)
     title = f"IN STOCK: {results[0].watch.name}" if len(results) == 1 else f"IN STOCK: {len(results)} items"
     log.info("sending restock alert: %s", title)

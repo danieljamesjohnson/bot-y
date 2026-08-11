@@ -104,16 +104,22 @@ def test_in_stock_with_no_ceiling_configured_is_alertable() -> None:
 
 
 def test_unpriced_in_stock_offer_does_not_pass_the_ceiling() -> None:
-    """A ceiling that cannot be evaluated must not authorise an alert.
+    """A price nobody read is not "cheap enough", in either branch.
 
     Walmart has already reshaped `priceInfo.currentPrice` once — that is why
     `parse._dig` exists — and `nextdata_offers` returns
     `Offer(available=True, price=None, ...)` when the dig misses. If an
     unreadable price counted as "cheap enough", the $229.99 flip listing would
-    clear the ceiling silently, and `notify.send_restock` would push it with a
-    "price unknown" body: an alert for a reseller's markup, with nothing in it
-    to show why. That is exactly the noise that trains you to ignore the
-    notifications.
+    clear the ceiling silently and be pushed with a `price: unknown` field: an
+    alert for a reseller's markup, with nothing in it to show why. That is
+    exactly the noise that trains you to ignore the notifications.
+
+    THE HEADLINE OF THIS DOCSTRING USED TO READ *"A ceiling that cannot be
+    evaluated must not authorise an alert"*, and that sentence is withdrawn
+    rather than quietly reused: since 2026-08-11 a ceiling with no shipping
+    figure under it CAN be evaluated, against the item price, and does authorise
+    an alert. What survives is the narrower and older rule — an unreadable
+    PRICE leaves nothing to evaluate at all.
     """
     assert _result(Availability.IN_STOCK, price=None, shipping=0.0, max_price=80).alertable is False
 
