@@ -229,12 +229,25 @@ MUTATIONS = (
     # `return True` would change nothing (the delivered total is also None, the
     # second guard returns False), M4 would SURVIVE, and the harness would
     # report a hole that was not there.
+    #
+    # RE-ANCHORED AGAIN 2026-08-11 (06-07), AND M4'S SUBJECT NARROWED. Dan
+    # reversed 06-01's rule — where no shipping cost can be established the
+    # ceiling now measures the item price and the alert goes out — so `alertable`
+    # split into two branches and the three lines M4 named stopped existing for
+    # the second time in two days. Before 2026-08-11 this ident guarded the
+    # claim that an unestablished DELIVERED TOTAL cannot clear the ceiling; it
+    # now guards the narrower claim that an unreadable PRICE cannot, because the
+    # wider one is no longer true and a `breaks=` sentence describing it would
+    # be a harness reporting a rule the tree does not hold. The price refusal
+    # moved INTO the unresolvable branch, where it is reachable and mutatable —
+    # which is what keeps this mutation able to fail at all, the same property
+    # the deletion above bought in 06-01.
     Mutation(
         ident="M4",
         target="boty/models.py",
-        search="        total = self.delivered_total\n        if total is None:\n            return False\n        return total <= self.watch.max_price",
-        replace="        total = self.delivered_total\n        if total is None:\n            return True\n        return total <= self.watch.max_price",
-        breaks="a delivered total that could not be established clears the ceiling — an unreadable price, or an offer whose shipping cost was never read, becomes alertable at any price",
+        search="        if self.price is None:\n            return False\n        return self.price <= self.watch.max_price",
+        replace="        if self.price is None:\n            return True\n        return self.price <= self.watch.max_price",
+        breaks="an offer whose PRICE could not be read clears the ceiling — with no shipping cost either, an unpriced IN_STOCK reading becomes alertable at any price, which is Walmart's reshaped `priceInfo.currentPrice` turned into a push",
     ),
     Mutation(
         ident="M5",
@@ -433,10 +446,11 @@ MUTATIONS = (
     # mutations rather than riding on the re-anchored M4 for M6/M7's stated
     # reason: they prove different things.
     #
-    # M4 dying proves the guard EXISTS — that SOMETHING refuses an
-    # unestablished delivered total. It says nothing about whether shipping is
-    # part of that total, or whether an unread shipping cost is treated as
-    # unestablished at all.
+    # M4 dying proves that an unreadable PRICE is refused under a ceiling. It
+    # says nothing about whether shipping is part of the total the ceiling
+    # measures, nor about what an unread shipping cost is allowed to be called.
+    # (Before 2026-08-11 that sentence read "an unestablished delivered total";
+    # M4's own comment block above records why it narrowed.)
     #
     # Both are anchored on an EXPRESSION and a condition, never on a `detail`
     # string, a docstring, a comment or any message prose. 06-01 added a
@@ -444,19 +458,49 @@ MUTATIONS = (
     # anchor would grab, and M2's re-anchoring lesson is explicit about what
     # that costs: "matching the message text would tie a mutation to prose that
     # is edited far more often than the verdict is."
+    # M17 WAS RE-POINTED ON 2026-08-11 BECAUSE ITS SUBJECT REVERSED, and this
+    # gets the longest comment in the file because that is the one thing a
+    # mutation harness must never do quietly.
+    #
+    # Until 2026-08-11 this ident pinned the item-price fallback as REJECTED —
+    # its `breaks=` sentence read "rebuilds the REJECTED lenient fallback
+    # exactly", and 06-01's SUMMARY records it as such. Dan then chose a version
+    # of that fallback, verbatim: "I think where we don't know just send it. If
+    # the user gets there and it's 50 dollar shipping that's disappointing but
+    # it's worse to feel like you 'missed out'." A `breaks=` sentence describing
+    # a rejection that did not survive is a gate asserting a rule the tree does
+    # not hold, so it could not be left standing.
+    #
+    # IT WAS RE-POINTED RATHER THAN DELETED. Deleting a mutation to make a suite
+    # green is forbidden in this repository, and it would have been the easy
+    # move here: the behaviour M17 guarded is now the behaviour, so the ident
+    # "no longer applies" is exactly the argument that would have lost a gate.
+    #
+    # WHAT IT GUARDS NOW: the CLAIM, where it used to guard the VERDICT. It
+    # points at `established_shipping`'s refusal returning `0.0` instead of
+    # `None` — a shipping cost NOBODY MEASURED, stated as free, in the alert
+    # body AND in the sum. That is the one thing Dan did not choose, and T-06-72
+    # names it: `None` never collapses to `0.0`, while `0.0` remains a positive
+    # claim of free shipping and survives untouched. Killed by the
+    # `delivered_total is None` tests and by the `shipping: unknown` render
+    # tests in tests/test_alert_text.py.
     Mutation(
         ident="M17",
         target="boty/models.py",
-        search="        if self.price is None or self.shipping is None or self.shipping < 0:\n            return None\n        return self.price + self.shipping",
-        replace="        if self.price is None or (self.shipping is not None and self.shipping < 0):\n            return None\n        return self.price + (self.shipping or 0.0)",
-        breaks="rebuilds the REJECTED lenient fallback exactly: an offer whose shipping cost could not be read is treated as shipping free, so its delivered total is the item price and the $54.99-listing-with-$45-shipping case walks through an $80 ceiling again — REQ-17's own defect, and a tree that summed a resolved shipping correctly while quietly falling back otherwise would pass M4 with the whole hole intact",
+        search="    if shipping is None or shipping < 0:\n        return None\n    return shipping",
+        replace="    if shipping is None or shipping < 0:\n        return 0.0\n    return shipping",
+        breaks="a shipping cost NOBODY READ is stated as free: `established_shipping` collapses the absence of a claim into $0.00, so the delivered total becomes the item price, the ceiling measures a figure nobody measured, and the push body says `shipping: $0.00` over a $45 charge waiting at the checkout page — the one reading of Dan's 2026-08-11 decision he did not choose",
     ),
+    # M18's anchor moved on 2026-08-11 for a MECHANICAL reason and not a
+    # semantic one: `delivered_total` now binds `established_shipping(self.
+    # shipping)` to a local, so the addend is spelled `shipping` rather than
+    # `self.shipping`. Same expression, same subject, same kill list.
     Mutation(
         ident="M18",
         target="boty/models.py",
-        search="        return self.price + self.shipping",
+        search="        return self.price + shipping",
         replace="        return self.price",
-        breaks="drops the shipping addend from the sum, so the ceiling measures the item price again while every guard around it still looks correct — killed on CAPTURED GameStop numbers rather than synthetic ones: $54.99 + $6.99 fails a $60 ceiling and $54.99 alone clears it",
+        breaks="drops the shipping addend from the sum, so the ceiling measures the item price again while every guard around it still looks correct — killed on CAPTURED GameStop numbers rather than synthetic ones: $54.99 + $6.99 fails a $60 ceiling and $54.99 alone clears it, which is the half of REQ-17 that survives Dan's reversal intact",
     ),
     # M19 and M20 are REQ-18: the README support matrix's Rung cell, and the
     # two joins that hold it up. Before 06-02 that column was bound to nothing —
@@ -566,6 +610,30 @@ MUTATIONS = (
         search="Publication happens from the `v0.2.0` tag",
         replace="Publication happens from the `v0.9.0` tag",
         breaks="the README tells a stranger to install from a tag this package was never built as. It is the other direction of the same binding — M25 moves the declaration away from the records, this moves a record away from the declaration — and one direction alone would be satisfied by a gate that only ever watched pyproject.toml move",
+    ),
+    # M27 AND M28 SHARE A `search` STRING DELIBERATELY, on M6/M7's precedent —
+    # "each mutation is applied in its own sandbox, so there is no interaction
+    # between them" — and for M6/M7's reason: they prove different things about
+    # one expression. The item-price comparison is the whole of what is left of
+    # the price defence once shipping cannot be read, and it has to be shown to
+    # bite in BOTH directions. M27 proves the branch ALERTS at all; M28 proves
+    # the ceiling STILL BINDS inside it. A single mutation would leave whichever
+    # half it did not rebuild unguarded, and the two halves fail in opposite
+    # directions: one silently un-reverses a user's decision, the other silently
+    # over-reads it.
+    Mutation(
+        ident="M27",
+        target="boty/models.py",
+        search="        return self.price <= self.watch.max_price",
+        replace="        return False",
+        breaks="rebuilds 06-01's strict refusal exactly, undoing Dan's 2026-08-11 reversal: an offer whose shipping cost could not be read never alerts again, so Nintendo — the only first-party GO Plus + listing in this project's config — and Amazon go quiet, with every test around them still looking sensible",
+    ),
+    Mutation(
+        ident="M28",
+        target="boty/models.py",
+        search="        return self.price <= self.watch.max_price",
+        replace="        return True",
+        breaks="rebuilds the MISREADING of Dan's decision — \"where we don't know just send it\" taken to mean send it at any price — so a $229.99 reseller listing whose shipping nobody read pages him, which is the most likely future regression here because it reads exactly like the decision",
     ),
 )
 
