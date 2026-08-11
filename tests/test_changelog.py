@@ -207,16 +207,48 @@ HISTORICAL_TAIL = '</content>\n</invoke>\n'
 #: The commit that removed it, named beside the bytes so neither travels alone.
 FIX_COMMIT = "2ac965f"
 
-#: The repository itself, needed to ask git what `2ac965f^` actually held. Absent
-#: in the mutation sandbox, which copies no `.git`, so the binding below skips
-#: there on the same `needs_changelog` reasoning.
+def _fix_commit_parent_is_readable() -> bool:
+    """True only where git can actually hand back `2ac965f^`'s `CHANGELOG.md`.
+
+    This asks the precondition the test genuinely has, and two cheaper-looking
+    questions are both wrong — measured, after each reddened `make verify` in turn:
+
+    * `(REPO_ROOT / ".git").exists()` is wrong because **`build_sandbox()` copies
+      `.git`**. The sandbox has one.
+    * "is `REPO_ROOT` git's own `--show-toplevel`" is wrong for the same reason:
+      inside the sandbox that command exits 0 and answers with the sandbox root, so
+      the guard passes and the test runs anyway. What the sandbox's copy lacks is
+      the *history* — `git show 2ac965f^:CHANGELOG.md` there exits **128**,
+      `fatal: invalid object name '2ac965f^'`.
+
+    So the predicate is not "am I in a repository" but "does this repository hold
+    the commit I am about to ask about". Anything weaker skips in the wrong places
+    or runs in them.
+    """
+    import subprocess
+
+    try:
+        probe = subprocess.run(
+            ["git", "show", f"{FIX_COMMIT}^:CHANGELOG.md"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, ValueError):  # git absent, or REPO_ROOT unusable as a cwd
+        return False
+    return probe.returncode == 0
+
+
+#: The history itself, needed to ask git what `2ac965f^` actually held.
 needs_git_history = pytest.mark.skipif(
-    not (REPO_ROOT / ".git").exists(),
+    not _fix_commit_parent_is_readable(),
     reason=(
-        "no .git here, so this is the mutation sandbox — build_sandbox() copies "
-        "no repository, and git cannot be asked what a commit held. The rules "
-        "themselves are still exercised there against HISTORICAL_TAIL by the "
-        "unconditional tests; what skips is only the provenance binding."
+        f"git here cannot read {FIX_COMMIT}^:CHANGELOG.md, so this is the mutation "
+        "sandbox (whose copied .git carries no history), an unpacked sdist, or a "
+        "shallow clone. The rules themselves are still exercised against "
+        "HISTORICAL_TAIL by the unconditional tests; what skips is only the "
+        "provenance binding."
     ),
 )
 
