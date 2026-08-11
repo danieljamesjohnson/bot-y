@@ -8,32 +8,28 @@ to be in stock, and its line is why you can believe the product's one.
 
 ## Why another one
 
-The existing tools are mostly dead — the big-retailer monitors on GitHub stopped
-getting real commits in 2021–22, exactly when Akamai and PerimeterX got serious.
-bot-y is built around three things they get wrong.
+The big-retailer monitors on GitHub stopped getting real commits in 2021–22,
+exactly when Akamai and PerimeterX got serious. bot-y is built around three
+things they get wrong.
 
 **1. "I don't know" is not "out of stock."** After a reskin, a selector-based
 monitor stops matching, reports out-of-stock forever, and *looks perfectly
-healthy*. So `Availability` has three values, a detector that cannot tell must
-say `UNKNOWN`, and every retailer carries a control product — a broken detector
+healthy*. So `Availability` has three values, a detector that cannot tell says
+`UNKNOWN`, and every retailer carries a control product — a broken detector
 pages you as loudly as a real restock.
 
 **2. "In stock" from a scalper is not a restock.** The $54.99 GO Plus + sits on
 Walmart at $229.99 from a third-party seller while Walmart itself has none. bot-y
 reads the seller on each offer, defaults to first-party only, and keeps a price
-ceiling as an independent second defence. The ceiling measures the **delivered
-total** — item plus shipping — and where that cannot be established (Amazon's buy
-box carries no shipping cost; Nintendo publishes one as prose) bot-y **refuses to
-authorise the alert** rather than guessing. That costs coverage, deliberately.
+ceiling as a second, independent defence.
 
 **3. Fetching: TLS first, browser last.** Anti-bot systems read your TLS
 ClientHello *before any HTTP header arrives*, so header spoofing is theatre and a
 headless browser fixes the JavaScript fingerprint while leaving the TLS one
 untouched. bot-y replays a real Chrome TLS stack with
-[`curl_cffi`](https://github.com/lexiforest/curl_cffi), reaching pages a full
-browser gets a CAPTCHA on, and reads stock from **structured data** (schema.org
-JSON-LD, Next.js payloads) rather than CSS selectors — retailers keep those
-accurate because Google Shopping depends on them.
+[`curl_cffi`](https://github.com/lexiforest/curl_cffi) and reads stock from
+**structured data** (schema.org JSON-LD, Next.js payloads) rather than CSS
+selectors — retailers keep those accurate because Google Shopping depends on them.
 
 ## Retailer status
 
@@ -152,13 +148,12 @@ make verify           # everything, including live retailer checks
 make verify-offline   # same minus the live check — for CI
 ```
 
-It exits 0 only if every stage below passed, and prints `VERIFY: PASS`,
-`VERIFY: PASS (INCOMPLETE — ...)` when some live controls could not run *on this
-host*, `VERIFY: PASS (OFFLINE — ...)` when nothing live ran, or `VERIFY: FAIL
-(<stage>)`. The three greens are kept apart because "everything passed" and "we
-could not check some of it" must not look the same. INCOMPLETE is the ordinary
-result of a fresh clone — the shipped Best Buy control needs rung 3 — and it is a
-gap in *your machine*, not in the detector.
+It exits 0 only if every stage below passed. The three greens are kept apart
+because "everything passed" and "we could not check some of it" must not look the
+same: `VERIFY: PASS`, `PASS (INCOMPLETE — ...)` when some live controls could not
+run *on this host*, `PASS (OFFLINE — ...)` when nothing live ran, or `FAIL
+(<stage>)`. INCOMPLETE is the ordinary result of a fresh clone — the shipped Best
+Buy control needs rung 3 — and it is a gap in *your machine*, not the detector.
 
 | Stage | Proves |
 |---|---|
@@ -170,12 +165,10 @@ gap in *your machine*, not in the detector.
 | `controls` | Live control products still read in stock |
 | `mutation` | The suite would actually notice a broken extractor |
 
-Fixtures and controls answer different questions: frozen pages catch *code*
-regressions offline but keep passing forever after a redesign, while live
-controls catch *reality*. `mutation` corrupts specific behaviours in a throwaway
-copy of the package and requires the tests to go red for each, because a green
-suite is not evidence that it detects anything. A dropped network **skips** the
-live check; a retailer turning us away fails it.
+Fixtures catch *code* regressions offline but keep passing forever after a
+redesign; live controls catch *reality*. `mutation` corrupts specific behaviours
+in a throwaway copy and requires the tests to go red for each, because a green
+suite is not evidence that it detects anything.
 
 ## Being a good citizen
 
