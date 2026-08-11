@@ -197,6 +197,12 @@ def test_the_gamestop_capture_carries_its_shipping_cost_all_the_way_to_a_result(
     assert result.price == 54.99
     assert result.shipping == 6.99
     assert result.delivered_total == pytest.approx(61.98)
+    # THE HEALTHY STRING STAYS BYTE-IDENTICAL, and it is asserted here rather
+    # than described: a ceiling IS configured on this watch, and the suffix that
+    # says what the ceiling measured must appear only where a shipping cost
+    # could not be established. 03.1-04 verified this shape character-for-
+    # character against live output.
+    assert result.detail == "ld+json: OutOfStock from GameStop"
 
 
 def test_a_page_with_no_structured_data_carries_no_shipping_and_moves_no_availability(
@@ -2206,7 +2212,8 @@ def test_a_first_party_amazon_offer_under_a_ceiling_alerts_with_its_shipping_unk
     assert r.shipping is None
     assert r.delivered_total is None
     assert r.alertable is True
-    assert "delivered total not established" in r.detail
+    assert "the ceiling was applied to the item price alone" in r.detail
+    assert "no shipping cost was read" in r.detail
 
 
 def test_an_amazon_reading_declares_both_axes_and_is_degraded(

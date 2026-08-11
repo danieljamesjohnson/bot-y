@@ -1,4 +1,16 @@
-"""REQ-15: no alert names a cause the code did not establish.
+"""What reaches a person: the health warning's cause, and the restock's fields.
+
+REQ-15 is the first half — no alert names a cause the code did not establish —
+and it is what this file was built for. The second half arrived on 2026-08-11
+with Dan's shipping reversal: `send_restock` renders `price:` and `shipping:` as
+two labelled fields, and where nobody read a figure the field says `unknown`
+rather than a number. Both halves belong here rather than in two files for the
+same reason the module docstring already gives below: this file is scoped to
+TEXT THAT REACHES A PERSON, which is a property of `monitor.py` and `notify.py`
+together, and the restock body is the one push a person receives when this
+project SUCCEEDS. Until 2026-08-11 not one test in this repository asserted
+anything about it — every reference under `tests/` was a monkeypatch — so the
+surface that carries the good news was the only unguarded one.
 
 ONE REQUIREMENT OVER TWO MODULES, WHICH IS WHY IT HAS ITS OWN FILE.
 -------------------------------------------------------------------
@@ -45,6 +57,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -310,6 +323,171 @@ def test_the_body_is_exactly_the_reason_and_the_failing_controls(
         "  • milk: unknown (detail)\n"
         "  • eggs: unknown (detail)"
     )
+
+
+# --------------------------------------------------------------------------
+# The restock body — two fields, the same shape either way
+# --------------------------------------------------------------------------
+#
+# Dan's format, verbatim, 2026-08-11: *"Instead of 'unverified', why don't you
+# say price: <price> shipping: <unknown>"*. Two separate fields, the same shape
+# whether or not shipping resolved, and NO DELIVERED TOTAL in either case —
+# you cannot add a number to `unknown`, so where shipping is unknown nothing is
+# claimed, and where it is known both addends are already on the screen. A total
+# that appeared in one case and vanished in the other is exactly the
+# special-casing this format avoids.
+
+
+def _restock(
+    *,
+    price: float | None,
+    shipping: float | None,
+    name: str = "Pokémon GO Plus +",
+    retailer: str = "nintendo",
+) -> Result:
+    watch = Watch(
+        name=name,
+        retailer=retailer,
+        target=f"https://{retailer}.test/p/1",
+        max_price=80,
+    )
+    return Result(
+        watch,
+        Availability.IN_STOCK,
+        price=price,
+        detail="synthetic",
+        url=watch.target,
+        shipping=shipping,
+    )
+
+
+def _body(monkeypatch: pytest.MonkeyPatch, result: Result) -> str:
+    recorder = _Recorder()
+    monkeypatch.setattr(notify, "_client", lambda urls: recorder)
+    assert notify.send_restock(["ntfy://example"], [result]) is True
+    return recorder.body
+
+
+def test_a_resolved_shipping_cost_is_stated_as_a_figure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GameStop's captured numbers, in Dan's shape."""
+    body = _body(monkeypatch, _restock(price=54.99, shipping=6.99))
+
+    assert "price: $54.99   shipping: $6.99" in body
+
+
+def test_a_shipping_cost_nobody_read_is_a_field_saying_so_and_no_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The whole of the mitigation for a hole Dan chose to reopen.
+
+    His reasoning, verbatim, 2026-08-11: *"I think where we don't know just send
+    it. If the user gets there and it's 50 dollar shipping that's disappointing
+    but it's worse to feel like you 'missed out'."*
+
+    So this alert goes out, and the ONE thing standing between him and a $45
+    surprise is this word. It must not be a `$0.00` — that would state a figure
+    nobody measured — and there must be no delivered total anywhere, because
+    there is no total: `unknown` is not a number and nothing may be summed with
+    it. Mutation M17 rebuilds exactly the collapse this forbids.
+    """
+    body = _body(monkeypatch, _restock(price=54.99, shipping=None))
+
+    assert "price: $54.99   shipping: unknown" in body
+    assert "$0.00" not in body, "a cost nobody read was stated as free"
+    assert "61.98" not in body and "total" not in body.lower(), (
+        f"a delivered total was stated over an unknown shipping cost:\n{body}"
+    )
+
+
+def test_a_refused_shipping_figure_never_reaches_a_phone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-06-01, one layer further out than `delivered_total`.
+
+    `-5.0` is a figure `established_shipping` has already refused to trust. The
+    naive render reads `r.shipping` directly and prints `$-5.00`; the naive
+    ARITHMETIC prints $49.99, below the item price. Neither may leave the
+    machine, and `unknown` is the honest word for a figure the code threw away.
+    """
+    body = _body(monkeypatch, _restock(price=54.99, shipping=-5.0))
+
+    assert "shipping: unknown" in body
+    assert "-5" not in body and "$-5.00" not in body
+    assert "49.99" not in body
+
+
+def test_an_unreadable_price_uses_the_same_word_as_an_unreadable_shipping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ONE spelling of "nobody read this", for `CAUSE_UNKNOWN`'s reason.
+
+    Three paraphrases drift, and a property stated three ways cannot be checked
+    mechanically at all — which is how the two withdrawn sentences in
+    `monitor.py` came to be wrong. Both fields go through one formatter, so they
+    cannot diverge in shape either.
+    """
+    body = _body(monkeypatch, _restock(price=None, shipping=None))
+
+    assert "price: unknown   shipping: unknown" in body
+    assert body.count(notify.FIELD_UNKNOWN) == 2
+
+
+def test_the_two_bodies_have_the_same_shape_and_differ_only_in_the_shipping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dan's "same shape whether or not shipping resolved", made mechanical.
+
+    Asserted rather than described, because "same shape" is precisely the kind
+    of claim that survives in a docstring while the code special-cases one
+    branch. Both bodies match one expression carrying both labels in order, and
+    the diff between them is one field's value.
+    """
+    resolved = _body(monkeypatch, _restock(price=54.99, shipping=6.99))
+    unresolved = _body(monkeypatch, _restock(price=54.99, shipping=None))
+
+    shape = re.compile(r"^price: (\S+)   shipping: (\S+)$", re.MULTILINE)
+    assert shape.search(resolved), f"the resolved body lost the shape:\n{resolved}"
+    assert shape.search(unresolved), f"the unresolved body lost the shape:\n{unresolved}"
+
+    assert resolved.replace("$6.99", notify.FIELD_UNKNOWN) == unresolved, (
+        "the two bodies differ by more than the shipping value — a branch is "
+        f"special-cased:\n{resolved}\n---\n{unresolved}"
+    )
+
+
+def test_the_restock_alert_still_names_the_item_and_carries_the_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The unchanged half. The fields are an addition, not a replacement."""
+    recorder = _Recorder()
+    monkeypatch.setattr(notify, "_client", lambda urls: recorder)
+    result = _restock(price=54.99, shipping=None)
+
+    notify.send_restock(["ntfy://example"], [result])
+
+    assert "Pokémon GO Plus +" in recorder.title
+    assert "IN STOCK" in recorder.title
+    assert "Pokémon GO Plus +" in recorder.body
+    assert "nintendo" in recorder.body
+    assert result.url in recorder.body
+
+
+def test_the_restock_body_names_no_cause_either(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REQ-15 over the surface it was never applied to.
+
+    The `ast` scan above already walks `notify.py` whole, so the new strings are
+    inside it by construction. This asserts the RENDERED body too, because a
+    field label that is clean in source and a body that is clean on a phone are
+    two claims and only one of them is what REQ-15 is about.
+    """
+    body = _body(monkeypatch, _restock(price=54.99, shipping=None))
+
+    for fragment in WITHDRAWN:
+        assert fragment not in body
 
 
 # --------------------------------------------------------------------------
