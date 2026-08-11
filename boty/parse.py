@@ -56,12 +56,14 @@ class Offer:
     #: `0.0`. `0.0` is a positive claim that this offer ships free — two
     #: independent Walmart fields agreeing, or a retailer's own
     #: `MonetaryAmount` saying so — and `None` is the absence of any claim at
-    #: all. That distinction is the whole of REQ-17: the price ceiling measures
-    #: the delivered total, and where the delivered total cannot be established
-    #: `Result.alertable` refuses to authorise an alert rather than guessing.
-    #: Collapsing the two would resolve "I could not tell" into "ships free",
-    #: which is the permissive direction and the hole this field exists to
-    #: close.
+    #: all. THAT DISTINCTION IS MORE LOAD-BEARING SINCE 2026-08-11, NOT LESS.
+    #: It used to decide whether an alert was authorised at all; since Dan
+    #: reversed that, an unread shipping cost no longer suppresses the alert —
+    #: it decides what the alert STATES. `models.established_shipping` reads
+    #: this field, and `notify.send_restock` renders `shipping: $0.00` for a
+    #: claim of free shipping and `shipping: unknown` for the absence of one,
+    #: on a push a person acts on. Collapsing the two would put a figure nobody
+    #: measured on somebody's phone, and the ceiling would measure it too.
     shipping: float | None = None
 
 
@@ -211,16 +213,17 @@ def _ldjson_shipping(offer: dict[str, Any]) -> float | None:
       `OfferShippingDetails`, one per destination region, and **no capture in
       this repository shows one**. Picking an entry would be a guess about
       which region applies, and a guessed shipping cost is worth less than
-      none: `None` refuses the alert, a guess authorises one.
+      none: `None` shows a hole in the alert body, and a guess states a figure
+      nobody measured — which is worse, and is worse in the direction this
+      whole milestone exists to close.
 
     - **`shippingRate` is not a dict.** Same rule one level down. The number
       lives in a `MonetaryAmount`, and anything else is a shape nobody measured.
 
     `_as_float` is REUSED rather than re-written: it already returns None for
     non-numeric input, which is half of T-06-01. The other half — a negative
-    value — is refused once, in `models.Result.delivered_total`, where a
-    shipping number becomes a decision. N readers would be N chances to get it
-    wrong.
+    value — is refused once, in `models.established_shipping`, where a shipping
+    number becomes a decision. N readers would be N chances to get it wrong.
     """
     details = offer.get("shippingDetails")
     if not isinstance(details, dict):

@@ -202,6 +202,40 @@ KNOWN_RETAILERS: frozenset[str] = frozenset(
 )
 
 
+def established_shipping(shipping: float | None) -> float | None:
+    """The one place a shipping figure is trusted or refused.
+
+    Returns the figure where a shipping cost was ESTABLISHED, and `None` where
+    it was not. THREE CONSUMERS ASK THIS EXACT QUESTION and they must not
+    answer it differently: `Result.delivered_total` (the sum), `notify.
+    send_restock` (what the alert body states), and
+    `retailers._verdict_from_html` (the `detail` suffix that says which figure
+    the ceiling measured). Two spellings of one rule is how the rule drifts.
+
+    A PLAIN FUNCTION AND NOT A `Result` PROPERTY, on purpose: `boty/retailers.
+    py` asks it about a `parse.Offer` before any `Result` exists.
+
+    `0.0` SURVIVES, and that is the case that matters. It is a positive claim
+    that this offer ships free — two independent Walmart fields agreeing, or a
+    retailer's own `MonetaryAmount` saying so — while `None` is the absence of
+    any claim at all. Collapsing the two would resolve "I could not tell" into
+    "ships free", which is the permissive direction.
+
+    A NEGATIVE SHIPPING COST IS REFUSED, and that is T-06-01: it would pull a
+    delivered total BELOW the item price and turn a defence into a hole. It is
+    refused HERE and in exactly one place rather than in each reader — this is
+    the single point at which a retailer-supplied shipping number becomes a
+    decision, and N readers would be N chances to get it wrong.
+
+    A refused figure and an absent one produce the same answer deliberately:
+    both mean "nobody established a shipping cost", which is the state the
+    alert body spells with one word rather than a number.
+    """
+    if shipping is None or shipping < 0:
+        return None
+    return shipping
+
+
 @dataclass(frozen=True)
 class Watch:
     """One product at one retailer."""
@@ -214,12 +248,17 @@ class Watch:
     #: a GO Plus + at $139 against a $54.99 MSRP is a scalper, not a restock.
     #:
     #: MEASURED AGAINST THE DELIVERED TOTAL — the item price PLUS shipping —
-    #: and not against the item price alone. A $54.99 listing with $45 shipping
-    #: walked straight through an $80 cap until REQ-17, which is one of only
-    #: two defences against a reseller alert defeated by a number the page
-    #: publishes. Where the delivered total cannot be established — no shipping
-    #: cost was read, or the price was unreadable — `Result.alertable` refuses
-    #: to authorise an alert rather than guessing. See `Result.delivered_total`.
+    #: WHERE A SHIPPING COST CAN BE READ, AND AGAINST THE ITEM PRICE ALONE
+    #: WHERE IT CANNOT. A $54.99 listing with $45 shipping walked straight
+    #: through an $80 cap until REQ-17, which is one of only two defences
+    #: against a reseller alert defeated by a number the page publishes; that
+    #: half stands, and a resolvable total above the ceiling is still
+    #: suppressed. The second half is Dan's decision of 2026-08-11 — where
+    #: nobody read a shipping cost the alert goes out on the item price and the
+    #: body says `shipping: unknown` — which reopens the hole REQ-17 named and
+    #: gives Nintendo and Amazon back their ability to page. An unreadable
+    #: PRICE under a ceiling is refused in either case. See
+    #: `Result.delivered_total`, `established_shipping` and `Result.alertable`.
     max_price: float | None = None
     #: Control watches are not products you want; they are canaries. See
     #: `boty.monitor` — a control must read IN_STOCK or the detector is broken.
@@ -377,14 +416,18 @@ class Result:
         - the price could not be read;
         - no shipping cost was read (`shipping is None`) — the common case, and
           the whole point: "publishes nothing" and "publishes something we did
-          not read" are indistinguishable from here, so a fallback to the item
-          price would reopen the hole REQ-17 closes;
-        - the shipping cost is NEGATIVE. That is T-06-01, and it is guarded
-          here and in exactly one place rather than in each reader: a negative
-          shipping cost would pull the delivered total BELOW the item price and
-          turn this new defence into a new hole. This is the single point at
-          which a shipping number becomes a decision, and N readers would be N
-          chances to get it wrong.
+          not read" are indistinguishable from here, so summing a missing
+          shipping cost as zero would state a figure nobody measured;
+        - the shipping cost is NEGATIVE. That is T-06-01, and it is now refused
+          by the shared `established_shipping` predicate rather than inline
+          here — same behaviour for every input, one fewer place holding the
+          rule, and two more consumers (the alert body and the `detail`
+          suffix) asking the same question of the same code.
+
+        WHAT AN UNESTABLISHED TOTAL NOW MEANS DOWNSTREAM CHANGED ON 2026-08-11
+        AND THIS PROPERTY DID NOT. `None` here still means "could not be
+        established", which is a different thing from being expensive; what
+        `alertable` does with that is its own comment's business.
 
         Derived rather than stored, for the reason `degraded`'s docstring
         already gives: one source of truth, so the number a reader is shown and
@@ -395,9 +438,10 @@ class Result:
         to `61.98` would invent precision no retailer stated while moving a
         boundary case in the permissive direction.
         """
-        if self.price is None or self.shipping is None or self.shipping < 0:
+        shipping = established_shipping(self.shipping)
+        if self.price is None or shipping is None:
             return None
-        return self.price + self.shipping
+        return self.price + shipping
 
     @property
     def degraded(self) -> bool:
@@ -430,42 +474,58 @@ class Result:
             return False
         if self.watch.max_price is None:
             return True
-        # A ceiling was configured and the delivered total could not be
-        # established. "I could not tell" must not resolve to "cheap enough" —
-        # that is the same conflation as reporting out-of-stock for a page we
-        # failed to parse, and it fails in the permissive direction: the alert
-        # goes out, with `notify.send_restock` writing "price unknown" where
-        # the number should be. Walmart's `priceInfo.currentPrice` has already
-        # been reshaped once, so an unpriced IN_STOCK offer is a live
-        # possibility rather than a hypothetical.
+        # WHERE THE DELIVERED TOTAL IS ESTABLISHED, THE CEILING MEASURES IT.
+        # That half is 06-01's and it is unchanged. A $54.99 listing with $45
+        # shipping cleared an $80 cap because this compared `price` alone, and
+        # a resolvable total ABOVE the ceiling is still suppressed: GameStop's
+        # $54.99 + $6.99 = $61.98 is what an $80 ceiling is asked about, not
+        # $54.99. "I could not tell" must not resolve to "cheap enough" — that
+        # is the same conflation as reporting out-of-stock for a page we failed
+        # to parse — and that argument is still true of this branch.
         #
-        # THE SHIPPING HALF, added under REQ-17, is the same sentence about a
-        # different number. A $54.99 listing with $45 shipping cleared an $80
-        # cap because this compared `price` alone, and no shipping cost read at
-        # all is precisely "I could not tell" about what you would pay.
-        # `tests/test_models.py` already settled the shape this takes: *"A
-        # ceiling that cannot be evaluated must not authorise an alert."*
+        # WHERE IT IS NOT ESTABLISHED, THE CEILING MEASURES THE ITEM PRICE AND
+        # THE ALERT GOES OUT. Reversed by Dan on 2026-08-11, in his words:
         #
-        # ONE GUARD, NOT TWO. The `price is None` check that used to sit above
-        # this one is GONE, and its removal is deliberate rather than tidying:
-        # `delivered_total` already returns `None` for an unreadable price, so
-        # a second guard ahead of this one would be unreachable in effect and
-        # un-mutatable in fact — flipping its `return False` to `return True`
-        # would change no verdict, M4 would SURVIVE, and `make verify` would
-        # fail reporting a hole that is not there.
+        #   "I think where we don't know just send it. If the user gets there
+        #   and it's 50 dollar shipping that's disappointing but it's worse to
+        #   feel like you 'missed out'."
         #
-        # `Availability` IS DELIBERATELY UNTOUCHED BY ALL OF THIS. Driving a
-        # reading to UNKNOWN over a PRICING question would make the page's own
-        # stock statement disappear, and it would strand Nintendo and Amazon —
-        # neither of which publishes a readable shipping cost — at a permanent
-        # UNKNOWN with no path back. The standing rule "UNKNOWN is never a
-        # verdict, and never OUT_OF_STOCK" is a rule against RESOLVING an
-        # unknown into a verdict; returning False here resolves nothing and
-        # moves in the fail-safe direction.
+        # STATE THE COST PLAINLY: this reopens the specific hole REQ-17 was
+        # written to close. A $54.99 listing with $45 of shipping the page does
+        # not publish readably now pages him. He was shown that cost measured —
+        # 06-01 took Nintendo's and Amazon's ability to page away, and Nintendo
+        # is the only first-party GO Plus + listing in this project's config —
+        # and accepted the trade. THE MITIGATION IS NOT A SUPPRESSED ALERT, it
+        # is a visible hole in the body: `notify.send_restock` renders
+        # `shipping: unknown` as a field beside the price, and states no
+        # delivered total, because there is no total to state. REQ-17's text is
+        # unedited; the reversal is recorded beside it, never over it.
+        #
+        # "JUST SEND IT" NEVER MEANT "AT ANY PRICE". The item-price ceiling is
+        # the whole of what is left of this defence in that branch and it still
+        # binds — a $229.99 reseller listing whose shipping nobody read is
+        # still refused. M28 rebuilds the misreading; M27 rebuilds 06-01's
+        # strict refusal, so re-tightening this cannot pass quietly.
+        #
+        # THE PRICE REFUSAL MOVED, and it is still exactly one guard. 06-01
+        # deleted a `price is None` check from ABOVE the total guard because it
+        # was unreachable in effect and un-mutatable in fact. It now lives in
+        # the unresolvable branch, where it IS reachable — an unreadable price
+        # under a ceiling is still not alertable — which is what keeps M4 able
+        # to fail.
+        #
+        # `Availability` IS DELIBERATELY UNTOUCHED BY ALL OF THIS, before and
+        # after the reversal. Driving a reading to UNKNOWN over a PRICING
+        # question would make the page's own stock statement disappear. The
+        # standing rule "UNKNOWN is never a verdict, and never OUT_OF_STOCK" is
+        # a rule against RESOLVING an unknown into a verdict; nothing here
+        # resolves one.
         total = self.delivered_total
-        if total is None:
+        if total is not None:
+            return total <= self.watch.max_price
+        if self.price is None:
             return False
-        return total <= self.watch.max_price
+        return self.price <= self.watch.max_price
 
 
 @dataclass

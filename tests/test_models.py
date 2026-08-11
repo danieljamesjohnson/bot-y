@@ -27,7 +27,14 @@ from __future__ import annotations
 
 import pytest
 
-from boty.models import Availability, Extraction, Result, Rung, Watch, established_shipping
+from boty.models import (
+    Availability,
+    Extraction,
+    Result,
+    Rung,
+    Watch,
+    established_shipping,
+)
 from boty.monitor import assess_health
 
 
