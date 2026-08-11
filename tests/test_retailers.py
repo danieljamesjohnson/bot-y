@@ -238,9 +238,16 @@ def test_a_number_in_a_field_never_observed_carrying_one_is_not_a_shipping_cost(
     signals do not agree, so nothing is resolved — and with a ceiling
     configured, nothing resolved is not alertable.
 
-    That is the $54.99-item-with-$45-shipping case REQ-17 names, answered by
-    refusal rather than by a pass. The item price alone would clear the $80
-    ceiling comfortably, which is exactly why the old ceiling let it through.
+    THIS IS THE $54.99-ITEM-WITH-$45-SHIPPING CASE REQ-17 NAMES, AND AS OF
+    2026-08-11 IT PAGES DAN. The name is unchanged and still accurate — the fee
+    still does not become a shipping cost, `shipping` is still `None` and the
+    delivered total is still unestablished — but the ceiling now falls back to
+    the item price where shipping cannot be read, and $54.99 clears $80
+    comfortably. That is Dan's decision, verbatim: *"I think where we don't
+    know just send it. If the user gets there and it's 50 dollar shipping
+    that's disappointing but it's worse to feel like you 'missed out'."* The
+    whole of the mitigation is that the push says `shipping: unknown`; Dan is
+    not told a total, because there is no total to tell him.
     """
     page = _nextdata(
         availabilityStatus="IN_STOCK",
@@ -263,7 +270,7 @@ def test_a_number_in_a_field_never_observed_carrying_one_is_not_a_shipping_cost(
     assert result.price == 54.99
     assert result.shipping is None
     assert result.delivered_total is None
-    assert result.alertable is False
+    assert result.alertable is True
 
 
 def test_the_walmart_capture_that_says_free_shipping_says_so_on_the_result(
@@ -1937,8 +1944,12 @@ def test_target_control_fixture_is_in_stock_priced_and_alertable(
     Target's reader is an add-to-cart button that publishes no shipping cost —
     so a synthetic ceiling here would have made this assertion a statement
     about REQ-17's refusal rather than about the detector, which is what this
-    test exists to watch. The refusal itself is pinned where it belongs, in
-    `test_a_first_party_amazon_offer_under_a_ceiling_cannot_be_alerted`.
+    test exists to watch. The ceiling's own behaviour is pinned where it
+    belongs, in
+    `test_a_first_party_amazon_offer_under_a_ceiling_alerts_with_its_shipping_unknown`
+    — which as of Dan's 2026-08-11 reversal now pins an ALERT rather than a
+    refusal. Removing the synthetic ceiling was right either way and for the
+    same reason: the shipped control carries none.
     """
     watch = Watch(
         name="CONTROL — up&up microfiber dust cloths",
@@ -2154,26 +2165,33 @@ def test_amazon_control_fixture_is_in_stock_first_party_priced_and_alertable(
     assert "Amazon.com" in r.detail
 
 
-def test_a_first_party_amazon_offer_under_a_ceiling_cannot_be_alerted(
+def test_a_first_party_amazon_offer_under_a_ceiling_alerts_with_its_shipping_unknown(
     amazon_aa_batteries: str,
 ) -> None:
-    """REQ-17's user-visible cost, measured rather than described.
+    """The watch 06-01 silenced, paging again — measured rather than described.
 
     This is a first-party Amazon offer, IN_STOCK, at $9.99, against an $80
-    ceiling — every other defence satisfied. It is nonetheless not alertable,
+    ceiling — every other defence satisfied. Under 06-01 it was not alertable,
     because `add_to_cart_offers` reads a button and a button carries no
-    shipping cost, so the delivered total cannot be established and the
-    configured ceiling cannot be evaluated.
+    shipping cost, so no delivered total could be established. That measured
+    cost went to Dan and he reversed the rule on 2026-08-11:
 
-    The shipped Amazon PRODUCT watch (`config/products.yaml`) carries exactly
-    that `max_price: 80`, so this is what happens to it the day Amazon itself
-    sells a GO Plus +: the reading is correct, the verdict is IN_STOCK, and no
-    page is sent. That consequence is Dan's to accept or reject and it is
-    routed to him at 06-06's checkpoint — it is deliberately NOT worked around
-    here by raising a ceiling or editing a watch.
+        "I think where we don't know just send it. If the user gets there and
+        it's 50 dollar shipping that's disappointing but it's worse to feel
+        like you 'missed out'."
 
-    The `detail` says so in words, so the silence is diagnosable from the
-    status page without re-reading this file.
+    So the ceiling now measures the item price where shipping cannot be read,
+    and the shipped Amazon PRODUCT watch (`config/products.yaml`, `max_price:
+    80`) can page again the day Amazon itself sells a GO Plus +. The delivered
+    total is still `None` and is still not stated anywhere: the push carries
+    `price:` and `shipping: unknown` as two fields and no total.
+
+    RENAMED, because the old name asserted the old verdict. Nothing about the
+    reading changed — same fixture, same availability, same price, same absent
+    shipping cost — only what the ceiling does with it.
+
+    The `detail` says which of the two the ceiling measured, so the decision is
+    diagnosable from the status page without re-reading this file.
     """
     watch = Watch(
         name="Pokémon GO Plus +",
@@ -2187,7 +2205,7 @@ def test_a_first_party_amazon_offer_under_a_ceiling_cannot_be_alerted(
     assert r.price == 9.99
     assert r.shipping is None
     assert r.delivered_total is None
-    assert r.alertable is False
+    assert r.alertable is True
     assert "delivered total not established" in r.detail
 
 

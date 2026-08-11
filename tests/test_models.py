@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 
-from boty.models import Availability, Extraction, Result, Rung, Watch
+from boty.models import Availability, Extraction, Result, Rung, Watch, established_shipping
 from boty.monitor import assess_health
 
 
@@ -136,6 +136,23 @@ def test_not_in_stock_is_never_alertable() -> None:
 # way.
 
 
+def test_established_shipping_trusts_a_claim_and_refuses_the_absence_of_one() -> None:
+    """The one predicate three consumers ask, and the `0.0` case is the point.
+
+    `0.0` is a positive claim that this offer ships free — two independent
+    Walmart fields agreeing, or a retailer's own `MonetaryAmount` saying so —
+    and it survives, sums, and renders as `$0.00`. `None` is the absence of any
+    claim, and a negative figure is a claim the code refuses to trust (T-06-01,
+    because it would pull a delivered total below the item price). Both of
+    those collapse to the same answer, because both mean "nobody established a
+    shipping cost", and that is the state the alert body spells `unknown`.
+    """
+    assert established_shipping(None) is None
+    assert established_shipping(-5.0) is None
+    assert established_shipping(0.0) == 0.0
+    assert established_shipping(6.99) == 6.99
+
+
 def test_the_delivered_total_is_the_price_plus_the_shipping() -> None:
     """GameStop's captured numbers: $54.99 + $6.99, under an $80 ceiling."""
     r = _result(Availability.IN_STOCK, price=54.99, shipping=6.99, max_price=80)
@@ -157,34 +174,71 @@ def test_the_ceiling_bites_on_the_delivered_total_and_on_nothing_else() -> None:
     assert r.alertable is False
 
 
-def test_an_unresolved_shipping_cost_under_a_ceiling_is_not_alertable() -> None:
-    """REQ-17's own sentence: an unresolvable shipping cost produces no pass.
+def test_an_unresolved_shipping_cost_under_a_ceiling_is_alertable() -> None:
+    """REVERSED BY DAN, 2026-08-11. Where shipping is unknown, the alert goes out.
 
-    This is the case that costs coverage, and it is accepted rather than
-    softened. Nintendo publishes `shippingDetails` as prose and Amazon's reader
-    is a button, so neither can establish a delivered total — and both stop
-    being able to page anybody, at today's `max_price: 80`, until some later
-    plan gives them a shipping cost or an operator declaration.
+    REQ-17's own sentence stands unedited in `REQUIREMENTS.md` and is quoted
+    here intact, because a criterion is never reworded to fit the code:
 
-    The rejected alternative was falling back to the item price when a retailer
-    publishes no shipping at all. It reopens exactly the hole this closes:
-    Walmart's paid-marketplace payload is unobserved, so "publishes nothing"
-    and "publishes something we did not read" are indistinguishable on the
-    retailer this defence exists for. REQUIREMENTS' own tiebreaker settles it —
-    trustworthiness over coverage.
+        "The price ceiling applies to the delivered total, not the item price,
+        and a shipping cost that cannot be resolved produces UNKNOWN rather
+        than a pass. A $54.99 listing with $45 shipping currently defeats one
+        of only two defences against a reseller alert."
+
+    06-01 built exactly that, measured what it cost — Nintendo and Amazon both
+    stopped being able to page anybody — and put the bill to Dan. He reversed
+    it, verbatim, on 2026-08-11:
+
+        "I think where we don't know just send it. If the user gets there and
+        it's 50 dollar shipping that's disappointing but it's worse to feel
+        like you 'missed out'."
+
+    So this test asserts the opposite of what it asserted yesterday, and it is
+    RENAMED to say so: a name stating the old verdict over an assertion of the
+    new one is the self-invalidating document this whole milestone exists to
+    close.
+
+    STATE THE COST PLAINLY. This reopens the specific hole REQ-17 names. A
+    $54.99 listing with $45 of shipping the page does not publish readably now
+    pages Dan, and he will not be told the total. What it gives back is the two
+    watches 06-01 took: Nintendo — the only first-party GO Plus + listing
+    anywhere in this project's config, at MSRP — and Amazon. The whole of the
+    mitigation is that the push body carries `shipping: unknown` as a field, so
+    the hole is visible at the moment of decision rather than explained
+    afterwards.
+
+    What did NOT reverse is asserted two tests up: where shipping IS readable
+    the ceiling still measures the delivered total, and $54.99 + $6.99 still
+    fails a $60 ceiling.
     """
-    assert _result(Availability.IN_STOCK, price=54.99, max_price=80).alertable is False
+    assert _result(Availability.IN_STOCK, price=54.99, max_price=80).alertable is True
+
+
+def test_an_item_price_over_the_ceiling_is_not_alertable_when_shipping_is_unknown() -> None:
+    """"Just send it" never meant "send it at any price".
+
+    The item-price ceiling is the whole of what is left of this defence once
+    shipping cannot be read, so it has to bite: the $229.99 reseller listing
+    that motivated the ceiling in the first place is still refused when nobody
+    read its shipping cost. Mutation M28 rebuilds the misreading — the
+    unresolvable branch passing unconditionally — and this is what kills it.
+    """
+    assert _result(Availability.IN_STOCK, price=229.99, max_price=80).alertable is False
 
 
 def test_an_unreadable_price_under_a_ceiling_is_still_not_alertable() -> None:
-    """The pre-existing rule, kept watchable in its own right.
+    """The pre-existing rule, and the one refusal the reversal does NOT touch.
 
-    `delivered_total` now answers for both halves, so this and the shipping
-    case above go through one guard. They are asserted separately because they
-    are separate claims: a tree that refused an unreadable price and quietly
-    summed a missing shipping as zero would pass one and fail the other.
+    An unreadable price is not "cheap enough" in either branch, and both are
+    asserted because they now run through different code: with `shipping=0.0`
+    the delivered total is unestablished only because the price is, and with
+    shipping omitted the unresolvable branch has to refuse the price itself.
+    A tree that reversed too much — treating an unreadable price the way it now
+    treats an unread shipping cost — would pass the first and fail the second.
+    This is what kills M4.
     """
     assert _result(Availability.IN_STOCK, price=None, shipping=0.0, max_price=80).alertable is False
+    assert _result(Availability.IN_STOCK, price=None, max_price=80).alertable is False
 
 
 def test_no_ceiling_configured_still_short_circuits_before_any_of_this() -> None:
@@ -203,17 +257,28 @@ def test_a_negative_shipping_cost_never_lowers_a_delivered_total() -> None:
 
     `54.99 + -5.0` is `49.99`, which clears a ceiling the honest total might
     not. A negative shipping cost pulls the delivered total BELOW the item
-    price, so it is refused outright rather than subtracted — the total is
-    unestablished, and unestablished is not alertable.
+    price, so it is refused outright rather than subtracted — the total stays
+    unestablished, which is what this test's name says and what it still
+    asserts.
 
-    Guarded in `delivered_total` and in exactly one place, not in each reader:
-    this is the single point at which a shipping number becomes a decision, and
-    N readers would be N chances to get it wrong.
+    Guarded in `established_shipping` and in exactly one place, not in each
+    reader: this is the single point at which a shipping number becomes a
+    decision, and N readers would be N chances to get it wrong. It moved out of
+    `delivered_total` on 2026-08-11 because two more consumers now ask the same
+    question — the alert body and the `detail` suffix — and the behaviour is
+    unchanged for every input.
+
+    THE SECOND ASSERTION REVERSED ON 2026-08-11, and the name did not, because
+    the name is still accurate. A refused figure is an unknown figure, and
+    under Dan's decision an unknown shipping cost alerts on the item price
+    alone: $54.99 against an $80 ceiling. What the reversal must NOT do is let
+    `-5.0` reach the sum or the push body — `delivered_total` is still `None`
+    here, and `tests/test_alert_text.py` asserts no `-5` reaches a phone.
     """
     r = _result(Availability.IN_STOCK, price=54.99, shipping=-5.0, max_price=80)
 
     assert r.delivered_total is None
-    assert r.alertable is False
+    assert r.alertable is True
 
 
 def test_the_delivered_total_is_none_whenever_either_half_is_missing() -> None:
