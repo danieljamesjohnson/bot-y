@@ -9,9 +9,20 @@ Two behaviours here are the reason this project exists.
    reskins, the detector stops matching, and it reports out-of-stock forever
    while looking perfectly healthy. You find out weeks later, having missed
    the drop. So every retailer carries at least one control — a product known
-   to be in stock. If a control stops reading IN_STOCK you get told, loudly,
-   that this retailer's readings are no longer verified — and that the cause is
-   not established.
+   to be in stock. If a control stops reading IN_STOCK, this retailer's readings
+   are recorded as no longer verified — with the cause not established — on the
+   status page, in `boty check` and in the log.
+
+   "AND YOU GET TOLD, LOUDLY" USED TO END THAT SENTENCE, AND IT DOES NOT ANY
+   MORE. Dan, 2026-08-12, the second time he raised it: *"im still getting
+   annoying messages. we need to never hit the user unless its something they
+   can buy or actually do"*. Nobody can repair a detector from a phone, and this
+   module has just finished saying it does not know why the control failed — so
+   the push asked for a decision that does not exist. What is RECORDED is
+   unchanged and deliberately so: every state below still reaches every one of
+   our own surfaces in full. What changed is that a state now has to carry a
+   `Health.action` — a thing a person can DO — before `cli.watch_cycle` will
+   wake anybody with it, and exactly one arm here can name one.
 
    WHAT THIS PARAGRAPH USED TO SAY, AND WHY IT DOES NOT ANY MORE. Until
    2026-08-10 it read: "If a control stops reading IN_STOCK, the *detector* is
@@ -51,6 +62,29 @@ log = logging.getLogger(__name__)
 #: One constant and not three paraphrases for a second reason: three copies
 #: drift, and drift is how the two sentences this replaced came to be wrong.
 CAUSE_UNKNOWN = "the cause is not established"
+
+#: The one thing in this module a person can actually DO, spelled once — the
+#: `Health.action` the store-gap arm carries, and the only reason any health
+#: state below is allowed to reach a phone.
+#:
+#: IT NAMES A CONFIG VALUE AND NOTHING ELSE, and that is what makes it an action
+#: rather than a diagnosis: the pin is absent or the page answered for another
+#: store, both of which are read off values we hold, and setting it is a step
+#: only the operator can take. Every other arm here ends in a fact about a
+#: retailer or in `CAUSE_UNKNOWN`, and neither is something anybody can do.
+#:
+#: NO STORE NUMBER, EVER — this string is joined into a push body that leaves
+#: the machine over `ntfy://` and friends, and `notify._redact_store_numbers`
+#: exists because a store number resolves publicly to one street address. It
+#: names the VARIABLE, not a value.
+#:
+#: One constant, one spelling, for `CAUSE_UNKNOWN`'s reason: a property stated
+#: three ways cannot be checked mechanically, and `scripts/mutation_check.py`
+#: anchors on the NAME rather than on this prose.
+STORE_PIN_ACTION = (
+    "set this watch's store_id in config/products.yaml — it reads "
+    "${WALMART_STORE_ID}, so the value goes in the daemon's EnvironmentFile"
+)
 
 
 @dataclass
@@ -208,12 +242,19 @@ def assess_health(results: list[Result]) -> list[Health]:
                 # already wrote precisely the right sentence.
                 #
                 # NO NEW SENDER, AND THE WIRING IS INHERITED RATHER THAN MISSING.
-                # This arm is `refused=False`, so `cli.watch_cycle`'s existing
-                # `pageable` filter pages it once per failure episode through
-                # `warned`, and the existing `send_health_warning(...) is False`
-                # branch already rolls that memory back on a failed delivery. A
-                # second sender would need `boty/cli.py`, and an unwired send is
-                # "not a retry — it is a drop nothing will ever mention again".
+                # `cli.watch_cycle`'s existing `pageable` filter pages this arm
+                # once per failure episode through `warned`, and the existing
+                # `send_health_warning(...) is False` branch already rolls that
+                # memory back on a failed delivery. A second sender would need
+                # `boty/cli.py`, and an unwired send is "not a retry — it is a
+                # drop nothing will ever mention again".
+                #
+                # WHAT MAKES IT PAGEABLE CHANGED ON 2026-08-12 AND THE OUTCOME
+                # DID NOT. It used to reach the filter by being `refused=False`,
+                # which was a fact about what it was NOT; since Dan's rule it
+                # reaches it by carrying `STORE_PIN_ACTION`, which is a fact
+                # about what he can DO. That is now the only route: after that
+                # change this is the sole arm here that pages at all.
                 reason = (
                     "a control reading cannot be shown to come from the store this "
                     "watch is about — store_id is unset in config/products.yaml, or the "
@@ -244,6 +285,14 @@ def assess_health(results: list[Result]) -> list[Health]:
                     refused=refused,
                     reason=reason,
                     failing_controls=[f"{c.watch.name}: {c.availability.value} ({c.detail})" for c in broken],
+                    # THE ONE ARM THAT NAMES SOMETHING TO DO, and the conditional
+                    # is the whole rule rather than a shortcut for it: `action`
+                    # defaults to empty on `Health`, so every arm above and every
+                    # arm added after this one is silent until somebody can write
+                    # down the remedy. `refused` and the breakage arm are not
+                    # omissions from a list — they have no remedy to state, which
+                    # is exactly why they no longer page.
+                    action=STORE_PIN_ACTION if store_gap else "",
                 )
             )
         else:

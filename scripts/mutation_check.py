@@ -635,6 +635,57 @@ MUTATIONS = (
         replace="        return True",
         breaks="rebuilds the MISREADING of Dan's decision — \"where we don't know just send it\" taken to mean send it at any price — so a $229.99 reseller listing whose shipping nobody read pages him, which is the most likely future regression here because it reads exactly like the decision",
     ),
+    # ------------------------------------------------------------------
+    # M29 AND M30 ARE THE TWO DIRECTIONS OF ONE RULE, on M27/M28's precedent:
+    # Dan, 2026-08-12, the second time he raised it — *"im still getting annoying
+    # messages. we need to never hit the user unless its something they can buy
+    # or actually do"*. A push now costs a `Health.action`, a stated thing a
+    # person can DO, and the field is empty unless an arm fills it.
+    #
+    # M29 rebuilds LOUDNESS: the filter stops reading the field, so every health
+    # state pages again — including the one that fired at 16:49:58 that day about
+    # an Amazon control nobody can repair from a phone.
+    # M30 rebuilds SILENCE where the one remedy exists: the store-pin arm stops
+    # naming it, so the single health state Dan can close goes quiet.
+    #
+    # ONE MUTATION WOULD LEAVE THE OTHER HALF UNGUARDED, and the halves fail in
+    # opposite directions — one restores the noise that trained him to ignore
+    # this channel, the other satisfies "stop the noise" by pushing nothing at
+    # all, which is the cheapest way to pass a suppression rule and the way that
+    # loses him a monitor.
+    #
+    # BOTH ARE ANCHORED ON BEHAVIOUR AND NEITHER TOUCHES PROSE — M2's lesson,
+    # which this repository has now paid for twice. M29 is the comprehension that
+    # decides; M30 is a conditional over a NAME, which is exactly why
+    # `STORE_PIN_ACTION` is a module constant rather than a literal at the call
+    # site. The sentence a person reads can be rewritten freely without either
+    # mutation drifting.
+    #
+    # M21-M24 ARE AN INTENTIONAL GAP and are not filled here.
+    #
+    # WHICH TESTS ARE EXPECTED TO CATCH EACH. M29:
+    # tests/test_cli_watch.py's REQ-21 section, in particular
+    # test_a_control_that_stopped_reading_in_stock_is_recorded_and_not_pushed and
+    # test_a_health_state_nobody_has_written_yet_is_silent. M30: that section's
+    # test_the_store_pin_gap_is_pushed_because_a_person_can_close_it, plus
+    # tests/test_alert_text.py's
+    # test_exactly_one_arm_names_something_a_person_can_do. If either SURVIVES,
+    # the first thing to check is whether the paging decision acquired a second
+    # gate somewhere — two gates on one rule means neither can be shown to bite.
+    Mutation(
+        ident="M29",
+        target="boty/cli.py",
+        search="    pageable = [h for h in unhealthy if h.action]",
+        replace="    pageable = list(unhealthy)",
+        breaks="every health state wakes somebody again, which is the blocklist-shaped default Dan has now asked to have removed twice: a refusal nobody can answer, a control nobody can repair and every arm added after today all page, and the alert channel this project exists to be trusted on fills up with states that ask for no decision",
+    ),
+    Mutation(
+        ident="M30",
+        target="boty/monitor.py",
+        search='                    action=STORE_PIN_ACTION if store_gap else "",',
+        replace='                    action="",',
+        breaks="the one health state a person can close stops saying so, so nothing reaches a phone at all — an unpinned or mismatched store leaves every Walmart reading UNKNOWN forever, silently, which is the suppression rule satisfied by deleting the monitor rather than the noise",
+    ),
 )
 
 

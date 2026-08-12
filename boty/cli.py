@@ -201,6 +201,23 @@ def _warn_monitor_is_stuck(cfg: Config, failures: int) -> None:
     Wrapped, because whatever broke the cycle may well have broken
     notification too — and raising from inside the failure handler would
     replace a diagnosable exit with a stack trace from the wrong place.
+
+    THIS ONE STILL PUSHES UNDER THE 2026-08-12 RULE, and it is the one place in
+    this file that says so with a stated reason rather than by default. It is
+    not an `assess_health` arm and does not reach `watch_cycle`'s filter, so the
+    `action` below is not decoration: it is the argument for the send, written
+    where somebody auditing the rule will look for it.
+
+    WHY IT SURVIVES THE RULE THAT SILENCED THE OTHERS. A control that stops
+    verifying is a thing the operator cannot fix; a loop that has raised three
+    times running is a thing only he can, and while it lasts NOTHING reaches him
+    — including the restock alert this project exists to send, with a green
+    status page over it. The other states are noise because they interrupt for
+    no decision; this one is the absence of the channel itself.
+
+    IT IS RARE BY CONSTRUCTION, which is why it is not the noise Dan is
+    describing: three consecutive raising cycles, once per episode
+    (`test_the_stuck_warning_is_sent_once_not_every_cycle`), not once per poll.
     """
     try:
         send_health_warning(
@@ -213,6 +230,10 @@ def _warn_monitor_is_stuck(cfg: Config, failures: int) -> None:
                         f"{failures} consecutive check cycles raised — the monitor is "
                         f"running but not monitoring, and the status page is stale"
                     ),
+                    action=(
+                        "restart boty.service and read the log — nothing is being "
+                        "checked and no restock can reach you until it runs again"
+                    ),
                 )
             ],
         )
@@ -220,18 +241,26 @@ def _warn_monitor_is_stuck(cfg: Config, failures: int) -> None:
         log.exception("could not send the stuck-monitor warning either")
 
 
-#: How many consecutive refusals before a refusal is treated as a real problem.
-#: Below this, backing off is the whole response. At it, the backoff has already
-#: stretched the interval by 2**N and the retailer is still saying no, which is
-#: no longer a rate-limit story.
-REFUSALS_BEFORE_PAGING = 5
-
-
-def _refusal_is_entrenched(health: Health, pacer: Pacer | None) -> bool:
-    """True when a refusal has outlasted the backoff and deserves a human."""
-    if pacer is None:
-        return True
-    return pacer._for(health.retailer).refusals >= REFUSALS_BEFORE_PAGING
+#: `REFUSALS_BEFORE_PAGING = 5` AND `_refusal_is_entrenched` STOOD HERE UNTIL
+#: 2026-08-12, and they are deleted rather than left unreferenced.
+#:
+#: They answered "when does a refusal deserve a human", and REQ-16's answer was
+#: "once it has outlasted the backoff": at five consecutive refusals the interval
+#: has already been stretched by 2**N and the retailer is still saying no, which
+#: is no longer a rate-limit story. That reasoning is still correct about
+#: REACHABILITY and it is no longer a reason to push, because it never named
+#: anything to do. Dan cannot make a retailer answer at five refusals any more
+#: than at one, and the entrenchment he was being woken for changed only how
+#: certain we were of a fact he has no move against.
+#:
+#: The backoff itself is untouched — `pacing.Pacer` still counts refusals,
+#: stretches the interval and persists both — so the response the monitor CAN
+#: take by itself is unchanged. What went is the page on top of it.
+#:
+#: Deleted and not merely unused: a helper named "deserves a human" sitting in
+#: the file whose rule is that almost nothing does is a comment that will be
+#: believed. `pacing.MAX_PERSISTED_REFUSALS` used to be bound to the constant by
+#: a test; that test now binds it to the backoff cap it actually protects.
 
 
 def watch_cycle(
@@ -299,25 +328,46 @@ def watch_cycle(
             state.seen.pop(r.watch.key, None)
         state.save()
 
-    # Warn once per retailer per failure episode, not every cycle — and not at
-    # all for a retailer that is merely refusing us.
+    # Warn once per retailer per failure episode, not every cycle — and only
+    # about a state that names something a person can DO.
     #
-    # A refusal is `ok=False` and belongs on the status page, because we do not
-    # know the stock. It is not a page, because nothing is broken and the
-    # monitor is already fixing it by asking less often. On 2026-08-04 that
-    # distinction was missing and Dan got 20 notifications in 24 hours for two
-    # retailers whose detectors were fine — which is how an alert channel stops
-    # being read, and this project's whole value is that its alerts mean
-    # something.
+    # THE FILTER IS A POSITIVE TEST AND NOT A LIST OF EXCEPTIONS, which is the
+    # decision here rather than an implementation of one. Dan, 2026-08-12, the
+    # second time he raised it: *"im still getting annoying messages. we need to
+    # never hit the user unless its something they can buy or actually do"*. The
+    # obvious shape — keep paging everything except the cases we have learned are
+    # useless — is exactly what produced that sentence twice. It was `refused`
+    # after 2026-08-04's 20 notifications in 24 hours, and it was still loud on
+    # 2026-08-12 at 16:49:58 for an Amazon control that did not read IN_STOCK,
+    # because a blocklist only ever knows about the noise somebody has already
+    # been woken by. Every arm added after it is loud by default.
     #
-    # A refusal that OUTLASTS the backoff is a different thing and does page:
-    # at that point the retailer is not rate-limiting us, it is refusing us,
-    # and that is a fact about reachability somebody should hear.
+    # So the default is silence and a push costs a stated reason: `Health.action`
+    # is empty unless `assess_health` deliberately fills it, and today exactly one
+    # arm can — the store-pin gap, whose remedy is a value only the operator can
+    # set. A health arm written next year says nothing until somebody writes down
+    # what to do about it, and that is a property of this line rather than of
+    # anybody's memory.
+    #
+    # NOTHING HERE STOPS NOTICING. `unhealthy` is untouched, `write_status` above
+    # has already published every state in full, and the loop below records each
+    # one it is not pushing. REQ-16's "recording and notifying stay separate" is
+    # what makes that a whole answer rather than half of one.
+    #
+    # WHAT THIS OVERRULES, SAID PLAINLY: REQ-16's second and third clauses — "a
+    # refusal that outlasts the cap is pushed once" and "a detector producing a
+    # wrong verdict is pushed immediately". Both are now recorded and not pushed.
+    # Dan's rule is later and is about the same channel, and the requirement's
+    # text is left as it stood at close rather than edited under it.
     unhealthy = [h for h in health if not h.ok]
-    pageable = [h for h in unhealthy if not h.refused or _refusal_is_entrenched(h, pacer)]
+    pageable = [h for h in unhealthy if h.action]
     for h in unhealthy:
-        if h not in pageable:
-            log.info("%s unhealthy but refusing, not broken — not paging: %s", h.retailer, h.reason)
+        if not h.action:
+            log.info(
+                "%s unhealthy, recorded and not pushed — nothing here is a human action: %s",
+                h.retailer,
+                h.reason,
+            )
     fresh = [h for h in pageable if h.retailer not in warned]
     # A retailer the PACER SKIPPED this cycle keeps its memory. `health` is
     # derived from `results`, and `run_once` returns no result at all for a

@@ -247,6 +247,65 @@ def test_exactly_the_two_unknown_causes_say_so() -> None:
     )
 
 
+def test_exactly_one_arm_names_something_a_person_can_do() -> None:
+    """The 2026-08-12 partition, over the same four arms — and it is the *reason*
+    a push is allowed rather than a second description of the same split.
+
+    Dan, twice: *"we need to never hit the user unless its something they can buy
+    or actually do"*. `Health.action` is empty by default, so this asserts which
+    arms deliberately fill it — and the answer has to stay ONE. Three of these
+    end in a fact about a retailer or in `CAUSE_UNKNOWN`, and neither is
+    something anybody can act on; the store gap ends in a value the operator
+    sets.
+
+    IT IS THE COMPLEMENT OF THE `CAUSE_UNKNOWN` PARTITION ABOVE AND MUST NOT BE
+    FOLDED INTO IT. They agree today for a reason — you cannot state a remedy for
+    a cause you have not established — but they answer different questions, and
+    the no-control arm is the case that proves it: its cause IS established (no
+    control is configured) and there is still nothing the person holding the
+    phone can do about it. A single test asserting one flag would go on passing
+    while the other rule quietly inverted.
+    """
+    (no_control,) = monitor.assess_health(
+        [Result(Watch(name="p", retailer="target", target="https://t/1"), Availability.OUT_OF_STOCK)]
+    )
+    (refusal,) = monitor.assess_health([_control(Availability.UNKNOWN, refused=True)])
+    (breakage,) = monitor.assess_health([_control(Availability.OUT_OF_STOCK)])
+    (store_gap,) = monitor.assess_health(
+        [_control(Availability.UNKNOWN, retailer="walmart", store_id=None)]
+    )
+
+    carries = {
+        "no control": bool(no_control.action),
+        "refusal": bool(refusal.action),
+        "breakage": bool(breakage.action),
+        "store gap": bool(store_gap.action),
+    }
+
+    assert carries == {
+        "no control": False,
+        "refusal": False,
+        "breakage": False,
+        "store gap": True,
+    }, (
+        "the partition moved. A state with no remedy must not name one, and the "
+        "one state a person can close must not go quiet"
+    )
+    assert store_gap.action == monitor.STORE_PIN_ACTION
+    assert "store_id" in store_gap.action, "the action has to name the thing to set"
+
+
+def test_a_state_with_nothing_to_do_about_it_is_silent_by_default() -> None:
+    """The default itself, asserted on the type rather than on any arm.
+
+    This is what makes the rule survive an arm nobody has written yet: a `Health`
+    constructed without an `action` has none, so it cannot page. A blocklist
+    would have the opposite default and would need editing every time this file
+    grows a branch — which is precisely how the channel filled up twice.
+    """
+    assert Health("anything", ok=False, reason="a state added in some later year").action == ""
+
+
 def test_cause_unknown_is_one_constant_with_one_spelling() -> None:
     """Three paraphrases would drift, which is how the withdrawn sentences got
     to be wrong in the first place — and a property stated three ways cannot be
@@ -323,6 +382,31 @@ def test_the_body_is_exactly_the_reason_and_the_failing_controls(
         "  • milk: unknown (detail)\n"
         "  • eggs: unknown (detail)"
     )
+
+
+def test_the_action_is_rendered_last_and_only_where_there_is_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What a person is asked to DO is the point of the interruption, so it is on
+    the body — and it is still composed elsewhere.
+
+    Two bodies, differing in exactly one field, because both halves matter: an
+    action that never reached the phone would make the 2026-08-12 rule pointless
+    at the last step, and an empty one leaving a stray arrow would change the
+    shape of every body that has nothing to ask for.
+    """
+    recorder = _Recorder()
+    monkeypatch.setattr(notify, "_client", lambda urls: recorder)
+    without = Health("walmart", ok=False, reason="a reason composed elsewhere")
+
+    notify.send_health_warning(["ntfy://example"], [without])
+    assert recorder.body == "[walmart] a reason composed elsewhere"
+
+    notify.send_health_warning(
+        ["ntfy://example"],
+        [Health("walmart", ok=False, reason="a reason composed elsewhere", action="do this one thing")],
+    )
+    assert recorder.body == "[walmart] a reason composed elsewhere\n  → do this one thing"
 
 
 # --------------------------------------------------------------------------

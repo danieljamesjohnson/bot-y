@@ -15,8 +15,16 @@ things they get wrong.
 **1. "I don't know" is not "out of stock."** After a reskin, a selector-based
 monitor stops matching, reports out-of-stock forever, and *looks perfectly
 healthy*. So `Availability` has three values, a detector that cannot tell says
-`UNKNOWN`, and every retailer carries a control product — a broken detector
-pages you as loudly as a real restock.
+`UNKNOWN`, and every retailer carries a control product — a control that stops
+verifying marks that retailer's readings unverified on the status page, in
+`boty check` and in the log.
+
+It does **not** page you for that, and the line above used to say it did ("a
+broken detector pages you as loudly as a real restock"). Notifications are
+reserved for what you can act on: a restock you could buy, or the one health
+state you can close yourself — a Walmart `store_id` that is unset or answering
+for the wrong store. Everything else is recorded rather than pushed, because an
+alert that asks for a decision you cannot make is how a channel stops being read.
 
 **2. "In stock" from a scalper is not a restock.** The $54.99 GO Plus + sits on
 Walmart at $229.99 from a third-party seller while Walmart itself has none. bot-y

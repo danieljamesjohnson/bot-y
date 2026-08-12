@@ -789,7 +789,17 @@ def test_a_release_heading_carrying_an_impossible_date_is_rejected() -> None:
 
 @needs_changelog
 def test_a_placeholder_spliced_into_an_entry_is_rejected() -> None:
-    corrupted = _corrupt(_shipped(), "Nothing yet.", "TODO: write this up before release.")
+    # RE-ANCHORED 2026-08-12. This corrupted the literal `Nothing yet.`, which
+    # stopped existing when `## [Unreleased]` acquired its first real entries —
+    # and `_corrupt` asserts its anchor is present, so the drift went red rather
+    # than quietly testing a substitution that did nothing. The new anchor is the
+    # file's own subtitle: it is not an entry, so no entry can delete it, and the
+    # rule under test scans the whole document rather than any one section.
+    corrupted = _corrupt(
+        _shipped(),
+        "What changed in each release",
+        "TODO: write this up before release.",
+    )
 
     findings = unreplaced_placeholders(corrupted)
 

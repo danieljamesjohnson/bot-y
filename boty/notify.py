@@ -163,13 +163,29 @@ def send_restock(urls: list[str], results: list[Result]) -> bool:
 
 
 def send_health_warning(urls: list[str], unhealthy: list[Health]) -> bool:
-    """Alert that one or more retailers are no longer verified.
+    """Alert about a health state SOMEBODY CAN ACT ON.
 
-    Deliberately as loud as a restock alert. A monitor you wrongly believe is
-    working is worse than one you know is down.
+    Deliberately as loud as a restock alert, because by the time anything gets
+    here it has already had to earn the interruption.
+
+    WHAT REACHES THIS FUNCTION NARROWED ON 2026-08-12 AND THE FUNCTION DID NOT.
+    It used to be sent every unhealthy retailer that was not a fresh refusal —
+    "a monitor you wrongly believe is working is worse than one you know is
+    down", which is still true and is now answered by the status page, `boty
+    check` and the log rather than by a push. Dan, twice: *"we need to never hit
+    the user unless its something they can buy or actually do"*. The decision
+    lives in `cli.watch_cycle`, which pages exactly the states carrying a
+    `Health.action`; it is NOT re-made here, and that is deliberate — two gates
+    on one rule means a mutation of either one survives the other, and a rule
+    nothing can break is a rule nothing is checking.
+
+    THE ACTION IS RENDERED WHERE ONE IS SET, and it is the last line of each
+    block because it is the only line asking for anything. An empty `action` adds
+    nothing — the shape of a body without one is exactly what it always was.
 
     THIS FUNCTION COMPOSES NO DIAGNOSIS OF ITS OWN, and must not start. The body
-    is `h.reason` plus `h.failing_controls` — `monitor.assess_health` is the one
+    is `h.reason`, `h.failing_controls` and `h.action` — `monitor.assess_health`
+    is the one
     place that decides what a failure may be said to mean, and a second opinion
     written here would be unreachable by the gate that checks it. The one
     transformation applied is `_redact_store_numbers`, which SUBTRACTS a
@@ -199,6 +215,13 @@ def send_health_warning(urls: list[str], unhealthy: list[Health]) -> bool:
         # least entitled to assume, and the thing most likely to be edited.
         lines.append(f"[{h.retailer}] {_redact_store_numbers(h.reason)}")
         lines.extend(f"  • {_redact_store_numbers(c)}" for c in h.failing_controls)
+        # THE SAME FILTER, for the reason the two above it record: which field
+        # holds a store number is a fact about prose written elsewhere, and this
+        # file is the least entitled to assume it. `STORE_PIN_ACTION` names the
+        # variable and not a value today; the filter is what keeps that from
+        # being load-bearing.
+        if h.action:
+            lines.append(f"  → {_redact_store_numbers(h.action)}")
     log.warning("sending health warning for: %s", ", ".join(h.retailer for h in unhealthy))
     return bool(
         client.notify(

@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -144,36 +145,42 @@ def test_a_delivered_restock_notification_is_not_repeated(
 
 
 def test_a_failed_health_warning_is_retried_next_cycle(
-    cfg: Config, sent: dict[str, list]
+    gap_cfg: Config, sent: dict[str, list]
 ) -> None:
     """`warned` had the same defect as `state.seen`, for the same reason.
 
     It was updated from `health` regardless of whether the warning was
-    delivered, so a broken detector could be reported once, fail to send, and
-    never be mentioned again — the "tells you when it breaks" promise silently
-    voided.
+    delivered, so a state somebody needed to act on could be reported once, fail
+    to send, and never be mentioned again — the "tells you when it breaks"
+    promise silently voided.
+
+    THE SCENARIO MOVED TO THE STORE-PIN GAP ON 2026-08-12 and the claim did not.
+    It used to ride on `gamestop` having no control watch, which was convenient
+    rather than chosen: since Dan's rule that state is recorded and not pushed,
+    so a rollback test built on it would assert the retry of a warning that is
+    never sent — green, and about nothing. `gap_cfg` is the one config whose
+    health state still pages, which is the only place this rollback can be seen.
     """
-    # No control watch for gamestop, so assess_health reports it unhealthy.
     sent["health_ok"] = [False, True]
-    state = State.load(cfg.state_path)
+    state = State.load(gap_cfg.state_path)
 
-    cli.watch_loop(cfg, _checker(Availability.OUT_OF_STOCK), state, cycles=2, sleep=lambda s: None)
+    cli.watch_loop(gap_cfg, _store_gap, state, cycles=2, sleep=lambda s: None)
 
-    assert sent["health"] == [["gamestop"], ["gamestop"]], (
+    assert sent["health"] == [["walmart"], ["walmart"]], (
         "the health warning was not delivered, but the retailer was marked as "
         "already warned, so the retry never happened"
     )
 
 
 def test_a_delivered_health_warning_is_not_repeated_every_cycle(
-    cfg: Config, sent: dict[str, list]
+    gap_cfg: Config, sent: dict[str, list]
 ) -> None:
     """Once per failure episode, not once per poll — the reason `warned` exists."""
-    state = State.load(cfg.state_path)
+    state = State.load(gap_cfg.state_path)
 
-    cli.watch_loop(cfg, _checker(Availability.OUT_OF_STOCK), state, cycles=3, sleep=lambda s: None)
+    cli.watch_loop(gap_cfg, _store_gap, state, cycles=3, sleep=lambda s: None)
 
-    assert sent["health"] == [["gamestop"]]
+    assert sent["health"] == [["walmart"]]
 
 
 # --------------------------------------------------------------------------
@@ -203,7 +210,12 @@ def test_a_transient_failure_is_tolerated(cfg: Config, sent: dict[str, list]) ->
     )
 
     assert rc == 0
-    assert sent["health"] == [["gamestop"]], "only the ordinary no-control warning"
+    # Before 2026-08-12 this line read `== [["gamestop"]]`, "only the ordinary
+    # no-control warning". `gamestop` has no control watch here, so it is still
+    # reported unhealthy on every surface we own — but *configure a control* is
+    # not a thing the person holding the phone can do, so it is recorded and not
+    # pushed. "Stay quiet" in the docstring above got stronger, not weaker.
+    assert sent["health"] == [], "a tolerated hiccup wakes nobody, and neither does the state"
 
 
 def test_three_consecutive_failures_are_announced(cfg: Config, sent: dict[str, list]) -> None:
@@ -498,6 +510,17 @@ def test_capture_fixture_still_needs_no_config_file(
 # REQ-16 across a RESTART: recorded not pushed, and pushed once — not once
 # per process
 #
+# WHICH STATE CARRIES THESE CLAIMS CHANGED ON 2026-08-12, AND THE CLAIMS DID
+# NOT. They used to be demonstrated on a refusal past the cap, because that was
+# then the only state that both waited and pushed. Under Dan's rule a refusal
+# never pushes at all, so a "pushed once" assertion built on one would be green
+# about a notification that cannot happen — the most comfortable kind of dead
+# test. The persistence they guard is not about refusals: it is `warned`
+# crossing a process boundary and surviving a paced-out cycle, and that is now
+# shown on the store-pin gap, the one state a person can act on. The refusal
+# scenario stays, asserting the half that is still true of it — RECORDED, and
+# never pushed however entrenched.
+#
 # A restart is modelled as two `watch_loop` calls sharing one
 # `pacer_state_path`, and that is a faithful model rather than a convenience:
 # `watch_loop` constructs its own `Pacer`, its own `warned` and its own
@@ -576,64 +599,87 @@ def test_a_refusal_the_backoff_is_handling_is_recorded_not_pushed_across_a_resta
         "a refusal the backoff is still handling was pushed. Below the cap, "
         "backing off IS the whole response"
     )
-    assert "not paging" in caplog.text, "the refusal was not recorded anywhere a human can see"
+    assert "not pushed" in caplog.text, "the refusal was not recorded anywhere a human can see"
 
 
-def test_a_refusal_past_the_cap_is_pushed_once_not_once_per_process(
-    restart_cfg: Config, sent: dict[str, list]
+def test_an_actionable_state_is_pushed_once_not_once_per_process(
+    gap_cfg: Config, sent: dict[str, list]
 ) -> None:
-    """REQ-16's headline clause, and the reason this plan exists.
+    """REQ-16's headline clause, and the reason that plan existed.
 
-    Process 1 climbs past `REFUSALS_BEFORE_PAGING` and pages. Process 2 starts
-    with a fresh `warned` by construction — `watch_loop` builds its own — and
-    must NOT page again, because both the refusal count and the paging memory
-    came back off disk. Before this, "pushed once" meant "pushed once per
-    process", and under a systemd unit with `Restart=` semantics that is not a
-    rare event.
+    Process 1 finds the store-pin gap and pages. Process 2 starts with a fresh
+    `warned` by construction — `watch_loop` builds its own — and must NOT page
+    again, because the paging memory came back off disk. Before this, "pushed
+    once" meant "pushed once per process", and under a systemd unit with
+    `Restart=` semantics that is not a rare event.
+
+    Nothing about this needs a cap or a backoff, which is why it survived the
+    2026-08-12 rule while the refusal version of it did not: the memory is what
+    is under test, and the gap is simply the state that still reaches a phone.
     """
-    _run(restart_cfg, cycles=40)
-    assert _refusals(restart_cfg) >= cli.REFUSALS_BEFORE_PAGING, "process 1 passed the cap"
-    assert sent["health"] == [["gamestop"]], "process 1 pages exactly once"
+    _run(gap_cfg, cycles=10, checker=_store_gap)
+    assert sent["health"] == [["walmart"]], "process 1 pages exactly once"
 
-    _run(restart_cfg, cycles=40)
+    _run(gap_cfg, cycles=10, checker=_store_gap)
 
-    assert sent["health"] == [["gamestop"]], (
-        "the retailer was paged again after the restart. REQ-16 says a refusal "
-        "that outlasts the cap is pushed ONCE, and this is how that quietly "
-        "became once per process"
+    assert sent["health"] == [["walmart"]], (
+        "the retailer was paged again after the restart. REQ-16 says such a "
+        "state is pushed ONCE, and this is how that quietly became once per "
+        "process"
     )
 
 
-def test_a_refusal_past_the_cap_is_pushed_once_within_one_process_too(
-    restart_cfg: Config, sent: dict[str, list]
+@pytest.fixture
+def paced_gap_cfg(gap_cfg: Config) -> Config:
+    """`gap_cfg`, but with the retailer asked less often than the loop cycles.
+
+    NOT A CONVENIENCE, AND MEASURED RATHER THAN ASSUMED. The claim below is that
+    a cycle in which a retailer was NOT ASKED does not end its failure episode,
+    so the test is worthless unless such a cycle happens. `Pacer.due` grants half
+    an interval of grace, and `watch_loop` sleeps `interval_seconds * uniform(
+    0.85, 1.15)` — so at the default cadence the shortest possible sleep still
+    clears the grace and the retailer is due on EVERY cycle. The refusal version
+    of this test got its skips from the backoff stretching the interval by 2**N;
+    with no refusal in sight, the skips have to come from the schedule.
+
+    1800 s against a 300 s pass is `config/products.yaml`'s own shape — Amazon
+    sits at exactly that — so this is the shipped configuration, not a contrived
+    one.
+    """
+    return replace(gap_cfg, retailer_intervals={"walmart": 1800})
+
+
+def test_an_actionable_state_is_pushed_once_within_one_process_too(
+    paced_gap_cfg: Config, sent: dict[str, list]
 ) -> None:
     """The same clause without any restart at all, and it was broken separately.
 
     `warned` is recomputed from `health` each cycle, and `health` is derived
-    from `results` — of which a paced-out retailer has none. So "not checked"
-    read as "recovered", and the memory was erased by the very next cycle:
-    measured 2026-08-10, it survived exactly one cycle out of the nine that
-    followed the page, and the retailer was paged again at its next check. At
-    the cap that is a notification every six hours, forever, about a refusal
+    from `results` — of which a retailer the pacer did not ask has none. So "not
+    checked" read as "recovered", and the memory was erased by the very next
+    such cycle: measured 2026-08-10, it survived exactly one cycle out of the
+    nine that followed the page, and the retailer was paged again at its next
+    check. That is a notification every few minutes, forever, about a config gap
     somebody was already told about — the 20-pages-in-24-hours failure rebuilt
     at a slower cadence.
 
-    120 cycles is measured to contain the sixth refusal (it lands at cycle
-    61-65), which is the second check past the cap and therefore the second
-    page.
+    NO BACKOFF IS INVOLVED HERE, so the skips come from the SCHEDULE instead —
+    see `paced_gap_cfg`, which is where that is argued and where the numbers are.
+    120 passes at 300 s against a 1800 s retailer is roughly 20 checks and 100
+    cycles in which nothing was learned about Walmart; without the union each of
+    those hundred reads as a recovery.
     """
-    _run(restart_cfg, cycles=120)
+    _run(paced_gap_cfg, cycles=120, checker=_store_gap)
 
-    assert _refusals(restart_cfg) == 6, "120 cycles is measured to yield 6 refusals"
-    assert sent["health"] == [["gamestop"]], (
-        "the retailer was paged twice in one process. The backoff skipping a "
-        "cycle is not the retailer recovering, and only a retailer that was "
-        "actually checked can have ended its failure episode"
+    assert sent["health"] == [["walmart"]], (
+        "the retailer was paged twice in one process. A cycle the pacer skipped "
+        "is not the retailer recovering, and only a retailer that was actually "
+        "checked can have ended its failure episode"
     )
 
 
 def test_the_same_scenario_pushes_twice_when_the_state_file_is_deleted(
-    restart_cfg: Config, sent: dict[str, list]
+    gap_cfg: Config, sent: dict[str, list]
 ) -> None:
     """The permanent negative control for the test above, and it does not decay.
 
@@ -643,13 +689,13 @@ def test_the_same_scenario_pushes_twice_when_the_state_file_is_deleted(
     so if persistence ever stops working the test above goes red, and if that
     test ever stops testing persistence this one does.
     """
-    _run(restart_cfg, cycles=40)
-    assert sent["health"] == [["gamestop"]]
+    _run(gap_cfg, cycles=10, checker=_store_gap)
+    assert sent["health"] == [["walmart"]]
 
-    restart_cfg.pacer_state_path.unlink()
-    _run(restart_cfg, cycles=40)
+    gap_cfg.pacer_state_path.unlink()
+    _run(gap_cfg, cycles=10, checker=_store_gap)
 
-    assert sent["health"] == [["gamestop"], ["gamestop"]], (
+    assert sent["health"] == [["walmart"], ["walmart"]], (
         "deleting the state file changed nothing, so the single push in the "
         "test above was not evidence of persistence"
     )
@@ -681,28 +727,30 @@ def test_the_backoff_comes_back_deep_rather_than_shallow(
     assert _persisted(restart_cfg)["retailers"]["gamestop"]["refused_at"] > 0
 
 
-def test_a_restored_paging_memory_does_not_silence_a_new_breakage(
-    restart_cfg: Config, sent: dict[str, list]
+def test_a_restored_paging_memory_does_not_silence_a_new_actionable_state(
+    gap_cfg: Config, sent: dict[str, list]
 ) -> None:
-    """REQ-16 clause 3 across the restart: a wrong verdict still pages immediately.
+    """Clause 3 across the restart: an actionable state pages immediately.
 
     The restore has to be checked for over-reach as well as under-reach. A
     `load` that returned every retailer it had ever heard of would pass the
-    pushed-once test above and silence the alarm this project exists to raise —
-    there is no cap for a breakage to outlast, so it pages on the first cycle it
-    appears in.
+    pushed-once test above and silence the one alert that survived 2026-08-12 —
+    there is nothing for a config gap to outlast, so it pages on the first cycle
+    it appears in.
+
+    Process 1 is REFUSED, which is the state that pushes nothing, so `warned`
+    ends empty rather than by assumption: `_is_store_gap` returns False for a
+    refusal (no page came back, so the store was never established either), and
+    the assertion below is what proves the setup rather than the subject.
     """
-    _run(restart_cfg, cycles=10)
-    assert sent["health"] == [], "refusals below the cap paged nobody, so `warned` is empty"
+    _run(gap_cfg, cycles=10, checker=_refuses)
+    assert sent["health"] == [], "a refusal pushed nobody, so `warned` is empty"
 
-    def _broken(watch: Watch) -> Result:
-        return Result(watch, Availability.UNKNOWN, detail="no structured stock data found")
+    _run(gap_cfg, cycles=1, checker=_store_gap)
 
-    _run(restart_cfg, cycles=1, checker=_broken)
-
-    assert sent["health"] == [["gamestop"]], (
-        "a control that stopped reading IN_STOCK — not a refusal — was not "
-        "pushed on the first cycle of the new process"
+    assert sent["health"] == [["walmart"]], (
+        "a store-pin gap — the one state naming something the operator can do — "
+        "was not pushed on the first cycle of the new process"
     )
 
 
@@ -720,3 +768,184 @@ def test_boty_check_writes_no_pacer_state_at_all(
     assert cli.main(["check", "-c", str(_check_config(tmp_path))]) == 0
 
     assert not (tmp_path / "pacer-state.json").exists()
+
+
+# --------------------------------------------------------------------------
+# REQ-21: a push has to carry a human action, and the default is silence
+#
+# Dan, 2026-08-12, the second time he raised it: *"im still getting annoying
+# messages. we need to never hit the user unless its something they can buy or
+# actually do"*. The message that produced it fired at 16:49:58 that day —
+# Amazon's control did not read IN_STOCK, and there is nothing a person can buy
+# or do about that.
+#
+# THE RULE IS A POSITIVE ONE, NOT A BLOCKLIST, and that is the property these
+# tests exist to pin. A list of cases that must stay quiet is stale the moment
+# an arm is added — the new one is loud by default, which is how this channel
+# filled up twice. So `Health.action` names the thing a person can DO, it is
+# EMPTY unless an arm deliberately fills it, and `watch_cycle` pages exactly
+# what carries one. A health arm written next year is silent until somebody
+# writes down what to do about it.
+#
+# RECORDING IS UNTOUCHED, and that is asserted here rather than assumed. Every
+# state still reaches `status.json` and the log in full; what changed is only
+# which of them wake somebody up.
+# --------------------------------------------------------------------------
+
+#: A Walmart control with no store pinned — the ONE health state a person can
+#: act on, because closing it means setting a value in the EnvironmentFile.
+#: `store_id=None` is the config gap itself, not a redaction.
+GAP_CONTROL = Watch(
+    name="ctl", retailer="walmart", target="https://x/3", control=True, store_id=None
+)
+
+
+@pytest.fixture
+def gap_cfg(tmp_path: Path) -> Config:
+    """A config whose control watch reaches `assess_health`'s store-gap arm."""
+    return Config(
+        watches=[GAP_CONTROL],
+        notify_urls=["tgram://token/chat"],
+        interval_seconds=300,
+        state_path=tmp_path / "state.json",
+        status_path=tmp_path / "status.json",
+        pacer_state_path=tmp_path / "pacer-state.json",
+    )
+
+
+def _store_gap(watch: Watch) -> Result:
+    """A reading that establishes nothing about the store it came from."""
+    return Result(watch, Availability.UNKNOWN, detail="no store_id pinned for this watch")
+
+
+def _health_rows(cfg: Config) -> dict[str, dict]:
+    return {row["retailer"]: row for row in json.loads(cfg.status_path.read_text())["retailers"]}
+
+
+def test_a_control_that_stopped_reading_in_stock_is_recorded_and_not_pushed(
+    restart_cfg: Config, sent: dict[str, list], caplog: pytest.LogCaptureFixture
+) -> None:
+    """The 16:49:58 message, and the reason this rule exists.
+
+    A control not reading IN_STOCK is real, and it is published in full. It is
+    not a push: nobody can repair a detector from a phone, and `assess_health`
+    has already said the cause is not established — an alert that wakes somebody
+    to tell them a cause is unknown asks for a decision that does not exist.
+
+    Both halves are asserted, on the precedent of the refusal test above:
+    "recorded, not pushed" is a claim about a record EXISTING, and asserting the
+    absence of the push alone would pass for a loop that had stopped noticing.
+    """
+    caplog.set_level(logging.INFO, logger="boty.cli")
+
+    def _broken(watch: Watch) -> Result:
+        return Result(watch, Availability.UNKNOWN, detail="no structured stock data found")
+
+    _run(restart_cfg, cycles=3, checker=_broken)
+
+    assert sent["health"] == [], (
+        "a control that stopped verifying was pushed. There is nothing to buy "
+        "and nothing to do about it, which is the whole of the rule"
+    )
+    row = _health_rows(restart_cfg)["gamestop"]
+    assert row["ok"] is False, "the state was silenced instead of merely not pushed"
+    assert "IN_STOCK" in row["reason"], "status.json lost the reason it used to carry"
+    assert "gamestop" in caplog.text and "not pushed" in caplog.text, (
+        "nothing in the log says the state was seen and deliberately not pushed"
+    )
+
+
+def test_a_refusal_past_the_old_cap_is_still_never_pushed(
+    restart_cfg: Config, sent: dict[str, list]
+) -> None:
+    """The clause this supersedes, watched at the point where it used to fire.
+
+    REQ-16 said a refusal that outlasts the backoff is pushed once. Dan's
+    2026-08-12 rule overrules that: he cannot make a retailer answer, so the
+    entrenchment of a refusal changes nothing a person can do about it. 40
+    cycles is measured to carry the count past the old threshold of five, and
+    the count is read off disk so this cannot pass by the refusals having
+    stopped being recorded.
+    """
+    _run(restart_cfg, cycles=40)
+
+    assert _refusals(restart_cfg) >= 5, "40 cycles is measured to pass the old cap"
+    assert sent["health"] == [], (
+        "an entrenched refusal was pushed. It is worth recording and it is not "
+        "worth waking somebody for — the retailer is not ours to fix"
+    )
+
+
+def test_the_store_pin_gap_is_pushed_because_a_person_can_close_it(
+    gap_cfg: Config, sent: dict[str, list]
+) -> None:
+    """The positive half, without which silence would be free.
+
+    A gate that only ever suppresses is satisfied by pushing nothing at all.
+    This is the one health state that names an action only Dan can take — set
+    the store id in the daemon's EnvironmentFile — so it must still reach him.
+    """
+    _run(gap_cfg, cycles=3, checker=_store_gap)
+
+    assert sent["health"] == [["walmart"]], (
+        "the one health state carrying a human action did not reach a phone"
+    )
+
+
+def test_a_health_state_nobody_has_written_yet_is_silent(
+    cfg: Config, sent: dict[str, list], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The anti-blocklist property, and the reason the field is opt-in.
+
+    A synthetic arm stands in for the one somebody adds next year. Nothing in
+    `watch_cycle` knows what it is; it carries no action, so it is silent. A
+    rule written as a list of known-quiet cases would push this one.
+    """
+    invented = Health("gamestop", ok=False, reason="a state this rule has never heard of")
+    monkeypatch.setattr(cli, "run_once", lambda *a, **k: ([], [invented], []))
+
+    _run(cfg, cycles=2)
+
+    assert sent["health"] == [], (
+        "an unrecognised health state was pushed by default. Every future arm "
+        "starts loud, which is the failure this rule exists to prevent"
+    )
+
+
+def test_boty_check_still_prints_a_state_that_is_never_pushed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The third recording surface, and the one a person reads on purpose.
+
+    `_check_config`'s watch has no control, so `assess_health` reports it
+    unhealthy and nothing pages about it. That must not become invisible: the
+    rule is *record everything, push what can be acted on*, and a change that
+    quietly turned one into the other would look identical from the phone.
+    """
+    _offline(monkeypatch)
+
+    assert cli.main(["check", "-c", str(_check_config(tmp_path))]) == 0
+
+    out = capsys.readouterr().out
+    assert "gamestop" in out and "no control watch configured" in out, out
+
+
+def test_the_same_state_pushes_once_somebody_writes_down_what_to_do(
+    cfg: Config, sent: dict[str, list], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other direction of the test above, so silence cannot be the answer to
+    everything: the ONLY difference between the two is the stated action."""
+    actionable = Health(
+        "gamestop",
+        ok=False,
+        reason="a state this rule has never heard of",
+        action="something a person can actually do",
+    )
+    monkeypatch.setattr(cli, "run_once", lambda *a, **k: ([], [actionable], []))
+
+    _run(cfg, cycles=2)
+
+    assert sent["health"] == [["gamestop"]], (
+        "a state that names a human action was suppressed, so the rule is "
+        "'push nothing' rather than 'push what can be acted on'"
+    )

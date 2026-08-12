@@ -20,7 +20,54 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **A health warning is only pushed when it names something you can do.** The
+  monitor still derives per-retailer health exactly as before and still publishes
+  every state in full — `status.json`, `boty check` and the log are untouched —
+  but a notification now costs a stated remedy. `Health` carries an `action`
+  field which is **empty by default**, `monitor.assess_health` fills it on one
+  arm only (a Walmart `store_id` that is unset or answering for a different
+  store, whose remedy is a value in the daemon's `EnvironmentFile`), and
+  `cli.watch_cycle` pages exactly the states that carry one.
+
+  This is a positive rule rather than a list of exceptions, deliberately: a
+  blocklist of known-useless alerts is stale the moment an arm is added, because
+  the new arm is loud by default. Under this shape a health state written next
+  year says nothing until somebody writes down what to do about it. Two mutations
+  in `scripts/mutation_check.py` watch both directions of that — one rebuilds the
+  loudness, one silences the single remaining remedy.
+
+  Asked for by the maintainer on 2026-08-12, the second time he raised it: *"im
+  still getting annoying messages. we need to never hit the user unless its
+  something they can buy or actually do"*. The message that produced it fired at
+  16:49:58 that day, about an Amazon control that did not read `IN_STOCK` — true,
+  worth recording, and not something anybody can act on from a phone.
+
+- **A refusal is never pushed, however entrenched.** `REFUSALS_BEFORE_PAGING` and
+  `cli._refusal_is_entrenched` are deleted. They implemented a rule that a
+  refusal outlasting the backoff deserves a human, and entrenchment turned out to
+  measure only how sure we are of a fact nobody can act on — you cannot make a
+  retailer answer at five refusals any more than at one. **The backoff itself is
+  unchanged**: `pacing.Pacer` still counts refusals, stretches the interval and
+  persists both, so the response the monitor can take by itself is intact.
+
+  **What this overrules, said plainly:** the second and third clauses of REQ-16
+  ("a refusal that outlasts the cap is pushed once"; "a detector producing a
+  wrong verdict is pushed immediately"). Both states are now recorded and not
+  pushed. The requirement's text is left as it stood at its milestone's close
+  rather than edited under it; this entry is the record of the reversal.
+
+- **The stuck-monitor warning still pushes, and now says why it is allowed to.**
+  Three consecutive raising cycles means nothing is being checked and no restock
+  can reach you, which is the one health state that is both actionable and worth
+  the interruption — so it carries an explicit action rather than surviving by
+  default.
+
+- **The notification body renders the action** as the last line of each block,
+  where there is one, through the same store-number redaction as the rest of the
+  body. A state with nothing to ask for leaves the body's shape exactly as it
+  was.
 
 ## [0.2.0] - 2026-08-10
 

@@ -545,3 +545,34 @@ class Health:
     #: waking somebody for it is a false alarm, and 20 of them in 24 hours is
     #: how an alert channel stops being read.
     refused: bool = False
+    #: WHAT A PERSON CAN DO ABOUT THIS STATE, in one sentence — and the whole of
+    #: what makes it worth a push. Empty means *nothing they can do*, which is
+    #: the DEFAULT, and `cli.watch_cycle` pages exactly the states that carry
+    #: one.
+    #:
+    #: Dan, 2026-08-12, the second time he raised it: *"im still getting annoying
+    #: messages. we need to never hit the user unless its something they can buy
+    #: or actually do"*. The message behind it fired at 16:49:58 that day, about
+    #: an Amazon control that did not read IN_STOCK — true, published, and not
+    #: something anybody can act on from a phone.
+    #:
+    #: A FIELD AND NOT A BLOCKLIST, which is the design decision rather than a
+    #: detail of it. The alternative — `watch_cycle` skipping a list of states
+    #: known to be quiet — is stale the moment an arm is added, because the new
+    #: arm is loud by default and nobody remembers to add it. This channel has
+    #: already filled up twice that way. Here the default is silence, and a push
+    #: costs somebody writing down what to DO; an arm added next year says
+    #: nothing until it can answer that.
+    #:
+    #: WHY IT LIVES ON `Health` AND NOT IN THE NOTIFIER. `monitor.assess_health`
+    #: is the one place allowed to decide what a failure means, and whether a
+    #: failure has a remedy is part of that meaning — `notify.py` composes no
+    #: diagnosis of its own and must not start composing one to decide whether to
+    #: send.
+    #:
+    #: Deliberately NOT published in `status.json`, on `Result.shipping`'s
+    #: precedent: `status.write` builds its rows field by field, no source
+    #: artifact asks for an action key, and the STATE it is derived from is
+    #: already published in full. Recorded so the absence is not read as an
+    #: omission.
+    action: str = ""

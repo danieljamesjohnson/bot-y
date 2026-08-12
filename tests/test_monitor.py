@@ -21,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from boty.models import Availability, Result, Watch
-from boty.monitor import CAUSE_UNKNOWN, State, assess_health, run_once
+from boty.monitor import CAUSE_UNKNOWN, STORE_PIN_ACTION, State, assess_health, run_once
 
 
 def _result(
@@ -164,8 +164,13 @@ def test_a_refusal_names_the_refusal_and_claims_nothing_else() -> None:
         assert withdrawn not in health.reason
     assert "no action is needed" not in health.reason, (
         "`assess_health` takes a list of Results and cannot see a Pacer, so it "
-        "cannot know what action is needed — and `cli.watch_cycle` only pages a "
-        "refusal once it is entrenched, which is exactly when that advice is false"
+        "cannot know what a refusal means for the schedule — and reassurance is "
+        "not a measurement. What IS now said about action is said in the one "
+        "field built for it, and this arm leaves it empty"
+    )
+    assert health.action == "", (
+        "a refusal named something to do, so it would page. Nobody can make a "
+        "retailer answer, which is why this arm went quiet on 2026-08-12"
     )
 
 
@@ -197,6 +202,10 @@ def test_an_unpinned_store_is_the_one_failure_whose_cause_was_measured() -> None
     assert health.refused is False
     assert "store_id" in health.reason
     assert CAUSE_UNKNOWN not in health.reason
+    # And the consequence of that, since 2026-08-12: a cause we measured is the
+    # only kind that can carry a remedy, and a remedy is the only thing that
+    # earns a push. This is the one arm here that reaches a phone.
+    assert health.action == STORE_PIN_ACTION
 
 
 def test_a_mismatched_store_reaches_the_same_arm() -> None:

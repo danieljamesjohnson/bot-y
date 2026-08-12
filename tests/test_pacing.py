@@ -673,15 +673,27 @@ def test_the_persisted_count_is_clamped(tmp_path: Path) -> None:
     assert p._for("amazon").due_at == MAX_BACKOFF_SECONDS
 
 
-def test_the_clamp_stays_above_the_paging_threshold() -> None:
-    """Imported from both modules, because `pacing` must not import `cli`.
+def test_the_clamp_never_restores_a_shallower_wait_than_the_cap() -> None:
+    """The clamp must not quietly undo the backoff it was added to protect.
 
-    A clamp at or below REFUSALS_BEFORE_PAGING would mean persistence silently
-    defeated the paging clause it exists to serve.
+    RE-ANCHORED 2026-08-12, because its subject was deleted. This read
+    `MAX_PERSISTED_REFUSALS >= cli.REFUSALS_BEFORE_PAGING` — "a clamp at or
+    below the paging threshold would mean persistence silently defeated the
+    paging clause it exists to serve". Dan's rule removed that clause and its
+    constant with it: a refusal is recorded and never pushed, however
+    entrenched, so there is no longer a paging threshold to stay above.
+
+    What the clamp still protects is the BACKOFF, which is untouched and is the
+    monitor's own response to being refused. A count restored below the one that
+    reaches `MAX_BACKOFF_SECONDS` would come back from disk asking sooner than
+    the retailer's own history says it should — persistence defeating the
+    politeness it exists to serve, which is the same sentence one layer down.
+    `pacing` still must not import `cli`; now it does not have to.
     """
-    from boty.cli import REFUSALS_BEFORE_PAGING
+    from boty.pacing import BACKOFF_FACTOR
 
-    assert MAX_PERSISTED_REFUSALS >= REFUSALS_BEFORE_PAGING
+    shallowest = min(300.0, MAX_BACKOFF_SECONDS)
+    assert shallowest * BACKOFF_FACTOR**MAX_PERSISTED_REFUSALS >= MAX_BACKOFF_SECONDS
 
 
 def test_the_age_out_is_derived_from_the_backoff_cap() -> None:
