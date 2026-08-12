@@ -70,9 +70,9 @@ Acknowledged and deferred at milestone close on 2026-08-11:
 
 | Category | Item | Status |
 |---|---|---|
-| deploy | Restart `boty.service` onto this tree (REQ-15/16/17) | Open — one command, no prerequisite |
+| deploy | Restart `boty.service` onto this tree (REQ-15/16/17) | **DONE 2026-08-12** — Dan's call, executed and measured. See below |
 | deploy | `WALMART_STORE_ID` in the EnvironmentFile (REQ-14) | Open — Dan's to give or not (`QUESTIONS.md` § 0f) |
-| verification | Phase 05 — `05-VERIFICATION.md` | `human_needed` — all three items are the deferred deploy above |
+| verification | Phase 05 — `05-VERIFICATION.md` | `human_needed` — its three items were the deploy, now done; the store pin remains |
 | verification | Phase 02 — `02-VERIFICATION.md` | `human_needed` — **v1.0.0**, not this milestone |
 | verification | Phase 03 — `03-VERIFICATION.md` | `human_needed` — **v1.0.0**, not this milestone |
 | verification | Phase 03.1 — `03.1-VERIFICATION.md` | `gaps_found` — **v1.0.0**, not this milestone |
@@ -705,3 +705,27 @@ Working and deployed on danserver before this roadmap was written:
 
 - **No open blockers.** The only thing still waiting on Dan is `QUESTIONS.md` § 0e (public git history carrying this host's ZIP in four fixtures), which is a decision rather than a blocker — nothing is stopped by it.
 - make verify FAILS live, first recorded 2026-08-06 and **re-measured once at Phase 5's close on 2026-08-10**: 'VERIFY: FAIL (live controls)', exit 2, in THREE classes now rather than two. Unchanged: Best Buy and Target cannot run at all (no Chrome/Chromium binary on this host, though nodriver 0.50.3 is installed, and STATE.md's 2026-08-10 entry records that Playwright's Chromium works when BOTY_BROWSER_PATH points at it). CHANGED: the Walmart/Amazon challenge-page class did NOT manifest on the 2026-08-10 pass — Amazon read IN_STOCK at $9.99 and Walmart served a judgeable page — so that class is intermittent rather than permanent. NEW, caused by Phase 5 and correct: 1/6 not reading IN_STOCK is Walmart through the config-gap guard, because make verify runs with no WALMART_STORE_ID. Everything still reads UNKNOWN rather than OUT_OF_STOCK, so the fail-safe is working, but real restocks are being missed. NOT a Phase 4 regression and NOT a Phase 5 regression — no plan in either phase touched a retailer, extractor or control. Still needs its own plan: polite probing plus fixture re-capture. Detail in .planning/phases/04-open-source-ready/deferred-items.md and docs/retailer-evidence.md § Phase 5 closing record
+
+## v0.2 is on the wire — deployed and measured 2026-08-12
+
+`sudo systemctl restart boty` at Dan's direction. **The first time anything this
+milestone built has actually run.** `MainPID` 3059142 → **492559**;
+`ActiveEnterTimestamp` 2026-08-04 17:48:52 → **2026-08-12 16:49:15 CDT**. A fresh
+cycle published ~40 s later and was read back from `served/boty/status.json`
+rather than assumed:
+
+| What v0.2 claimed | Measured on the daemon |
+|---|---|
+| REQ-14 — the store is published | `store` and `store_pinned` present on **every** watch row (both were absent before) |
+| REQ-14 — an unpinned Walmart reading is never a verdict | Both Walmart rows `unknown`, `alertable=False`, no store, no pin. **Before the restart the milk control was live at `in_stock` / `alertable=True` unpinned** — the 2026-08-09 defect, running. It is gone |
+| REQ-15 — no alert names an unmeasured cause | `probably broken` no longer published by any retailer. Amazon now reads *"a control product did not read IN_STOCK and was not refused, so readings from this retailer are unverified…"* — a consequence that follows from what a control is. Target and Walmart read *"the retailer is refusing us — a challenge page or a 403 came back… so the extractor was never reached"*, which is what was measured, not a rate |
+| REQ-16 — the backoff survives a restart | `pacer-state.json` exists at the working directory, keys `version` / `retailers` / `warned`, 2 retailers tracked |
+
+`healthy: false` across 6 retailers is **correct and expected**: Walmart and Target
+are being refused right now and Amazon's control is not reading IN_STOCK. Every
+one of those is UNKNOWN rather than a verdict, which is the fail-safe working.
+
+**What is still not true:** Walmart cannot alert on the GO Plus + until
+`WALMART_STORE_ID` is set — by design, and `QUESTIONS.md` § 0f holds that
+question. And **no tag exists**: Dan chose no tag on 2026-08-12, matching
+v1.0.0. `git tag -l` → 0, remote → 0 refs. Nothing is published.
