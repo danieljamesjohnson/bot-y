@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -34,6 +35,10 @@ from boty.monitor import State
 
 WATCH = Watch(name="goplusplus", retailer="gamestop", target="https://x/1")
 KEY = "gamestop:goplusplus"
+
+#: The age REQ-21's opening measurement is about, and the one criterion 4 names:
+#: "a restart cannot make a two-day-old reading look fresh".
+_TWO_DAYS = 172800.0
 
 
 @pytest.fixture
@@ -87,6 +92,22 @@ def _checker(*availabilities: Availability):
     return check
 
 
+def _stamped(stamp: float, availability: Availability = Availability.IN_STOCK):
+    """A checker whose reading carries the moment it was taken (REQ-21).
+
+    SEPARATE FROM `_checker` ON PURPOSE, and `_checker` is left alone. Every
+    other test in this file depends on it, and an unstamped `Result` is what a
+    hand-built one is — `Result.read_at` defaults to `None`. Changing it would
+    quietly stop the whole file exercising the no-stamp path, which is the path
+    `State.transitioned_to_stock` has to CLEAR a stale stamp on.
+    """
+
+    def check(watch: Watch) -> Result:
+        return Result(watch, availability, price=54.99, detail="synthetic", read_at=stamp)
+
+    return check
+
+
 # --------------------------------------------------------------------------
 # WR-06: a failed notification must not consume the alert
 # --------------------------------------------------------------------------
@@ -119,17 +140,33 @@ def test_a_failed_restock_notification_is_retried_next_cycle(
 def test_a_failed_restock_notification_rolls_the_memory_back(
     cfg: Config, sent: dict[str, list]
 ) -> None:
-    """The retry above works by un-remembering, so assert that directly."""
+    """The retry above works by un-remembering, so assert that directly.
+
+    The checker is `_stamped` rather than `_checker` for the REQ-21 assertion at
+    the end: against an unstamped reading nothing would ever write an age, and
+    "no age on disk" would be green about a field this test never exercised.
+    """
     sent["restock_ok"] = [False]
     state = State.load(cfg.state_path)
 
-    cli.watch_loop(cfg, _checker(Availability.IN_STOCK), state, cycles=1, sleep=lambda s: None)
+    cli.watch_loop(
+        cfg, _stamped(time.time() - _TWO_DAYS), state, cycles=1, sleep=lambda s: None
+    )
 
     assert KEY not in state.seen, (
         "an undelivered alert must leave no trace of the transition, or the "
         "next cycle will treat the unchanged in-stock reading as old news"
     )
     assert State.load(cfg.state_path).seen == state.seen, "the rollback must reach disk too"
+    # REQ-21, and it is the same claim one field along rather than a new one.
+    # `save` builds its document FROM `seen`, so popping the key takes its age
+    # with it: the availability and the moment it was read leave together, which
+    # is what a rollback means. (The in-memory `read_at` can still hold the
+    # orphan for the rest of this process — it simply has no way to reach disk.)
+    assert State.load(cfg.state_path).read_at == {}, (
+        "the availability was rolled back and its age was not, so the document "
+        "on disk dates a reading it no longer remembers taking"
+    )
 
 
 def test_a_delivered_restock_notification_is_not_repeated(
@@ -768,6 +805,92 @@ def test_boty_check_writes_no_pacer_state_at_all(
     assert cli.main(["check", "-c", str(_check_config(tmp_path))]) == 0
 
     assert not (tmp_path / "pacer-state.json").exists()
+
+
+# --------------------------------------------------------------------------
+# REQ-21 across a RESTART: an age that does not survive the process is the
+# failure this phase exists to fix
+#
+# Criterion 4, verbatim: "the age survives a service restart, so a restart
+# cannot make a two-day-old reading look fresh". REQ-21's opening measurement
+# was not that Walmart's last reading was old — it was that its age could not be
+# ESTABLISHED AT ALL, because a service restart at 2026-08-12 16:49:57 zeroed the
+# counter that held the evidence. 07-01 gave a reading a moment; that moment
+# lived in a `Result` and died with the process. This is where it stops dying.
+#
+# A restart is modelled as two `watch_loop` calls sharing one `state_path`. The
+# `REQ-16 across a RESTART` section above already argues why that model is
+# faithful rather than convenient — each call builds its own `State`, its own
+# `Pacer` and its own `warned`, so only the file crosses between them — and that
+# argument is cited here rather than re-made, so the two cannot drift apart.
+#
+# THIS IS THIS FILE'S FIRST GENUINE `REQ-21` SECTION. The header at the section
+# below carried that ident until 2026-08-13 and had no claim to it; 07-01
+# relabelled it REQ-16 and re-pointed `scripts/mutation_check.py`'s citation.
+# Confirmed against the tree before this section was written, because two
+# `REQ-21` sections in one file would rebuild exactly the ambiguity that closed.
+# --------------------------------------------------------------------------
+
+
+def test_the_age_of_a_reading_survives_the_restart(cfg: Config, sent: dict[str, list]) -> None:
+    """A two-day-old reading is still two days old on the other side, to the float.
+
+    Both ends are asserted — the bytes on disk and what a fresh `State` makes of
+    them — because they fail in different ways: a `save` that never wrote the
+    stamp and a `load` that manufactured one both look identical from the other
+    side of a single assertion.
+    """
+    stamp = time.time() - _TWO_DAYS
+
+    cli.watch_loop(
+        cfg,
+        _stamped(stamp, Availability.OUT_OF_STOCK),
+        State.load(cfg.state_path),
+        cycles=1,
+        sleep=lambda s: None,
+    )
+
+    assert json.loads(cfg.state_path.read_text())[KEY]["read_at"] == stamp
+
+    restarted = State.load(cfg.state_path)
+
+    assert restarted.seen[KEY] == "out_of_stock"
+    assert restarted.read_at[KEY] == stamp, (
+        "the restart did not carry the age across, so a two-day-old reading "
+        "comes back looking fresh — criterion 4's failure exactly, and the "
+        "2026-08-12 event REQ-21 was written for"
+    )
+
+
+def test_the_second_process_reads_the_first_process_stamp_and_not_its_own_clock(
+    cfg: Config, sent: dict[str, list]
+) -> None:
+    """The stamp that crosses is the one the READING carried, not the one either process started at.
+
+    The second cycle takes a reading of its own, one hour old, and the document
+    has to move to it — an age that survived a restart but then refused to update
+    would be a bound stuck at the first value it ever saw, which is the same
+    defect standing still instead of running fast.
+    """
+    old = time.time() - _TWO_DAYS
+    newer = time.time() - 3600
+
+    cli.watch_loop(
+        cfg,
+        _stamped(old, Availability.OUT_OF_STOCK),
+        State.load(cfg.state_path),
+        cycles=1,
+        sleep=lambda s: None,
+    )
+    cli.watch_loop(
+        cfg,
+        _stamped(newer, Availability.OUT_OF_STOCK),
+        State.load(cfg.state_path),
+        cycles=1,
+        sleep=lambda s: None,
+    )
+
+    assert State.load(cfg.state_path).read_at[KEY] == newer
 
 
 # --------------------------------------------------------------------------

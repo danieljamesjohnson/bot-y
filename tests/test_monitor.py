@@ -722,6 +722,90 @@ def test_a_write_failure_is_logged_and_does_not_raise(
     assert "OSError" in caplog.text, "log.exception must carry the type and traceback"
 
 
+#: THE DOCUMENT ON THIS HOST, measured 2026-08-13, reproduced entry for entry
+#: rather than approximated by hand. 13 keys, every value a bare string, which is
+#: the only shape `state.json` has ever had. `sorted({f for v in state.values()
+#: if isinstance(v, dict) for f in v})` over it is `[]`.
+#:
+#: NOTHING HOST-IDENTIFYING IS ADDED BY REPRODUCING IT. Every key is
+#: `retailer:name` where the name is already present in tracked
+#: `config/products.yaml`; there is no store number, no path and no clock in it.
+#:
+#: `walmart:Pokémon GO Plus +` IS A FOSSIL AND THESE TESTS MUST NOT PAPER OVER
+#: IT. The 2026-08-12 restart deployed Phase 5's store-gap guard, `${WALMART_STORE_ID}`
+#: is still unset (`QUESTIONS.md` § 0f, open), so every Walmart reading is now
+#: `Availability.UNKNOWN` — and `transitioned_to_stock` returns on UNKNOWN before
+#: it writes. That value is not merely undated; it cannot be UPDATED by anything
+#: until a store is pinned. After this phase it writes `"read_at": null` on every
+#: cycle for as long as it stays frozen, which is the honest output. Any design
+#: in which `save` supplied a stamp would date it at the moment of every write.
+_PRE_07_DOCUMENT = {
+    "amazon:CONTROL — Amazon Basics AA batteries (20-pack)": "in_stock",
+    "amazon:Pokémon GO Plus +": "out_of_stock",
+    "bestbuy:CONTROL — Pokémon Let's Go, Pikachu! (Switch)": "in_stock",
+    "gamestop:CONTROL — PS5 console": "in_stock",
+    "gamestop:Pokémon GO Plus +": "out_of_stock",
+    "gamestop:TRANSITION — Ascended Heroes Mini Tin": "in_stock",
+    "gamestop:TRANSITION — Mega Evolution Booster Bundle": "out_of_stock",
+    "gamestop:TRANSITION — Pitch Black Booster Bundle": "in_stock",
+    "nintendo:CONTROL — Nintendo HDMI cable": "in_stock",
+    "nintendo:Pokémon GO Plus +": "out_of_stock",
+    "target:CONTROL — up&up microfiber dust cloths": "in_stock",
+    "walmart:CONTROL — Great Value whole milk": "in_stock",
+    "walmart:Pokémon GO Plus +": "out_of_stock",
+}
+
+
+def test_the_real_pre_07_document_loads_with_its_alert_behaviour_unchanged(
+    tmp_path: Path,
+) -> None:
+    """The migration measured against the file it actually reaches, not a stand-in.
+
+    Dan's daemon runs this tree through an editable install, so there is no
+    staging environment between this code and his disk: the next restart is where
+    the shape change lands. The claim is not merely "no exception" — it is that
+    every remembered availability keeps its meaning, so a restock that was going
+    to alert still alerts and one that was not still does not.
+    """
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps(_PRE_07_DOCUMENT))
+
+    state = State.load(path)
+
+    assert state.seen == _PRE_07_DOCUMENT, "13 availabilities in, 13 availabilities out"
+    assert state.read_at == {}, "an age nobody recorded was manufactured at load time"
+    assert state.transitioned_to_stock(
+        _result(Availability.IN_STOCK, retailer="gamestop", name="Pokémon GO Plus +")
+    ), "a remembered out_of_stock stopped transitioning — a real restock would go unsent"
+    assert not state.transitioned_to_stock(
+        _result(Availability.IN_STOCK, retailer="gamestop", name="CONTROL — PS5 console")
+    ), "a remembered in_stock re-alerted — the memory was lost by the migration"
+
+
+def test_saving_the_migrated_document_twice_never_invents_an_age(tmp_path: Path) -> None:
+    """`save` reads no clock, asserted end to end rather than by reading the source.
+
+    This is `pacing.py:196-199`'s recorded trap, inherited: *"stamping at write
+    time would refresh the record forever and the age-out would never fire once —
+    a bound that cannot bind is worse than no bound, because it reads like one in
+    the file."* The frozen Walmart row is the proof case: it can never be updated
+    while the store pin is unset, so a write-time stamp would date it at the
+    moment of every cycle, forever, and it would read as the freshest row in the
+    document.
+    """
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps(_PRE_07_DOCUMENT))
+
+    State.load(path).save()
+    State.load(path).save()
+
+    assert State.load(path).read_at == {}
+    assert json.loads(path.read_text())["walmart:Pokémon GO Plus +"] == {
+        "availability": "out_of_stock",
+        "read_at": None,
+    }
+
+
 # --------------------------------------------------------------------------
 # run_once — the pieces wired together
 # --------------------------------------------------------------------------
