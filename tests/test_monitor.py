@@ -37,6 +37,7 @@ def _result(
     control: bool = False,
     price: float | None = None,
     max_price: float | None = None,
+    read_at: float | None = None,
 ) -> Result:
     watch = Watch(
         name=name,
@@ -45,7 +46,11 @@ def _result(
         max_price=max_price,
         control=control,
     )
-    return Result(watch, availability, price=price, detail="synthetic")
+    # `read_at` defaults to `None` for the reason `Result.read_at` does: a
+    # hand-built Result took no reading, so every existing caller in this file
+    # keeps exercising the no-stamp path — which is the path that has to CLEAR a
+    # stamp rather than leave one behind.
+    return Result(watch, availability, price=price, detail="synthetic", read_at=read_at)
 
 
 def _health_for(results: list[Result], retailer: str):
@@ -617,6 +622,79 @@ def test_an_entry_naming_no_availability_is_skipped_whole(tmp_path: Path, entry:
 
     assert state.seen == {}
     assert state.read_at == {}
+
+
+def test_a_resolved_reading_records_both_the_availability_and_the_moment(
+    tmp_path: Path,
+) -> None:
+    """ONE ACT, TWO FACTS — the availability and its age are written together."""
+    stamp = time.time() - _TWO_DAYS
+    state = State.load(tmp_path / "state.json")
+
+    state.transitioned_to_stock(_result(Availability.OUT_OF_STOCK, read_at=stamp))
+
+    assert state.seen == {"gamestop:thing": "out_of_stock"}
+    assert state.read_at == {"gamestop:thing": stamp}
+
+
+def test_an_unknown_reading_records_neither_the_availability_nor_the_moment(
+    tmp_path: Path,
+) -> None:
+    """The guard is INHERITED, not added.
+
+    `transitioned_to_stock` already returns on UNKNOWN before it writes, so a
+    refusal — which happened at a wall-clock moment but took no reading — never
+    reaches the line that stamps. No second guard is added for it:
+    `mutation_check.py:678`'s rule is that two gates on one rule means neither
+    can be shown to bite.
+    """
+    state = State.load(tmp_path / "state.json")
+
+    state.transitioned_to_stock(_result(Availability.UNKNOWN, read_at=time.time()))
+
+    assert state.seen == {}
+    assert state.read_at == {}
+
+
+def test_an_unknown_reading_does_not_disturb_a_moment_already_remembered(
+    tmp_path: Path,
+) -> None:
+    """The mirror of the memory rule one field along.
+
+    UNKNOWN never overwrites a known availability; it must not overwrite that
+    availability's age either, or a blocked fetch would quietly un-date a reading
+    that was genuinely taken.
+    """
+    stamp = time.time() - _TWO_DAYS
+    state = State.load(tmp_path / "state.json")
+    state.transitioned_to_stock(_result(Availability.IN_STOCK, read_at=stamp))
+
+    state.transitioned_to_stock(_result(Availability.UNKNOWN, read_at=time.time()))
+
+    assert state.seen == {"gamestop:thing": "in_stock"}
+    assert state.read_at == {"gamestop:thing": stamp}
+
+
+def test_a_resolved_reading_with_no_moment_clears_the_stamp_the_key_was_holding(
+    tmp_path: Path,
+) -> None:
+    """A key must never pair one reading's availability with another's age.
+
+    A resolved reading carrying no stamp is reachable — every hand-built `Result`
+    in this suite is one — and leaving the previous stamp in place would attach
+    one reading's moment to a different reading's verdict. That is a smaller lie
+    than the one this phase is fixing, and it is the same lie.
+    """
+    state = State.load(tmp_path / "state.json")
+    state.transitioned_to_stock(_result(Availability.IN_STOCK, read_at=time.time() - _TWO_DAYS))
+
+    state.transitioned_to_stock(_result(Availability.OUT_OF_STOCK))
+
+    assert state.seen == {"gamestop:thing": "out_of_stock"}
+    assert state.read_at == {}, (
+        "the new verdict kept the old reading's moment, so the pair on disk "
+        "describes a reading that never happened"
+    )
 
 
 def test_a_write_failure_is_logged_and_does_not_raise(
