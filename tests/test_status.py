@@ -16,6 +16,7 @@ reading worth" — in two places, and the answer must not diverge.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,19 @@ import pytest
 from boty.cli import _report
 from boty.models import Availability, Extraction, Health, Result, Rung, Watch
 from boty.status import write
+
+
+#: "this argument was not passed at all", which is a different thing from
+#: passing None. The unmeasured path has to be reachable through the helper
+#: exactly as every pre-existing caller reaches it — by omission.
+#:
+#: DECLARED ABOVE `_result` SINCE REQ-21, and only because Python needs a
+#: default's name to exist when the `def` runs. `_result` now takes `read_at`
+#: through the same sentinel for the same reason `_payload` takes
+#: `duration_seconds` through it: "nobody stamped this reading" is the case
+#: under test, and passing `None` explicitly is a different call shape from the
+#: one every arm in `boty/retailers.py` that read nothing actually makes.
+_OMITTED = object()
 
 
 def _result(
@@ -33,6 +47,7 @@ def _result(
     availability: Availability = Availability.IN_STOCK,
     store: str | None = None,
     store_pinned: str | None = None,
+    read_at: object = _OMITTED,
 ) -> Result:
     watch = Watch(
         name="goplusplus",
@@ -41,18 +56,14 @@ def _result(
         control=control,
         store_id=store_pinned,
     )
-    kwargs: dict[str, Rung | Extraction] = {}
+    kwargs: dict[str, Rung | Extraction | float] = {}
     if rung is not None:
         kwargs["rung"] = rung
     if extraction is not None:
         kwargs["extraction"] = extraction
+    if read_at is not _OMITTED:
+        kwargs["read_at"] = read_at  # type: ignore[assignment]
     return Result(watch, availability, price=54.99, detail="synthetic", store=store, **kwargs)
-
-
-#: "this argument was not passed at all", which is a different thing from
-#: passing None. The unmeasured path has to be reachable through the helper
-#: exactly as every pre-existing caller reaches it — by omission.
-_OMITTED = object()
 
 
 def _payload(tmp_path: Path, results: list[Result], duration_seconds: object = _OMITTED) -> dict:
@@ -184,6 +195,12 @@ def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path)
             "degraded",
             "store",
             "store_pinned",
+            # REQ-21, added 2026-08-13. This assertion going red when the key
+            # landed is Finding 10 working exactly as intended, not a
+            # regression — and it is ENUMERATED rather than relaxed to a subset
+            # check, because a `<=` here would stop noticing the next key
+            # entirely. Appended last so no existing key moves.
+            "read_at",
         }
         assert entry["rung"] == "browser"
         assert entry["degraded"] is True
@@ -203,6 +220,77 @@ def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path)
                 "failing_controls": [],
             }
         ]
+
+
+# --------------------------------------------------------------------------
+# REQ-21: when the reading was taken, published per watch
+# --------------------------------------------------------------------------
+#
+# Criterion 1's second half. `Result.read_at` exists at the source; this is where
+# it becomes readable by the dashboard, by `boty check` and by anything else
+# reading the file.
+#
+# THE ASSERTIONS BELOW READ THE BYTES BACK, not the dict that produced them.
+# `null` versus `0` is a question about what `json.dumps` wrote, and asserting
+# on the payload dict before it was serialised would answer a different one.
+
+
+def test_an_unstamped_reading_publishes_null_rather_than_zero(tmp_path: Path) -> None:
+    """A reading nobody dated is `null` — not `0`, not `""`, and never absent.
+
+    Both wrong values are available and they lie in opposite directions. `0`
+    renders as 1 January 1970, i.e. MAXIMALLY STALE, which is the
+    `store`-published-as-`0` mistake one direction over — that one invents a
+    real store, this one invents a real (and terrible) age. Omitting the key
+    instead would leave the dashboard's own consumer to invent a default, which
+    is the same failure delegated.
+    """
+    payload = _payload(tmp_path, [_result()])
+    (entry,) = payload["watches"]
+
+    assert "read_at" in entry, "the key must always be present, even unstamped"
+    assert entry["read_at"] is None
+    # Not falsiness: `0` is falsy and `0` is precisely the value this must never
+    # take. Asserted against the serialised text as well, because `null` and `0`
+    # are the same truthiness and different bytes.
+    raw = (tmp_path / "status.json").read_text()
+    assert '"read_at": null' in raw
+    assert '"read_at": 0' not in raw
+
+
+def test_a_stamped_reading_round_trips_its_moment(tmp_path: Path) -> None:
+    """The float survives the file. A stamp that does not survive is not a stamp.
+
+    Constructed as `time.time() - 172800` rather than taken, so nothing here
+    depends on a clock this test controls — the phase's standing rule.
+    """
+    stamp = time.time() - 172800
+
+    payload = _payload(tmp_path, [_result(read_at=stamp)])
+    (entry,) = payload["watches"]
+
+    assert entry["read_at"] == stamp
+    assert isinstance(entry["read_at"], float)
+
+
+def test_the_row_stamp_is_not_the_file_stamp(tmp_path: Path) -> None:
+    """`updated` and `read_at` answer different questions, and this is the split.
+
+    The top-level `updated` is when the CYCLE ran. It is computed once per
+    `write` call, outside the row comprehension, and it is FRESH even when every
+    row beneath it is two days old — which is exactly the reading this project
+    gave when asked how old the Amazon and Walmart GO Plus + readings were. So a
+    two-day-old row under a `updated` written this second is the state REQ-21
+    exists to make visible, and it must be REPRESENTABLE rather than collapsed.
+    """
+    stamp = time.time() - 172800
+
+    payload = _payload(tmp_path, [_result(read_at=stamp)])
+    (entry,) = payload["watches"]
+
+    assert payload["updated"] >= stamp + 172000, "`updated` is this cycle, not the reading"
+    assert entry["read_at"] == stamp
+    assert entry["read_at"] != payload["updated"]
 
 
 # --------------------------------------------------------------------------
