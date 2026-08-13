@@ -41,8 +41,10 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -86,24 +88,250 @@ STORE_PIN_ACTION = (
     "${WALMART_STORE_ID}, so the value goes in the daemon's EnvironmentFile"
 )
 
+#: The oldest wall clock a reading time read back off disk may carry: midnight
+#: 2000-01-01 UTC. A measured number, not a round one, and argued from both
+#: directions in `MAX_PERSISTED_REFUSALS`'s shape.
+#:
+#: `tzinfo` is explicit so the constant does not depend on the host's zone — a
+#: floor that moved by five hours between the daemon's box and a contributor's
+#: laptop would be a bound whose value nobody could quote.
+#:
+#: WHAT IT CATCHES. A `0`, which is the absent-published-as-zero lie one
+#: direction over: zero is not "unknown", it renders as 1 January 1970, so a
+#: consumer subtracting against `now` reports the reading as fifty-six years
+#: stale rather than as unestablished. A seconds value that lost a factor of a
+#: thousand (milliseconds divided once too often, or a `/ 1000` applied to a
+#: number that was already seconds). A truncated or hand-edited number. All
+#: three are numbers this program cannot have written, and believing one
+#: publishes an age that was never measured — REQ-21's whole subject.
+#:
+#: WHAT IT DELIBERATELY DOES NOT DO: expire a real reading.
+#: `pacing.STATE_MAX_AGE_SECONDS` is NOT reused as the far bound here, and the
+#: difference is not a preference. There the far bound is six hours because a
+#: refusal COUNT past the cap "has outlived its reasoning" — a refusal is a
+#: penalty, and penalties expire. A reading's age does not: the older it is, the
+#: more the operator needs to see it. Applying that constant here would silently
+#: delete every stamp older than one backoff window, which is this phase's own
+#: datum evaporating twice a day — a bound that binds on the wrong thing, and
+#: therefore the very defect this phase exists to remove.
+#:
+#: WHY IT CAN NEVER BIND ON ANYTHING REAL: this repository's first commit is
+#: 2026-08-02, so the floor sits more than a quarter of a century below the
+#: earliest stamp any clock this program has ever run on could produce. It
+#: rejects impossible numbers and nothing else.
+#:
+#: AND A STANDING INSTRUCTION: do NOT "tighten" this to the date the field
+#: shipped. It is a floor on CREDIBILITY, not a freshness policy. The tests
+#: construct aged documents by subtraction from the real clock, and this
+#: project's entire subject is a reading that is genuinely days old — a floor
+#: near today would reject exactly the readings REQ-21 exists to surface.
+EARLIEST_CREDIBLE_READING = datetime(2000, 1, 1, tzinfo=timezone.utc).timestamp()
+
+
+def _remembered_availability(entry: object) -> str | None:
+    """The availability inside one persisted entry, or `None` to skip it whole.
+
+    `object` rather than a narrower type because this reads a `json.loads`
+    result: everything here is what a file said, not what a caller promised.
+
+    A `str` entry is THE PRE-07 SHAPE — a bare availability carrying no age at
+    all, which is the document on this host today, and it loads as *availability
+    with an unknown age*. That branch is the whole migration; there is no version
+    field and no conversion pass, because tolerance per entry also reads a
+    document an older binary rewrote mixed, which a version could not.
+
+    A `dict` entry is this program's own shape and yields its `availability` when
+    that value is a `str`.
+
+    THE REMEMBERED AVAILABILITY IS NOT VALIDATED AGAINST THE `Availability` ENUM,
+    and that is a decision rather than an omission. The only comparison ever made
+    against this string is `!= Availability.IN_STOCK.value`, so a value outside
+    the enum already behaves as "not in stock" — the safe direction. Rejecting it
+    would add a branch that changes no outcome, which is a gate that cannot bite,
+    which is the defect this phase is being written to remove.
+    """
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict):
+        availability = entry.get("availability")
+        if isinstance(availability, str):
+            return availability
+    return None
+
+
+def _remembered_stamp(entry: object, now: float) -> float | None:
+    """The reading time inside one persisted entry, or `None` for UNKNOWN age.
+
+    `None` here means the age is not established. It never means `0.0` and it
+    never means `now`: manufacturing either is REQ-21's defect, moved from the
+    reading to the restart.
+
+    One expression covers both shapes of the document, so the pre-07 bare string
+    and the `"read_at": null` this program writes for itself every cycle arrive
+    at the same guard rather than at two that could drift.
+
+    `pacing.load`'s worked shape (`pacing.py:335-350`), adapted where it must be.
+    """
+    stamp = entry.get("read_at") if isinstance(entry, dict) else None
+    # `bool` is an `int` subclass, so `"read_at": true` would otherwise restore a
+    # reading taken one second after midnight 1970. `config._price`'s precedent,
+    # which `pacing.load` cites for the same reason two modules over.
+    if not isinstance(stamp, (int, float)) or isinstance(stamp, bool):
+        return None
+    # BOTH bounds, as one comparison. A stamp in the FUTURE is a clock that
+    # jumped backwards, and with only a lower bound it would read as fresh for as
+    # long as the skew lasted — the fresh direction, which is the dangerous one.
+    # A stamp below the floor was not written by this program at all.
+    if not EARLIEST_CREDIBLE_READING <= float(stamp) <= now:
+        return None
+    return float(stamp)
+
 
 @dataclass
 class State:
-    """Last-seen availability per watch, so alerts fire on transitions."""
+    """Last-seen availability per watch and WHEN it was read, so alerts fire on transitions."""
 
     path: Path
     seen: dict[str, str]
+    #: The wall clock at which each remembered availability was read. Keyed by
+    #: the same `watch.key` as `seen`, and declared LAST with a default so every
+    #: existing positional `State(path, {})` construction stays valid and keeps
+    #: its meaning — the chain `Result.rung`, `Result.store`, `Result.shipping`
+    #: and `Pacer.state_path` each extend. That is load-bearing rather than
+    #: stylistic here: `tests/test_pacing.py:271` and `:299` construct this class
+    #: positionally, and `cli.py` and this module construct it in three more
+    #: places.
+    #:
+    #: A KEY PRESENT IN `seen` AND ABSENT FROM HERE IS A REMEMBERED READING WHOSE
+    #: MOMENT WAS NEVER ESTABLISHED — an UNKNOWN age, which is not `0.0` and is
+    #: not now. Absence is the representation on purpose: there is no `None`
+    #: sitting in the map to accidentally do arithmetic against, and
+    #: `read_at.get(key)` hands every consumer the three-valued answer directly.
+    #:
+    #: WALL clock (`time.time()`), never `time.monotonic()`, citing the
+    #: distinction `_RetailerState.refused_at` already records
+    #: (`pacing.py:159-175`): a monotonic epoch is process- and boot-local, so it
+    #: means nothing in a file. This is the same KIND of number as `refused_at` —
+    #: a stamp on the EVIDENCE, which exists to be written down, and not a
+    #: position on a schedule like `due_at`.
+    read_at: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> State:
+        """Restore the memory, tolerating both shapes of the document.
+
+        THE PRE-07 SHAPE IS NOT HYPOTHETICAL. Measured on this host 2026-08-13,
+        `state.json` is 13 bare `"retailer:name" -> "in_stock"` strings, and the
+        daemon runs this tree through an editable install — so this method is
+        what that file meets at the next restart. It loads as availability with an
+        UNKNOWN age, which is both the fail-safe direction and simply true of it.
+
+        NO VERSION FIELD, decided rather than defaulted. `pacing.STATE_VERSION`
+        exists because `refusals` is a COUNT whose units are a policy decision;
+        epoch seconds have no policy constant to be re-pointed against. And the
+        price of a version here is paid in ALERTS: a file carrying the wrong one
+        is *treated as absent*, which for this document discards 13 remembered
+        availabilities, so the next in-stock reading on each reads as a fresh
+        restock. Per-entry tolerance costs nothing and keeps the memory.
+
+        THE RESIDUAL IS A DOWNGRADE, AND IT IS PRICED HERE RATHER THAN DESCRIBED.
+        An older binary reading the newer document compares a mapping against
+        `"in_stock"`, finds them unequal, and re-alerts — it would not read a
+        version field either, because the code that would check it is the code
+        that does not exist yet. Measured against today's document: 8 of 13
+        entries are `in_stock`, 6 of those are controls, and controls never
+        alert, so the whole cost is AT MOST TWO duplicate restock pushes (the two
+        GameStop `TRANSITION —` watches, which `config/products.yaml:330` records
+        as deliberately not controls). It is also not one-way: an old binary
+        rewrites the file mixed, and per-entry tolerance reads a mixed document
+        without loss in either direction, which a version field could not do.
+
+        `time.time()` is read here and that is not a staleness comparison — it is
+        the upper end of a VALIDATION, exactly as `pacing.load:323` reads it.
+        Every staleness comparison in this phase takes `now` as a parameter; this
+        is not one.
+        """
         try:
-            return cls(path, json.loads(path.read_text()))
+            doc = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):
             return cls(path, {})
+        if not isinstance(doc, dict):
+            return cls(path, {})
+
+        now = time.time()
+        seen: dict[str, str] = {}
+        read_at: dict[str, float] = {}
+        # NO `isinstance(key, str)` GUARD, and its absence is deliberate:
+        # `json.loads` produces `str` keys by construction, so that branch cannot
+        # be taken. `pacing.load` carries one because its keys come from a nested
+        # `retailers` mapping it also has to prove is a dict; here it would be a
+        # gate that cannot bind.
+        for key, entry in doc.items():
+            availability = _remembered_availability(entry)
+            if availability is None:
+                continue
+            seen[key] = availability
+            # THIS IS WHERE THE COPY OF `pacing.load` DELIBERATELY DIVERGES, and
+            # it is written here because here is where a reader will look for it.
+            # `pacing.load` `continue`s past a bad entry and drops it WHOLE; a
+            # failed stamp check here drops only the AGE and keeps the
+            # availability. Dropping the entry would forget a remembered
+            # availability, and a forgotten availability re-alerts on the next
+            # in-stock reading — so the strict copy would turn one hand-edited
+            # number into a push. The fail-safe direction for an age is
+            # *unknown*; the fail-safe direction for a memory is *keep it*.
+            stamp = _remembered_stamp(entry, now)
+            if stamp is not None:
+                read_at[key] = stamp
+        return cls(path, seen, read_at)
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.seen, indent=2, sort_keys=True))
+        """Write the memory and its dates as one document, one object per entry.
+
+        THIS METHOD NEVER READS THE CLOCK, AND THAT IS THE WHOLE TRAP. `save`
+        runs every cycle, so supplying a stamp for an entry that has none would
+        refresh the record forever and the age-out would never fire once —
+        `pacing.py:196-199` wrote the rule down for `_warned_since` and it is
+        inherited verbatim here: *"a bound that cannot bind is worse than no
+        bound, because it reads like one in the file."* It is not abstract on
+        this host: `walmart:Pokémon GO Plus +` cannot be updated at all while
+        `WALMART_STORE_ID` is unset, so a write-time stamp would date a frozen
+        reading at the moment of every write, forever.
+
+        An entry with no established moment therefore writes `null`, never `0`.
+        `status.py:136-141`'s argument, one direction over: an absent stamp
+        published as zero reads as 1 January 1970 — maximally stale rather than
+        unknown, which is the same class of lie pointed the other way.
+
+        THE DOCUMENT IS BUILT FROM `seen`, WHICH IS WHAT MAKES `cli.watch_cycle`'s
+        ROLLBACK CORRECT. `cli.py:328` pops a key from `state.seen` when a restock
+        alert was not delivered; because every entry here comes from `seen`, that
+        key's stamp cannot reach disk either. The availability and its age leave
+        together, which is what a rollback means. (An orphan stamp can survive in
+        `read_at` for the rest of that process and can never be written. Recorded
+        rather than guarded: the guard would live in `boty/cli.py`, which this
+        plan does not own.)
+
+        WRAPPED, on `Pacer.save`'s precedent (`pacing.py:406-430`), and the reason
+        is sharper here than there: `run_once` calls this BEFORE
+        `cli.watch_cycle` attempts delivery, so an `OSError` escaping it does not
+        merely lose a memory — it takes the cycle down before a real restock
+        alert is sent, which is this project's worst outcome. `Exception` rather
+        than `OSError`, on WR-05's recorded widening, though only the write is
+        known to raise today. `log.exception` carries the type and the traceback,
+        so nothing is swallowed silently. The residual, plainly: a failed write
+        means the memory does not survive the next restart, costing at most one
+        duplicate alert — the direction this project prefers over a missed one.
+        """
+        try:
+            doc = {
+                key: {"availability": availability, "read_at": self.read_at.get(key)}
+                for key, availability in self.seen.items()
+            }
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(doc, indent=2, sort_keys=True))
+        except Exception:
+            log.exception("could not write the remembered state to %s", self.path)
 
     def transitioned_to_stock(self, result: Result) -> bool:
         """True if this is a *new* in-stock reading.
