@@ -404,6 +404,92 @@ class Result:
     #: shipping key on the status page. Recorded so the absence is not read as
     #: an omission.
     shipping: float | None = None
+    #: WHEN THE RETAILER'S ANSWER WAS READ — the wall-clock moment
+    #: (`time.time()`) at which the bytes this reading is about were in hand.
+    #: `availability` is what the page said; this is when it said it.
+    #:
+    #: TWO THINGS ALREADY IN THIS TREE THAT A READER WILL CONFUSE IT WITH, named
+    #: here because the confusion is the defect rather than a risk of one.
+    #: `status.json`'s top-level `updated` (`status.py:42`) is when the CYCLE
+    #: ran: it is computed once per `write` call and it is FRESH even when every
+    #: row beneath it is stale, which is exactly the reading Dan was given when
+    #: he asked how old the Amazon and Walmart GO Plus + readings were. And
+    #: `make verify`'s `fixtures` stage ages CAPTURED TEST PAGES from their
+    #: `captured_at` sidecars (`control_check.report_fixture_staleness`) — a fact
+    #: about this repository's test corpus, not about a live reading.
+    #:
+    #: A WALL CLOCK, AND NEVER `time.monotonic()`, on the distinction
+    #: `pacing.py:159-175` already recorded: `refused_at` is a timestamp on the
+    #: EVIDENCE while `due_at` is a position on the caller's SCHEDULE, and a
+    #: monotonic epoch is process- and boot-local, so it means nothing in a file
+    #: and nothing after a restart. This is a stamp on the evidence, so it is
+    #: `refused_at`'s kind of number. It inherits `refused_at`'s residual too: a
+    #: clock correction forward ages a reading out early (the safe direction) and
+    #: a jump backwards leaves a stamp in the future for a reader to discard.
+    #:
+    #: Declared LAST, after `shipping`, with a default, for the same reason
+    #: `rung`, `extraction`, `store` and `shipping` are: every pre-existing
+    #: construction site stays valid and keeps its meaning, because none of them
+    #: records when it read.
+    #:
+    #: WHAT THE DEFAULT MEANS: `None` is UNKNOWN AGE — "no reading was taken" —
+    #: and it is NEVER `time.time()` at construction. That is the whole of this
+    #: field's hardest rule. `status.py:53-57` states the same rule for a number,
+    #: about `duration_seconds`: *"A missing measurement serialised as 0 would
+    #: read off the dashboard as the fastest check ever recorded."* A missing
+    #: stamp defaulted to *now* reads off the dashboard as the freshest reading
+    #: ever taken, about a page nobody fetched.
+    #:
+    #: AND IT IS NEVER `0.0` EITHER, which is the same lie pointed the other way.
+    #: Epoch `0.0` renders as 1 January 1970 — MAXIMALLY STALE — where `None`
+    #: means nobody knows. That is the `store`-published-as-`0` mistake one
+    #: direction over: both replace "we did not establish this" with a value that
+    #: reads as established. Both directions of dishonesty are available here and
+    #: only `None` takes neither.
+    #:
+    #: Deliberately NOT folded into `degraded`. An age is not a confidence
+    #: discount. `degraded` means "discount this" — a browser rendered it, or a
+    #: DOM reader lifted it out of presentation markup — and how OLD a reading is
+    #: answers a different question about it. It is not `degraded`'s third
+    #: disjunct.
+    #:
+    #: AND THE ASYMMETRY A READER WILL OTHERWISE TRY TO FIX. Staleness touches
+    #: NEITHER `Availability` NOR `alertable`, and the reason is mechanical
+    #: rather than aesthetic: A `Result` IS ALWAYS FRESH AT THE INSTANT IT IS
+    #: CONSTRUCTED. A staleness term inside either property would therefore be a
+    #: term that is always false — a branch that can never be taken, which is the
+    #: unbindable-gate defect one level in, and this phase's own subject wearing
+    #: the fix's clothes.
+    #:
+    #: THIS LANDS DIFFERENTLY FROM `store`, which DOES drive `Availability` to
+    #: UNKNOWN, and the difference is worth stating because the two look alike.
+    #: A reading from the wrong store is an answer to a DIFFERENT QUESTION, and
+    #: it is knowable at construction — the page named a store, and it was not
+    #: the pinned one. An age is not a property of the reading at all: it is a
+    #: property of the reading's age AT THE MOMENT SOMEBODY LOOKS, and the
+    #: reading does not know when that is. So the comparison belongs to each
+    #: consumer, against its own `now`, and never to this class.
+    #: `models.py:517-522`'s standing rule points the same way independently:
+    #: UNKNOWN is never RESOLVED into a verdict, and an age nobody asked about
+    #: is not a stock fact.
+    #:
+    #: NOT DERIVABLE from `refused` or from `availability`, because that is the
+    #: first simplification a reader will propose. `availability is UNKNOWN` is
+    #: NOT the predicate "no reading was taken" — a store-gap UNKNOWN and a
+    #: parse-failure UNKNOWN both read a page, and a refusal did not. `refused`
+    #: is closer and still not identical: `retailers.check_bestbuy_api`'s `bad
+    #: api json` arm sets no `refused` and still received a response from Best
+    #: Buy. There is NO EXISTING FIELD that answers "was a page read"; this one
+    #: becomes it, which is why every construction site states it rather than
+    #: inheriting this default.
+    #:
+    #: PUBLISHED in `status.json`, unlike `shipping` — REQ-21's criterion 1 asks
+    #: for it by name, per watch row. `shipping`'s "Deliberately NOT published"
+    #: paragraph above stays true OF `shipping`: its argument is a statement
+    #: about `status.write` building rows field by field, so a new field here
+    #: publishes nothing on its own, and it is not a prohibition on publishing
+    #: one deliberately. Said here rather than by editing that paragraph.
+    read_at: float | None = None
 
     @property
     def delivered_total(self) -> float | None:
