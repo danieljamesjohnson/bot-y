@@ -759,6 +759,96 @@ MUTATIONS = (
         replace="refused=True, store=None, shipping=None, read_at=time.time()",
         breaks="`check_html`'s `except Blocked` arm — a refusal that never received a page now stamps the moment of the refusal, so every refusal refreshes the age of a reading nobody took. Amazon and Walmart have both been refusing this host for hours at a stretch, so both would publish a perpetually fresh age while nothing was read at all: the 2026-08-12 failure REQ-21 exists to fix, rebuilt inside the fix",
     ),
+    # ------------------------------------------------------------------
+    # M32 — LOAD DEFAULTS A MISSING STAMP TO NOW. REQ-21, 2026-08-13.
+    #
+    # M31 is this defect at the READING; M32 is the same defect at the RESTART,
+    # which is criterion 4's failure in one line: "the age survives a service
+    # restart, so a restart cannot make a two-day-old reading look fresh".
+    #
+    # WHICH LINE, SPECIFICALLY, AND PRE-COUNTED BEFORE REGISTRATION. The anchor is
+    # `monitor._remembered_stamp`'s type guard AND the `return None` beneath it,
+    # joined with an explicit `\n` exactly as M2 does, because `apply_mutation`
+    # replaces the FIRST occurrence and a non-unique anchor mutates a line this
+    # `breaks=` sentence is not describing — M19's recorded trap, which this
+    # repository has paid for once. Measured against the tree this is registered
+    # on:
+    #
+    #     grep -c 'if not isinstance(stamp, (int, float)) or isinstance(stamp, bool):' \
+    #         boty/monitor.py   ->   1
+    #
+    # and the two-line string itself counted once over the file's text. The bare
+    # `return None` occurs 3 times in that file, which is why the guard is carried
+    # into the anchor rather than the fall-through alone.
+    #
+    # BEHAVIOURAL, NOT PROSE — a type guard and its fall-through, carrying no
+    # message text, no rendered tag, no `detail` string and no version literal.
+    # That is § *Finding 1*'s hard rule after M25 and M26 both drifted on
+    # 2026-08-13 when the milestone version rolled, and after M2 was re-anchored
+    # in 2026-08-04 when the prose on its branch moved.
+    #
+    # `now` IS A PARAMETER OF THE ENCLOSING FUNCTION, so the replacement yields a
+    # PLAUSIBLE WRONG AGE rather than a `NameError`. A mutation caught by a crash
+    # proves nothing about the rule — it proves the suite notices a broken module,
+    # which it would notice anyway.
+    #
+    # WHY THIS GUARD AND NOT THE PRE-07 BRANCH ABOVE IT. This one covers BOTH
+    # directions the phase has to hold: the one-time migration of Dan's bare-string
+    # document, AND the `"read_at": null` this program writes for itself on every
+    # cycle thereafter for any entry whose moment was never established. So the
+    # gate sits on the path that runs at every restart forever, rather than on the
+    # one that runs once.
+    #
+    # THE SAVE-SIDE MIRROR — `save` inventing a stamp — IS GUARDED BY A TEST AND
+    # NOT BY A MUTATION, and the asymmetry is stated rather than left to be
+    # noticed: this plan holds one ident, and the LOAD direction is the one
+    # criterion 4 names. `tests/test_monitor.py`'s
+    # `test_saving_the_migrated_document_twice_never_invents_an_age` is the
+    # save-side gate.
+    #
+    # WHICH TESTS ARE EXPECTED TO CATCH IT — SEVEN, MEASURED BY APPLYING IT
+    # RATHER THAN PREDICTED. In `tests/test_monitor.py`:
+    # `test_a_pre_07_document_loads_as_availability_with_an_unknown_age`,
+    # `test_the_real_pre_07_document_loads_with_its_alert_behaviour_unchanged`
+    # (13 undated entries all come back dated NOW),
+    # `test_saving_the_migrated_document_twice_never_invents_an_age`, and
+    # `test_a_stamp_that_cannot_be_believed_loses_the_age_and_keeps_the_memory`
+    # at its `null`, `a-string` and `a-bool` parametrisations. In
+    # `tests/test_cli_watch.py`:
+    # `test_a_reading_the_first_process_could_not_date_comes_back_undated`.
+    #
+    # THE OTHER THREE PARAMETRISATIONS ARE NOT KILLERS AND THAT IS CORRECT, not
+    # a gap: `in-the-future`, `zero` and `a-seconds-value-that-lost-a-thousand`
+    # are all real numbers, so they pass THIS guard and are rejected by the
+    # `EARLIEST_CREDIBLE_READING <= stamp <= now` bound one line below, which
+    # this mutation does not touch. Naming them as expected killers would be
+    # describing a catch that did not happen — the same defect as a `breaks=`
+    # sentence that describes the wrong line.
+    #
+    # NOR IS `test_the_age_of_a_reading_survives_the_restart`, and the reason is
+    # worth the line because 07-02's plan predicted it: its stamp is a real
+    # two-day-old float, so `_remembered_stamp` returns before ever reaching this
+    # fall-through. The restart-side test that DOES bind is the undated one named
+    # above, and it was added when this was measured — a gate is named after
+    # watching it fail, never after expecting it to.
+    #
+    # If it ever SURVIVES, the first thing to check is whether one of the seven
+    # acquired a skip decorator.
+    #
+    # M33 IS NOT A NEW GAP. `07-PLAN-OUTLINE.md` assigns it to **07-03**
+    # (`current_interval` ignoring the backoff). 07-01 reserved M32 for this plan
+    # and this plan consumes M32 only. `tests/test_support_matrix.py`'s own
+    # message governs: *"Idents are reserved across concurrent plans, not
+    # renumbered."*
+    #
+    # M21-M24 REMAIN THE INTENTIONAL GAP and are still not filled.
+    Mutation(
+        ident="M32",
+        target="boty/monitor.py",
+        search="    if not isinstance(stamp, (int, float)) or isinstance(stamp, bool):\n        return None",
+        replace="    if not isinstance(stamp, (int, float)) or isinstance(stamp, bool):\n        return now",
+        breaks="`monitor._remembered_stamp`'s type guard stops meaning \"the age is not established\" and starts meaning \"the age is now\", so every entry with no believable stamp comes back off disk dated at the instant the daemon started. Applied to the document on this host that is all 13 entries — including `walmart:Pokémon GO Plus +`, which has not been updatable since 2026-08-12 and cannot be until a store is pinned — so a restart makes a two-day-old reading look four seconds old. That is criterion 4's failure in one line, and it is the same manufacture of an age nobody recorded that REQ-21 exists to end, moved from the reading to the restart",
+    ),
 )
 
 
