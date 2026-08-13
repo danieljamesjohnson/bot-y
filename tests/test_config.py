@@ -275,11 +275,19 @@ def test_the_pacer_state_path_can_be_set(tmp_path: Path) -> None:
 def test_the_state_paths_are_three_separate_files(tmp_path: Path) -> None:
     """`state.json` was rejected as a home for this, and the reason is structural.
 
-    Its whole document is `State.seen` (`monitor.py` parses the entire file as
-    that map), so a second top-level key there is a schema change with a
-    migration behind it — and `run_once` saves it BEFORE delivery is attempted,
-    which is exactly the wrong moment to commit a paging memory whose only job
-    is to be rolled back when a delivery fails.
+    ONE OF THE TWO REASONS WAS OVERTAKEN ON 2026-08-13 and the decision was not.
+    This docstring used to read: *"Its whole document is `State.seen`
+    (`monitor.py` parses the entire file as that map), so a second top-level key
+    there is a schema change with a migration behind it."* REQ-21 gave that
+    document a reading time per entry, so it is a map of entries rather than the
+    `seen` map, and the migration that objection warned about has since been done
+    per entry. Half-spent, exactly as `config.py`'s comment now records it.
+
+    The surviving reason is decisive on its own: `run_once` saves `state.json`
+    BEFORE delivery is attempted, which is exactly the wrong moment to commit a
+    paging memory whose only job is to be rolled back when a delivery fails.
+
+    The assertion below is unchanged — three paths are still three paths.
     """
     cfg = Config.load(_write(tmp_path, _WATCH))
 

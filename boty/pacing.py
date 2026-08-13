@@ -96,12 +96,40 @@ MAX_BACKOFF_SECONDS = 6 * 60 * 60
 #: Schema version of the persisted document. A file carrying any other value is
 #: treated as absent.
 #:
-#: The hedge is worth arguing rather than assuming. `monitor.State` has no
-#: version and needs none: its document is a flat map of strings whose meaning
-#: cannot drift. This one carries a COUNT whose units are a policy decision —
-#: `BACKOFF_FACTOR` and the cap — so a future version that changed either and
-#: then restored an old file under the new units would pin a retailer at a wait
-#: nobody chose. One integer against that is cheap.
+#: The hedge is worth arguing rather than assuming. This one carries a COUNT
+#: whose units are a policy decision — `BACKOFF_FACTOR` and the cap — so a
+#: future version that changed either and then restored an old file under the
+#: new units would pin a retailer at a wait nobody chose. One integer against
+#: that is cheap.
+#:
+#: THE CONTRAST THIS PARAGRAPH USED TO DRAW WAS WITHDRAWN ON 2026-08-13. Until
+#: then the sentence above opened with:
+#:
+#:     "`monitor.State` has no version and needs none: its document is a flat
+#:     map of strings whose meaning cannot drift."
+#:
+#: REQ-21 overruled the premise, not the conclusion. That day `monitor.State`
+#: gained a reading time per entry, so its document is a map of ENTRIES each
+#: carrying an availability and a stamp, and a sentence resting on *"strings"*
+#: cannot be left standing over it.
+#:
+#: THE CONCLUSION SURVIVES AND THE REASON IS NEW, which is why this is a rewrite
+#: rather than a bump over there. `monitor.State` still has no version, on three
+#: measured grounds:
+#:
+#: 1. The distinction this comment always drew is intact and only the example on
+#:    the other side of it changed: `refusals` is a count whose units are a
+#:    policy decision, and epoch seconds have no policy constant to be
+#:    re-pointed against.
+#: 2. The price of a version THERE is paid in ALERTS rather than in one repeated
+#:    notification. *Treated as absent* applied to `state.json` means forgetting
+#:    13 remembered availabilities, so the next in-stock reading on each of them
+#:    reads as a fresh restock.
+#: 3. A version field does not answer the hazard that is actually there, which
+#:    is a DOWNGRADE — an older binary comparing a mapping against `"in_stock"`
+#:    and re-alerting. It would not read a version field either, because the
+#:    code that would check it is the code that does not exist yet. That
+#:    residual is priced, in alerts, in `monitor.State.load` — same commit.
 #:
 #: BUMPED TO 2 on 2026-08-10 (05-REVIEW WR-01): `warned` changed from a list of
 #: names to a mapping of name to the wall clock its paging episode began, so

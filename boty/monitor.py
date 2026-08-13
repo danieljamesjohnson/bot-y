@@ -344,6 +344,29 @@ class State:
         key = result.watch.key
         previous = self.seen.get(key)
         self.seen[key] = result.availability.value
+        # THE GUARD ABOVE IS INHERITED, NOT ADDED. The UNKNOWN early return
+        # already means the memory is written only when a verdict was RESOLVED,
+        # so a refusal — which happened at a wall-clock moment but took no
+        # reading — can never reach this line. No `refused` check belongs here:
+        # `scripts/mutation_check.py:678` records the rule that two gates on one
+        # rule means neither can be shown to bite, and a gate that cannot bite is
+        # the defect this phase exists to remove.
+        #
+        # ONE ACT, TWO FACTS — including the removal case. A resolved reading
+        # carrying no stamp is reachable (every hand-built `Result` in the suite
+        # is one, and `Result.read_at` defaults to `None`), and leaving the
+        # previous stamp in place would attach one reading's moment to a
+        # different reading's verdict. That is a smaller lie than the one this
+        # phase is fixing and it is the same lie, so the pair is written together
+        # or cleared together, never half of each.
+        #
+        # THIS IS NOT WHERE STALENESS IS DECIDED. Nothing here compares the stamp
+        # to anything: 07-03 owns the retailer's current interval, 07-04 the
+        # missing rows, 07-05 the rendering.
+        if result.read_at is not None:
+            self.read_at[key] = result.read_at
+        else:
+            self.read_at.pop(key, None)
         return result.availability is Availability.IN_STOCK and previous != Availability.IN_STOCK.value
 
 

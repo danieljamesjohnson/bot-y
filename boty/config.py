@@ -288,13 +288,27 @@ class Config:
     #: things, because ROADMAP criterion 6 names `Pacer._state` in as many words
     #: and one slightly-narrow name beats two names for two keys in one file.
     #:
-    #: NOT folded into `state.json`, and that was considered. That file's
-    #: document is `State.seen` in its entirety — `monitor.State.load` parses the
-    #: whole thing as the map — so a second top-level key there is a schema
-    #: change with a migration behind it. Worse, `run_once` saves it BEFORE
-    #: delivery is attempted, on purpose, which is exactly the wrong moment to
-    #: commit a paging memory whose entire job is to be rolled back when a
-    #: delivery fails.
+    #: NOT folded into `state.json`, and that was considered. The decision is
+    #: unchanged; ONE OF ITS TWO REASONS HAS BEEN OVERTAKEN, and leaving it
+    #: reading as though it had not would be a false sentence in a file somebody
+    #: consults before proposing the merge again.
+    #:
+    #: The first objection, as it stood until 2026-08-13: *"That file's document
+    #: is `State.seen` in its entirety — `monitor.State.load` parses the whole
+    #: thing as the map — so a second top-level key there is a schema change with
+    #: a migration behind it."* REQ-21 overruled it that day. `state.json` is now
+    #: a map of ENTRIES, each carrying an availability and the moment it was
+    #: read, so the whole file is no longer `State.seen`; and the migration that
+    #: objection warned about has since been DONE, per entry rather than with a
+    #: version. So it is half-spent: a schema change there is no longer
+    #: unprecedented, only unnecessary.
+    #:
+    #: THE SECOND OBJECTION IS UNTOUCHED AND IS DECISIVE ON ITS OWN: `run_once`
+    #: saves `state.json` BEFORE delivery is attempted, on purpose, which is
+    #: exactly the wrong moment to commit a paging memory whose entire job is to
+    #: be rolled back when a delivery fails. Nothing about REQ-21 moves that
+    #: write, and `monitor.State.save`'s own docstring now depends on the same
+    #: ordering for the rollback it describes.
     pacer_state_path: Path = Path("pacer-state.json")
 
     @classmethod
