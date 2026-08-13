@@ -771,7 +771,26 @@ def test_boty_check_writes_no_pacer_state_at_all(
 
 
 # --------------------------------------------------------------------------
-# REQ-21: a push has to carry a human action, and the default is silence
+# REQ-16: a push has to carry a human action, and the default is silence
+#
+# RELABELLED FROM `REQ-21` ON 2026-08-13, and argued here rather than silently
+# retyped. This section was written 2026-08-12 by Phase 6's paging work, and
+# REQ-21 was minted NOWHERE in v0.2's archive and nowhere in Phase 6's planning
+# — that ident was invented in this file and never existed as a requirement.
+# The section's own subject is REQ-16's ("A notification is sent only when a
+# human decision changes the outcome"), and `tests/test_cli_watch.py:510`
+# already carries a `REQ-16 across a RESTART` section, so the label was a slip:
+# somebody reached for the next free number instead of the governing
+# requirement. v0.3 then minted a REAL REQ-21 on 2026-08-13, meaning something
+# entirely different — when a reading was taken — and 07-01 writes genuine
+# `REQ-21` sections in three test files, which would make
+# `scripts/mutation_check.py`'s citation of "test_cli_watch.py's REQ-21
+# section" ambiguous the moment it landed. M29's citation is re-pointed in the
+# same commit.
+#
+# NO CRITERION, REQUIREMENT OR MEASUREMENT CHANGES HERE. A mistyped
+# cross-reference is being made to point at what it always meant. Every
+# assertion below is byte-unchanged.
 #
 # Dan, 2026-08-12, the second time he raised it: *"im still getting annoying
 # messages. we need to never hit the user unless its something they can buy or

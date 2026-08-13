@@ -669,7 +669,12 @@ MUTATIONS = (
     # M21-M24 ARE AN INTENTIONAL GAP and are not filled here.
     #
     # WHICH TESTS ARE EXPECTED TO CATCH EACH. M29:
-    # tests/test_cli_watch.py's REQ-21 section, in particular
+    # tests/test_cli_watch.py's REQ-16 paging section (re-pointed 2026-08-13:
+    # that section was labelled REQ-21, an ident that was invented in a test
+    # file and never existed as a requirement — its subject is REQ-16's. v0.3
+    # minted a real REQ-21 meaning something else entirely, so this citation
+    # would otherwise have become ambiguous. Nothing about what M29 tests
+    # changed), in particular
     # test_a_control_that_stopped_reading_in_stock_is_recorded_and_not_pushed and
     # test_a_health_state_nobody_has_written_yet_is_silent. M30: that section's
     # test_the_store_pin_gap_is_pushed_because_a_person_can_close_it, plus
@@ -690,6 +695,69 @@ MUTATIONS = (
         search='                    action=STORE_PIN_ACTION if store_gap else "",',
         replace='                    action="",',
         breaks="the one health state a person can close stops saying so, so nothing reaches a phone at all — an unpinned or mismatched store leaves every Walmart reading UNKNOWN forever, silently, which is the suppression rule satisfied by deleting the monitor rather than the noise",
+    ),
+    # ------------------------------------------------------------------
+    # M31 — A NON-READ ARM STAMPS THE MOMENT OF ITS REFUSAL. REQ-21, 2026-08-13.
+    #
+    # This is the phase's own defect rebuilt inside the fix meant to prevent it,
+    # which is why it is the one mutation 07-01 ships. A refusal DOES happen at a
+    # wall-clock moment. It took no READING. `boty/models.py`'s `read_at` dates a
+    # reading, so stamping a refusal refreshes the age of a reading nobody took —
+    # and `pacing.py:196-199` already wrote the lesson down for `_warned_since`:
+    # *"stamping at write time would refresh the record forever and the age-out
+    # would never fire once — a bound that cannot bind is worse than no bound,
+    # because it reads like one in the file."*
+    #
+    # WHICH ARM, SPECIFICALLY — never "an error arm". `apply_mutation` replaces
+    # the FIRST occurrence, so the `breaks=` sentence has to describe the line the
+    # anchor actually lands on or it describes something that did not happen (M19
+    # is the recorded trap; this repository has paid for it once). The anchor was
+    # PRE-COUNTED against the tree it is registered on:
+    #
+    #     grep -c 'refused=True, store=None, shipping=None, read_at=None' \
+    #         boty/retailers.py   ->   1
+    #
+    # Exactly one, at `boty/retailers.py:544` — `check_html`'s `except Blocked`
+    # arm. The bare substring `read_at=None` occurs 17 times in that file (9
+    # construction sites plus the comments that argue them), which is why the
+    # anchor is the arm's whole stated metadata rather than the field alone.
+    #
+    # BEHAVIOURAL, NOT PROSE. It carries no message text, no tag, no `detail`
+    # string and no version literal — it is the keyword metadata four arms state
+    # explicitly. That is the hard rule after M25 and M26 both drifted on
+    # 2026-08-13 when the milestone version rolled, and after M2 was re-anchored
+    # in 2026-08-04 when the prose on its branch moved.
+    #
+    # THE REPLACEMENT DEPENDS ON `time` BEING IMPORTED IN `boty/retailers.py`, and
+    # it is (added by 07-01 for `_verdict_from_html`'s stamp). That dependency is
+    # deliberate: the mutant must produce a PLAUSIBLE WRONG AGE rather than a
+    # `NameError`. A mutation caught by a crash proves nothing about the rule — it
+    # proves the suite notices a broken module, which it would notice anyway.
+    #
+    # WHICH TESTS ARE EXPECTED TO CATCH IT: `tests/test_retailers.py`'s
+    # `test_a_transport_that_refused_took_no_reading` (the `check_html` x `Blocked`
+    # parametrisation asserts `read_at is None`) and
+    # `test_the_read_and_non_read_arms_are_partitioned_exactly` (the AST partition
+    # sees the literal `None` become a call). If it ever SURVIVES, the first thing
+    # to check is whether either acquired a skip decorator or stopped asserting
+    # `is None` in favour of falsiness — `0.0` is falsy, and a falsiness assertion
+    # would let a different wrong answer through the same gate.
+    #
+    # M32 IS NOT A SECOND GAP. `07-PLAN-OUTLINE.md` assigns it to **07-02**
+    # (`State.load` defaulting a missing stamp to `time.time()` — criterion 4's
+    # failure in one line). The orchestrator reserved M31-M32 for this phase's
+    # first wave; 07-01 consumes M31 only and leaves M32 to the plan the outline
+    # assigns it to, rather than renumbering five downstream plans and 07-06's
+    # arithmetic. `tests/test_support_matrix.py`'s own message governs: *"Idents
+    # are reserved across concurrent plans, not renumbered."*
+    #
+    # M21-M24 REMAIN THE INTENTIONAL GAP and are still not filled.
+    Mutation(
+        ident="M31",
+        target="boty/retailers.py",
+        search="refused=True, store=None, shipping=None, read_at=None",
+        replace="refused=True, store=None, shipping=None, read_at=time.time()",
+        breaks="`check_html`'s `except Blocked` arm — a refusal that never received a page now stamps the moment of the refusal, so every refusal refreshes the age of a reading nobody took. Amazon and Walmart have both been refusing this host for hours at a stretch, so both would publish a perpetually fresh age while nothing was read at all: the 2026-08-12 failure REQ-21 exists to fix, rebuilt inside the fix",
     ),
 )
 
