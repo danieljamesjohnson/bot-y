@@ -25,7 +25,6 @@ from boty.cli import _report
 from boty.models import Availability, Extraction, Health, Result, Rung, Watch
 from boty.status import write
 
-
 #: "this argument was not passed at all", which is a different thing from
 #: passing None. The unmeasured path has to be reachable through the helper
 #: exactly as every pre-existing caller reaches it — by omission.
