@@ -893,6 +893,39 @@ def test_the_second_process_reads_the_first_process_stamp_and_not_its_own_clock(
     assert State.load(cfg.state_path).read_at[KEY] == newer
 
 
+def test_a_reading_the_first_process_could_not_date_comes_back_undated(
+    cfg: Config, sent: dict[str, list]
+) -> None:
+    """The restart must not INVENT an age either, and that is the other half of criterion 4.
+
+    An age that does not survive is one failure; an age manufactured at the
+    moment of the restart is the same failure wearing the fix's clothes, and it
+    is worse because it reads like an answer. This is `walmart:Pokémon GO Plus +`
+    on this host in miniature: a remembered availability whose moment cannot be
+    established, restarted. It has to come back UNKNOWN, indefinitely, rather
+    than dated at whenever the daemon last came up.
+
+    `_checker` is the unstamped one on purpose here — a hand-built `Result` took
+    no reading, which is exactly the input this claim is about.
+    """
+    cli.watch_loop(
+        cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        State.load(cfg.state_path),
+        cycles=1,
+        sleep=lambda s: None,
+    )
+
+    assert json.loads(cfg.state_path.read_text())[KEY]["read_at"] is None, (
+        "null and never 0 — a zero here renders as 1 January 1970, which reads "
+        "as maximally stale rather than as unknown"
+    )
+    assert State.load(cfg.state_path).read_at == {}, (
+        "the restart dated a reading nobody stamped, so a frozen row comes back "
+        "looking as though it had just been taken"
+    )
+
+
 # --------------------------------------------------------------------------
 # REQ-16: a push has to carry a human action, and the default is silence
 #
