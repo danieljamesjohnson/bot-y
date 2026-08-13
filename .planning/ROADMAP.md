@@ -424,3 +424,26 @@ mutation anchored on behaviour rather than prose.
 top-level `updated` is when the *cycle* ran — it is fresh even when every row in it
 is stale. And `make verify`'s `fixtures` stage ages *captured test pages*, not live
 readings.
+
+**Plans**: 6 plans, in 6 waves — every wave serial, and for the plainest reason this
+project has had: **no two plans own disjoint file sets.** The table is in
+`.planning/phases/07-a-reading-has-an-age/07-PLAN-OUTLINE.md` § *Why every wave is serial*,
+which is this phase's contract. Plans are written one at a time; a line below whose
+`PLAN.md` does not exist yet is a plan scheduled, not a plan claimed.
+
+Plans:
+
+- [ ] 07-01: A reading carries the moment it was taken, and a non-reading carries none — `Result.read_at`, all 20 construction sites, published as `null` never `0` *(wave 1)*
+- [ ] 07-02: The age survives the restart, and the file that survives it changes shape without breaking on Dan's disk *(wave 2, blocked on 07-01)*
+- [ ] 07-03: The retailer's current interval becomes one readable number, and both surfaces read the same one *(wave 3, blocked on 07-02)*
+- [ ] 07-04: Every configured watch has a row, and a remembered reading says it is remembered — 3 rows for 14 watches today *(wave 4, blocked on 07-03)*
+- [ ] 07-05: The three surfaces say the age out loud, and an absent one says UNKNOWN *(wave 5, blocked on 07-04)*
+- [ ] 07-06: Close — no code; the gates measured, the count observed rising from 26, five verdicts *(wave 6, blocked on 07-01 … 07-05, `autonomous: false`)*
+
+**Criteria 2 and 3 each span more than one plan, and that is structure rather than
+dilution.** Criterion 2 splits across 07-01 (the datum: an absent stamp is `None`, never
+`now`) and 07-05 (the rendering: it shows as UNKNOWN). Criterion 3 splits across 07-03
+(the interval), 07-04 (a row that can be old) and 07-05 (the three renderings) — because
+a paced-out watch does not have a *stale* row in `status.json` today; **it has no row at
+all**, measured at 3 rows for 14 configured watches, so a staleness rule applied only to
+the rows that exist would be a bound that cannot bind.
