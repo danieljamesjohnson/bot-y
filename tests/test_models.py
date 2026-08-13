@@ -25,6 +25,9 @@ separately below rather than only where the two coincide.
 
 from __future__ import annotations
 
+import dataclasses
+import time
+
 import pytest
 
 from boty.models import (
@@ -47,6 +50,7 @@ def _result(
     extraction: Extraction | None = None,
     control: bool = False,
     shipping: float | None = None,
+    read_at: float | None = None,
 ) -> Result:
     watch = Watch(
         name="goplusplus",
@@ -72,6 +76,12 @@ def _result(
         kwargs["extraction"] = extraction
     if shipping is not None:
         kwargs["shipping"] = shipping
+    # `read_at` follows the same convention again, and here omission is the case
+    # under test rather than a tidiness: a `Result` nobody stamped is what an
+    # arm that read nothing actually constructs, and its age must come out
+    # UNKNOWN rather than *now*.
+    if read_at is not None:
+        kwargs["read_at"] = read_at
     return Result(watch, availability, price=price, detail="synthetic", **kwargs)
 
 
@@ -573,3 +583,93 @@ def test_the_store_is_carried_on_the_result_and_changes_no_verdict() -> None:
     assert pinned.alertable is True
     assert mismatched.alertable is True
     assert mismatched.availability is Availability.IN_STOCK
+
+
+# --------------------------------------------------------------------------
+# REQ-21: a reading carries the moment it was taken
+# --------------------------------------------------------------------------
+#
+# Asked when the Amazon and Walmart GO Plus + watches last read `out_of_stock`,
+# this system had no answer: a row read four seconds ago and one last read two
+# days ago were byte-identical in shape. `Result.read_at` is the datum that ends
+# that, and the two things asserted here are the two that can go wrong at the
+# source — the default meaning UNKNOWN age rather than *now*, and the stamp
+# leaking into a verdict it must not touch.
+#
+# NO CLOCK IS FROZEN, INJECTED OR MONKEYPATCHED, here or anywhere in this phase.
+# The two-day-old case is CONSTRUCTED as `time.time() - 172800` — a value read
+# rather than taken — which is `tests/test_pacing.py:501-505`'s existing method
+# and the reason no time seam is built at all.
+
+
+def test_a_result_built_without_a_stamp_has_no_age() -> None:
+    """`None`, and specifically not `0.0` and not `time.time()`.
+
+    Both wrong answers are available and they fail in opposite directions.
+    `time.time()` at construction dates a reading to the moment somebody built
+    the object, which makes a refusal look like a fresh reading — the failure
+    REQ-21 exists to remove. `0.0` renders as 1 January 1970, i.e. maximally
+    stale, which is the same lie pointed the other way.
+
+    Asserted with `is None` rather than for falsiness on purpose: `0.0` is falsy,
+    so `assert not r.read_at` would pass against the value this must never take.
+    """
+    r = _result(Availability.IN_STOCK, price=54.99)
+
+    assert r.read_at is None
+
+
+def test_read_at_is_declared_last_with_a_default_of_none() -> None:
+    """"Declared last, after `shipping`" is asserted statically, not described.
+
+    Every field added to `Result` since `rung` has been appended for one reason:
+    every pre-existing construction site stays valid and keeps its meaning. That
+    property is a fact about field ORDER, so a comment claiming it is a claim
+    nothing measures — this is the measurement.
+    """
+    fields = dataclasses.fields(Result)
+
+    assert fields[-1].name == "read_at"
+    assert fields[-1].default is None
+    # The field it follows, named: `shipping`'s own comment is the precedent
+    # this one extends, and an insertion between them would silently break the
+    # positional signature this rule exists to protect.
+    assert fields[-2].name == "shipping"
+
+
+def test_the_stamp_changes_no_verdict() -> None:
+    """A fresh, a two-day-old and an unstamped reading agree on all four verdicts.
+
+    This is the asymmetry paragraph as a test rather than as a claim. Staleness
+    touches neither `Availability` nor `alertable`, and the reason is mechanical:
+    a `Result` is always fresh at the instant it is constructed, so a staleness
+    term inside either property is a term that is always false — a branch that
+    can never be taken, which is the unbindable-gate defect this phase exists to
+    avoid, one level in.
+
+    The ceiling is configured and the shipping cost is established so `alertable`
+    is `True` in all three cases. An assertion that every arm is `False` would
+    hold just as well against a property that had been broken to refuse
+    everything, and would therefore have nothing to lose.
+    """
+    fresh = _result(
+        Availability.IN_STOCK, price=54.99, shipping=0.0, max_price=80, read_at=time.time()
+    )
+    two_days_old = _result(
+        Availability.IN_STOCK,
+        price=54.99,
+        shipping=0.0,
+        max_price=80,
+        read_at=time.time() - 172800,
+    )
+    unstamped = _result(Availability.IN_STOCK, price=54.99, shipping=0.0, max_price=80)
+
+    assert fresh.read_at is not None
+    assert two_days_old.read_at is not None
+    assert unstamped.read_at is None
+
+    for r in (fresh, two_days_old, unstamped):
+        assert r.availability is Availability.IN_STOCK
+        assert r.alertable is True
+        assert r.degraded is False
+        assert r.delivered_total == pytest.approx(54.99)
