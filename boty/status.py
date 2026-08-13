@@ -141,6 +141,39 @@ def write(
                 # the dashboard as a real store.
                 "store": r.store,
                 "store_pinned": r.watch.store_id,
+                # WHEN THIS READING WAS TAKEN — REQ-21's criterion 1, and the
+                # answer to *"so they are out of stock as of when?"*, which this
+                # file could not give at all before today.
+                #
+                # `null`, NEVER `0`. The `store` argument directly above applies
+                # word for word, and here it is sharper in one respect: an absent
+                # store published as `0` reads off the dashboard as a real store,
+                # and an absent stamp published as `0` reads as 1 January 1970 —
+                # MAXIMALLY STALE rather than unknown. That is the same class of
+                # lie pointed the other way. Both directions of dishonesty are
+                # available and `null` is the only value that takes neither.
+                #
+                # THIS IS NOT `updated`, and this is where a reader will look for
+                # that sentence. The top-level `updated` above is computed ONCE
+                # per `write` call, outside this comprehension, and it is when the
+                # CYCLE ran — it is fresh when every row beneath it is stale, and
+                # that exact confusion is the thing REQ-21 exists to remove. It is
+                # not reused here and it is not renamed: `index.html:133-142`
+                # reads it for the "monitor may not be running" banner, which asks
+                # whether this snapshot is still being WRITTEN. Different
+                # question, correct where it is, stays where it is.
+                #
+                # NO DERIVED `stale` KEY, and that is a decision rather than an
+                # omission. A flag computed at write time fails the mirror way to
+                # `pacing.py:196-199`: a row written fresh carries `stale: false`
+                # and keeps carrying it for exactly the interval during which it
+                # becomes stale — a bound that cannot bind. So the raw fact goes
+                # out and every consumer subtracts against its own `now`, which is
+                # this file's own rule from the `store` paragraph above ("the raw
+                # facts go out alongside any derived flag") applied a third time.
+                # 07-05 is where that comparison lands, in each of the three
+                # surfaces that make it.
+                "read_at": r.read_at,
             }
             for r in results
         ],
