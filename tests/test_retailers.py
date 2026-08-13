@@ -17,9 +17,11 @@ network — and conftest's guard would raise loudly if anything tried.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 import pytest
@@ -2868,3 +2870,224 @@ def test_the_verdict_function_branches_on_the_store_ahead_of_every_verdict() -> 
         "a return precedes the store guards, so a verdict can form for a store "
         "nobody asked about before they are ever consulted"
     )
+
+
+# --------------------------------------------------------------------------
+# REQ-21: a reading carries the moment it was taken; a non-reading carries none
+# --------------------------------------------------------------------------
+#
+# TWO GATES, AND THE FIRST ONE IS STATIC ON PURPOSE. Phase 5's identical bulk
+# edit threaded `shipping` onto eight sites and missed two of them; only the
+# tests caught it, and the sites at highest risk this time are
+# `check_bestbuy_api`'s four, which do not delegate to `_verdict_from_html` at
+# all. A behavioural suite that covers nineteen arms passes, and the twentieth
+# is the one that ships wrong — so the completeness assertion is made over the
+# SOURCE, where "every one" is a thing that can actually be counted.
+#
+# THE PARTITION IS THE MEASUREMENT, not a rule of thumb. *"An `except` arm read
+# nothing"* is FALSE at two of the twenty: `check_bestbuy_api`'s `bad api json`
+# arm (`except ValueError`, raised by `page.json` — `get()` already returned, so
+# bytes came back) and its `sku not found` arm (an empty `products` list — Best
+# Buy answered). Marking those two unstamped errs in the DANGEROUS direction: it
+# says a reading that DID happen has no age, and Best Buy is then permanently
+# UNKNOWN-aged on the one retailer this project reaches through an official API.
+#
+# NO CLOCK IS FROZEN, INJECTED OR MONKEYPATCHED. A stamp is asserted by
+# BRACKETING — `before = time.time()`, call, `after = time.time()` — which is
+# sufficient for everything below and is why this phase adds no time seam.
+
+
+def _retailers_ast() -> ast.Module:
+    return ast.parse(Path(retailers.__file__).read_text(encoding="utf-8"))
+
+
+def _result_calls(node: ast.AST) -> list[ast.Call]:
+    return [
+        n
+        for n in ast.walk(node)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "Result"
+    ]
+
+
+def _read_at_kind(call: ast.Call) -> str:
+    """`literal-None`, `variable`, `missing`, or whatever else somebody wrote."""
+    for kw in call.keywords:
+        if kw.arg != "read_at":
+            continue
+        if isinstance(kw.value, ast.Constant) and kw.value.value is None:
+            return "literal-None"
+        if isinstance(kw.value, ast.Name):
+            return "variable"
+        return f"other:{type(kw.value).__name__}"
+    return "missing"
+
+
+def test_every_result_construction_in_retailers_names_read_at() -> None:
+    """All 20 sites, proved over the source rather than arm by arm.
+
+    THE COUNT IS ASSERTED AS WELL AS THE PROPERTY, and that is not belt-and-
+    braces: a gate that finds zero `Result(` constructions — because the class
+    was aliased, or the module moved — would pass vacuously while proving
+    nothing at all. This file's own `_matrix` helper set that precedent.
+    """
+    calls = _result_calls(_retailers_ast())
+
+    assert len(calls) == 20, (
+        f"expected 20 `Result(` constructions in {Path(retailers.__file__).name}, found "
+        f"{len(calls)}. A site added here must state `read_at` like the other twenty: "
+        "the whole purpose of that field is to distinguish a reading from a non-reading, "
+        "and a dataclass default cannot state which one this arm is."
+    )
+    unnamed = [c.lineno for c in calls if _read_at_kind(c) == "missing"]
+    assert not unnamed, (
+        f"`Result(` at line(s) {unnamed} does not name `read_at`. Inheriting the default "
+        "silently claims 'nothing was read' — which is right at nine arms and a lie at "
+        "eleven, and no test of the other nineteen arms can see it."
+    )
+
+
+def test_the_read_and_non_read_arms_are_partitioned_exactly() -> None:
+    """11 stamped, 9 literal `None`, per enclosing function — the measured table.
+
+    `(literal-None, variable)` per function. The two entries worth reading twice
+    are `check_bestbuy_api`'s: **1** literal and **3** variable, because Best Buy
+    ANSWERED on three of its four arms.
+    """
+    expected = {
+        # Every one of these eight follows a successful fetch and parse. They
+        # differ in what the page SAID, not in whether it answered.
+        "_verdict_from_html": (0, 8),
+        "check_html": (2, 0),
+        "check_amazon": (2, 0),
+        "check_bestbuy_browser": (2, 0),
+        "check_target_browser": (2, 0),
+        # `api error` alone is the non-read arm here.
+        "check_bestbuy_api": (1, 3),
+    }
+
+    measured: dict[str, tuple[int, int]] = {}
+    for node in _retailers_ast().body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        calls = _result_calls(node)
+        if not calls:
+            continue
+        kinds = [_read_at_kind(c) for c in calls]
+        measured[node.name] = (kinds.count("literal-None"), kinds.count("variable"))
+
+    assert measured == expected, (
+        f"the read/non-read partition moved: {measured} != {expected}.\n"
+        "This is a MEASUREMENT, not a rule of thumb. `check_bestbuy_api`'s `bad api json` "
+        "and `sku not found` arms are responses that WERE read — `get()` returned before "
+        "`page.json` raised, and an empty `products` list is Best Buy answering — so "
+        "marking either unstamped is the dangerous direction, not a tidy-up: it dates a "
+        "reading that happened as having no age at all, permanently, on the one retailer "
+        "reached through an official API.\n"
+        "And the inverse is the trap this phase exists to avoid: stamping a refusal "
+        "refreshes the age of a reading nobody took (pacing.py:196-199 — 'a bound that "
+        "cannot bind is worse than no bound')."
+    )
+    assert sum(v for pair in measured.values() for v in pair) == 20
+
+
+@pytest.mark.parametrize("exc", [Blocked("challenge page"), FetchError("HTTP 503")])
+@pytest.mark.parametrize(
+    ("adapter", "transport"),
+    [
+        ("check_html", "get"),
+        ("check_amazon", "get"),
+        ("check_bestbuy_browser", "fetch_rendered"),
+        ("check_target_browser", "fetch_rendered"),
+    ],
+)
+def test_a_transport_that_refused_took_no_reading(
+    monkeypatch: pytest.MonkeyPatch, adapter: str, transport: str, exc: Exception
+) -> None:
+    """Four adapters, both refusal arms each: `read_at is None`.
+
+    A refusal DOES have a wall-clock moment. It took no READING, and stamping it
+    would refresh the age of a reading that never happened — the 2026-08-12
+    Walmart failure rebuilt inside the fix meant to prevent it.
+
+    `is None` and never falsiness: `0.0` is falsy, and `0.0` is the other wrong
+    answer (1 January 1970, maximally stale). A future regression to `0.0` must
+    not be able to pass this.
+    """
+
+    def _refuse(target: str, **kwargs: object) -> Page:
+        raise exc
+
+    monkeypatch.setattr(retailers, transport, _refuse)
+    watch = Watch(name="probe", retailer="gamestop", target=GAMESTOP_URL)
+
+    r = getattr(retailers, adapter)(watch)
+
+    assert r.availability is Availability.UNKNOWN
+    assert r.read_at is None, f"{adapter} stamped an arm where nothing came back"
+
+
+def test_a_page_that_answered_is_stamped_with_the_moment_it_was_read(
+    monkeypatch: pytest.MonkeyPatch, gamestop_goplusplus: str
+) -> None:
+    """Bracketed, not frozen: `before <= read_at <= after` around the call."""
+    _serve(monkeypatch, gamestop_goplusplus)
+    watch = Watch(name="GO Plus +", retailer="gamestop", target=GAMESTOP_URL)
+
+    before = time.time()
+    r = retailers.check_html(watch)
+    after = time.time()
+
+    assert r.read_at is not None, "a page that answered has an age"
+    assert before <= r.read_at <= after
+
+
+def test_best_buy_answering_with_unparseable_bytes_is_still_a_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`bad api json` — `get()` returned, so Best Buy answered.
+
+    The bytes were unreadable, which is a fact about what came back, not about
+    whether anything did. `except ValueError` is raised by `page.json`, one line
+    AFTER the response was in hand.
+    """
+    _serve(monkeypatch, "<html>403 Forbidden</html>")
+
+    before = time.time()
+    r = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY)
+    after = time.time()
+
+    assert r.availability is Availability.UNKNOWN
+    assert "bad api json" in r.detail
+    assert r.read_at is not None, (
+        "an unparseable response is still a response; marking it unstamped leaves "
+        "Best Buy permanently UNKNOWN-aged on the one retailer reached through an "
+        "official API"
+    )
+    assert before <= r.read_at <= after
+
+
+def test_best_buy_answering_that_the_sku_is_unknown_is_still_a_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`sku not found` — an empty `products` list IS Best Buy's answer."""
+    _serve(monkeypatch, '{"products": []}')
+
+    before = time.time()
+    r = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY)
+    after = time.time()
+
+    assert r.availability is Availability.UNKNOWN
+    assert "not found" in r.detail
+    assert r.read_at is not None
+    assert before <= r.read_at <= after
+
+
+def test_best_buy_refusing_took_no_reading(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`api error` — nothing came back, so there is no reading to date."""
+    _raise(monkeypatch, Blocked("challenge page"))
+
+    r = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY)
+
+    assert r.availability is Availability.UNKNOWN
+    assert "api error" in r.detail
+    assert r.read_at is None
