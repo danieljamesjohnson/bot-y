@@ -11,15 +11,15 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 IN PROGRESS — Phase 7 planned (6 plans, all serial); 07-01 complete 2026-08-13, 07-02 next. v0.2 archived, complete in the tree and deployed 2026-08-12
-stopped_at: Completed 07-01-PLAN.md — Result.read_at exists at the source, published per watch row, M31 watched red and CAUGHT at 27/27
-last_updated: "2026-08-13T15:39:09.413Z"
+status: Milestone v0.3 IN PROGRESS — Phase 7 planned (6 plans, all serial); 07-02 complete 2026-08-13, 07-03 next. v0.2 archived, complete in the tree and deployed 2026-08-12
+stopped_at: Completed 07-02-PLAN.md — the age survives the restart, state.json migrates per entry without a version, M32 watched red and CAUGHT at 28/28
+last_updated: "2026-08-13T17:05:00.000Z"
 last_activity: 2026-08-13
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
+  completed_plans: 2
   # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 0 of the
   # 1 phase in v0.3 is complete, so 0 — even though 1 of 6 plans has landed. The plan counter
   # above is where per-plan progress is read.
@@ -33,11 +33,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-11, with a `## Current State` section)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 7 — *A Reading Has an Age*, milestone v0.3. 07-01 landed 2026-08-13:
-`Result.read_at` exists, is stated at all 20 construction sites in `boty/retailers.py`, and is
-published per watch row in `status.json` as `null` when absent. 07-02 next — the age surviving a
-restart. The one outstanding action carried from v0.2 is not planning work — it is
-`sudo systemctl restart boty`.
+**Current focus:** Phase 7 — *A Reading Has an Age*, milestone v0.3. 07-01 and 07-02 both landed
+2026-08-13: `Result.read_at` exists, is stated at all 20 construction sites in
+`boty/retailers.py`, is published per watch row in `status.json` as `null` when absent, and now
+SURVIVES THE PROCESS — `monitor.State` persists it per entry, tolerating the pre-07 bare-string
+document without a version field and without losing an availability. 07-03 next — the retailer's
+current interval as one readable number. The one outstanding action carried from v0.2 is not
+planning work — it is `sudo systemctl restart boty`, and that restart is now also what migrates
+`state.json` to its new shape: 13 entries back undated and honest, with
+`walmart:Pokémon GO Plus +` publishing `"read_at": null` indefinitely until a store is pinned.
 
 ## Status
 
@@ -784,3 +788,62 @@ convention comment and `## Project Reference`'s *Current focus* were rewritten t
 `gsd-tools roadmap update-plan-progress 07` worked correctly and checked 07-01 off. The documented
 positional form is what both commands accept; the `--phase` flag form is rejected with
 `Error: Phase --phase not found`.
+
+### 07-02 — the age survives the process, 2026-08-13
+
+**Criterion 4 whole, and the persistence half of criterion 2.** `monitor.State` gained
+`read_at: dict[str, float]`, declared last with a default. Two `watch_loop` calls sharing one
+`state_path` — a restart in every respect these criteria are about — and the age the first process
+wrote is the age the second loads, to the float.
+
+```
+identity check: PASS — 216 file(s), no host identity found
+821 passed in 10.78s
+Success: no issues found in 18 source files
+mutation check: 28/28 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, ...)
+EXIT=0
+```
+
+**The registry rose from 27 to 28**, and 07-06 must record the phase as rising **from 26**. M32 —
+*`load` defaults a missing stamp to now* — was applied by hand and observed turning **seven** named
+tests red at exit 1 before the harness was asked, then reverted with `git status --porcelain`
+empty. Its anchor was pre-counted at exactly **1** (the bare `return None` occurs 3 times in
+`boty/monitor.py`, which is why the anchor carries the type guard as well). **M33 is reserved for
+07-03** and says so in `scripts/mutation_check.py`; M21-M24 remain the intentional gap.
+
+**THE SHAPE CHANGE REACHES DAN'S DISK AT THE NEXT RESTART, and this is 07-06's checkpoint
+material.** `state.json` becomes one object per entry carrying `availability` and `read_at`. The 13
+existing entries come back **undated and honest** — every availability preserved, so nothing
+re-alerts on the migration itself. `walmart:Pokémon GO Plus +` will publish `"read_at": null`
+**indefinitely**: it has been frozen since 2026-08-12 (`WALMART_STORE_ID` unset, `QUESTIONS.md`
+§ 0f), `transitioned_to_stock` returns on UNKNOWN before it writes, and `save` reads no clock, so
+nothing can date it until a store is pinned. The downgrade residual is priced **in the code**
+(`monitor.State.load`): at most two duplicate restock pushes, measured off today's document.
+
+**Two reversals argued in place, not edits.** `pacing.py`'s *"a flat map of strings whose meaning
+cannot drift"* and `config.py`'s *"That file's document is `State.seen` in its entirety"* are both
+falsified by this edit; both are withdrawn with the original quoted, the date named, and the
+surviving conclusion re-argued. `tests/test_config.py`'s docstring repeats the second and was
+corrected the same way, **with its assertion byte-unchanged**.
+
+**One measurement note, and it changed the code.** The plan predicted
+`test_the_age_of_a_reading_survives_the_restart` as an M32 killer. Applied by hand, it is **not**
+one — its stamp is a real two-day-old float, so `_remembered_stamp` returns at the bounds check and
+never reaches the fall-through M32 mutates. The comment now names the seven killers **measured by
+applying it** and argues the four non-killers in place, and a restart-side test that does bind was
+added: `test_a_reading_the_first_process_could_not_date_comes_back_undated` — a restart must not
+INVENT an age either, which is the frozen Walmart row in miniature.
+
+**REQ-21 is still NOT marked complete.** 07-06 closes it.
+
+**`gsd-tools state advance-plan` was NOT RUN, for the first time on this repo, and that is a
+decision rather than an omission.** It has misfired nine times for the same cause — it reads
+`Plan: 6 of 6 complete` out of the archived v1.0.0 block below, which is kept verbatim and
+therefore cannot be edited to fix the tool — and on its ninth run it additionally deleted the
+`milestone:` key's warning comment, inserted a stray blank line into the v0.2 archive, and wrote a
+date into the block that is kept verbatim. Nine identical corrections is enough evidence: this
+file's frontmatter and this section were written by hand, which is what the previous nine runs
+ended up doing anyway after paying for the damage first.
+`gsd-tools roadmap update-plan-progress 07` **was** run and worked correctly, checking 07-02 off —
+it is the one verb on this repo with a clean record.
