@@ -18,7 +18,12 @@ No fixtures needed — these are hand-built Results.
 
 from __future__ import annotations
 
+import json
+import logging
+import time
 from pathlib import Path
+
+import pytest
 
 from boty.models import Availability, Result, Watch
 from boty.monitor import CAUSE_UNKNOWN, STORE_PIN_ACTION, State, assess_health, run_once
@@ -452,6 +457,191 @@ def test_unreadable_state_file_starts_empty(tmp_path: Path) -> None:
     path.write_text("{ not json")
 
     assert State.load(path).seen == {}
+
+
+# --------------------------------------------------------------------------
+# REQ-21: a remembered reading carries the moment it was taken
+#
+# Criterion 4 — "the age survives a service restart, so a restart cannot make a
+# two-day-old reading look fresh" — and the persistence half of criterion 2, "a
+# reading with no recorded time is shown as UNKNOWN age, never as current".
+#
+# THE DOCUMENT THESE TESTS MIGRATE IS ON DISK RIGHT NOW. `state.json` on this
+# host is 13 bare `"retailer:name" -> "in_stock"` strings, and the daemon runs
+# this tree through an editable install, so the shape change below reaches that
+# file at the next restart. The pre-07 shape is therefore not a legacy case kept
+# for politeness — it is the only shape that has ever existed, and it has to load
+# as *availability with an UNKNOWN age*: never `0.0`, which renders as 1 January
+# 1970 and reads as maximally stale, and never `now`, which manufactures an age
+# nobody recorded.
+#
+# NO CLOCK IS FROZEN, INJECTED OR MONKEYPATCHED ANYWHERE BELOW. Aged documents
+# are built by subtraction from the real clock, which is `tests/test_pacing.py`'s
+# own method (`:585-591`) and is what lets these assertions be about arithmetic
+# on a real timestamp rather than about a test double.
+# --------------------------------------------------------------------------
+
+#: Two days, the age REQ-21's opening measurement is about.
+_TWO_DAYS = 172800.0
+
+
+def test_a_pre_07_document_loads_as_availability_with_an_unknown_age(tmp_path: Path) -> None:
+    """The migration, in one test: bare strings in, availabilities out, no ages.
+
+    `read_at == {}` and not `{key: 0.0}` and not `{key: now}`. Absence IS the
+    representation of "the moment was never established", so there is no `None`
+    to accidentally do arithmetic against and no invented number to believe.
+    """
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"gamestop:thing": "out_of_stock", "amazon:other": "in_stock"}))
+
+    state = State.load(path)
+
+    assert state.seen == {"gamestop:thing": "out_of_stock", "amazon:other": "in_stock"}
+    assert state.read_at == {}, (
+        "a document that never recorded a moment came back carrying one — which "
+        "is criterion 2's failure, manufactured at load time"
+    )
+
+
+def test_a_dated_document_round_trips_to_the_float(tmp_path: Path) -> None:
+    """Save then load returns the same stamp, exactly.
+
+    The stamp is deliberately two days old, which is well past
+    `pacing.STATE_MAX_AGE_SECONDS` (6 hours). That constant is NOT reused as this
+    field's far bound: a refusal count past the cap has outlived its reasoning, a
+    reading's age never does, and a 6-hour cap here would delete this phase's own
+    datum twice a day.
+    """
+    path = tmp_path / "nested" / "state.json"
+    stamp = time.time() - _TWO_DAYS
+    state = State.load(path)
+    state.seen["gamestop:thing"] = "out_of_stock"
+    state.read_at["gamestop:thing"] = stamp
+    state.save()
+
+    assert State.load(path).read_at["gamestop:thing"] == stamp, (
+        "a two-day-old reading did not come back two days old — which is "
+        "criterion 4 verbatim"
+    )
+
+
+#: Every way a stamp read back off disk can fail to be believable. Parametrised
+#: over one list so a further case is one line, and each is asserted in BOTH
+#: directions: the age is dropped AND the availability beside it is kept.
+_UNBELIEVABLE = [
+    pytest.param(None, id="null-this-program-wrote-itself"),
+    pytest.param("2026-08-13T10:00:00Z", id="a-string"),
+    pytest.param(True, id="a-bool-which-is-an-int-subclass"),
+    pytest.param(time.time() + 3600, id="in-the-future"),
+    pytest.param(0, id="zero-which-renders-as-1-january-1970"),
+    pytest.param(1755084310.42 / 1000, id="a-seconds-value-that-lost-a-thousand"),
+]
+
+
+@pytest.mark.parametrize("stamp", _UNBELIEVABLE)
+def test_a_stamp_that_cannot_be_believed_loses_the_age_and_keeps_the_memory(
+    tmp_path: Path, stamp: object
+) -> None:
+    """Validation drops the AGE, never the entry — and that divergence is the point.
+
+    `pacing.load` `continue`s past a bad entry and drops it whole. Copying that
+    verbatim here would forget a remembered availability, and a forgotten
+    availability re-alerts on the next in-stock reading: one hand-edited number
+    would become a push. The fail-safe direction for an age is *unknown*; the
+    fail-safe direction for a memory is *keep it*.
+    """
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"gamestop:thing": {"availability": "in_stock", "read_at": stamp}}))
+
+    state = State.load(path)
+
+    assert state.read_at == {}, f"{stamp!r} was believed as a reading time"
+    assert state.seen == {"gamestop:thing": "in_stock"}, (
+        "the availability was dropped along with the age, so the next in-stock "
+        "reading will re-alert — a hand-edited number turned into a push"
+    )
+
+
+def test_save_writes_one_object_per_entry_and_a_null_where_no_moment_is_established(
+    tmp_path: Path,
+) -> None:
+    """Asserted on the BYTES, because the shape is what reaches Dan's disk.
+
+    `null` and never `0`: an absent stamp published as zero reads as 1 January
+    1970, i.e. maximally stale rather than unknown — `status.py:136-141`'s
+    argument, one direction over.
+    """
+    path = tmp_path / "nested" / "state.json"
+    state = State.load(path)
+    state.seen["walmart:frozen"] = "out_of_stock"
+    state.seen["gamestop:thing"] = "in_stock"
+    state.read_at["gamestop:thing"] = 1755084310.42
+    state.save()
+
+    assert json.loads(path.read_text()) == {
+        "walmart:frozen": {"availability": "out_of_stock", "read_at": None},
+        "gamestop:thing": {"availability": "in_stock", "read_at": 1755084310.42},
+    }
+
+
+def test_a_top_level_json_value_that_is_not_an_object_starts_empty(tmp_path: Path) -> None:
+    """A list parses fine and is not a document. Same outcome as a corrupt file."""
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps(["gamestop:thing"]))
+
+    state = State.load(path)
+
+    assert state.seen == {}
+    assert state.read_at == {}
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param(123, id="a-bare-number"),
+        pytest.param({"read_at": 1755084310.42}, id="a-stamp-with-no-availability"),
+        pytest.param({"availability": 5}, id="an-availability-that-is-not-a-string"),
+    ],
+)
+def test_an_entry_naming_no_availability_is_skipped_whole(tmp_path: Path, entry: object) -> None:
+    """Here the entry IS dropped, and the asymmetry with the stamp cases is deliberate.
+
+    A dropped age leaves a memory that still works. An entry with no readable
+    availability has no memory in it to keep.
+    """
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"gamestop:thing": entry}))
+
+    state = State.load(path)
+
+    assert state.seen == {}
+    assert state.read_at == {}
+
+
+def test_a_write_failure_is_logged_and_does_not_raise(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cycle that cannot persist must still deliver its alerts.
+
+    `run_once` calls `save()` BEFORE `cli.watch_cycle` attempts delivery, so an
+    exception escaping here does not merely lose a memory — it takes the cycle
+    down before a real restock notification is sent, which is this project's
+    worst outcome.
+    """
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr(Path, "write_text", _boom)
+    caplog.set_level(logging.ERROR, logger="boty.monitor")
+    state = State.load(tmp_path / "state.json")
+    state.seen["gamestop:thing"] = "in_stock"
+
+    state.save()
+
+    assert "no space left on device" in caplog.text
+    assert "OSError" in caplog.text, "log.exception must carry the type and traceback"
 
 
 # --------------------------------------------------------------------------
