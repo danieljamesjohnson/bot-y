@@ -433,7 +433,7 @@ which is this phase's contract. Plans are written one at a time; a line below wh
 
 Plans:
 
-- [ ] 07-01: A reading carries the moment it was taken, and a non-reading carries none — `Result.read_at`, all 20 construction sites, published as `null` never `0` *(wave 1)*
+- [x] 07-01: A reading carries the moment it was taken, and a non-reading carries none — `Result.read_at`, all 20 construction sites, published as `null` never `0` *(wave 1)*
 - [ ] 07-02: The age survives the restart, and the file that survives it changes shape without breaking on Dan's disk *(wave 2, blocked on 07-01)*
 - [ ] 07-03: The retailer's current interval becomes one readable number, and both surfaces read the same one *(wave 3, blocked on 07-02)*
 - [ ] 07-04: Every configured watch has a row, and a remembered reading says it is remembered — 3 rows for 14 watches today *(wave 4, blocked on 07-03)*

@@ -1,23 +1,29 @@
 ---
-gsd_state_version: 1.0
 # `milestone:` is MACHINE-READ by tests/test_packaging_metadata.py against pyproject.toml's
 # version, component-wise — a milestone names a MINOR line, so v0.3 requires 0.3.x. Moved to
 # v0.3 on 2026-08-13 when that milestone was scoped, together with pyproject.toml in the same
 # commit. Nothing is tagged or published, so the number claims nothing to anyone.
+#
+# RESTORED BY HAND 2026-08-13: `gsd-tools state advance-plan` deleted this comment block while
+# recording 07-01. It leaves the KEY alone, so the packaging test still binds — but the warning
+# above it is what stops the key being edited casually, and that is the ninth misfire of that
+# command on this repo (see the note under ## Session below).
+gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 SCOPED 2026-08-13 — Phase 7 next, unplanned. v0.2 archived, complete in the tree and deployed 2026-08-12
-stopped_at: Scoped milestone v0.3 — a reading does not carry its age; Phase 7 needs planning
-last_updated: "2026-08-11T16:00:00.000Z"
-last_activity: 2026-08-11
+status: Milestone v0.3 IN PROGRESS — Phase 7 planned (6 plans, all serial); 07-01 complete 2026-08-13, 07-02 next. v0.2 archived, complete in the tree and deployed 2026-08-12
+stopped_at: Completed 07-01-PLAN.md — Result.read_at exists at the source, published per watch row, M31 watched red and CAUGHT at 27/27
+last_updated: "2026-08-13T15:39:09.413Z"
+last_activity: 2026-08-13
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 11
-  completed_plans: 11
-  # percent is PHASE-based, not plan-based: 2 of 2 phases in v0.2 are complete.
-  # (Phase 5 = 4 plans, Phase 6 = 7 plans, so 11 of 11 plans agree with it here.)
-  percent: 100
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 6
+  completed_plans: 1
+  # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 0 of the
+  # 1 phase in v0.3 is complete, so 0 — even though 1 of 6 plans has landed. The plan counter
+  # above is where per-plan progress is read.
+  percent: 0
 ---
 
 # State: bot-y
@@ -27,8 +33,11 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-11, with a `## Current State` section)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Nothing in flight. v0.2 is archived; the next milestone is unscoped. The one
-outstanding action from v0.2 is not planning work — it is `sudo systemctl restart boty`.
+**Current focus:** Phase 7 — *A Reading Has an Age*, milestone v0.3. 07-01 landed 2026-08-13:
+`Result.read_at` exists, is stated at all 20 construction sites in `boty/retailers.py`, and is
+published per watch row in `status.json` as `null` when absent. 07-02 next — the age surviving a
+restart. The one outstanding action carried from v0.2 is not planning work — it is
+`sudo systemctl restart boty`.
 
 ## Status
 
@@ -729,3 +738,49 @@ one of those is UNKNOWN rather than a verdict, which is the fail-safe working.
 `WALMART_STORE_ID` is set — by design, and `QUESTIONS.md` § 0f holds that
 question. And **no tag exists**: Dan chose no tag on 2026-08-12, matching
 v1.0.0. `git tag -l` → 0, remote → 0 refs. Nothing is published.
+
+## Session — 07-01 complete, 2026-08-13
+
+**`Result.read_at` exists.** The datum REQ-21 is about now exists at the source, is stated at all
+**20** `Result(` construction sites in `boty/retailers.py` (11 stamped / 9 literal `None`), and is
+published per watch row in `status.json` as `null` when absent. Measured, not asserted:
+
+```
+identity check: PASS — 215 file(s), no host identity found
+798 passed in 10.83s
+Success: no issues found in 18 source files
+mutation check: 27/27 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, ...)
+EXIT=0
+```
+
+**The registry rose from 26 to 27.** M31 — *a non-read arm stamps the moment of its refusal* — was
+applied by hand and observed turning `test_the_read_and_non_read_arms_are_partitioned_exactly` and
+`test_a_transport_that_refused_took_no_reading[check_html-get-exc0]` red at exit 1 **before** the
+harness was asked whether it caught it, then reverted with `git status --porcelain` empty. Its
+anchor was pre-counted at exactly **1**. **M32 is reserved for 07-02** and says so in
+`scripts/mutation_check.py`; M21-M24 remain the intentional gap.
+
+**Two measurement notes, recorded rather than retyped into a planning document.** (1) `read_at=None`
+occurs at **nine** arms after 07-01, not the eight `07-PLAN-OUTLINE.md` § *Finding 1* predicts — the
+outline omits `check_bestbuy_api`'s `api error` arm from that parenthetical while classifying it as
+a non-read arm one section later. M31's anchor point is unaffected: the first occurrence in file
+order is still `check_html`'s `except Blocked` arm. (2) § *Finding 11*'s citation collision is
+closed — `tests/test_cli_watch.py`'s paging section relabelled REQ-21 → **REQ-16** and M29's
+citation re-pointed in the same commit, with no criterion, requirement or measurement changed.
+
+**REQ-21 is NOT marked complete**, per the outline's rule that a requirement is not closed by the
+plan that ships its code. **07-06 closes it by measuring what landed.**
+
+**`gsd-tools state advance-plan` misfired again — the ninth time on this repo, and it did something
+new.** As always it read `Plan: 6 of 6 complete` out of the archived v1.0.0 block below and returned
+`{"advanced": false, "reason": "last_plan", "status": "ready_for_verification"}` for a phase whose
+first of six plans had just landed, writing a stale `stopped_at` of *"Completed 06-05-PLAN.md"*.
+Newly this run it also **deleted the `milestone:` key's warning comment from the frontmatter** — the
+one recording that `tests/test_packaging_metadata.py` machine-reads that key — **inserted a stray
+blank line** into the v0.2 archive bullet list, and **wrote today's date into the v1.0.0 block that
+is explicitly kept verbatim**. All four corrected by hand; `status`, `stopped_at`, the `percent`
+convention comment and `## Project Reference`'s *Current focus* were rewritten to what is true.
+`gsd-tools roadmap update-plan-progress 07` worked correctly and checked 07-01 off. The documented
+positional form is what both commands accept; the `--phase` flag form is rejected with
+`Error: Phase --phase not found`.
