@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from urllib.parse import quote_plus
 
 from . import parse
@@ -182,7 +183,55 @@ def _verdict_from_html(
     broken render looks like. Labelling it `structured` would tell a reader the
     DOM path was never involved in exactly the situation where it is the thing
     that failed.
+
+    "DOES NO I/O WHATSOEVER" IS AMENDED RATHER THAN WITHDRAWN, on this repo's
+    house style for a reversal (`models.py:335-342`, `pacing.py:29-53`): the
+    original sentence stays because it is still true in the sense it was written
+    — no NETWORK I/O, which is why every transport can reach the same UNKNOWN
+    logic and why this function is testable with no fixtures and no monkeypatch.
+    What it now also does, once, is READ THIS PROCESS'S OWN WALL CLOCK, to stamp
+    `Result.read_at`. That is a fact about the reading rather than a fetch, but
+    it is not nothing, and a reader who took the old sentence to mean "pure"
+    should learn otherwise here rather than by surprise.
     """
+    # WHEN THIS PAGE WAS READ. Taken ONCE, here, at the top of the function, for
+    # the same reason `store` is read once below: every arm of one verdict must
+    # agree on the moment, and eight clock reads would be eight slightly
+    # different answers to a question with one answer.
+    #
+    # ENTERING THIS FUNCTION *IS* THE MOMENT THE PAGE WAS IN HAND. It is only
+    # ever reached with markup a transport already obtained, so all eight returns
+    # below follow a response that came back — they differ in what the page SAID,
+    # not in whether it answered.
+    #
+    # THE IMPRECISION, STATED RATHER THAN HIDDEN: the stamp is taken within one
+    # call of the fetch returning, so for a browser adapter it trails the actual
+    # response by the settle time, and the LATER of the two moments is the one
+    # recorded. That is acceptable here and the reason is a unit argument, not a
+    # shrug — the thing this stamp is compared against is a retailer's cadence,
+    # measured in minutes to hours (a retailer at seven refusals is on a
+    # ~97-minute interval), and a difference measured in seconds cannot move a
+    # verdict about it. Recording the later moment is also the conservative
+    # direction: it can only make a reading look younger than it is by seconds,
+    # never older by more.
+    #
+    # PASSED EXPLICITLY AT ALL EIGHT SITES BELOW, never inherited from the
+    # dataclass default. The default means "no reading was taken", so an arm that
+    # forgot to name this would silently claim the opposite of what happened —
+    # and `tests/test_retailers.py`'s AST gate requires each site to say it.
+    #
+    # REJECTED, RECORDED SO IT IS NOT RE-PROPOSED AS A TIDY-UP: threading
+    # `read_at` in from the four callers as a parameter, so the stamp is taken
+    # where the fetch actually returned. It reads cleaner and it is wrong here.
+    # `tests/test_retailers.py` calls this function directly at eleven sites and
+    # `tests/test_alert_text.py` at one, so an optional parameter would default
+    # those twelve readings to `None` — a reading that WAS taken reporting no age
+    # at all, which is the dangerous direction — and the AST completeness gate
+    # would stay green the whole time, because every site would still name the
+    # field. A required parameter would break those twelve callers loudly, which
+    # is honest, but it buys milliseconds of precision on a comparison whose unit
+    # is a retailer's cadence in minutes.
+    read_at = time.time()
     # `ldjson_read` rather than `ldjson_offers`: the verdict is the same, but a
     # malformed block and an absent one are different diagnoses and only this
     # call can tell them apart. See `LdJsonRead` — the distinction was bought
@@ -293,6 +342,7 @@ def _verdict_from_html(
                 extraction=extraction,
                 store=store,
                 shipping=None,
+                read_at=read_at,
             )
         # `store is None` is handled INSIDE the mismatch guard rather than as a
         # third one. "The page did not name a store" and "the page named a
@@ -321,6 +371,7 @@ def _verdict_from_html(
                 extraction=extraction,
                 store=store,
                 shipping=None,
+                read_at=read_at,
             )
 
     if not offers:
@@ -344,6 +395,7 @@ def _verdict_from_html(
                 extraction=extraction,
                 store=store,
                 shipping=None,
+                read_at=read_at,
             )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way
@@ -360,6 +412,7 @@ def _verdict_from_html(
             extraction=extraction,
             store=store,
             shipping=None,
+            read_at=read_at,
         )
 
     offer = _pick(offers, watch.retailer, first_party_only)
@@ -383,6 +436,7 @@ def _verdict_from_html(
                 extraction=extraction,
                 store=store,
                 shipping=None,
+                read_at=read_at,
             )
         if first_party_only and watch.retailer in MARKETPLACES and any(o.seller is None for o in offers):
             # The page says something is buyable but does not say by whom, on a
@@ -400,6 +454,7 @@ def _verdict_from_html(
                 extraction=extraction,
                 store=store,
                 shipping=None,
+                read_at=read_at,
             )
         return Result(
             watch,
@@ -410,6 +465,7 @@ def _verdict_from_html(
             extraction=extraction,
             store=store,
             shipping=None,
+            read_at=read_at,
         )
 
     state = Availability.IN_STOCK if offer.available else Availability.OUT_OF_STOCK
@@ -453,6 +509,7 @@ def _verdict_from_html(
         extraction=extraction,
         store=store,
         shipping=offer.shipping,
+        read_at=read_at,
     )
 
 
@@ -466,9 +523,28 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
         # shipping would cost. Written out so this arm declares its metadata
         # the way the browser adapters declare theirs, rather than depending on
         # a dataclass default staying what it is today.
-        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target, refused=True, store=None, shipping=None)
+        #
+        # `read_at=None` IS THE SAME RULE AND IT INVERTS THE OBVIOUS ONE, which
+        # is why it is argued here rather than assumed. A refusal DOES happen at
+        # a wall-clock moment — this line runs at a definite time — and stamping
+        # it is still wrong, because the stamp dates a READING and no reading was
+        # taken. Stamping refusals would refresh the age of a reading that never
+        # happened, which is the 2026-08-12 Walmart failure rebuilt inside the
+        # fix meant to prevent it. `pacing.py:196-199` wrote the lesson down for
+        # `_warned_since` already: *"stamping at write time would refresh the
+        # record forever and the age-out would never fire once — a bound that
+        # cannot bind is worse than no bound, because it reads like one in the
+        # file."* Amazon and Walmart have both refused this host for hours at a
+        # stretch; under the stamped version they would publish a perpetually
+        # fresh age while nothing was read at all. M31 rebuilds exactly that.
+        #
+        # STATED AT EVERY ARM AND NEVER INHERITED, in all four adapters, because
+        # the entire purpose of this field is to distinguish "read" from "not
+        # read" and a dataclass default cannot state which one an arm is.
+        return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target, refused=True, store=None, shipping=None, read_at=None)
     except FetchError as exc:
-        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc), store=None, shipping=None)
+        # Same inversion: the transport failed, so nothing came back to date.
+        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc), store=None, shipping=None, read_at=None)
 
     return _verdict_from_html(
         watch,
@@ -514,6 +590,14 @@ def check_amazon(watch: Watch, *, first_party_only: bool = True) -> Result:
     try:
         page = get(watch.target)
     except Blocked as exc:
+        # `read_at=None`: Amazon refused, so no page was read. The refusal has a
+        # moment; the reading it did not produce does not — `check_html`'s arm
+        # carries the full argument and `pacing.py:196-199` is the rule.
+        #
+        # `store` and `shipping` are NOT stated here, and that is left alone
+        # deliberately: widening these arms is not this change's business.
+        # `read_at` is stated at all twenty sites only because the completeness
+        # gate in `tests/test_retailers.py` requires it of every one.
         return Result(
             watch,
             Availability.UNKNOWN,
@@ -521,8 +605,10 @@ def check_amazon(watch: Watch, *, first_party_only: bool = True) -> Result:
             url=watch.target,
             extraction=Extraction.DOM,
             refused=True,
+            read_at=None,
         )
     except FetchError as exc:
+        # `read_at=None`: the fetch failed, so there is no reading to date.
         return Result(
             watch,
             Availability.UNKNOWN,
@@ -530,6 +616,7 @@ def check_amazon(watch: Watch, *, first_party_only: bool = True) -> Result:
             url=watch.target,
             extraction=Extraction.DOM,
             refused=is_refusal(exc),
+            read_at=None,
         )
 
     return _verdict_from_html(
@@ -639,6 +726,10 @@ def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Res
     try:
         page = fetch_rendered(product_url)
     except Blocked as exc:
+        # `read_at=None`: the browser was refused, so no page was read. The
+        # refusal happened at a moment; the reading did not happen at all — see
+        # `check_html`'s arm for the argument and `pacing.py:196-199` for the
+        # rule it rests on.
         return Result(
             watch,
             Availability.UNKNOWN,
@@ -646,8 +737,10 @@ def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Res
             url=product_url,
             rung=Rung.BROWSER,
             refused=True,
+            read_at=None,
         )
     except FetchError as exc:
+        # `read_at=None`: the render failed, so there is no reading to date.
         return Result(
             watch,
             Availability.UNKNOWN,
@@ -655,6 +748,7 @@ def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Res
             url=product_url,
             rung=Rung.BROWSER,
             refused=is_refusal(exc),
+            read_at=None,
         )
 
     return _verdict_from_html(
@@ -748,6 +842,9 @@ def check_target_browser(watch: Watch, *, first_party_only: bool = True) -> Resu
             # measured present, because the whole point is to stop racing.
             page = fetch_rendered(watch.target, settle_seconds=_TARGET_RETRY_SETTLE)
     except Blocked as exc:
+        # `read_at=None`: Target refused the render, so no page was read — and
+        # neither did the patient retry above, which raises out of this same
+        # `try`. `check_html`'s arm carries the argument.
         return Result(
             watch,
             Availability.UNKNOWN,
@@ -756,8 +853,10 @@ def check_target_browser(watch: Watch, *, first_party_only: bool = True) -> Resu
             rung=Rung.BROWSER,
             extraction=Extraction.DOM,
             refused=True,
+            read_at=None,
         )
     except FetchError as exc:
+        # `read_at=None`: the render failed, so there is no reading to date.
         return Result(
             watch,
             Availability.UNKNOWN,
@@ -766,6 +865,7 @@ def check_target_browser(watch: Watch, *, first_party_only: bool = True) -> Resu
             rung=Rung.BROWSER,
             extraction=Extraction.DOM,
             refused=is_refusal(exc),
+            read_at=None,
         )
 
     return _verdict_from_html(
@@ -829,10 +929,33 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
     def _redact(text: str) -> str:
         return text.replace(api_key, "***") if api_key else text
 
+    # WHEN BEST BUY ANSWERED — and this is the one adapter where the obvious rule
+    # is measurably wrong, so the PLACEMENT of the assignment below is the whole
+    # argument rather than an implementation detail.
+    #
+    # Initialised to `None` HERE, before the `try`, as the fail-safe: if `get()`
+    # itself were ever to raise `ValueError` — it does not today, but that is a
+    # property of another module, not of this line — the `except ValueError` arm
+    # below reads a stamp that was never set. `None` there means "no age
+    # established", which is the direction every other unknown in this codebase
+    # falls. The alternative, an unassigned name, is a `NameError` on a path that
+    # only fires when something else already went wrong.
+    read_at: float | None = None
     try:
         page = get(api_url)
+        # *** THE LINE THE PARTITION TURNS ON. *** Everything after this point
+        # had a response in hand: `get()` has returned. `page.json` below can
+        # still raise, and that is a fact about the BYTES, not about whether any
+        # arrived. So the stamp is taken between the two, and the three arms
+        # downstream of it are reads.
+        read_at = time.time()
         data = page.json
     except (Blocked, FetchError) as exc:
+        # `read_at=None` AS A LITERAL, not the variable: nothing came back. `get`
+        # raised, so control never reached the assignment above — passing the
+        # variable would be correct today by accident, and this arm should say
+        # what it means rather than depend on that. This is the ONLY non-read arm
+        # of the four here.
         return Result(
             watch,
             Availability.UNKNOWN,
@@ -840,24 +963,39 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
             url=product_url,
             rung=Rung.API,
             refused=is_refusal(exc),
+            read_at=None,
         )
     except ValueError as exc:
+        # STAMPED, AND THIS IS ONE OF THE TWO ARMS THE OBVIOUS RULE GETS WRONG.
+        # *"An `except` arm read nothing"* is false here: `get()` already
+        # returned and `page.json` raised while parsing bytes Best Buy sent. A
+        # response that could not be parsed is still a response, and marking it
+        # unstamped would report a reading that DID happen as having no age —
+        # the dangerous direction, and it would leave Best Buy permanently
+        # UNKNOWN-aged on the one retailer this project reaches through an
+        # official API.
         return Result(
             watch,
             Availability.UNKNOWN,
             detail=_redact(f"bad api json: {exc}"),
             url=product_url,
             rung=Rung.API,
+            read_at=read_at,
         )
 
     products = data.get("products") or []
     if not products:
+        # STAMPED, AND THIS IS THE SECOND ARM THE OBVIOUS RULE GETS WRONG — and
+        # it is not even an `except` arm. An empty `products` list is Best Buy
+        # ANSWERING: it read its catalogue and told us this SKU matches nothing.
+        # That is a reading with an age, and the age is when it said so.
         return Result(
             watch,
             Availability.UNKNOWN,
             detail=f"sku {watch.target} not found",
             url=product_url,
             rung=Rung.API,
+            read_at=read_at,
         )
 
     p = products[0]
@@ -869,4 +1007,5 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
         detail=f"bestbuy api: onlineAvailability={available}",
         url=product_url,
         rung=Rung.API,
+        read_at=read_at,
     )
