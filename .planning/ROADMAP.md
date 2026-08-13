@@ -22,6 +22,10 @@ under *Milestone v1.0.0 — Phase Details* below. v1.0.0 remains open and untagg
 
 - ✅ **Milestone v0.2 — Say Only What You Measured** (scoped 2026-08-10, closed 2026-08-11) — Phases 5–6, 11 plans, complete **in the tree**; **not deployed, not tagged, not published**. Archived in full: [`milestones/v0.2-ROADMAP.md`](milestones/v0.2-ROADMAP.md) · [`milestones/v0.2-REQUIREMENTS.md`](milestones/v0.2-REQUIREMENTS.md) · [`milestones/v0.2-MILESTONE-AUDIT.md`](milestones/v0.2-MILESTONE-AUDIT.md)
 
+### Milestone v0.3 — Say When You Measured It (scoped 2026-08-13)
+
+- [ ] **Phase 7: A Reading Has an Age** - Stamp it, publish it, and show a stale reading as stale rather than as fact
+
 ## Retailer Scope
 
 Deliberately narrowed from a padded list of ten. Newegg, B&H and Micro Center
@@ -365,3 +369,58 @@ Deliberately excluded — see PROJECT.md for reasoning:
 
 - **Amazon** may be unreachable without a browser or paid proxies. Phase 2 should establish that early and cheaply rather than sinking a plan into it. If it's out, say so in the support matrix with evidence.
 - **The upstream `curl_cffi` fetcher contribution to changedetection.io** is tracked separately from this roadmap. Their maintainer asked for exactly the proof we now have (issue #1730); worth doing, but it is not bot-y's critical path.
+
+---
+
+## Milestone v0.3 — Say When You Measured It (Phase Details)
+
+**Scoped 2026-08-13, from a question the system could not answer.** Dan asked of the
+Amazon and Walmart GO Plus + watches: *"so they are out of stock as of when?"* — and
+there was no recorded answer. Not hard to find; **absent**.
+
+v0.2 was *say only what you measured*. This is its unfinished half: **a reading with
+no age is a claim about the past presented as the present.** Same shape as *"the
+detector is probably broken"*, except the unestablished thing is *when*.
+
+It has teeth rather than being tidiness. A retailer that refuses us backs off to
+multi-hour intervals, so **the rows least likely to be current are exactly the ones
+that look identical to the fresh ones.** Detail and the reconstruction in
+`.planning/seeds/a-reading-does-not-carry-its-age.md`.
+
+### Phase 7: A Reading Has an Age
+
+**Goal**: Every reading says when it was taken, and a reading too old to trust is shown as stale rather than as fact — or says it does not know.
+**Depends on**: Phase 6
+**Requirements**: REQ-21
+**Success Criteria** (what must be TRUE):
+
+  1. Every `Result` records when it was read, and that time is published per watch in `status.json`
+  2. A reading with no recorded time is shown as UNKNOWN age, never as current — watched going red
+  3. A reading older than its retailer's current interval is presented as stale in `status.json`, `boty check` and the dashboard, and the staleness is derived from the retailer's own pacing rather than a fixed clock
+  4. The age survives a service restart, so a restart cannot make a two-day-old reading look fresh
+  5. `make verify-offline` exits 0, and every gate this phase adds has been watched going red
+
+**Why the interval and not a fixed clock.** A retailer in backoff is *legitimately*
+checked less often — Walmart at seven refusals is on a multi-hour interval and that
+is the politeness rule working. What is dishonest is not the age; it is presenting
+an age nobody recorded. So "stale" means *older than this retailer's own current
+cadence*, which is a fact the `Pacer` already holds.
+
+**The measurement that opened it**, reconstructed from refusal history because
+nothing recorded it directly: Amazon's `out_of_stock` was from early 2026-08-13
+(before ~06:37 — a refusal streak began then and the counter had reset, which only
+happens on a successful read). **Walmart's could not be established at all**: no
+later than 2026-08-12 16:49, plausibly 2026-08-11. A service restart at 16:49:57
+zeroed the refusal counter and destroyed the evidence that would have settled it.
+
+**Follow the `store` field's path.** It is the worked precedent four times over —
+`rung`, `extraction`, the widened `degraded`, and `store` — and the groove is:
+declare the field last with a default, write down what it is deliberately NOT folded
+into, thread it through every `check_*` return including the error arms, publish it
+in `status.write`, render it in `cli._report` and the dashboard, pin it with a
+mutation anchored on behaviour rather than prose.
+
+**Not to be confused with two things that already exist.** `status.json`'s
+top-level `updated` is when the *cycle* ran — it is fresh even when every row in it
+is stale. And `make verify`'s `fixtures` stage ages *captured test pages*, not live
+readings.

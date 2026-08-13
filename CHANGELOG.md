@@ -20,6 +20,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] - 2026-08-13
+
+**Nothing is tagged, uploaded or released here either** — `git tag -l` is empty and
+`pypi.org/pypi/bot-y/json` is 404, exactly as at `0.2.0`. This heading marks the line the
+tree is on, opened when milestone v0.3 was scoped on 2026-08-13.
+
 ### Changed
 
 - **A health warning is only pushed when it names something you can do.** The

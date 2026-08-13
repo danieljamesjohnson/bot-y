@@ -600,14 +600,19 @@ MUTATIONS = (
     Mutation(
         ident="M25",
         target="pyproject.toml",
-        search='version = "0.2.0"',
-        replace='version = "0.3.0"',
+        search='version = "0.3.0"',
+        replace='version = "0.4.0"',
+        # Re-pointed 2026-08-13 with the v0.3 scoping roll, and the subject is unchanged:
+        # the anchor is the declared version literal, so it necessarily moves every time
+        # that literal does. The harness refused to run rather than silently dropping to
+        # 25 mutations while printing 26 — which is the behaviour that made this a
+        # two-minute fix instead of a quiet hole.
         breaks="silently changes the version this package would publish under — the wheel filename, its METADATA and what `pip install bot-y==<v>` resolves — while README.md's publication instruction, CHANGELOG.md's top released heading and the project's own milestone all keep stating the old one. Before REQ-20 nothing offline read `[project] version` at all, so this edit was invisible to the entire suite",
     ),
     Mutation(
         ident="M26",
         target="README.md",
-        search="Publication happens from the `v0.2.0` tag",
+        search="Publication happens from the `v0.3.0` tag",  # re-pointed with the v0.3 roll, same reason as M25
         replace="Publication happens from the `v0.9.0` tag",
         breaks="the README tells a stranger to install from a tag this package was never built as. It is the other direction of the same binding — M25 moves the declaration away from the records, this moves a record away from the declaration — and one direction alone would be satisfied by a gate that only ever watched pyproject.toml move",
     ),

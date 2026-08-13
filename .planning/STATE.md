@@ -1,13 +1,13 @@
 ---
 gsd_state_version: 1.0
 # `milestone:` is MACHINE-READ by tests/test_packaging_metadata.py against pyproject.toml's
-# version (0.2.0), component-wise. It STAYS at v0.2 through this archival: v0.2 is the version
-# in the tree, nothing was tagged or published, and no next milestone has been scoped. Change
-# it only together with pyproject.toml, and re-run that test file.
-milestone: v0.2
-milestone_name: — Say Only What You Measured
-status: Milestone v0.2 ARCHIVED 2026-08-11 — 2 of 2 phases, 11 of 11 plans, complete IN THE TREE; not deployed, not tagged, not published
-stopped_at: Archived milestone v0.2 — ROADMAP and REQUIREMENTS extracted to .planning/milestones/, REQUIREMENTS.md removed for the next milestone, no git tag created
+# version, component-wise — a milestone names a MINOR line, so v0.3 requires 0.3.x. Moved to
+# v0.3 on 2026-08-13 when that milestone was scoped, together with pyproject.toml in the same
+# commit. Nothing is tagged or published, so the number claims nothing to anyone.
+milestone: v0.3
+milestone_name: — Say When You Measured It
+status: Milestone v0.3 SCOPED 2026-08-13 — Phase 7 next, unplanned. v0.2 archived, complete in the tree and deployed 2026-08-12
+stopped_at: Scoped milestone v0.3 — a reading does not carry its age; Phase 7 needs planning
 last_updated: "2026-08-11T16:00:00.000Z"
 last_activity: 2026-08-11
 progress:
