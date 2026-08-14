@@ -47,6 +47,31 @@ DASHBOARD = Path(__file__).resolve().parent.parent / "served" / "boty" / "index.
 #: BOTH entries are needed and neither implies the other: the regex below is
 #: `(?<![\w.])w\.store\b`, and `\b` after `store` does not match inside
 #: `w.store_pinned`.
+#:
+#: `w.read_at` joins the list under REQ-21, and NOT because anybody can make it
+#: a string today. What actually reaches the sink is `fmtDur`'s return, and its
+#: three bands coerce with `|0`, which produces an int32 for every possible
+#: input including a string, an object and `NaN` — so no character outside
+#: `[0-9-]` and the formatter's own literal text can reach `innerHTML` through
+#: that path.
+#:
+#: It is listed anyway, and that is the POINT of the list: the rule "everything
+#: at this sink is escaped" survives a future edit in a way that "these are
+#: currently unreachable" does not. The day somebody writes
+#: `title="read at ${w.read_at}"`, the escaping test goes red instead of
+#: shipping.
+#:
+#: AND ITS PROVENANCE IS A THIRD KIND THIS LIST HAS NOT CARRIED. The heading
+#: above says "fields whose values originate with a retailer rather than with
+#: the operator". `read_at` originates with neither: it comes from `state.json`,
+#: a mutable file on the host that a process trusts after a restart — 07-02's
+#: threat, mitigated there with a both-ended bound. A value whose upstream is a
+#: file on disk is the last one to make an exception for.
+#:
+#: `w.checked` is DELIBERATELY NOT LISTED. It is a boolean used as a CONDITION
+#: and never interpolated, exactly like `w.degraded`, `w.control` and
+#: `w.extraction`. The test below only fires on `${...}` interpolation, so
+#: listing a condition would demand `esc()` around a comparison and break it.
 UNTRUSTED = (
     "w.name",
     "w.detail",
@@ -54,6 +79,7 @@ UNTRUSTED = (
     "w.url",
     "w.store",
     "w.store_pinned",
+    "w.read_at",
     "r.retailer",
     "r.reason",
 )
@@ -230,4 +256,140 @@ def test_the_store_tag_has_two_visual_weights(page: str) -> None:
     assert re.search(r"\.tag\.store\.warn\s*\{", page), (
         "no `.tag.store.warn` rule — an unpinned or mismatched store renders "
         "identically to a correctly pinned one"
+    )
+
+
+# --------------------------------------------------------------------------
+# REQ-21: the row has to say how old the reading is
+# --------------------------------------------------------------------------
+#
+# Four plans put the facts on the row — a stamp (07-01), a stamp that survives a
+# restart (07-02), the cadence each retailer is currently on (07-03), and a row
+# for every configured watch saying whether anybody looked (07-04). Nothing
+# rendered any of it, so the page still presented a reading taken four seconds
+# ago and one last taken two days ago identically.
+#
+# THE FOUR FORMS ARE `boty check`'s FOUR, deliberately, so a reader comparing
+# the two surfaces never has to translate:
+#
+#     4s ago            [age 4s]
+#     7h ago > 6h       [age 7h > 6h]
+#     3h ago · cadence ?  [age 3h, cadence ?]
+#     age ?             [age ?]
+#
+# AND THE ROW THRESHOLD IS NOT THE BANNER'S. `index.html`'s 1800-second constant
+# asks *is this snapshot being written?*; the row asks *is this reading younger
+# than the cadence its own retailer is currently on?* Merging them is wrong in
+# BOTH directions at once on this config — see the killer test below.
+
+
+def test_the_dashboard_reads_the_reading_stamp(page: str) -> None:
+    """`status.write` publishes `read_at`; the page has to read it.
+
+    A contract asserted at one end only is a comment — the lesson that put this
+    module's docstring on this file, arriving for the fourth key.
+    """
+    assert re.search(r"\bw\.read_at\b", page), (
+        "the dashboard does not read the `read_at` key that `status.write` "
+        "publishes for it, so a two-day-old row renders as a fresh one"
+    )
+
+
+def test_the_dashboard_reads_the_checked_flag(page: str) -> None:
+    """07-04's carried-forward producer/consumer pair, closed here.
+
+    07-04 published `checked` and could not reach its consumer: this file
+    belongs to 07-05, and reaching into it would have broken the phase's serial
+    file ownership. Without it the page cannot tell "read this cycle, and out of
+    stock" from "nobody looked, and this is what we remember".
+    """
+    assert re.search(r"\bw\.checked\b", page), (
+        "the dashboard does not read the `checked` key that 07-04 published, "
+        "so a remembered row is indistinguishable from an observed one"
+    )
+
+
+def test_the_age_tag_has_two_visual_weights(page: str) -> None:
+    """A reading inside its cadence is a LABEL; a stale or undated one is a WARNING.
+
+    The same distinction this file already draws between `control` and
+    `degraded`, and between `.tag.store` and `.tag.store.warn`. A stale reading
+    styled like a fresh one says "here is a word" rather than "this may not be
+    true any more" — and an undated one styled like a fresh one is the implicit
+    claim this whole phase exists to remove.
+    """
+    assert re.search(r"\.tag\.age\s*\{", page), (
+        "no `.tag.age` rule — an age styled like every other tag says 'here is "
+        "a word' rather than 'this is how much this row is worth'"
+    )
+    assert re.search(r"\.tag\.age\.warn\s*\{", page), (
+        "no `.tag.age.warn` rule — a stale or undated reading renders "
+        "identically to one taken four seconds ago"
+    )
+
+
+def test_the_row_threshold_is_the_retailers_own_cadence_and_not_a_fixed_clock(
+    page: str,
+) -> None:
+    """Criterion 3 on this surface, and the reason it is worth a mutation.
+
+    The page must read the published per-retailer cadence, and the banner's
+    1800-second constant must occur exactly ONCE — where it is, unmoved and
+    unreused. A count rather than an absence, because the legitimate occurrence
+    is still there and a presence assertion could not tell the two apart.
+    """
+    assert re.search(r"\bcurrent_interval_seconds\b", page), (
+        "the row threshold is not the published per-retailer cadence, so the "
+        "page judges every retailer against one number"
+    )
+    assert len(re.findall(r"\b1800\b", page)) == 1, (
+        "the banner's 1800-second constant was reused as a row threshold. It is "
+        "wrong in BOTH directions on this config in the same second: target and "
+        "walmart sit on the 21 600-second cap when they are refusing us, so "
+        "every one of their rows would paint stale while they behave exactly as "
+        "the politeness rule requires; and gamestop runs on a 900-second "
+        "override, so a 25-minute-old GameStop reading would paint fresh when "
+        "its own pacing says it is overdue. The one legitimate 1800 on this "
+        "page is the banner's — it asks whether the snapshot is being written, "
+        "which is a different question from how old a reading is"
+    )
+
+
+def test_the_page_has_exactly_one_age_formatter(page: str) -> None:
+    """`fmtAge` is REUSED, not duplicated: the bands live in `fmtDur`.
+
+    Two formatters drift, and the banner and the row tag must not start
+    disagreeing about what "3h" means. `Result.degraded`'s one-source-of-truth
+    argument, applied to a template. 5400 is the band boundary and it must occur
+    exactly once.
+    """
+    assert len(re.findall(r"\b5400\b", page)) == 1, (
+        "the age formatter's bands appear more than once — `fmtAge` was copied "
+        "rather than defined through `fmtDur`"
+    )
+    assert re.search(r"const fmtAge = s => `\$\{fmtDur\(s\)\} ago`", page), (
+        "`fmtAge` is not defined through `fmtDur`, so its output is no longer "
+        "provably byte-identical to what the banner printed before"
+    )
+
+
+def test_a_row_nobody_checked_does_not_claim_a_store_answered(page: str) -> None:
+    """The register defect 07-04 measured and handed here.
+
+    `storeTag` renders `store: null` with a non-null `store_pinned` as a WARN tag
+    saying the page did not name its store. On a remembered row that sentence is
+    true in the letter — no page said anything — and false in register: the row's
+    actual story is that nobody looked this cycle. 07-04 measured that it fires
+    the moment `WALMART_STORE_ID` is set, which is the question 07-06's own
+    checkpoint puts in front of Dan; shipping a defect that appears the moment he
+    answers a question this phase asks him is a scheduled bug, not a latent one.
+
+    `=== false` and not `!w.checked`, because a pre-07-04 `status.json` sitting
+    on disk during a deploy has no `checked` key at all and `!undefined` is
+    `true`, which would suppress the store tag on every row of that file —
+    07-02's shape-tolerance rule, one file over.
+    """
+    assert re.search(r"const storeTag[\s\S]{0,400}?w\.checked === false", page), (
+        "`storeTag` still renders before it consults `checked`, so a row nobody "
+        "read carries a warning about a page that was never fetched"
     )
