@@ -1045,6 +1045,109 @@ MUTATIONS = (
         replace='                "alertable": availability == Availability.IN_STOCK.value,',
         breaks="a remembered row inherits an alert decision from a reading nobody took. State the claim precisely rather than loudly: this key SENDS NOTHING — pushes come from `run_once`'s `alerts` list, built from `Result` objects, and no remembered row ever becomes one — so what the mutation manufactures is a published claim, on a served page and in a file with three consumers, that a reading nobody took is worth waking somebody for. The measured consequence: 8 of the 13 entries in this host's ledger are `in_stock`, 6 of them are controls, and the remaining two are the GameStop `TRANSITION —` watches, which carry no `max_price` — so it publishes two false buy-signals on every cycle GameStop is paced out, and GameStop runs on a 900-second override",
     ),
+    # ----------------------------------------------------------------------
+    # M36 / M37 — the RENDERING pair: an age nobody recorded, and an age
+    # judged against a clock nobody paces by.
+    # ----------------------------------------------------------------------
+    #
+    # WHY THIS PAIR SITS ON TWO DIFFERENT FILES, WHICH NO PRIOR PAIR IN THIS
+    # REGISTRY DOES. M27/M28 share one `search`; M29/M30 sit in two modules but
+    # gate one rule. This pair gates one rule across TWO SURFACES, and that is
+    # the point rather than an accident: REQ-21's criterion 3 names
+    # `status.json`, `boty check` AND the dashboard, and a gate on one of three
+    # surfaces is not a gate on the criterion. M37 is the FIRST mutation in this
+    # registry under `served/`, and the third outside `boty/` after M25 and M26.
+    # `served` has been in SANDBOX_CONTENTS since before this phase, so nothing
+    # is added there and Phase 4's rule for that tuple is not reopened.
+    #
+    # THE HALVES FAIL IN OPPOSITE DIRECTIONS, which is the pair convention's own
+    # test:
+    #
+    #   M36 manufactures an age nobody recorded — criterion 2's failure, the
+    #       reading nobody dated presented as current.
+    #   M37 judges a REAL age against a clock nobody paces by — criterion 3's
+    #       failure, a fixed threshold instead of the retailer's own cadence.
+    #
+    # Neither repairs the other. A surface that dates every reading correctly and
+    # then judges them all against 1 800 seconds is wrong about every retailer in
+    # this config; a surface with a perfect threshold that treats `null` as now is
+    # wrong about the five rows that matter most on this host today.
+    #
+    # ANCHOR PRE-COUNTS, TAKEN BEFORE REGISTRATION, 2026-08-14:
+    #
+    #     M36's conditional expression in boty/cli.py            -> 1
+    #     grep -o 'read_at' boty/cli.py | wc -l                  -> 3
+    #     M37's lookup line in served/boty/index.html            -> 1
+    #     grep -o 'intervals' served/boty/index.html | wc -l     -> 4
+    #
+    # `apply_mutation` replaces the FIRST occurrence, so the competing counts are
+    # what make the anchors safe rather than lucky. M36 anchors on the WHOLE
+    # conditional expression and not on the bare name `read_at`, which also
+    # appears in `_remembered`; M37 anchors on the whole lookup line and not on
+    # `intervals`, which appears four times on the page. Fourth measurement of
+    # this trap in this phase.
+    #
+    # WHICH TESTS CATCH EACH — MEASURED BY HAND BEFORE THIS HARNESS WAS EVER RUN.
+    # Each mutation was applied ALONE (two at once cannot show which test killed
+    # which) and reverted to an empty `git status --porcelain`.
+    #
+    # M36, 1 failed / 864 passed, exit 1:
+    #     tests/test_status.py::test_report_says_unknown_for_a_reading_nobody_dated
+    #
+    # M37, 1 failed / 864 passed, exit 1:
+    #     tests/test_dashboard.py::test_the_row_threshold_is_the_retailers_own_cadence_and_not_a_fixed_clock
+    #
+    # ONE KILLER EACH, AND THAT IS MEASURED RATHER THAN THIN. 07-05-PLAN.md
+    # predicted M36 would also be caught by the boundary test and the join test;
+    # neither fires, and both for good reasons stated rather than glossed. The
+    # boundary test constructs a stamp, so `read_at is None` is never reached in
+    # it; the join test reads `status.json`, which `_age_tag` does not touch. The
+    # `[age ?]` capsys test is the ONLY fixture in this repository under which a
+    # zero age and an unknown age differ at all — which is exactly why it asserts
+    # the ABSENCE of an age number as well as the presence of `?`. A gate is
+    # named after watching it fail, never after expecting it to.
+    #
+    # IF EITHER EVER SURVIVES: for M36, check first whether that capsys test
+    # drifted to asserting only the `?` — the mutation prints `[age 0s]`, which
+    # contains no `?` today but would pass a weaker assertion the moment somebody
+    # "simplified" it. For M37, check whether the page acquired a second
+    # legitimate `1800`; the killer asserts a COUNT rather than an absence
+    # precisely because the banner's occurrence is legitimate and must stay.
+    #
+    # BOTH ANCHORS ARE BEHAVIOURAL AND NEITHER TOUCHES PROSE — a conditional
+    # expression and a lookup expression, on 07-PLAN-OUTLINE.md § Finding 1's
+    # hard rule after two anchors drifted on 2026-08-13. This is the plan in the
+    # phase most exposed to that mistake, because both of its surfaces are made
+    # of prose: the rule is to anchor on the condition that CHOOSES the tag,
+    # never on the tag.
+    #
+    # WHY THERE IS NO THIRD IDENT for the `storeTag` register fix or the `not
+    # checked` label. Both are guarded by structural producer/consumer tests in
+    # tests/test_dashboard.py, and neither failure manufactures a false claim
+    # about an age: a suppressed-or-shown store tag is a register defect on a row
+    # that already carries its own provenance. A third mutation on a rule two
+    # tests already state is the "two gates on one rule means neither can be
+    # shown to bite" warning above, one further along.
+    #
+    # THE IDENT ARITHMETIC, CLOSED, so 07-06 reads it rather than re-deriving it.
+    # M34/M35 were 07-04's; M36/M37 are consumed here. The registry ends this
+    # phase at 33 and the phase added SEVEN idents (M31-M37), not the outline's
+    # six. 07-06 still records the count rising FROM 26. M21-M24 remain the
+    # intentional gap and are still not filled.
+    Mutation(
+        ident="M36",
+        target="boty/cli.py",
+        search="    age = None if r.read_at is None else now - r.read_at",
+        replace="    age = 0.0 if r.read_at is None else now - r.read_at",
+        breaks="every reading nobody dated renders as `[age 0s]` — the FRESHEST row on the surface — instead of `[age ?]`. Criterion 2's failure, on the surface that criterion names, rebuilt inside the fix written to remove it. The live case rather than a description: amazon, target and walmart refused every watch this morning and 07-01 stamps no refusal arm, so five of the thirteen configured watches print this form today; and walmart's `Pokémon GO Plus +` has been frozen at `out_of_stock` in state.json since before the store-gap guard shipped, with no stamp anywhere in the ledger and no way to acquire one while WALMART_STORE_ID is unset. Under this mutation that row prints as though it had been read this instant. An unmeasured value rendered as zero does not read as unknown, it reads as best-in-class",
+    ),
+    Mutation(
+        ident="M37",
+        target="served/boty/index.html",
+        search="  const interval = intervals.get(w.retailer) ?? null;",
+        replace="  const interval = 1800;",
+        breaks="the row tag stops asking *is this reading younger than its own retailer's current cadence* and starts asking the banner's question instead — 07-PLAN-OUTLINE.md § Finding 9's forbidden merge, built. It is WRONG IN BOTH DIRECTIONS ON THE SAME PAGE IN THE SAME SECOND, with the arithmetic rather than the principle: target and walmart sit on the 21 600-second cap while they are refusing us, so every one of their remembered rows renders stale while they behave exactly as the politeness rule requires — the ROADMAP's own sentence, *'a retailer in backoff is legitimately checked less often, and that is the politeness rule working'* — and gamestop runs on a 900-second override, so a 25-minute-old GameStop reading renders fresh when its own pacing says it is overdue. Criterion 3's *'derived from the retailer's own pacing rather than a fixed clock'* stated as a mutation. This is also the shape a future editor reaches for when 'simplifying' two staleness rules into one, which is why the anchor is the lookup expression itself",
+    ),
 )
 
 
