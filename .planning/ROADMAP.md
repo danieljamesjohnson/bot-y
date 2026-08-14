@@ -437,7 +437,7 @@ Plans:
 - [x] 07-02: The age survives the restart, and the file that survives it changes shape without breaking on Dan's disk *(wave 2, blocked on 07-01)*
 - [x] 07-03: The retailer's current interval becomes one readable number, and both surfaces read the same one *(wave 3, blocked on 07-02)*
 - [x] 07-04: Every configured watch has a row, and a remembered reading says it is remembered — 3 rows for 14 watches today *(wave 4, blocked on 07-03)*
-- [ ] 07-05: The three surfaces say the age out loud, and an absent one says UNKNOWN *(wave 5, blocked on 07-04)*
+- [x] 07-05: The three surfaces say the age out loud, and an absent one says UNKNOWN *(wave 5, blocked on 07-04)*
 - [ ] 07-06: Close — no code; the gates measured, the count observed rising from 26, five verdicts *(wave 6, blocked on 07-01 … 07-05, `autonomous: false`)*
 
 **Criteria 2 and 3 each span more than one plan, and that is structure rather than

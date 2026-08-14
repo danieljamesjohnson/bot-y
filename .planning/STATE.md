@@ -36,18 +36,29 @@
 # by hand after restoring from the `cp` taken before the call. Twelve for twelve. **The protocol is
 # not optional here, and on this repo the tool's return value must not be trusted either — it has
 # now said "last_plan" about plan 3 and plan 4 of 6.**
+#
+# RESTORED BY HAND A FIFTH TIME, 2026-08-14, recording 07-05 — the THIRTEENTH misfire, byte-for-byte
+# the twelfth. `gsd-tools query state.advance-plan` returned `{"advanced": false, "reason":
+# "last_plan", "current_plan": 6, "total_plans": 6}` for a phase on its FIFTH of six plans — the
+# third consecutive plan it has called "last_plan" — and did the identical three damages: deleted
+# THIS comment block, deleted the `percent` comment block below, and regressed `stopped_at` from
+# 07-04 back to `Completed 06-05-PLAN.md`. The only legitimate deltas in its whole diff were
+# `completed_plans: 4 -> 5` and the `last_updated` timestamp; both applied by hand after restoring
+# from the `cp`. Thirteen for thirteen, and the failure is now fully deterministic on this repo:
+# three plans in a row, same wrong verdict, same three damages, two different subcommands. It is
+# not worth invoking again here — run the `cp`/`diff` and expect to write the deltas yourself.
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 IN PROGRESS — Phase 7 EXECUTING (6 plans, all serial); 07-01 and 07-02 complete 2026-08-13, 07-03 and 07-04 complete 2026-08-14, 07-05 next, 07-06 checkpoints for Dan. v0.2 archived, complete in the tree and deployed 2026-08-12
-stopped_at: Completed 07-04-PLAN.md — every configured watch has a row on both surfaces, 13 published while 3 were fetched, a remembered row carries `checked: false` and a stated `alertable: false`, M34 and M35 watched red by hand at 3 and 2 killers and CAUGHT at 31/31
-last_updated: "2026-08-14T13:05:00.000Z"
+status: Milestone v0.3 IN PROGRESS — Phase 7 EXECUTING (6 plans, all serial); 07-01 and 07-02 complete 2026-08-13, 07-03, 07-04 and 07-05 complete 2026-08-14, 07-06 next and it checkpoints for Dan. v0.2 archived, complete in the tree and deployed 2026-08-12
+stopped_at: Completed 07-05-PLAN.md — both consumers render the age in the same four forms against the retailer's OWN current cadence, an undated reading renders `age ?` as a warning on both, `storeTag` stops claiming a page answered on a row nobody read, and M36/M37 were watched red by hand at one killer each and CAUGHT at 33/33
+last_updated: "2026-08-14T13:45:00.000Z"
 last_activity: 2026-08-14
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 0 of the
   # 1 phase in v0.3 is complete, so 0 — even though 1 of 6 plans has landed. The plan counter
   # above is where per-plan progress is read.
@@ -75,12 +86,24 @@ rows while 3 were fetched** — with a remembered row carrying the ledger's avai
 stamp (possibly `null`), `null` for every fact about the act of reading, a stated `alertable: false`
 and `checked: false`. **The configured-watch count is 13, not the 14 every planning document in this
 phase carries** (the fourteenth `grep` match is a comment at `config/products.yaml:309`), and 07-06's
-checkpoint depends on that number. 07-05 next — the three surfaces say the age out loud, on idents
-**M36/M37** rather than the outline's M35/M36. The one
-outstanding action carried from v0.2 is not
-planning work — it is `sudo systemctl restart boty`, and that restart is now also what migrates
-`state.json` to its new shape: 13 entries back undated and honest, with
-`walmart:Pokémon GO Plus +` publishing `"read_at": null` indefinitely until a store is pinned.
+checkpoint depends on that number. **07-05 landed 2026-08-14 and the age is now said out loud:**
+`cli._age_tag` and the dashboard's `ageTag` render the same four forms — `[age 4s]`, `[age 7h > 6h]`,
+`[age 3h, cadence ?]`, `[age ?]` — each judged against the retailer's OWN current cadence read from
+07-03's published number, never against `index.html`'s 30-minute banner constant, which stays exactly
+where it is. `status.json` gained **no key**: a join test proves `read_at`, `checked` and
+`current_interval_seconds` are jointly sufficient, so no staleness flag is computed at write time.
+`storeTag` now returns early on `checked === false`, closing the register defect 07-04 measured and
+could not reach. M36 and M37 consumed (the first mutation in this registry under `served/`), registry
+at **33**, survivors 0. **Measured and looked at: 13 rows, and all 13 render `age ?` today**, because
+`state.json` holds 13 availabilities and **0** stamps. 07-06 next — it closes REQ-21 and checkpoints
+for Dan. The one outstanding action carried from v0.2 is not planning work — it is `sudo systemctl
+restart boty`, and that restart is now doing THREE things: it migrates `state.json` to its new shape,
+it is what makes the daemon publish `read_at`, `checked` and `current_interval_seconds` at all, and
+it is therefore what makes this rendering visible on the live page. **Measured 2026-08-14: the
+running `boty watch` is PID 547119, started Wed Aug 12 17:28:29 — before 07-01 — so it holds
+pre-phase code in memory and the file it writes every cycle carries none of the four new keys.** The
+page handles that old file correctly (every row renders `age ?`, every store tag survives), which is
+the `=== false`-not-`!` decision paying off, but the restart is what makes the page say anything new.
 
 ## Status
 
@@ -616,6 +639,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 06 P07 | 32min | 3 tasks (2 TDD, so 5 code commits) | 11 files |
 | Phase 06 P06 | 42min | 3 tasks (1 checkpoint, already answered 2026-08-11 and shipped as 06-07) | 5 files |
 | Phase 07 P04 | 25min | 3 tasks (2 TDD, so 5 code commits) | 5 files |
+| Phase 07 P05 | 34min | 3 tasks (2 TDD, so 5 code commits) | 5 files |
 
 ## Decisions
 
@@ -750,6 +774,15 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 06]: 06-06: no code was written to close the phase, on 05-04's precedent — a closing plan that implemented its way to a green table would be a phase measuring work it did in the act of measuring. The one edit outside the four record files is the removal of committed leaked markup from `06-07-SUMMARY.md`, which is the defect REQ-19 names sitting in this milestone's own documentation, and it was committed separately (`7355034`) so the closing record's own diff stays four files
 - [Phase 06]: 06-06: the leaked-markup sweep was RE-RUN at close rather than its remembered figure repeated — 21 matching lines in 7 files, against the outline's 9-in-4. The outline's four files are UNCHANGED at 9; of the twelve new lines, ten are `tests/test_changelog.py` (4) and `06-04-SUMMARY.md` (6) carrying the shapes on purpose, and two are the real hit in `06-07-SUMMARY.md`. Repeating a number nobody re-measured is the defect this milestone exists to close
 - [Phase 06]: 06-06: REQ-18's two stale claims (`131`, and "Routing and Extraction are already pinned") are FLAGGED in the requirement's own entry and in its traceability cell, and NEITHER IS EDITED — a requirement's text is the record of why the work was done and must survive it; a criterion is not amended to make it meetable, and by the same rule not to make it accurate
+- [Phase 07]: 07-05: the stale tag prints BOTH numbers (`[age 7h > 6h]`, `7h ago > 6h`) rather than a word — a bare `stale` cannot say which threshold produced the verdict, and criterion 3's entire content is WHICH threshold was used. `[store Y != pinned X]`'s idiom, one field over
+- [Phase 07]: 07-05: the age tag is appended UNCONDITIONALLY and `_age_tag` never returns `None`, unlike `_store_tag` — five of six retailers can never produce a store so their rows must stay clean, but every reading has an age or a stated absence of one, and an absent tag would MEAN fresh
+- [Phase 07]: 07-05: `>` and not `>=` — a reading exactly one cadence old is due to be replaced this instant, not overdue. Asserted to the float at both sides so nobody "fixes" it later
+- [Phase 07]: 07-05: `_report`'s `intervals` is REQUIRED rather than defaulted — one production call site means mypy is the gate for a DROPPED keyword, and an AST test closes the `intervals=None` direction mypy cannot see (it type-checks, prints `cadence ?` on every row, and leaves every behavioural test green)
+- [Phase 07]: 07-05: `status.json` gains NO staleness key and that is the result, not an omission — a flag computed at write time is written `false` and keeps saying `false` for exactly the interval during which it becomes true. A join test proves `read_at`, `checked` and `current_interval_seconds` are jointly sufficient, and it passed on the RED commit before any implementation existed
+- [Phase 07]: 07-05: `fmtAge` is defined through an extracted `fmtDur` rather than copied, and the byte-identical claim was EXECUTED in node over 16 inputs rather than asserted by inspection
+- [Phase 07]: 07-05: `storeTag` returns early on `w.checked === false` and not `!w.checked` — a pre-07-04 `status.json` on disk during a deploy has no `checked` key, and `!undefined` would suppress the store tag on every row of it. Verified against the live pre-phase file, not argued in the abstract
+- [Phase 07]: 07-05: the `not checked` label uses the plain dim `.tag` weight — a paced-out retailer is an ordinary, expected and correct state, and the warning, if there is one, is the age beside it. Inventing a third visual weight for a non-problem would be inventing a visual language
+- [Phase 07]: 07-05: a comment that must reference a forbidden code shape DESCRIBES it rather than quoting it, and writes the banner constant as `1 800` with a space — both of this plan's source-scanning gates read comments too, and each went red on its own explanation before it ever saw the code. The gates were not weakened to fit the prose
 
 ### Blockers
 
@@ -1025,3 +1058,84 @@ for a phase on its third of six plans, deleted both frontmatter comment blocks, 
 real deltas applied by hand. The protocol is what turned a silent regression into a caught one, and
 it is now recorded in the frontmatter as mandatory rather than advisory.
 `gsd-tools roadmap update-plan-progress 07` was run and worked correctly, checking 07-03 off.
+
+## Session — 07-05 complete, 2026-08-14
+
+**The age is said out loud on every surface, and an absent one says so.** `cli._age_tag` and the
+dashboard's `ageTag` render the same four forms, each judged against the retailer's OWN current
+cadence:
+
+| State | `boty check` | dashboard | weight |
+|---|---|---|---|
+| within its retailer's cadence | `[age 4s]` | `4s ago` | label |
+| past that cadence | `[age 7h > 6h]` | `7h ago > 6h` | **warning** |
+| cadence unknown | `[age 3h, cadence ?]` | `3h ago · cadence ?` | **warning** |
+| no stamp | `[age ?]` | `age ?` | **warning** |
+
+```
+identity check: PASS — 219 file(s), no host identity found
+865 passed in 11.00s
+Success: no issues found in 18 source files
+mutation check: 33/33 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, ...)
+EXIT=0
+```
+
+**The registry rose from 31 to 33**, exactly two, with survivors **0**. M36 (*an undated reading
+acquires an age of zero*) and M37 (*the row threshold becomes the banner's fixed 1800*) were each
+applied by hand ALONE, watched turning **one named killer each** red at exit 1 before the harness was
+asked, and reverted to an empty `git status --porcelain`. **M37 is the first mutation in this
+registry targeting a file under `served/`**, and the third outside `boty/`. Both anchors pre-counted
+to exactly 1 with their competing counts recorded (`read_at` occurs 3 times in `boty/cli.py`;
+`intervals` occurs 4 times in `served/boty/index.html`). **M36/M37 consumed here, the phase added
+seven idents, 07-06 still records the rise FROM 26, M21–M24 unfilled.**
+
+**`status.json` got no key, and that is a result.** A `stale` flag computed at write time is written
+`false` and keeps saying `false` for exactly the interval during which it becomes true —
+`pacing.py:196-199`'s own recorded rule. The join test derives a verdict from `read_at`, `checked`
+and `current_interval_seconds` alone, and **it passed on the RED commit**, before any implementation
+existed. That is the difference between a criterion met and a criterion asserted.
+
+**The page was LOOKED AT, twice, not inferred from source.** Headless Chromium against a scratch copy
+on `127.0.0.1`, so the running daemon's own served file was never written to. The real payload
+renders **13 rows, every one carrying `AGE ?` as an amber warn tag beside a dim `NOT CHECKED`** —
+because `state.json` holds 13 availabilities and **0** stamps. A clearly-labelled synthetic payload
+showed all four forms at the two weights, including the GameStop row at `25M AGO > 15M`: a
+25-minute-old reading on a 900-second override, correctly warned, which the banner's 1 800-second
+constant would have drawn as an ordinary dim label. § *Finding 9* in a picture.
+
+**07-04's carried-forward register defect is closed.** `storeTag` returns early on
+`w.checked === false`, so a row nobody read stops carrying a warn tag whose sentence is about a page
+that was never fetched. Verified against the LIVE pre-phase `status.json`: every row kept its store
+tag, because `=== false` is `false` when the key is `undefined` — the decision paying off on the file
+it was written for.
+
+**THE RUNNING DAEMON PREDATES THE ENTIRE PHASE, and 07-06 needs this.** `boty watch` PID 547119
+started **Wed Aug 12 17:28:29 2026**, before 07-01 landed. It holds pre-phase code in memory and the
+`served/boty/status.json` it writes every cycle carries **none** of the four keys this phase added.
+So the rendering is complete in the tree and invisible on the live page until `sudo systemctl restart
+boty`. Recorded, not pushed — it is not something Dan can act on inside five minutes without the
+context 07-06's checkpoint will give him.
+
+**Four deviations, all recorded and none changing what shipped.** Two of this plan's own comments
+went red on this plan's own tests — the escaping test scans every `${...}` in the FILE and the `1800`
+killer counts digits over the whole file, and neither can tell prose from code. Both were fixed in
+the prose, not in the gate. `storeTag`'s register argument moved above the function rather than
+widening its test's 400-character window. And M36's measured catch is **one** test rather than the
+three predicted; the registry names the one and says why the other two cannot fire.
+
+**The cadence table moved again, harder.** Between the plan's 09:41 reading and this run's 13:06Z
+one, **walmart fell from the 21 600 s cap to 300 s and amazon rose from 1 800 s to the cap** — the
+two retailers swapped ends of the range. Criterion 3's *"derived from the retailer's own pacing
+rather than a fixed clock"* has never had a better argument.
+
+**REQ-21 is still NOT marked complete.** 07-06 closes it.
+
+**`gsd-tools query state.advance-plan` misfired for the THIRTEENTH time**, byte-for-byte identically
+to the twelfth: it returned `{"advanced": false, "reason": "last_plan", "current_plan": 6,
+"total_plans": 6}` for a phase on its FIFTH of six plans — the third consecutive plan it has called
+"last_plan" — deleted both frontmatter comment blocks, and regressed `stopped_at` from 07-04 back to
+`Completed 06-05-PLAN.md`. Restored from the pre-call `cp` and the two real deltas (`completed_plans:
+4 -> 5`, `last_updated`) applied by hand. **The failure is now fully deterministic on this repo:
+three plans in a row, same wrong verdict, same three damages, across two subcommands.**
+`gsd-tools query roadmap.update-plan-progress 07` was run under the same protocol.
