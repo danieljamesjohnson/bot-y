@@ -25,18 +25,29 @@
 # regressed `stopped_at` from 07-02 to `Completed 06-05-PLAN.md` — the same two damages the tenth
 # misfire did, from a different subcommand. Restored from the copy and the real deltas applied by
 # hand. Eleven for eleven; the protocol is not optional here.
+#
+# RESTORED BY HAND A FOURTH TIME, 2026-08-14, recording 07-04 — the TWELFTH misfire, and it is now
+# fully reproducible rather than intermittent. `gsd-tools query state.advance-plan` returned
+# `{"advanced": false, "reason": "last_plan", "current_plan": 6, "total_plans": 6}` for a phase on
+# its FOURTH of six plans — the identical wrong verdict it gave on the third — and did the identical
+# three damages: deleted THIS comment block, deleted the `percent` comment block below, and
+# regressed `stopped_at` from 07-03 back to `Completed 06-05-PLAN.md`. The only legitimate deltas in
+# its whole diff were `completed_plans: 3 -> 4` and the `last_updated` timestamp; both were applied
+# by hand after restoring from the `cp` taken before the call. Twelve for twelve. **The protocol is
+# not optional here, and on this repo the tool's return value must not be trusted either — it has
+# now said "last_plan" about plan 3 and plan 4 of 6.**
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 IN PROGRESS — Phase 7 EXECUTING (6 plans, all serial); 07-01 and 07-02 complete 2026-08-13, 07-03 complete 2026-08-14, 07-04 next, 07-06 checkpoints for Dan. v0.2 archived, complete in the tree and deployed 2026-08-12
-stopped_at: Completed 07-03-PLAN.md — the retailer's current cadence is one number both surfaces read, `boty check` has a load-only pacer, M33 watched red at 11 killers and CAUGHT at 29/29
-last_updated: "2026-08-14T12:35:00.000Z"
+status: Milestone v0.3 IN PROGRESS — Phase 7 EXECUTING (6 plans, all serial); 07-01 and 07-02 complete 2026-08-13, 07-03 and 07-04 complete 2026-08-14, 07-05 next, 07-06 checkpoints for Dan. v0.2 archived, complete in the tree and deployed 2026-08-12
+stopped_at: Completed 07-04-PLAN.md — every configured watch has a row on both surfaces, 13 published while 3 were fetched, a remembered row carries `checked: false` and a stated `alertable: false`, M34 and M35 watched red by hand at 3 and 2 killers and CAUGHT at 31/31
+last_updated: "2026-08-14T13:05:00.000Z"
 last_activity: 2026-08-14
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 0 of the
   # 1 phase in v0.3 is complete, so 0 — even though 1 of 6 plans has landed. The plan counter
   # above is where per-plan progress is read.
@@ -58,7 +69,14 @@ document without a version field and without losing an availability. 07-03 lande
 retailer's CURRENT cadence — the standing interval with the backoff in force applied to it — is
 `Pacer.current_interval`, `record` computes its own wait through it so the published number and
 the fetch schedule are one expression, and `boty check` builds a load-only `Pacer` so both surfaces
-answer from the same `pacer-state.json`. 07-04 next — the rows that go missing. The one
+answer from the same `pacer-state.json`. **07-04 landed 2026-08-14 and the rows stopped going
+missing:** `status.json` publishes one row per CONFIGURED watch on both surfaces — measured, **13
+rows while 3 were fetched** — with a remembered row carrying the ledger's availability, the ledger's
+stamp (possibly `null`), `null` for every fact about the act of reading, a stated `alertable: false`
+and `checked: false`. **The configured-watch count is 13, not the 14 every planning document in this
+phase carries** (the fourteenth `grep` match is a comment at `config/products.yaml:309`), and 07-06's
+checkpoint depends on that number. 07-05 next — the three surfaces say the age out loud, on idents
+**M36/M37** rather than the outline's M35/M36. The one
 outstanding action carried from v0.2 is not
 planning work — it is `sudo systemctl restart boty`, and that restart is now also what migrates
 `state.json` to its new shape: 13 entries back undated and honest, with
@@ -597,6 +615,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 06 P05 | 31min | 3 tasks | 6 files |
 | Phase 06 P07 | 32min | 3 tasks (2 TDD, so 5 code commits) | 11 files |
 | Phase 06 P06 | 42min | 3 tasks (1 checkpoint, already answered 2026-08-11 and shipped as 06-07) | 5 files |
+| Phase 07 P04 | 25min | 3 tasks (2 TDD, so 5 code commits) | 5 files |
 
 ## Decisions
 
@@ -919,6 +938,82 @@ DIRECTION — a truncated read over-reports staleness and self-heals) and *"a cl
 a second construction site"* (replaced by a testable rule: **a second pacer is allowed exactly when
 it neither saves nor schedules**); plus `tests/test_cli_watch.py`'s `_check_config` docstring. A
 fourth was found during execution and handled the same way —
+`test_boty_check_writes_no_pacer_state_at_all`'s docstring, whose premise (*"`check` is one pass
+with no schedule, so it builds no pacer to persist"*) died while its assertion stayed exactly right.
+
+*(The sentence above ended mid-word in this file until 2026-08-14. It was completed from
+`07-03-SUMMARY.md` § Deviations, which records the same fact, while recording 07-04. No claim was
+invented to close it.)*
+
+### 07-04 — every configured watch has a row, 2026-08-14
+
+**Criterion 3's ROW half — the thing that had to exist before staleness could be presented at all.**
+`status.json` published one row per reading taken this cycle; it now publishes one row per
+CONFIGURED watch. A watch nobody asked about used to have no row at all — not a stale row, no row —
+so *"not watched this cycle"* and *"watched, and out of stock"* were indistinguishable when one of
+them was simply missing.
+
+**Measured against the real config and this host's real ledger: 13 rows published while 3 were
+fetched.** Ten remembered rows carrying the availability the ledger holds, the stamp it holds (five
+of them `null`), `null` for every fact about the act of reading, a **stated** `alertable: false`,
+and `checked: false`. Fresh and remembered rows carry the same keys in the same order, so `checked`
+and `read_at` are the only two fields that tell them apart — REQ-21's *"byte-identical in shape"*
+turned from the defect into the design.
+
+```
+identity check: PASS — 218 file(s), no host identity found
+848 passed in 10.94s
+Success: no issues found in 18 source files
+mutation check: 31/31 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, ...)
+EXIT=0
+```
+
+**The registry rose from 29 to 31** — exactly two above what `07-03-SUMMARY.md` recorded, read from
+that summary and confirmed against `grep -c` before either ident was taken. **M34** (a memory
+published as an observation) went red by hand at **exit 1, 3 failed / 78 passed**; **M35** (a memory
+given an observation's authority) at **exit 1, 2 failed / 79 passed**; each applied ALONE and
+reverted to an empty `git status --porcelain`, and the harness then reported exactly those counts
+and names.
+
+**M34's anchor is two lines and that is a measurement.** The two-line fragment counts 1; the
+single-line `"checked": False,` counts 2 and the FIRST is the retailers array's paced branch;
+`grep -c '"checked":'` counts 4. A single-line anchor would have gated a rule it has nothing to do
+with — M19's trap, third occurrence in this phase, measured before it was walked into.
+
+**THE IDENT ARITHMETIC MOVED AND TWO PLANS DEPEND ON IT.** The brief for this plan named M35–M36 and
+was off by one: 07-03 consumed M33 only. This plan consumed **M34 and M35**, so **07-05's pair is
+M36/M37**, one higher than `07-PLAN-OUTLINE.md` assigns. The registry ends this phase at **33** and
+the phase adds **seven** idents — but **07-06 still records the rise FROM 26**. M21–M24 stay
+unfilled.
+
+**THE DENOMINATOR IS 13, NOT 14.** Every planning document in this phase says 14 configured watches,
+from `grep -c "retailer:" config/products.yaml`. Measured through `Config.load`: **13**. The
+fourteenth match is a COMMENT at `config/products.yaml:309` — a sentence about an absent watch
+counted as a present one, the same class of error as `grep -c` counting prose one file over.
+**07-06's checkpoint must tell Dan the dashboard goes to 13 rows.** Recorded beside the documents;
+none was edited.
+
+**And the row count is a function of pacing, not of configuration** — three readings of the live
+file now disagree: 3 rows at 2026-08-13 08:25:10, 8 at 09:24:54 the same morning, 5 at 2026-08-14
+07:36:57, from a config that never changed. That is a sharper statement of the defect than any one
+of those numbers.
+
+**Walmart's row, as it will publish, indefinitely, until a store is pinned:** `out_of_stock`,
+`read_at: null`, `checked: false`, `alertable: false`. The ledger entry is frozen —
+`WALMART_STORE_ID` is unset, so every Walmart reading is UNKNOWN and `transitioned_to_stock` returns
+before it writes — so the age genuinely is not established and inventing one would be this phase's
+own defect. **07-06's checkpoint material**, and the second time this milestone hands Dan the same
+open question (`QUESTIONS.md` § 0f).
+
+**Carried to 07-05:** once a store IS pinned, `index.html`'s `storeTag` will render every remembered
+Walmart row as a `store ? · pinned X` **warn** tag — literally true (no page, so no store answered)
+on a row whose actual story is *"not checked this cycle"*. Recorded rather than fixed, because
+`served/boty/index.html` is 07-05's file.
+
+**Nothing about the cycle moved.** The three fetch-sensitive suites pass together at 164, and the
+headline test asserts both halves in ONE place — every configured watch has a row AND only the due
+ones were fetched — because split apart, each passes while the pair is false.
 `test_boty_check_writes_no_pacer_state_at_all`'s premise died and its assertion did not.
 
 **REQ-21 is still NOT marked complete.** 07-06 closes it.
