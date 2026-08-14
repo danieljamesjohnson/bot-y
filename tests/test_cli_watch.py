@@ -402,9 +402,23 @@ def _check_config(tmp_path: Path) -> Path:
     `served/boty/status.json` that the deployed dashboard serves, so running
     the test suite would clobber the live monitor's published state.
 
-    `pacer_state_path` is here even though `boty check` builds no pacer and so
-    writes no such file. A defence that depends on a code path staying absent is
-    a defence with a countdown on it.
+    `pacer_state_path` is here, and the reason it is here CHANGED on 2026-08-13.
+    Until then this paragraph read:
+
+        "`pacer_state_path` is here even though `boty check` builds no pacer and
+        so writes no such file. A defence that depends on a code path staying
+        absent is a defence with a countdown on it."
+
+    REQ-21 ran the countdown down. `boty check` now builds a `Pacer` and loads
+    this document, so that it can answer *"what cadence is this retailer on"*
+    with the daemon's own backoff depth instead of the config value.
+
+    The line survives with a STRONGER reason, which is why this is a rewrite
+    rather than a deletion: the premise died and the conclusion did not. The
+    defence used to be against a code path staying absent; it is now against one
+    that exists and must stay READ-ONLY. That is asserted directly by the REQ-21
+    cross-surface section below — the document's bytes are compared across a
+    check — rather than inferred from the absence of a file.
     """
     config = tmp_path / "products.yaml"
     config.write_text(
@@ -541,6 +555,169 @@ def test_capture_fixture_still_needs_no_config_file(
 
     assert cli.main(["capture-fixture", "gamestop", "goplusplus", "https://x/1"]) == 7
     assert capsys.readouterr().err == ""
+
+
+# --------------------------------------------------------------------------
+# REQ-21: one cadence, read the same way by both surfaces
+# --------------------------------------------------------------------------
+#
+# Criterion 3 says a reading is stale when it is older than "its retailer's
+# current interval". If `boty check` and the daemon compute that threshold
+# separately they will disagree — measured on this host 2026-08-13, four of six
+# retailers were on a cadence different from their configured one, by factors of
+# up to 72 — and two surfaces publishing different staleness verdicts about one
+# reading is this project's own defect one level up, rebuilt on the surface the
+# criterion names. So both go through `cli._current_intervals`, and this is
+# where that is asserted rather than described.
+#
+# `boty check` therefore builds a `Pacer` where it built none before, under
+# three constraints that are each a defect if a later edit drops them: it never
+# saves, it is never passed to `run_once`, and a missing document is the
+# standing interval rather than an error. All three are asserted below.
+
+
+def _published_cadence(cfg: Config, retailer: str = "gamestop") -> float | None:
+    """The `current_interval_seconds` for one retailer, off the written file.
+
+    Read out of the bytes rather than off a returned object, because what is
+    under test is what the two surfaces PUBLISH — the dashboard has nothing else
+    to read.
+    """
+    published = json.loads(cfg.status_path.read_text())["retailers"]
+    (row,) = [r for r in published if r["retailer"] == retailer]
+    return row["current_interval_seconds"]
+
+
+def test_both_surfaces_publish_one_cadence_from_one_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The join this plan exists to make, asserted at the same refusal depth.
+
+    The ordering is the whole of this test's validity. A naive version compares
+    a daemon that has just recorded an outcome against a check that recorded
+    nothing, so the two are read at different depths and an equality between
+    them means nothing. Here gamestop is deep enough in its backoff to be
+    PACED OUT of the daemon's cycle, so `run_once` records nothing for it and
+    the depth stays at 3 across both surfaces.
+
+    It also pins the two branches of the retailers array to each other: the
+    daemon's row is built from `paced` and the check's from `health`.
+    """
+    from boty.pacing import Pacer
+
+    config = _check_config(tmp_path)
+    cfg = Config.load(config)
+
+    # One document, written by a pacer built exactly as `watch_loop` builds one.
+    pacer = Pacer(
+        default_interval=cfg.interval_seconds,
+        overrides=dict(cfg.retailer_intervals),
+        state_path=cfg.pacer_state_path,
+    )
+    for _ in range(3):
+        pacer.record("gamestop", refused=True, now=0.0)
+    pacer.save(set())
+
+    # THE DAEMON. gamestop is not due — 0.0 + 150.0 >= 2400.0 is false — so it
+    # is published on the PACED branch and nothing is recorded against it.
+    cli.watch_cycle(
+        cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        State.load(cfg.state_path),
+        set(),
+        pacer=pacer,
+        now=0.0,
+    )
+    from_the_daemon = _published_cadence(cfg)
+    document_before = cfg.pacer_state_path.read_bytes()
+
+    # `boty check`, which built no pacer at all before 2026-08-13.
+    _offline(monkeypatch)
+    assert cli.main(["check", "-c", str(config)]) == 0
+    from_the_check = _published_cadence(cfg)
+
+    assert from_the_daemon == from_the_check, (
+        f"the daemon published {from_the_daemon} and `boty check` published "
+        f"{from_the_check} for the same retailer off the same document — the "
+        f"two surfaces are answering 'is this reading stale?' with different "
+        f"thresholds, which is this project's own defect one level up and the "
+        f"reason criterion 3 is structural rather than cosmetic"
+    )
+    # THE BACKED-OFF NUMBER, not the standing one. Without this the test would
+    # pass if both surfaces silently returned 300 — which is exactly what M33
+    # makes them do.
+    assert from_the_check == 2400.0, "300 x 2**3, the cadence three refusals put gamestop on"
+    assert from_the_check > cfg.interval_seconds
+
+    # LOAD-ONLY, proved on the bytes. The daemon owns this document and `boty
+    # check` is routinely run while the service is running.
+    assert cfg.pacer_state_path.read_bytes() == document_before, (
+        "`boty check` rewrote pacer-state.json — two writers to one document is "
+        "the contradiction the single-write argument in boty/pacing.py exists "
+        "to prevent, pointed the other way"
+    )
+
+    # AND NOTHING WAS SKIPPED. A pacer passed to `run_once` would have skipped
+    # this watch, and `boty check` is the one surface that shows every watch.
+    checked = json.loads(cfg.status_path.read_text())["watches"]
+    assert [w["name"] for w in checked] == ["goplusplus"], (
+        "`boty check` dropped a watch — its pacer reached `run_once`, which "
+        "makes the check start skipping and imports the vanishing-row problem "
+        "onto the surface that exists to show all of them"
+    )
+
+
+def test_a_check_with_no_pacer_state_publishes_the_standing_interval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A fresh clone must not be told it is missing something it never had.
+
+    No document means zero refusals means the config value, which is the
+    correct answer and not a degraded one.
+    """
+    config = _check_config(tmp_path)
+    cfg = Config.load(config)
+    assert not cfg.pacer_state_path.exists()
+    _offline(monkeypatch)
+
+    with caplog.at_level(logging.WARNING):
+        assert cli.main(["check", "-c", str(config)]) == 0
+
+    assert _published_cadence(cfg) == float(cfg.interval_seconds)
+    assert caplog.records == [], (
+        f"an absent pacer-state.json warned: {[r.getMessage() for r in caplog.records]}"
+    )
+
+
+def test_a_per_retailer_override_reaches_the_published_cadence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The half of the cadence that comes from config rather than from the file.
+
+    Without this the standing-interval path is only ever exercised at the
+    default, and an accessor that ignored `overrides` would publish 300 for
+    every retailer while GameStop was actually being asked every 15 minutes.
+    """
+    config = tmp_path / "products.yaml"
+    config.write_text(
+        "settings:\n"
+        f"  state_path: {tmp_path / 'state.json'}\n"
+        f"  status_path: {tmp_path / 'status.json'}\n"
+        f"  pacer_state_path: {tmp_path / 'pacer-state.json'}\n"
+        "  retailer_intervals:\n"
+        "    gamestop: 900\n"
+        "watches:\n"
+        "  - name: goplusplus\n"
+        "    retailer: gamestop\n"
+        "    target: https://x/1\n",
+        encoding="utf-8",
+    )
+    cfg = Config.load(config)
+    _offline(monkeypatch)
+
+    assert cli.main(["check", "-c", str(config)]) == 0
+
+    assert _published_cadence(cfg) == 900.0
 
 
 # --------------------------------------------------------------------------
@@ -794,7 +971,22 @@ def test_a_restored_paging_memory_does_not_silence_a_new_actionable_state(
 def test_boty_check_writes_no_pacer_state_at_all(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`check` is one pass with no schedule, so it builds no pacer to persist.
+    """`check` is one pass with no schedule, so it persists no pacer state.
+
+    THE FIRST HALF OF THIS SENTENCE WAS WITHDRAWN ON 2026-08-13. It read:
+
+        "`check` is one pass with no schedule, so it builds no pacer to
+        persist."
+
+    REQ-21 falsified the premise and left the assertion untouched: `boty check`
+    now builds a `Pacer` and `load()`s it, to answer criterion 3 with the
+    daemon's own backoff depth — and still writes nothing, because that pacer is
+    load-only by construction. So this test stopped being a statement about a
+    code path that does not exist and became a statement about one that does.
+    Its stronger sibling is
+    `test_both_surfaces_publish_one_cadence_from_one_document`, which compares
+    the document's BYTES across a check; this one keeps the cheaper claim, that
+    a check with no document does not create one.
 
     Pinned rather than assumed: `_check_config` points the path at `tmp_path`
     precisely so this test can tell "nothing was written" from "something was
