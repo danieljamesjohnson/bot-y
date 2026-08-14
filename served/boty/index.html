@@ -67,6 +67,34 @@
      different question, which is why it is loud rather than dim. */
   .tag.store { color: var(--dim); border-color: var(--line); }
   .tag.store.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  /* HOW OLD THIS READING IS, at the same two weights, drawing the same
+     label-versus-warning distinction as `control`/`degraded` and
+     `store`/`store.warn` above — third application.
+     A reading younger than the cadence its OWN retailer is currently on is an
+     ordinary label and recedes: the monitor is doing exactly what it should. A
+     reading older than that cadence, and a reading nobody dated, are warnings,
+     because both are the row saying something different from what it appears to
+     say.
+
+     THE BANNER'S 1 800-SECOND CONSTANT IS NOT THIS THRESHOLD AND MUST NOT BE
+     MERGED WITH IT. It asks *is this snapshot being written?*; this tag asks *is
+     this reading younger than its own retailer's current cadence?* The
+     arithmetic, not just the principle: target and walmart sit on the
+     21 600-second cap while they are refusing us, so 1 800 would paint every one
+     of their rows stale while they behave exactly as the politeness rule
+     requires; and gamestop runs on a 900-second override, so 1 800 would call a
+     25-minute-old GameStop reading fresh when its own pacing says it is
+     overdue. ONE CONSTANT, WRONG IN BOTH DIRECTIONS ON THE SAME PAGE IN THE
+     SAME SECOND.
+
+     So the banner's constant stays exactly where it is, unmoved and unreused,
+     and `tests/test_dashboard.py` asserts the digits occur on this page exactly
+     ONCE. That is why this paragraph writes the number with a space: the test
+     counts over the whole file and cannot tell prose from code, so an unspaced
+     numeral here would make the assertion fail on its own explanation. Do not
+     "tidy" the spacing. */
+  .tag.age { color: var(--dim); border-color: var(--line); }
+  .tag.age.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
   footer { margin-top: 1.1rem; color: var(--dim); font-size: .76rem; }
 </style>
 </head>
@@ -77,7 +105,18 @@
 <footer>Controls are known-in-stock products. If one stops reading green, the detector is broken — not the market.</footer>
 
 <script>
-const fmtAge = s => s < 90 ? `${s|0}s ago` : s < 5400 ? `${(s/60)|0}m ago` : `${(s/3600)|0}h ago`;
+// The three bands now have ONE home. The row tag needs the same bands for a
+// CADENCE, where `" ago"` would be false — a threshold is not a time in the
+// past — so `fmtDur` holds the bands and `fmtAge` is defined through it rather
+// than copied beside it. `Result.degraded`'s one-source-of-truth argument, on a
+// template: two formatters drift, and the banner and the row tag must not start
+// disagreeing about what "3h" means.
+//
+// `fmtAge`'s output is UNCHANGED for every input — same bands, same coercions,
+// same suffix — so the banner's sentence below is byte-identical to what it
+// printed before.
+const fmtDur = s => s < 90 ? `${s|0}s` : s < 5400 ? `${(s/60)|0}m` : `${(s/3600)|0}h`;
+const fmtAge = s => `${fmtDur(s)} ago`;
 
 // Everything below builds HTML by interpolation and assigns it to innerHTML,
 // and not all of it is ours. `w.detail` is `"<source>: <availability> from
@@ -109,7 +148,23 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 // operator's, and it is escaped too because the rule on this page is "escape
 // once, at the sink, and apply it to every interpolated value" — not "these
 // three but not those two".
+//
+// AND A ROW NOBODY READ MAKES NO CLAIM ABOUT A PAGE AT ALL, which is the first
+// line of the function. The two states above are both statements about a
+// READING; a row with no reading is in neither, so rendering it in either is
+// exactly the conflation this phase exists to remove. On a remembered row
+// `store` is always null — the ledger holds no store — so such a row could only
+// ever reach the pinned-but-unanswered warn branch, whose sentence says the page
+// did not name its store on a row where there was no page. True in the letter,
+// false in register. 07-04 measured that it fires the moment WALMART_STORE_ID is
+// set, which is the open question 07-06's checkpoint puts in front of the
+// operator.
+//
+// `=== false` and not `!w.checked`, because a pre-07-04 status.json sitting on
+// disk during a deploy has no `checked` key at all and `!undefined` is `true`,
+// which would silently suppress the store tag on every row of that file.
 const storeTag = w => {
+  if (w.checked === false) return '';
   const answered = w.store ?? null, pinned = w.store_pinned ?? null;
   if (answered === null && pinned === null) return '';
   if (answered === null)
@@ -121,6 +176,54 @@ const storeTag = w => {
   return `<span class="tag store" title="the store that answered is the store pinned for this watch — this reading is about the place you asked about">store ${esc(answered)}</span>`;
 };
 
+// HOW OLD THIS READING IS, in the same four forms `boty check` prints, so a
+// reader comparing the two surfaces never has to translate:
+//
+//     4s ago              cli: [age 4s]
+//     7h ago > 6h         cli: [age 7h > 6h]
+//     3h ago · cadence ?  cli: [age 3h, cadence ?]
+//     age ?               cli: [age ?]
+//
+// `w.read_at == null` AND NOT `!w.read_at`, because `0` is a real epoch second
+// and `!0` is `true`. This is `status.py`'s null-never-zero rule arriving at the
+// consumer: 07-01 refuses to publish `0` for an unmeasured stamp, and the
+// consumer must refuse to read a genuine one as absent.
+//
+// IT TAKES THE WHOLE MAP rather than a looked-up value. Passing the lookup from
+// the row template instead would put `w.retailer` inside an unescaped
+// interpolation, and `tests/test_dashboard.py` scans every interpolation on this
+// page for exactly that. The lookup belongs in here, not in the template.
+// (That test scans the FILE, so it reads comments too — which is why the
+// offending form is described here rather than quoted. Measured 2026-08-14: it
+// went red on a comment before it ever saw the code, which is the check being
+// coarse in the safe direction.)
+//
+// WHICH CLOCK `nowS` IS, AND THE SKEW THIS ACCEPTS. `read_at` is the daemon
+// host's wall clock; `nowS` is the viewer's phone. Both run NTP and the smallest
+// threshold in this config is 300 seconds, so the skew is orders of magnitude
+// below the comparison. The alternative that cancels it EXACTLY — using
+// `d.updated` as `now`, so both stamps come from one clock — is REJECTED: a
+// daemon that stopped two days ago would then render every row as one cycle old,
+// which is this phase's own failure with the clock pointed the other way, and
+// the banner being loud about it does not make the rows honest.
+//
+// AND WHY THE AGE IS CLAMPED AT 0. A viewer's clock behind the host's yields a
+// negative age, and a negative duration in a served surface is the defect
+// `status.py` already records for `duration_seconds`. The clamp cannot make a
+// stale reading look fresh — it only affects values already below zero — and
+// that limit is stated rather than left as a reassurance.
+const ageTag = (w, intervals, nowS) => {
+  if (w.read_at == null)
+    return `<span class="tag age warn" title="nobody recorded when this reading was taken, so its age is not known — this is not a fresh reading, it is an undated one">age ?</span>`;
+  const interval = intervals.get(w.retailer) ?? null;
+  const age = Math.max(0, nowS - w.read_at);
+  if (interval == null)
+    return `<span class="tag age warn" title="this reading has a time, but the cadence its retailer is currently on was not published — so how old is too old cannot be answered for this row">${fmtAge(age)} · cadence ?</span>`;
+  if (age > interval)
+    return `<span class="tag age warn" title="this reading is older than the cadence its own retailer is currently on — both numbers are shown so you can see which threshold the verdict was taken against">${fmtAge(age)} > ${fmtDur(interval)}</span>`;
+  return `<span class="tag age" title="this reading is younger than the cadence its own retailer is currently on — the monitor is reading this watch as often as it should">${fmtAge(age)}</span>`;
+};
+
 async function tick() {
   let d;
   try {
@@ -130,7 +233,11 @@ async function tick() {
     return;
   }
 
-  const age = Date.now() / 1000 - d.updated;
+  // ONE INSTANT PER RENDER, hoisted rather than read twice. No two rows on this
+  // page may be judged against two clocks — the same rule `cli._report` states
+  // for the printed report and `status.py` states for the producer.
+  const nowS = Date.now() / 1000;
+  const age = nowS - d.updated;
   document.getElementById('age').textContent = fmtAge(age);
 
   // A snapshot that has stopped updating is itself a failure worth surfacing.
@@ -148,11 +255,22 @@ async function tick() {
     banner.textContent = 'All detectors verified by control products.';
   }
 
+  // Built ONCE per tick. A cadence is a per-retailer fact and 07-03 publishes it
+  // once, in the `retailers` array, precisely so it is not copied onto every one
+  // of thirteen rows where the copies could drift.
+  const intervals = new Map(d.retailers.map(r => [r.retailer, r.current_interval_seconds]));
+
+  // `not checked` USES THE PLAIN `.tag` CLASS, and that is the decision rather
+  // than an oversight. `.tag` dim is an ordinary label, and a retailer that is
+  // paced out right now is an ordinary, expected and CORRECT state — it is the
+  // politeness rule working. The warning, if there is one, is the AGE, and the
+  // age tag beside it is what carries it. Inventing a third visual weight for a
+  // state that is not a problem would be inventing a visual language.
   document.getElementById('list').innerHTML = d.watches.map(w => `
     <li>
       <span class="dot ${w.availability}"></span>
       <div>
-        <div>${w.url ? `<a class="name" href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a>` : `<span class="name">${esc(w.name)}</span>`}${w.control ? '<span class="tag">control</span>' : ''}${w.degraded ? '<span class="tag degraded" title="lower confidence: a page we rendered ourselves, or a reading lifted out of presentation markup">degraded</span>' : ''}${w.extraction === 'dom' ? '<span class="tag dom" title="read out of the page&#39;s presentation markup rather than the retailer&#39;s own structured feed — a reskin breaks this silently">dom</span>' : ''}${storeTag(w)}</div>
+        <div>${w.url ? `<a class="name" href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a>` : `<span class="name">${esc(w.name)}</span>`}${w.control ? '<span class="tag">control</span>' : ''}${w.degraded ? '<span class="tag degraded" title="lower confidence: a page we rendered ourselves, or a reading lifted out of presentation markup">degraded</span>' : ''}${w.extraction === 'dom' ? '<span class="tag dom" title="read out of the page&#39;s presentation markup rather than the retailer&#39;s own structured feed — a reskin breaks this silently">dom</span>' : ''}${storeTag(w)}${ageTag(w, intervals, nowS)}${w.checked === false ? '<span class="tag" title="nobody read this watch this cycle — its retailer was not due, so the availability and the age beside this are what the monitor last recorded rather than what it just read">not checked</span>' : ''}</div>
         <div class="meta">${esc(w.retailer)} · ${esc(w.detail)}</div>
       </div>
       <span class="price">${w.price != null ? '$' + w.price.toFixed(2) : ''}</span>
