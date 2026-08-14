@@ -13,9 +13,50 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .models import Health, Result
+from .models import Availability, Health, Result, Watch
 
 log = logging.getLogger(__name__)
+
+
+def _remembered_rows(
+    watches: list[Watch] | None,
+    results: list[Result],
+    remembered: dict[str, tuple[str, float | None]] | None,
+) -> list[tuple[Watch, str, float | None]]:
+    """The configured watches nobody read this cycle, each with what is remembered.
+
+    Three jobs, and each one is a decision rather than plumbing:
+
+    1. IT SELECTS BY ABSENCE FROM `results`, not by anything the pacer says.
+       A watch is served by the fresh comprehension if and only if a `Result`
+       exists for it, so the two branches are disjoint by construction and no row
+       can be emitted twice or claimed by both. Returns `[]` when `watches` is
+       `None`, which is the pre-07-04 payload exactly.
+
+    2. IT SORTS BY `Watch.key`, mirroring `sorted((paced or {}).items())`
+       directly below it. This ordering reaches a served file, so it is stable
+       rather than whatever order a dict happened to be built in.
+
+    3. `(Availability.UNKNOWN.value, None)` IS THE DEFAULT FOR A KEY THE LEDGER
+       NEVER RESOLVED — and that single expression is REQ-21's criterion 2
+       written as code: *where nothing was ever recorded, the age is UNKNOWN,
+       never "now"*. Two ways a configured watch reaches it, both live: a fresh
+       clone whose `state.json` does not exist yet, and a watch every reading of
+       which has been UNKNOWN, because `State.transitioned_to_stock` returns on
+       UNKNOWN before it writes. Both Walmart watches on this host are the second
+       case today, `WALMART_STORE_ID` being unset.
+
+    Extracted from the payload literal so that literal keeps flat local names and
+    the partition logic has one home to be read in.
+    """
+    if watches is None:
+        return []
+    read_this_cycle = {r.watch.key for r in results}
+    return [
+        (w, *(remembered or {}).get(w.key, (Availability.UNKNOWN.value, None)))
+        for w in sorted(watches, key=lambda w: w.key)
+        if w.key not in read_this_cycle
+    ]
 
 
 def write(
@@ -26,6 +67,8 @@ def write(
     duration_seconds: float | None = None,
     paced: dict[str, str] | None = None,
     intervals: dict[str, float] | None = None,
+    watches: list[Watch] | None = None,
+    remembered: dict[str, tuple[str, float | None]] | None = None,
 ) -> None:
     """Publish the current reading.
 
@@ -71,6 +114,35 @@ def write(
     each of fourteen watch rows is thirteen more copies that can drift.
     `served/boty/index.html` already holds `d.retailers` and already interpolates
     `w.retailer`, so the join is a lookup rather than a new payload shape.
+
+    `watches` is every watch the operator CONFIGURED and `remembered` is what the
+    ledger holds for them. Together they are what makes this file publish one row
+    per configured watch instead of one row per reading taken this cycle. See the
+    comment block on the second `watches` comprehension below for why that
+    matters and what such a row is allowed to say.
+
+    `remembered` MAPS A KEY TO A PAIR — the availability and the moment it was
+    read — and that is the decision in this signature a reader will want to undo,
+    so it is argued here. `monitor.State` holds `seen` and `read_at` as two
+    separate attributes, so two keywords would be the shorter diff and the more
+    obvious one. They are not taken: a caller that passed one and forgot the
+    other would publish a remembered availability with no age, silently, with
+    every test still green — this plan's own defect rebuilt in the plumbing that
+    delivers the fix. Pairing them at one call site makes half a memory
+    unrepresentable, which is `monitor.State`'s one-act rule pointed at the read
+    side.
+
+    BOTH DEFAULT TO `None`, AND THAT IS A COMPATIBILITY DEFAULT RATHER THAN A
+    DEGRADED MODE — say which, because a permissive default looks like a soft
+    failure path and this one is not. With no `watches` the remembered block is
+    empty and the payload is what it was before 07-04 plus the `checked` key,
+    deliberately, so every existing caller in `tests/` stays valid. WHAT STOPS
+    THAT FROM BECOMING A PRODUCTION REGRESSION IS NOT THIS DEFAULT: it is the
+    static AST gate in `tests/test_cli_watch.py` that asserts both `boty/cli.py`
+    call sites pass both keywords. A behavioural test cannot see a call site that
+    dropped a keyword — every assertion stays green and the dashboard quietly
+    goes back to publishing five rows out of thirteen. That gate is where the
+    teeth are.
     """
     payload: dict[str, Any] = {
         "updated": int(time.time()),
@@ -215,8 +287,99 @@ def write(
                 # 07-05 is where that comparison lands, in each of the three
                 # surfaces that make it.
                 "read_at": r.read_at,
+                # WHERE THIS ROW CAME FROM. `true` means a `Result` exists for
+                # this watch, i.e. somebody read a page this cycle. Appended
+                # last so no existing key moves, on the precedent
+                # `current_interval_seconds` set on the retailer rows above.
+                #
+                # It is the provenance flag the remembered rows below carry as
+                # `false`, and together with `read_at` it is the ONLY thing that
+                # tells the two kinds of row apart — see the comment block on
+                # that comprehension.
+                "checked": True,
             }
             for r in results
+        ]
+        + [
+            {
+                # EVERY CONFIGURED WATCH HAS A ROW, and this is the comprehension
+                # that makes the rest of them exist. It is the `paced` retailer
+                # rows one level up in this file, applied one level down, and the
+                # paragraph that argues those applies to a watch WORD FOR WORD:
+                #
+                #   "the retailer is not healthy (nothing was verified) and not
+                #   unhealthy (nothing failed) — it simply was not asked.
+                #   Without this the retailer vanishes from the file entirely,
+                #   and a reader counting rows sees five retailers where there
+                #   are six and concludes one was dropped."
+                #
+                # THAT WAS NOT A HYPOTHETICAL FOR WATCHES. Measured on the live
+                # file this daemon writes: 8 rows for 13 configured watches at
+                # 09:24:54 on 2026-08-13, 3 rows at 08:25:10 the same morning,
+                # 5 rows at 07:36:57 on 2026-08-14 — an unchanged config every
+                # time. The row count was a function of PACING, so a reader who
+                # opened the page twice in one morning watched the watch list
+                # change size with no way to tell a watch that had been removed
+                # from a watch that had not been asked.
+                #
+                # THE THREE-WAY PARTITION OF A ROW, which is the whole design:
+                # config facts are published because they are true whether or
+                # not anybody looked; the remembered reading is published
+                # because it is what the ledger holds; facts about the ACT of
+                # reading are `null` because nobody performed one; and
+                # `alertable` — authority — is refused outright.
+                #
+                # `null` AND NEVER A DEFAULT, extending the `store` paragraph
+                # above rather than restating it. `detail: ""` is a value the
+                # fresh path already produces and it means *the page said
+                # nothing worth repeating*; `null` never appears on a fresh row,
+                # so it is the only one of the two a reader can tell apart. And
+                # `degraded: false` on a memory would be a confidence claim
+                # about a reading nobody took — which is why `rung`,
+                # `extraction` and their derived flag go out as `null` together.
+                #
+                # WHY `alertable` IS A LITERAL, with the claim made carefully
+                # rather than loudly. THIS KEY DOES NOT SEND ANYTHING: pushes
+                # come from `run_once`'s `alerts` list, built from `Result`
+                # objects, and no remembered row ever becomes a `Result`. What a
+                # `true` here would be is a PUBLISHED CLAIM, on a served page
+                # and in a file this project already has three consumers for,
+                # that a reading nobody took is worth waking somebody for. And
+                # it is not hypothetical arithmetic: measured against this
+                # host's ledger, 8 of 13 remembered entries are `in_stock`, 6 of
+                # those are controls, and the remaining two are the GameStop
+                # `TRANSITION —` watches, which carry no `max_price` — so a
+                # value derived from the memory would publish two false
+                # buy-signals on every cycle GameStop is paced out, and GameStop
+                # runs on a 900-second override.
+                #
+                # WHAT THIS ROW IS NOT: it carries no staleness verdict and no
+                # tag. The raw facts go out and each consumer subtracts against
+                # its own `now`, which is this file's own rule applied a fifth
+                # time. 07-05 is where the three renderings land.
+                "name": w.name,
+                "retailer": w.retailer,
+                "availability": availability,
+                "price": None,
+                "detail": None,
+                "url": w.target,
+                "control": w.control,
+                "alertable": False,
+                "rung": None,
+                "extraction": None,
+                "degraded": None,
+                "store": None,
+                "store_pinned": w.store_id,
+                "read_at": read_at,
+                "checked": False,
+            }
+            # SAME KEYS, SAME ORDER as the fresh row above. That is a decision
+            # rather than an accident: it means `checked` and `read_at` are the
+            # only things that distinguish a memory from an observation, which
+            # is REQ-21's own opening sentence — *"byte-identical in shape"* —
+            # converted from the defect into a stated property with exactly two
+            # fields carrying the difference.
+            for w, availability, read_at in _remembered_rows(watches, results, remembered)
         ],
     }
     try:
