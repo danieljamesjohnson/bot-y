@@ -153,7 +153,11 @@ STATE_MAX_AGE_SECONDS = MAX_BACKOFF_SECONDS
 #: Ceiling on a refusal count read back off disk. A measured number, not a round
 #: one.
 #:
-#: `record` computes `st.interval * BACKOFF_FACTOR ** st.refusals`, and float
+#: `current_interval` computes `st.interval * BACKOFF_FACTOR ** st.refusals` —
+#: the address changed on 2026-08-13 when the expression was moved out of
+#: `record` into the accessor, and NOTHING ELSE IN THIS COMMENT CHANGED WITH IT.
+#: The reachability is the same one call along: `record` evaluates it on every
+#: refusal by calling the accessor. Float
 #: exponentiation has a domain limit. Measured 2026-08-10 on CPython 3.12.3:
 #: `2.0 ** 1024` raises OverflowError; `2.0 ** 1023` returns 8.99e307, and the
 #: multiplication that follows overflows to `inf` — which `min()` clamps to the
@@ -267,10 +271,13 @@ class Pacer:
             # Wall clock, and only here: this is the moment the evidence was
             # collected, which is the only thing a later process can date.
             st.refused_at = time.time()
-            wait = min(
-                st.interval * BACKOFF_FACTOR ** st.refusals,
-                MAX_BACKOFF_SECONDS,
-            )
+            # Computed THROUGH the accessor rather than beside it, and read
+            # after the increment above so it reflects the count this cycle just
+            # produced — which is what the inline expression that used to sit
+            # here already did, and the reason the value is identical rather
+            # than merely equivalent. See `current_interval` for why the two are
+            # one expression.
+            wait = self.current_interval(retailer)
             log.warning(
                 "%s refused us (%d in a row) — next attempt in ~%.0f min, not %.0f",
                 retailer,
@@ -286,6 +293,58 @@ class Pacer:
             wait = st.interval
         st.due_at = now + wait
 
+    # THE CADENCE THIS RETAILER IS CURRENTLY ON, DERIVED AND NEVER STORED.
+    # `STATE_MAX_AGE_SECONDS` above and `Result.degraded` one module over make
+    # the same argument: a second copy of a number is a second thing to edit,
+    # and the two only have to disagree once.
+    #
+    # Applied harder here, because `record` is a CALLER of this method rather
+    # than a second site computing the same thing. The published cadence and the
+    # fetch schedule are one expression, so an edit to the backoff cannot move
+    # what is published away from what is actually happening — there is nothing
+    # to keep in step, only one line to change.
+    #
+    # WHO READS IT: `status.write` publishes it per retailer as
+    # `current_interval_seconds`, and `boty check` builds a load-only `Pacer`
+    # purely so it can answer from this same method. Before that existed each
+    # surface would have had to work the cadence out for itself, and `boty check`
+    # would have compared a reading against `cfg.interval_seconds` while the
+    # daemon compared it against the backed-off figure — two surfaces publishing
+    # different staleness verdicts about one reading, which is this project's own
+    # defect one level up.
+    #
+    # WHAT IT IS NOT: a staleness comparison. Nothing here reads a clock or takes
+    # `now`. This is the threshold; the subtraction against it happens in the
+    # surfaces that render it.
+    def current_interval(self, retailer: str) -> float:
+        """How long we are currently waiting between attempts at this retailer.
+
+        The standing interval — the config default or a per-retailer override —
+        with whatever backoff is in force applied to it. At zero refusals the
+        two are the same number.
+        """
+        st = self._for(retailer)
+        if not st.refusals:
+            # NOT COSMETIC, though at every value this project configures today
+            # it is indistinguishable from the general expression below:
+            # `BACKOFF_FACTOR ** 0` is 1.0, so the two agree. They stop agreeing
+            # the moment a standing interval exceeds `MAX_BACKOFF_SECONDS`,
+            # where the general form would clamp a cadence the operator chose
+            # while `record`'s non-refusal branch went on scheduling at the
+            # unclamped value — the accessor silently disagreeing with the
+            # schedule, in the one direction this method exists to make
+            # impossible.
+            #
+            # Measured 2026-08-13: the largest configured interval is Amazon's
+            # 1800 s against a 21 600 s cap, so this branch cannot bind on this
+            # config, and nothing asserts against it as a gate. It is here so a
+            # future config edit cannot make the two answers differ.
+            return st.interval
+        return min(
+            st.interval * BACKOFF_FACTOR ** st.refusals,
+            MAX_BACKOFF_SECONDS,
+        )
+
     def skipped_reason(self, retailer: str, now: float) -> str:
         """Why this retailer was not checked — for the status page.
 
@@ -297,7 +356,17 @@ class Pacer:
         mins = max(0.0, st.due_at - now) / 60
         if st.refusals:
             return f"backing off after {st.refusals} refusal(s) — next attempt in ~{mins:.0f} min"
-        return f"paced at {st.interval / 60:.0f} min — next attempt in ~{mins:.0f} min"
+        # Through the accessor, not off `st.interval` directly: this was the only
+        # public method that read the interval, and leaving it reading the field
+        # would leave a second reader of the thing `current_interval` exists to
+        # make single.
+        #
+        # THE OUTPUT IS UNCHANGED, which is what makes this a refactor rather
+        # than a behaviour change, and it is an identity rather than a hope: this
+        # branch is only reached when `st.refusals` is falsy, and at zero
+        # refusals the accessor returns `st.interval`. `tests/test_pacing.py`'s
+        # "paced at 30 min" assertion is byte-unchanged across this edit.
+        return f"paced at {self.current_interval(retailer) / 60:.0f} min — next attempt in ~{mins:.0f} min"
 
     # ----------------------------------------------------------------------
     # Surviving the process
