@@ -943,6 +943,108 @@ MUTATIONS = (
         replace="        return st.interval",
         breaks="`Pacer.current_interval` returns the standing config interval however many refusals are in force, so the backoff stops reaching any surface. On this host that is target and walmart at seven refusals judged against 300 s instead of the six-hour cap they are actually on, and amazon against 1800 s instead of 7200 — every reading from a backed-off retailer reads as wildly stale on all three surfaces, which is criterion 3's \"derived from the retailer's own pacing rather than a fixed clock\" stated as a mutation. And because `record` computes its wait THROUGH this accessor, the fetch schedule collapses with it: a retailer that just walled us is asked again at full rate, which is the 2026-08-04 behaviour boty/pacing.py exists to prevent and the politeness constraint calls a hard limit",
     ),
+    # ------------------------------------------------------------------
+    # M34/M35 — A MEMORY PUBLISHED AS AN OBSERVATION, AND A MEMORY GIVEN AN
+    # OBSERVATION'S AUTHORITY. REQ-21, 2026-08-14.
+    #
+    # 07-04 made `boty/status.py` publish one row per CONFIGURED watch instead of
+    # one row per reading taken this cycle. Rows for watches nobody read carry
+    # what the ledger remembers, the stamp the ledger holds (possibly `null`) and
+    # `checked: false`. These two mutations are the gates on what such a row is
+    # allowed to say and what it is allowed to authorise.
+    #
+    # WHY THEY ARE A PAIR AND NOT ONE MUTATION, on the convention M27/M28 and
+    # M29/M30 establish. M34 is about what a row SAYS: a memory presented as an
+    # observation. M35 is about what a row AUTHORISES: a memory given an
+    # observation's standing. They are not two views of one rule — a row
+    # correctly marked `checked: false` that still publishes `alertable: true` is
+    # a page saying "nobody checked this, and it is a buy signal", which is a
+    # worse sentence than either failure alone. Fixing either does not fix the
+    # other.
+    #
+    # WHY THERE IS NO THIRD IDENT FOR THE MANUFACTURE-AN-AGE DIRECTION — a
+    # remembered row publishing the cycle's clock instead of the ledger's stamp.
+    # That failure already carries TWO registry gates one and two layers up: M31
+    # (a non-read arm stamps the moment of its refusal) and M32 (`load` defaults a
+    # missing stamp to `time.time()`). At this layer it is asserted directly, by
+    # test_a_remembered_row_publishes_the_availability_and_stamp_the_ledger_holds
+    # (`read_at == stamp` and `read_at != updated`) and by
+    # test_a_remembered_row_publishes_the_age_the_ledger_holds. A third ident on
+    # one rule is the "two gates on one rule means neither can be shown to bite"
+    # warning above, one further along.
+    #
+    # M34'S ANCHOR IS TWO LINES AND THAT IS A MEASUREMENT, NOT A STYLE CHOICE.
+    # Pre-counted over the file text before registration, 2026-08-14:
+    #
+    #     the two-line `"read_at": read_at,\n"checked": False,` fragment   -> 1
+    #     the single-line `"checked": False,` fragment                     -> 2
+    #     grep -c '"checked":' boty/status.py                              -> 4
+    #
+    # `apply_mutation` replaces the FIRST occurrence, and the first single-line
+    # `"checked": False,` is the RETAILERS array's paced branch at line 193 — a
+    # different rule entirely. A single-line anchor would have mutated that, been
+    # killed by tests/test_pacing.py's paced-retailer test, and stood in this
+    # registry as a gate on something it does not gate. That is M19's recorded
+    # trap and 07-03's M33 trap, third occurrence in this phase.
+    #
+    # WHICH TESTS ARE EXPECTED TO CATCH EACH — MEASURED BY HAND BEFORE THIS
+    # HARNESS WAS EVER RUN, not predicted. Each mutation was applied ALONE (two
+    # at once cannot show which test killed which) and reverted to an empty `git
+    # status --porcelain`.
+    #
+    # M34, 3 failed / 78 passed, exit 1:
+    #     tests/test_status.py::test_every_configured_watch_has_a_row_whether_or_not_it_was_read
+    #     tests/test_status.py::test_remembered_rows_come_after_every_fresh_row_and_are_ordered_by_key
+    #     tests/test_cli_watch.py::test_every_configured_watch_has_a_row_while_only_the_due_ones_are_fetched
+    #
+    # M35, 2 failed / 79 passed, exit 1:
+    #     tests/test_status.py::test_a_remembered_row_refuses_the_authority_a_derived_value_would_grant
+    #     tests/test_cli_watch.py::test_every_configured_watch_has_a_row_while_only_the_due_ones_are_fetched
+    #
+    # TWO PREDICTIONS THE MEASUREMENT DID NOT BEAR OUT, recorded here rather than
+    # written as though they had. 07-04-PLAN.md expected M34 to be caught by
+    # test_a_check_publishes_every_watch_and_calls_none_of_them_remembered and by
+    # the key-order test. Neither fires, and both for good reasons: `boty check`
+    # re-reads every watch, so its remembered branch emits no rows at all and
+    # there is nothing on that surface for M34 to flip; and the key ORDER is
+    # untouched by a mutation that changes only a value. A gate is named after
+    # watching it fail, never after expecting it to — 07-02's Pattern 3.
+    #
+    # M35'S KILLER TEST IS FIXTURE-CRITICAL. It uses a remembered `in_stock` on a
+    # watch with NO `max_price` — the one configuration where a stated and a
+    # derived `alertable` differ — and it measures that rather than asserting it,
+    # by publishing the same watch as a FRESH reading and requiring `alertable:
+    # true` there. If M35 ever SURVIVES, the first thing to check is whether that
+    # fixture drifted to a watch with a ceiling.
+    #
+    # BOTH ANCHORS ARE BEHAVIOURAL: a JSON key's boolean value, and the literal
+    # that refuses authority. No message text, no rendered tag, no `detail`
+    # string, no version literal — 07-PLAN-OUTLINE.md § Finding 1's hard rule
+    # after two anchors drifted on 2026-08-13.
+    #
+    # THE IDENT ARITHMETIC, so the next plan reads it rather than re-deriving it.
+    # M34 was reserved for 07-04 by 07-01, 07-02 and 07-03 in turn and is
+    # consumed here; M35 is consumed here as the pair's second half. **M36/M37
+    # are 07-05's**, which is one higher than 07-PLAN-OUTLINE.md assigns it — the
+    # outline is NOT edited and this is recorded beside it. The registry ends this
+    # phase at 33 and the phase adds seven idents; 07-06 still records the count
+    # rising FROM 26.
+    #
+    # M21-M24 REMAIN THE INTENTIONAL GAP and are still not filled.
+    Mutation(
+        ident="M34",
+        target="boty/status.py",
+        search='                "read_at": read_at,\n                "checked": False,',
+        replace='                "read_at": read_at,\n                "checked": True,',
+        breaks="every row a paced-out retailer contributes is published as though it had been read this cycle, while carrying an availability from the last time anybody looked and a stamp that may be `null`. That is REQ-21's own opening sentence — \"a row read four seconds ago and one last read two days ago are byte-identical in shape, and the page presents both as current\" — rebuilt inside the fix written to remove it. On the live file this daemon wrote at 07:36:57 on 2026-08-14 that is 8 of 13 rows, including both watches Dan asked about. The concrete case: walmart's `Pokémon GO Plus +`, frozen at `out_of_stock` in state.json since before the store-gap guard shipped and unable to be updated by anything while WALMART_STORE_ID is unset, would publish as a reading taken this minute",
+    ),
+    Mutation(
+        ident="M35",
+        target="boty/status.py",
+        search='                "alertable": False,',
+        replace='                "alertable": availability == Availability.IN_STOCK.value,',
+        breaks="a remembered row inherits an alert decision from a reading nobody took. State the claim precisely rather than loudly: this key SENDS NOTHING — pushes come from `run_once`'s `alerts` list, built from `Result` objects, and no remembered row ever becomes one — so what the mutation manufactures is a published claim, on a served page and in a file with three consumers, that a reading nobody took is worth waking somebody for. The measured consequence: 8 of the 13 entries in this host's ledger are `in_stock`, 6 of them are controls, and the remaining two are the GameStop `TRANSITION —` watches, which carry no `max_price` — so it publishes two false buy-signals on every cycle GameStop is paced out, and GameStop runs on a 900-second override",
+    ),
 )
 
 
