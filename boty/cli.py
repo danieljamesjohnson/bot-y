@@ -119,6 +119,34 @@ def _store_tag(r: Result) -> str | None:
     return f"[store {answered}]"
 
 
+def _current_intervals(cfg: Config, pacer: Pacer) -> dict[str, float]:
+    """The cadence every configured retailer is currently on, from one place.
+
+    BOTH SURFACES CALL THIS, which is the whole point of it: `boty check` and
+    the daemon cannot answer *"what cadence is this retailer on"* differently,
+    because there is one function and two call sites rather than two surfaces
+    each working it out. Without that, `boty check` would compare a reading
+    against `cfg.interval_seconds` while the daemon compared the same reading
+    against the backed-off figure — two published staleness verdicts about one
+    reading, which is this project's own defect one level up.
+
+    Keyed over the CONFIGURED retailers, not over the ones checked this cycle. A
+    paced-out retailer still publishes its cadence, and that is deliberate: it is
+    exactly the retailer whose staleness question is live, because being skipped
+    is why its reading is old.
+
+    It takes a `Pacer` rather than a `Config` alone because the backoff depth is
+    not in the config — it is in `pacer-state.json`. That is the entire reason
+    `boty check` has to load that document at all.
+    """
+    return {
+        retailer: pacer.current_interval(retailer)
+        # Sorted for the reason `watch_cycle`'s `paced` comprehension is sorted:
+        # this ordering reaches a served file.
+        for retailer in sorted({w.retailer for w in cfg.watches})
+    }
+
+
 def _report(results: list[Result], health: list[Health]) -> None:
     for r in results:
         price = f"${r.price:>8.2f}" if r.price is not None else " " * 9
@@ -304,12 +332,17 @@ def watch_cycle(
         if pacer is not None
         else None
     )
+    # The cadence each retailer is currently on — REQ-21's criterion 3
+    # threshold. Guarded exactly as `paced` is, and through the same helper
+    # `main`'s check path uses, so the two surfaces publish one number.
+    intervals = _current_intervals(cfg, pacer) if pacer is not None else None
     write_status(
         cfg.status_path,
         results,
         health,
         duration_seconds=time.monotonic() - started,
         paced=paced,
+        intervals=intervals,
     )
 
     # Alerts are edge-triggered, and `run_once` has already committed the
@@ -592,8 +625,43 @@ def main(argv: list[str] | None = None) -> int:
         started = time.monotonic()
         results, health, alerts = run_once(cfg.watches, checker, state)
         elapsed = time.monotonic() - started
+        # A LOAD-ONLY PACER, and every clause of that is a defect if a later
+        # edit undoes it. It exists for one reason: to answer REQ-21's
+        # criterion 3 with the SAME number the daemon publishes, which means
+        # reconstructing the daemon's own backoff depth — `refusals` off the
+        # document, `interval` from config.
+        #
+        # 1. INSIDE THIS BRANCH, not above the `if`. Constructing it earlier
+        #    would hand the `watch` path a second `Pacer`, which is what
+        #    `pacing.py`'s one-pacer-for-the-life-of-the-loop invariant forbids:
+        #    `watch_loop` builds and loads its own.
+        # 2. IT MUST NEVER `save()`. The daemon owns this document and `boty
+        #    check` is routinely run while the service is running. Two writers to
+        #    one file is the contradiction `pacing.py`'s "one document, one
+        #    write, one load" argument exists to prevent, pointed the other way.
+        # 3. IT IS NEVER PASSED TO `run_once`. `boty check` re-reads every watch
+        #    by design; handing it a pacer would make it skip, which is a
+        #    behaviour change nobody asked for and would put the vanishing-row
+        #    problem on the one surface that shows every watch.
+        # 4. `load()`'s RETURN VALUE IS DELIBERATELY DROPPED, not forgotten. It
+        #    hands back the paging memory, and `boty check` pages nobody: it
+        #    sends no health warning and holds no episode across anything.
+        #
+        # NO DOCUMENT IS NOT AN ERROR. `load` returns empty state for an absent,
+        # truncated or hand-edited file, every retailer then reads at its
+        # standing interval, and that is the correct answer on a fresh clone —
+        # zero refusals means the config value. It must not warn.
+        pacer = Pacer(
+            default_interval=cfg.interval_seconds,
+            overrides=dict(cfg.retailer_intervals),
+            state_path=cfg.pacer_state_path,
+        )
+        pacer.load()
+        intervals = _current_intervals(cfg, pacer)
         _report(results, health)
-        write_status(cfg.status_path, results, health, duration_seconds=elapsed)
+        write_status(
+            cfg.status_path, results, health, duration_seconds=elapsed, intervals=intervals
+        )
         if alerts:
             print(f"\n  {len(alerts)} alertable transition(s)")
         # The human surface for REQ-08's two-minute budget; `duration_seconds`

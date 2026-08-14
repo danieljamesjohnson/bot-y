@@ -390,8 +390,35 @@ class Pacer:
     # Instance methods rather than a `State`-style classmethod, because `Pacer`
     # needs `default_interval` and `overrides` at construction and
     # `cli.watch_loop`'s invariant is one pacer for the life of the loop: the
-    # loop builds the pacer and then loads INTO it. A classmethod would invite a
-    # second construction site, which is the thing that invariant forbids.
+    # loop builds the pacer and then loads INTO it.
+    #
+    # THE SENTENCE THAT USED TO CLOSE THAT PARAGRAPH WAS WITHDRAWN ON
+    # 2026-08-13. It read, in full:
+    #
+    #     "A classmethod would invite a second construction site, which is the
+    #     thing that invariant forbids."
+    #
+    # REQ-21 built a second construction site that day, deliberately:
+    # `cli.main`'s `check` branch constructs a `Pacer` and calls `load()` on it,
+    # so that `boty check` answers "what cadence is this retailer on" with the
+    # daemon's own backoff depth rather than with the config value. Leaving the
+    # sentence standing would have it read as forbidding the thing the file now
+    # does.
+    #
+    # THE INVARIANT IT NAMES IS UNTOUCHED, and it was never about construction —
+    # it is `cli.watch_loop`'s: ONE pacer for the life of the LOOP, because the
+    # backoff is memory within a loop and a pacer rebuilt each cycle forgets
+    # every refusal and hammers at full rate. `boty check` runs one pass and
+    # exits. Its pacer is load-only, never reaches `run_once`, and holds no
+    # memory across anything, so there is no loop for it to forget within.
+    #
+    # SO THE BLANKET PROHIBITION IS REPLACED BY A RULE THE NEXT CASE CAN BE
+    # TESTED AGAINST, rather than by a prohibition to route around: A SECOND
+    # PACER IS ALLOWED EXACTLY WHEN IT NEITHER SAVES NOR SCHEDULES. One that
+    # saves is a second writer to this document; one that schedules is a second
+    # memory of a backoff, and the two would diverge. `cli.main`'s satisfies
+    # both clauses and `tests/test_cli_watch.py` asserts them rather than
+    # trusting them.
     # ----------------------------------------------------------------------
 
     def load(self) -> set[str]:
@@ -496,9 +523,28 @@ class Pacer:
         which is what the sorted list was buying.
 
         Plain `write_text`, NOT `status.write`'s temp-and-replace, and the
-        difference is the reason: `status.json` is atomic because it is served
-        over HTTP *while* it is being written. This file has exactly one reader,
-        once, at startup, in the same process that writes it.
+        difference used to be argued from a fact that is no longer true. The
+        withdrawn sentence, 2026-08-13:
+
+            "This file has exactly one reader, once, at startup, in the same
+            process that writes it."
+
+        REQ-21 overruled it that day. `cli.main`'s `check` branch now loads this
+        document too, on a surface routinely run while the daemon is writing, so
+        there is a second reader and it can catch a partial write.
+
+        THE DECISION SURVIVES AND IS RE-ARGUED RATHER THAN DROPPED. The write
+        stays a plain `write_text` because the new reader's worst case is
+        bounded and points the safe way: a truncated read raises
+        `JSONDecodeError`, `load` already turns that into empty state, every
+        retailer then reads at its STANDING interval, and a reading judged
+        against a narrower window than the real one over-reports staleness
+        rather than under-reporting it — which is the direction REQ-21 prefers,
+        and it self-heals on the next check. Promoting this to temp-and-replace
+        is available and was deliberately not done when the second reader
+        landed: this is the daemon's persistence path, that plan's rule was that
+        pacing behaviour does not move, and the benefit accrues only to the
+        reader. If the residual ever bites, that is the change to make.
 
         Wrapped, on `status.write`'s precedent: failing to persist a backoff
         must degrade to the old in-memory behaviour, never take down a cycle. A
