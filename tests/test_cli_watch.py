@@ -721,6 +721,246 @@ def test_a_per_retailer_override_reaches_the_published_cadence(
 
 
 # --------------------------------------------------------------------------
+# REQ-21: every configured watch has a row, on both surfaces
+# --------------------------------------------------------------------------
+#
+# `status.write` rebuilds its `watches` array from `results`, and `run_once`
+# filters the watches down to those the pacer says are due. So before 07-04 a
+# paced-out watch did not leave a STALE row behind — it had no row at all.
+# Measured on the live served file: 3 rows for 13 configured watches at 08:25:10
+# on 2026-08-13, 8 at 09:24:54 the same morning, 5 at 07:36:57 on 2026-08-14,
+# from a config that did not change between any of them.
+#
+# "not watched this cycle" and "watched, and out of stock" are indistinguishable
+# when one of them is simply missing, so a reader could not answer *"so they are
+# out of stock as of when?"* about the two watches that opened this phase — both
+# of which were among the absent ones on every one of those three readings.
+#
+# THE HEADLINE TEST ASSERTS BOTH HALVES IN ONE PLACE, deliberately: every
+# configured watch has a row AND only the due ones were fetched. Split into two
+# tests, each could pass while the pair was false — thirteen rows because
+# thirteen were fetched is precisely the change this plan must not make.
+
+
+def _paced_config(tmp_path: Path) -> Path:
+    """Two retailers, three watches, all state under `tmp_path`.
+
+    `_check_config` above is one watch at one retailer, which cannot express the
+    case this section is about: a cycle in which SOME retailers are due and
+    others are not. Both are needed, so this is a sibling rather than an edit —
+    changing `_check_config` would move the ground under the cadence section
+    that uses it.
+    """
+    config = tmp_path / "products.yaml"
+    config.write_text(
+        "settings:\n"
+        f"  state_path: {tmp_path / 'state.json'}\n"
+        f"  status_path: {tmp_path / 'status.json'}\n"
+        f"  pacer_state_path: {tmp_path / 'pacer-state.json'}\n"
+        "watches:\n"
+        "  - name: goplusplus\n"
+        "    retailer: gamestop\n"
+        "    target: https://x/1\n"
+        "  - name: CONTROL — PS5 console\n"
+        "    retailer: gamestop\n"
+        "    target: https://x/2\n"
+        "    control: true\n"
+        "  - name: goplusplus\n"
+        "    retailer: walmart\n"
+        "    target: https://x/3\n",
+        encoding="utf-8",
+    )
+    return config
+
+
+def _backed_off_pacer(cfg: Config, retailer: str = "gamestop", refusals: int = 3):
+    """A saved document with one retailer deep enough not to be due at `now=0.0`.
+
+    Three refusals puts gamestop on 300 x 2**3 = 2400 s, and `0.0 + 150.0 >=
+    2400.0` is false — the same arithmetic the cadence section above relies on,
+    cited rather than re-derived so the two cannot drift.
+    """
+    from boty.pacing import Pacer
+
+    pacer = Pacer(
+        default_interval=cfg.interval_seconds,
+        overrides=dict(cfg.retailer_intervals),
+        state_path=cfg.pacer_state_path,
+    )
+    for _ in range(refusals):
+        pacer.record(retailer, refused=True, now=0.0)
+    pacer.save(set())
+    return pacer
+
+
+def _published_watches(cfg: Config) -> dict[str, dict]:
+    """The published watch rows, keyed as `Watch.key` is, off the bytes."""
+    published = json.loads(cfg.status_path.read_text())["watches"]
+    return {w["retailer"] + ":" + w["name"]: w for w in published}
+
+
+def test_every_configured_watch_has_a_row_while_only_the_due_ones_are_fetched(
+    tmp_path: Path,
+) -> None:
+    """The plan in one sentence: N rows published while fewer than N were fetched.
+
+    BOTH HALVES BELONG IN ONE TEST. A version that only counted rows would pass
+    if this plan had made the daemon fetch every watch every cycle — which would
+    satisfy the letter of "every watch has a row" by breaking the politeness
+    constraint that is the whole reason rows go missing. A version that only
+    counted fetches would pass on the pre-07-04 code.
+    """
+    config = _paced_config(tmp_path)
+    cfg = Config.load(config)
+    pacer = _backed_off_pacer(cfg)
+
+    state = State.load(cfg.state_path)
+    # What the ledger remembers about the two watches nobody is about to ask.
+    state.seen["gamestop:goplusplus"] = "out_of_stock"
+    state.seen["gamestop:CONTROL — PS5 console"] = "in_stock"
+
+    asked: list[str] = []
+
+    def watching_checker(watch: Watch) -> Result:
+        asked.append(watch.key)
+        return Result(watch, Availability.OUT_OF_STOCK, price=54.99, detail="synthetic")
+
+    cli.watch_cycle(cfg, watching_checker, state, set(), pacer=pacer, now=0.0)
+
+    rows = _published_watches(cfg)
+    assert asked == ["walmart:goplusplus"], (
+        f"the cycle moved: the checker was asked for {asked}, and this plan "
+        f"changes what is REPORTED rather than what is fetched"
+    )
+    assert set(rows) == {w.key for w in cfg.watches}, (
+        f"a watch that was not asked has a row that says nobody asked, rather "
+        f"than no row at all — published {sorted(rows)} for "
+        f"{sorted(w.key for w in cfg.watches)}"
+    )
+    assert len(rows) == 3 and len(asked) == 1, "3 rows published while 1 was fetched"
+
+    assert rows["walmart:goplusplus"]["checked"] is True
+    for key, remembered in (
+        ("gamestop:goplusplus", "out_of_stock"),
+        ("gamestop:CONTROL — PS5 console", "in_stock"),
+    ):
+        assert rows[key]["checked"] is False
+        assert rows[key]["availability"] == remembered
+        assert rows[key]["alertable"] is False, (
+            "a memory acquired a reading's authority — the control is "
+            "remembered in stock and carries no ceiling, which is exactly the "
+            "configuration where a derived value would be True"
+        )
+
+
+def test_a_remembered_row_publishes_the_age_the_ledger_holds(tmp_path: Path) -> None:
+    """Two days old, and still two days old on the page.
+
+    `_TWO_DAYS` is REQ-21's own example and criterion 4's sentence. The stamp is
+    constructed by subtraction from the real clock rather than by freezing one —
+    this phase's standing rule, `tests/test_pacing.py:585-591`'s method.
+
+    The `!=` against `updated` is the assertion that matters most: `updated` is
+    written this second on every cycle, and a row that published it instead of
+    the ledger's stamp would look four seconds old forever. That is REQ-21's
+    opening complaint rebuilt inside the fix for it.
+    """
+    stamp = time.time() - _TWO_DAYS
+    config = _paced_config(tmp_path)
+    cfg = Config.load(config)
+    pacer = _backed_off_pacer(cfg)
+
+    state = State.load(cfg.state_path)
+    state.seen["gamestop:goplusplus"] = "out_of_stock"
+    state.read_at["gamestop:goplusplus"] = stamp
+    # Seen, never dated: a remembered reading whose moment was never
+    # established. It must publish `null` rather than be dropped from the file.
+    state.seen["gamestop:CONTROL — PS5 console"] = "in_stock"
+
+    cli.watch_cycle(cfg, _checker(Availability.OUT_OF_STOCK), state, set(), pacer=pacer, now=0.0)
+
+    rows = _published_watches(cfg)
+    updated = json.loads(cfg.status_path.read_text())["updated"]
+
+    assert rows["gamestop:goplusplus"]["read_at"] == stamp
+    assert rows["gamestop:goplusplus"]["read_at"] != updated
+    assert rows["gamestop:CONTROL — PS5 console"]["read_at"] is None, (
+        "a key present in `seen` and absent from `read_at` is a remembered "
+        "reading whose moment was never established — an UNKNOWN age, which is "
+        "not 0.0 and is not now"
+    )
+
+
+def test_a_check_publishes_every_watch_and_calls_none_of_them_remembered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`boty check` re-reads every watch, so its remembered branch produces nothing.
+
+    That emptiness is asserted rather than assumed, and the assertion is only
+    meaningful because the branch was AVAILABLE: `main` passes both keywords, so
+    a `checked: false` row on this surface would mean a pacer had reached
+    `run_once` and the check had started skipping.
+    """
+    config = _paced_config(tmp_path)
+    cfg = Config.load(config)
+    # A document deep in a backoff, so a pacer that reached `run_once` would
+    # visibly drop two of the three rows.
+    _backed_off_pacer(cfg)
+    _offline(monkeypatch)
+
+    assert cli.main(["check", "-c", str(config)]) == 0
+
+    rows = _published_watches(cfg)
+    assert set(rows) == {w.key for w in cfg.watches}
+    assert len(rows) == len(cfg.watches) == 3
+    assert all(row["checked"] is True for row in rows.values()), (
+        f"`boty check` published a row nobody read: "
+        f"{[k for k, v in rows.items() if not v['checked']]}"
+    )
+
+
+def test_both_write_status_call_sites_thread_the_watches_and_the_ledger() -> None:
+    """Static, over the module's AST, because no behavioural test can see this.
+
+    `status.write`'s `watches` and `remembered` default to `None` so that every
+    pre-07-04 caller in `tests/` stays valid. That default is a compatibility
+    default, and it has one cost: a production call site that DROPPED one of
+    these keywords would keep every assertion in this file green — each of them
+    passes its own arguments — while Dan's dashboard quietly went back to
+    publishing five rows out of thirteen.
+
+    So this is the gate that default is paid for with. It lives in the suite
+    rather than only in a plan's `<verify>` because it has to run on every future
+    edit, not once. The AST idiom is `tests/test_support_matrix.py`'s and
+    `tests/test_ci_workflow.py`'s, and 07-03 used it on this same module to pin
+    the check path's pacer as load-only.
+    """
+    import ast
+
+    tree = ast.parse(Path(cli.__file__).read_text(encoding="utf-8"))
+    calls = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "write_status"
+    ]
+
+    assert len(calls) == 2, (
+        f"expected exactly 2 `write_status` call sites in boty/cli.py — the "
+        f"daemon's and `boty check`'s — found {len(calls)}. A third surface "
+        f"publishing this file needs to be in this assertion before it ships"
+    )
+    for call in calls:
+        missing = {"watches", "remembered"} - {kw.arg for kw in call.keywords}
+        assert not missing, (
+            f"a `write_status` call site at line {call.lineno} passes no "
+            f"{sorted(missing)} — that surface publishes only the watches it "
+            f"read this cycle, which is the defect 07-04 exists to remove"
+        )
+
+
+# --------------------------------------------------------------------------
 # REQ-16 across a RESTART: recorded not pushed, and pushed once — not once
 # per process
 #
