@@ -17,18 +17,26 @@
 # diffed the file against a copy taken before the call. **Any agent invoking a `gsd-tools state`
 # write on this repo must `cp` this file first and diff after.** The autonomous run of 2026-08-14
 # does exactly that.
+#
+# RESTORED BY HAND A THIRD TIME, 2026-08-14, recording 07-03 — the ELEVENTH misfire. The protocol
+# in the paragraph above is what caught it: `cp` before, `diff` after. `gsd-tools query
+# state.advance-plan` returned `{"advanced": false, "reason": "last_plan", "current_plan": 6}` for
+# a phase on its THIRD of six plans, and in doing so deleted BOTH comment blocks again AND
+# regressed `stopped_at` from 07-02 to `Completed 06-05-PLAN.md` — the same two damages the tenth
+# misfire did, from a different subcommand. Restored from the copy and the real deltas applied by
+# hand. Eleven for eleven; the protocol is not optional here.
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 IN PROGRESS — Phase 7 EXECUTING (6 plans, all serial); 07-01 and 07-02 complete 2026-08-13, 07-03 → 07-05 running 2026-08-14, 07-06 checkpoints for Dan. v0.2 archived, complete in the tree and deployed 2026-08-12
-stopped_at: Completed 07-02-PLAN.md — the age survives the restart, state.json migrates per entry without a version, M32 watched red and CAUGHT at 28/28
-last_updated: "2026-08-14T12:10:00.000Z"
+status: Milestone v0.3 IN PROGRESS — Phase 7 EXECUTING (6 plans, all serial); 07-01 and 07-02 complete 2026-08-13, 07-03 complete 2026-08-14, 07-04 next, 07-06 checkpoints for Dan. v0.2 archived, complete in the tree and deployed 2026-08-12
+stopped_at: Completed 07-03-PLAN.md — the retailer's current cadence is one number both surfaces read, `boty check` has a load-only pacer, M33 watched red at 11 killers and CAUGHT at 29/29
+last_updated: "2026-08-14T12:35:00.000Z"
 last_activity: 2026-08-14
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
+  completed_plans: 3
   # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 0 of the
   # 1 phase in v0.3 is complete, so 0 — even though 1 of 6 plans has landed. The plan counter
   # above is where per-plan progress is read.
@@ -46,8 +54,12 @@ See: `.planning/PROJECT.md` (updated 2026-08-11, with a `## Current State` secti
 2026-08-13: `Result.read_at` exists, is stated at all 20 construction sites in
 `boty/retailers.py`, is published per watch row in `status.json` as `null` when absent, and now
 SURVIVES THE PROCESS — `monitor.State` persists it per entry, tolerating the pre-07 bare-string
-document without a version field and without losing an availability. 07-03 next — the retailer's
-current interval as one readable number. The one outstanding action carried from v0.2 is not
+document without a version field and without losing an availability. 07-03 landed 2026-08-14: the
+retailer's CURRENT cadence — the standing interval with the backoff in force applied to it — is
+`Pacer.current_interval`, `record` computes its own wait through it so the published number and
+the fetch schedule are one expression, and `boty check` builds a load-only `Pacer` so both surfaces
+answer from the same `pacer-state.json`. 07-04 next — the rows that go missing. The one
+outstanding action carried from v0.2 is not
 planning work — it is `sudo systemctl restart boty`, and that restart is now also what migrates
 `state.json` to its new shape: 13 entries back undated and honest, with
 `walmart:Pokémon GO Plus +` publishing `"read_at": null` indefinitely until a store is pinned.
@@ -856,3 +868,65 @@ file's frontmatter and this section were written by hand, which is what the prev
 ended up doing anyway after paying for the damage first.
 `gsd-tools roadmap update-plan-progress 07` **was** run and worked correctly, checking 07-02 off —
 it is the one verb on this repo with a clean record.
+
+### 07-03 — one cadence, read the same way by both surfaces, 2026-08-14
+
+**Criterion 3's THRESHOLD half.** `Pacer.current_interval(retailer)` is the standing interval with
+whatever backoff is in force applied to it, and `record`'s refusal branch computes its own wait by
+calling it — so the published cadence and the fetch schedule are ONE expression rather than two
+that must be kept in step. `cli._current_intervals` is the single reader; `watch_cycle` and
+`main`'s `check` branch both go through it, and `status.json` carries
+`current_interval_seconds` on both branches of the `retailers` array, `null` where none is
+established.
+
+```
+identity check: PASS — 217 file(s), no host identity found
+835 passed in 11.29s
+Success: no issues found in 18 source files
+mutation check: 29/29 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, ...)
+EXIT=0
+```
+
+**The registry rose from 28 to 29** — exactly one above what `07-02-SUMMARY.md` recorded, read from
+that summary and confirmed against the run. M33 — *the accessor ignores the backoff* — was applied
+by hand and observed at **exit 1, 11 failed / 100 passed**, then reverted with
+`git status --porcelain` empty. Its multi-line anchor was pre-counted at exactly **1**; the
+single-line fragment occurs **2** times, the first being `MAX_PERSISTED_REFUSALS`' comment, which
+is the M19 trap this anchor's shape exists to avoid. **M34 is reserved for 07-04** and says so in
+`scripts/mutation_check.py`; M21-M24 remain the intentional gap.
+
+**Four of the eleven M33 killers predate REQ-21 entirely** — the 2026-08-04 backoff tests. That is
+the accessor/schedule join showing up in a measurement rather than being claimed: a version of this
+change that published a number BESIDE the schedule instead of THROUGH it would have left all four
+green.
+
+**`boty check` now reads `pacer-state.json`, and reads it only.** Never `save()`s (asserted on the
+document's BYTES across a check, and by an AST check that `main` contains no `.save()` call), never
+passed to `run_once` (asserted by a watch-row count — `boty check` is the surface that shows every
+watch), built INSIDE the `check` branch so the `watch` path cannot acquire a second pacer. A missing
+document is the standing interval and logs nothing at WARNING.
+
+**A correction 07-05 needs.** *"A retailer at seven refusals is on a ~97-minute cadence"* appears in
+`07-PLAN-OUTLINE.md` and `07-PATTERNS.md` and is wrong arithmetic. Measured: 300 x 2**7 = 38 400 s
+exceeds `MAX_BACKOFF_SECONDS` (21 600 s), so target and walmart are on the **six-hour cap**. The ~97
+and ~53 minute figures are `skipped_reason`'s *time remaining*, a different quantity. Recorded
+beside those documents, not edited into them.
+
+**Three reversals argued in place.** `pacing.py`'s *"exactly one reader, once, at startup, in the
+same process that writes it"* (the plain `write_text` decision survives, re-argued on the failure
+DIRECTION — a truncated read over-reports staleness and self-heals) and *"a classmethod would invite
+a second construction site"* (replaced by a testable rule: **a second pacer is allowed exactly when
+it neither saves nor schedules**); plus `tests/test_cli_watch.py`'s `_check_config` docstring. A
+fourth was found during execution and handled the same way —
+`test_boty_check_writes_no_pacer_state_at_all`'s premise died and its assertion did not.
+
+**REQ-21 is still NOT marked complete.** 07-06 closes it.
+
+**`gsd-tools query state.advance-plan` WAS run this time, under the cp/diff protocol, and misfired
+for the eleventh time.** It returned `{"advanced": false, "reason": "last_plan", "current_plan": 6}`
+for a phase on its third of six plans, deleted both frontmatter comment blocks, and regressed
+`stopped_at` from 07-02 back to `Completed 06-05-PLAN.md`. Restored from the pre-call copy and the
+real deltas applied by hand. The protocol is what turned a silent regression into a caught one, and
+it is now recorded in the frontmatter as mandatory rather than advisory.
+`gsd-tools roadmap update-plan-progress 07` was run and worked correctly, checking 07-03 off.
