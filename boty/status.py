@@ -25,6 +25,7 @@ def write(
     *,
     duration_seconds: float | None = None,
     paced: dict[str, str] | None = None,
+    intervals: dict[str, float] | None = None,
 ) -> None:
     """Publish the current reading.
 
@@ -37,6 +38,39 @@ def write(
     counting rows sees five retailers where there are six and concludes one was
     dropped. Publishing it as `checked: false` with a reason is the same
     three-valued honesty `Availability` is built on, applied to a schedule.
+
+    `intervals` maps a retailer to the cadence it is CURRENTLY on — the standing
+    interval with whatever backoff is in force applied to it — and that is a
+    different number from the `interval_seconds` in the operator's own config.
+    Say the distinction rather than leave it to be inferred: a reader who
+    conflates the two reads a six-hour cadence as a misconfiguration, when what
+    it actually is is a retailer that has refused us seven times running.
+
+    IT IS PUBLISHED BECAUSE THE PAGE HAS TO COMPARE AGAINST SOMETHING. REQ-21's
+    criterion 3 says a reading is stale when it is older than its retailer's own
+    current interval, derived from that retailer's pacing rather than from a
+    fixed clock — so the threshold has to travel with the reading. 07-05 is where
+    the comparison lands, in each of the three surfaces that make it.
+
+    THE RAW FACT GOES OUT AND THE FLAG DOES NOT, which is the rule the `store`
+    paragraph below states and this is its fourth application. A `stale` computed
+    here would be written `false` and keep saying `false` for exactly the
+    interval during which the row becomes stale — `pacing.py`'s
+    stamp-at-write-time trap in mirror image, a bound that cannot bind. Every
+    consumer subtracts against its own `now` instead.
+
+    `null`, NEVER `0`. The `duration_seconds` and `store` arguments apply word
+    for word and are sharper here: a cadence of `0` says *this retailer is
+    checked continuously*, so every reading against it is stale the instant it
+    is taken — the most confident possible lie about a number nobody
+    established. `null` is "the cadence is not established on this surface",
+    which is the same three-valued honesty the `checked: false` row beside it
+    already carries.
+
+    PER RETAILER, NOT PER WATCH. A cadence is a per-retailer fact, and a copy on
+    each of fourteen watch rows is thirteen more copies that can drift.
+    `served/boty/index.html` already holds `d.retailers` and already interpolates
+    `w.retailer`, so the join is a lookup rather than a new payload shape.
     """
     payload: dict[str, Any] = {
         "updated": int(time.time()),
@@ -71,6 +105,9 @@ def write(
                 "checked": True,
                 "reason": h.reason,
                 "failing_controls": h.failing_controls,
+                # The cadence this retailer is currently on. See the docstring:
+                # `null` where none is established, never `0`.
+                "current_interval_seconds": (intervals or {}).get(h.retailer),
             }
             for h in health
         ]
@@ -84,6 +121,10 @@ def write(
                 "checked": False,
                 "reason": reason,
                 "failing_controls": [],
+                # ON THIS BRANCH TOO, and this is the row it matters most on: a
+                # retailer deep enough in a backoff to be skipped is the one
+                # whose readings are oldest.
+                "current_interval_seconds": (intervals or {}).get(retailer),
             }
             for retailer, reason in sorted((paced or {}).items())
         ],
