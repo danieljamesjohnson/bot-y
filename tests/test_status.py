@@ -47,9 +47,10 @@ def _result(
     store: str | None = None,
     store_pinned: str | None = None,
     read_at: object = _OMITTED,
+    name: str = "goplusplus",
 ) -> Result:
     watch = Watch(
-        name="goplusplus",
+        name=name,
         retailer="bestbuy",
         target="6577129",
         control=control,
@@ -70,17 +71,30 @@ def _payload(
     results: list[Result],
     duration_seconds: object = _OMITTED,
     intervals: object = _OMITTED,
+    watches: object = _OMITTED,
+    remembered: object = _OMITTED,
 ) -> dict:
     path = tmp_path / "status.json"
     health = [Health("bestbuy", ok=True)]
     # Built by omission for the reason `_OMITTED` exists at all: "this argument
     # was not passed" is a different call shape from "this argument was passed
     # None", and both are cases under test.
+    #
+    # `watches` and `remembered` join it under REQ-21 for a sharper version of
+    # the same reason: the no-`watches` call is not a degraded mode to be
+    # simulated with `None` — it is the shape every caller in this file and in
+    # `tests/test_pacing.py` used before 07-04, and the assertion that it still
+    # produces the pre-07-04 payload is only about the real path if it reaches
+    # the real path.
     kwargs: dict[str, object] = {}
     if duration_seconds is not _OMITTED:
         kwargs["duration_seconds"] = duration_seconds
     if intervals is not _OMITTED:
         kwargs["intervals"] = intervals
+    if watches is not _OMITTED:
+        kwargs["watches"] = watches
+    if remembered is not _OMITTED:
+        kwargs["remembered"] = remembered
     write(path, results, health, **kwargs)  # type: ignore[arg-type]
     return json.loads(path.read_text())
 
@@ -210,6 +224,13 @@ def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path)
             # check, because a `<=` here would stop noticing the next key
             # entirely. Appended last so no existing key moves.
             "read_at",
+            # REQ-21, added 2026-08-14, and enumerated for the same reason one
+            # line up — the third time this assertion has gone red on purpose in
+            # this phase. WHICH provenance this row has is the whole of what
+            # this key says: `true` here because this row came from a `Result`,
+            # i.e. somebody read a page this cycle. The remembered rows that
+            # carry `false` are asserted in the section below.
+            "checked",
         }
         assert entry["rung"] == "browser"
         assert entry["degraded"] is True
@@ -396,6 +417,307 @@ def test_a_write_with_no_intervals_at_all_still_publishes_the_key(tmp_path: Path
 
     assert "current_interval_seconds" in row
     assert row["current_interval_seconds"] is None
+
+
+# --------------------------------------------------------------------------
+# REQ-21: every configured watch has a row, and a remembered row says so
+# --------------------------------------------------------------------------
+#
+# WHAT WAS MEASURED, THREE TIMES, AND IT MOVED EVERY TIME. The live
+# `served/boty/status.json` this daemon writes carried 3 watch rows at 08:25:10
+# on 2026-08-13, 8 rows at 09:24:54 the same morning, and 5 rows at 07:36:57 on
+# 2026-08-14 — from a config that declares 13 watches and did not change between
+# any of those readings. The row count is a function of PACING, not of
+# configuration, which is a sharper statement of the defect than any one of
+# those numbers: a reader who opens the page twice in one morning watches the
+# watch list change size with no way to tell a watch that was removed from a
+# watch that was not asked.
+#
+# `status.write` rebuilds `watches` from `results`, and `run_once` filters the
+# watches down to those the pacer says are due. So a paced-out watch does not
+# leave a STALE row behind — it has no row at all, and a row that is absent
+# cannot answer "so they are out of stock as of when?" any better than an
+# undated one can.
+#
+# THE ASSERTIONS READ THE BYTES BACK, for the reason the two sections above
+# give: `null` versus a default is a question about what `json.dumps` wrote.
+
+
+def _watch(name: str, retailer: str, **kw: object) -> Watch:
+    """A configured watch, distinct from every other by `retailer:name`.
+
+    Separate from `_result`'s inline `Watch` because this section is about
+    watches that produced NO result — the case that helper cannot express.
+    """
+    return Watch(name=name, retailer=retailer, target=f"https://x/{retailer}/{name}", **kw)  # type: ignore[arg-type]
+
+
+_FRESH = _watch("fresh", "bestbuy")
+_REMEMBERED = _watch("memory", "walmart")
+_NEVER = _watch("never", "target")
+_THREE = [_FRESH, _REMEMBERED, _NEVER]
+
+
+def _rows(payload: dict) -> dict[str, dict]:
+    return {w["retailer"] + ":" + w["name"]: w for w in payload["watches"]}
+
+
+def _read_this_cycle() -> Result:
+    """A `Result` for `_FRESH` — the one watch of the three that was asked."""
+    return Result(_FRESH, Availability.IN_STOCK, price=54.99, detail="synthetic")
+
+
+def test_every_configured_watch_has_a_row_whether_or_not_it_was_read(
+    tmp_path: Path,
+) -> None:
+    """Three configured, one read, three rows — and provenance on each.
+
+    This is the plan in one assertion. Before today the answer was ONE row, and
+    the two watches nobody asked about were indistinguishable from two watches
+    that had been deleted from the config.
+    """
+    payload = _payload(
+        tmp_path,
+        [_read_this_cycle()],
+        watches=_THREE,
+        remembered={"walmart:memory": ("out_of_stock", time.time() - 172800)},
+    )
+    rows = _rows(payload)
+
+    assert set(rows) == {"bestbuy:fresh", "walmart:memory", "target:never"}, (
+        "a watch that was not asked has a row that says nobody asked, rather "
+        "than no row at all"
+    )
+    assert rows["bestbuy:fresh"]["checked"] is True
+    assert rows["walmart:memory"]["checked"] is False
+    assert rows["target:never"]["checked"] is False
+
+
+def test_a_remembered_row_publishes_the_availability_and_stamp_the_ledger_holds(
+    tmp_path: Path,
+) -> None:
+    """The memory, and its age, off the bytes.
+
+    The stamp is `time.time() - 172800` — REQ-21's own two-day example,
+    constructed by subtraction rather than by freezing a clock, which is this
+    phase's standing rule and `tests/test_pacing.py:585-591`'s method.
+    """
+    stamp = time.time() - 172800
+
+    payload = _payload(
+        tmp_path,
+        [_read_this_cycle()],
+        watches=_THREE,
+        remembered={"walmart:memory": ("out_of_stock", stamp)},
+    )
+    row = _rows(payload)["walmart:memory"]
+
+    assert row["availability"] == "out_of_stock"
+    assert row["read_at"] == stamp
+    assert isinstance(row["read_at"], float)
+    assert row["read_at"] != payload["updated"], (
+        "the remembered row published THIS cycle's clock instead of the "
+        "ledger's stamp, which is the age being manufactured rather than "
+        "remembered"
+    )
+
+
+def test_a_watch_the_ledger_never_resolved_publishes_unknown_with_no_age(
+    tmp_path: Path,
+) -> None:
+    """Criterion 2 at this layer: never `now`, never `0`, never omitted.
+
+    Two ways a configured watch reaches this branch and both are live: a fresh
+    clone, and a watch every reading of which has been UNKNOWN — which on this
+    host is what `WALMART_STORE_ID` being unset does to both Walmart watches.
+    """
+    payload = _payload(tmp_path, [_read_this_cycle()], watches=_THREE, remembered={})
+    row = _rows(payload)["target:never"]
+
+    assert row["availability"] == "unknown"
+    assert "read_at" in row, "the key must always be present, even unknown"
+    assert row["read_at"] is None
+    assert row["read_at"] != payload["updated"]
+    # `0` is falsy and `null` is falsy; they are different bytes and only one of
+    # them means "nobody established this". `0` reads as 1 January 1970 —
+    # maximally stale rather than unknown.
+    raw = (tmp_path / "status.json").read_text()
+    assert '"read_at": 0' not in raw
+
+
+def test_a_remembered_row_publishes_null_for_every_fact_about_the_act_of_reading(
+    tmp_path: Path,
+) -> None:
+    """Nobody performed a reading, so nothing about one is published.
+
+    Asserted as a SET over the row rather than key by key, so a later key added
+    to the fresh branch cannot quietly acquire a default over here. `detail: ""`
+    is a value the fresh path produces and means *the page said nothing worth
+    repeating*; `null` never appears on a fresh row, which is the entire reason
+    to prefer it — it is distinguishable. And `degraded: false` on a memory
+    would be a confidence claim about a reading nobody took, so `rung`,
+    `extraction` and their derived flag go out as `null` together.
+    """
+    payload = _payload(
+        tmp_path,
+        [_read_this_cycle()],
+        watches=_THREE,
+        remembered={"walmart:memory": ("out_of_stock", time.time() - 172800)},
+    )
+    row = _rows(payload)["walmart:memory"]
+
+    about_the_act_of_reading = {"price", "detail", "rung", "extraction", "degraded", "store"}
+    assert {k: row[k] for k in about_the_act_of_reading} == dict.fromkeys(
+        about_the_act_of_reading
+    ), f"a fact nobody measured was published as a default: {row}"
+
+
+def test_a_remembered_row_refuses_the_authority_a_derived_value_would_grant(
+    tmp_path: Path,
+) -> None:
+    """`alertable` is a stated `False`, on the one fixture where that differs.
+
+    A remembered `in_stock` on a watch with NO `max_price` is exactly the
+    configuration under which a derived value is `True` — and the second half of
+    this test measures that rather than asserting it, by publishing the same
+    watch as a fresh reading and watching `alertable` come back `true`. Any
+    other fixture would let M35 survive.
+
+    Measured against this host's ledger on 2026-08-14: 8 of 13 remembered
+    entries are `in_stock`, 6 are controls, and the other two are the GameStop
+    `TRANSITION —` watches, neither of which carries a `max_price`. So a derived
+    value publishes two false buy-signals on every cycle GameStop is paced out,
+    and GameStop runs on a 900-second override.
+    """
+    no_ceiling = _watch("transition", "gamestop")
+
+    remembered_row = _rows(
+        _payload(
+            tmp_path,
+            [_read_this_cycle()],
+            watches=[_FRESH, no_ceiling],
+            remembered={"gamestop:transition": ("in_stock", time.time() - 172800)},
+        )
+    )["gamestop:transition"]
+    fresh_row = _rows(
+        _payload(
+            tmp_path,
+            [_read_this_cycle(), Result(no_ceiling, Availability.IN_STOCK)],
+            watches=[_FRESH, no_ceiling],
+            remembered={},
+        )
+    )["gamestop:transition"]
+
+    assert no_ceiling.max_price is None, "the fixture drifted to a watch with a ceiling"
+    assert fresh_row["alertable"] is True, (
+        "this fixture no longer distinguishes a stated `alertable` from a "
+        "derived one, so it can no longer catch a memory inheriting one"
+    )
+    assert remembered_row["alertable"] is False, (
+        "a reading nobody took was published as worth waking somebody for"
+    )
+
+
+def test_a_remembered_row_publishes_the_config_facts_it_can_know(
+    tmp_path: Path,
+) -> None:
+    """True whether or not anybody looked, so they are published either way.
+
+    Without them the row is a key and two values, and the dashboard cannot
+    render it at all: it interpolates `w.url` and `w.name` unconditionally.
+    """
+    pinned = _watch("pinned", "walmart", control=True, store_id="1234")
+
+    payload = _payload(
+        tmp_path,
+        [_read_this_cycle()],
+        watches=[_FRESH, pinned],
+        remembered={"walmart:pinned": ("in_stock", None)},
+    )
+    row = _rows(payload)["walmart:pinned"]
+
+    assert row["name"] == "pinned"
+    assert row["retailer"] == "walmart"
+    assert row["url"] == pinned.target
+    assert row["control"] is True
+    assert row["store_pinned"] == "1234"
+    # An availability the ledger holds with no stamp beside it: a remembered
+    # reading whose moment was never established. Not `0`, not this cycle.
+    assert row["availability"] == "in_stock"
+    assert row["read_at"] is None
+
+
+def test_a_fresh_row_and_a_remembered_row_carry_the_same_keys_in_the_same_order(
+    tmp_path: Path,
+) -> None:
+    """REQ-21's own sentence, converted from a defect into a design property.
+
+    The requirement opens by complaining that a row read four seconds ago and
+    one last read two days ago are *byte-identical in shape*. That is now TRUE
+    ON PURPOSE and it is the fix rather than the bug — because `checked` and
+    `read_at` are the only two fields carrying the difference, and both of them
+    say which kind of row this is out loud.
+    """
+    payload = _payload(
+        tmp_path,
+        [_read_this_cycle()],
+        watches=_THREE,
+        remembered={"walmart:memory": ("out_of_stock", time.time() - 172800)},
+    )
+    rows = _rows(payload)
+
+    fresh = list(rows["bestbuy:fresh"])
+    remembered = list(rows["walmart:memory"])
+    assert fresh == remembered, (
+        f"provenance must live in `checked` and `read_at` and nowhere else; "
+        f"fresh={fresh} remembered={remembered}"
+    )
+    assert list(rows["target:never"]) == fresh
+
+
+def test_a_write_with_no_watches_at_all_publishes_one_row_per_result(
+    tmp_path: Path,
+) -> None:
+    """The pre-07-04 payload, plus `checked`, reached by OMISSION.
+
+    Every caller in `tests/` and `tests/test_pacing.py:320` still calls `write`
+    this way, and they must all keep working. The permissive default is NOT what
+    stops that from becoming a production regression — the static AST gate in
+    `tests/test_cli_watch.py` asserting both `boty/cli.py` call sites pass both
+    keywords is, because a behavioural test cannot see a dropped keyword while
+    every other assertion stays green.
+    """
+    payload = _payload(tmp_path, [_read_this_cycle()])
+
+    (row,) = payload["watches"]
+    assert row["name"] == "fresh"
+    assert row["checked"] is True
+
+
+def test_remembered_rows_come_after_every_fresh_row_and_are_ordered_by_key(
+    tmp_path: Path,
+) -> None:
+    """Checked rows first, then the not-checked ones sorted by key.
+
+    The same order `sorted((paced or {}).items())` already gives the retailers
+    array one level up in this file, and taken for that reason: the file's own
+    established shape is worth more than the cosmetic win of emitting rows in
+    config order, which would have meant rewriting the commented fresh-row
+    comprehension to get it. The consequence — row order still shifts as pacing
+    shifts — is stated rather than hidden.
+    """
+    payload = _payload(
+        tmp_path,
+        [_read_this_cycle()],
+        # Deliberately NOT in sorted order, so a test that passed by accident of
+        # input order would fail here.
+        watches=[_NEVER, _REMEMBERED, _FRESH],
+        remembered={"walmart:memory": ("out_of_stock", None)},
+    )
+
+    keys = [w["retailer"] + ":" + w["name"] for w in payload["watches"]]
+    assert keys == ["bestbuy:fresh", "target:never", "walmart:memory"]
+    assert [w["checked"] for w in payload["watches"]] == [True, False, False]
 
 
 # --------------------------------------------------------------------------
