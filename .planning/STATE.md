@@ -8,13 +8,22 @@
 # recording 07-01. It leaves the KEY alone, so the packaging test still binds — but the warning
 # above it is what stops the key being edited casually, and that is the ninth misfire of that
 # command on this repo (see the note under ## Session below).
+#
+# RESTORED BY HAND AGAIN 2026-08-14 — the TENTH misfire, and the first that lost more than a
+# comment. `gsd-tools state begin-phase` (a DIFFERENT subcommand to advance-plan, so this is the
+# family and not one bad verb) deleted BOTH comment blocks and then REGRESSED `stopped_at` from
+# 07-02 back to `Completed 06-05-PLAN.md`, and `Last Activity` from Phase 7 back to "Phase 6
+# execution started" — it rewrote accurate state with older state. Caught only because the run
+# diffed the file against a copy taken before the call. **Any agent invoking a `gsd-tools state`
+# write on this repo must `cp` this file first and diff after.** The autonomous run of 2026-08-14
+# does exactly that.
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 IN PROGRESS — Phase 7 planned (6 plans, all serial); 07-02 complete 2026-08-13, 07-03 next. v0.2 archived, complete in the tree and deployed 2026-08-12
+status: Milestone v0.3 IN PROGRESS — Phase 7 EXECUTING (6 plans, all serial); 07-01 and 07-02 complete 2026-08-13, 07-03 → 07-05 running 2026-08-14, 07-06 checkpoints for Dan. v0.2 archived, complete in the tree and deployed 2026-08-12
 stopped_at: Completed 07-02-PLAN.md — the age survives the restart, state.json migrates per entry without a version, M32 watched red and CAUGHT at 28/28
-last_updated: "2026-08-13T17:05:00.000Z"
-last_activity: 2026-08-13
+last_updated: "2026-08-14T12:10:00.000Z"
+last_activity: 2026-08-14
 progress:
   total_phases: 1
   completed_phases: 0
@@ -479,8 +488,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 2. **Pacing and backoff (2026-08-04), in response to a live alert.** Amazon and GameStop had been refusing us for a day. Not a detector bug: `interval_seconds` is per PASS, so load is `watches x 288/day` — Amazon 576, GameStop 1,440 — with no backoff at all. Worse, every failing control was reported as "the detector is probably broken", which is false for a refusal and sent 20 pages in 24 hours. Added `Result.refused` / `fetch.is_refusal`, split the health message, added `boty/pacing.py` (per-retailer cadence + exponential backoff, capped, reset on a good read), and stopped paging for refusals until they outlast the backoff. Verified live: 0 pages while both retailers refused, both published as `paced` rather than dropped.
 
-**Last Activity:** 2026-08-11
-**Last Activity Description:** Phase 6 execution started
+**Last Activity:** 2026-08-14
+**Last Activity Description:** Phase 07 execution started (waves 3–5 autonomous, wave 6 checkpoints)
 
 3. **Two live detector failures (2026-08-04 evening), both caught by control products within a cycle, neither a broken detector.** Best Buy began serving its JSON-LD **JavaScript-escaped** — `\'` inside strings, literal `\n` outside them — so `json.loads` refused all three blocks, `parse.py` skipped them silently, and the control read UNKNOWN with a detail naming the wrong cause. Proven against the shipped fixture, which parses 3/3 on the same SKU with no backslashes at all. `ldjson_read` now parses strictly first and only then offers an already-failed block to a string-state-aware repair; it reports `blocks`/`unparseable`/`repaired`, and a repaired read publishes as `ld+json (repaired)` so it cannot look ordinary. **Not claimed:** that the repair restored the live reading — Best Buy was serving valid markup again by 17:45 and the live read carried no `(repaired)` marker. The escaping is intermittent; a clean probe does not disprove it. Separately, **Target's UNKNOWN was our own render race**: ~35 KB of markup carrying the add-to-cart control arrives between 1s and 3s (measured: absent at `settle=1.0`, present at 3.0 and 6.0), and `fetch_rendered`'s default is exactly 3.0. `check_target_browser` now re-renders once at 10.0s before concluding — in the adapter, because it is a layout question and `boty/browser.py` is deliberately ignorant of layout. **M2's anchor was re-pointed** because this change moved the line it named, and the harness refused to run rather than quietly drop to seven mutations. Verified: mypy clean, 419 passed, 8/8 mutations, `VERIFY: PASS (OFFLINE)`, both new gates watched failing in both directions (removing the repair reddens 3 tests, making it over-reach reddens 22), **service restarted onto the fixed code** and publishing **6/6 retailers healthy**, 13 watches, 47.1s of REQ-08's 120s.
 
