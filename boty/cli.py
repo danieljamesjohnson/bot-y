@@ -147,6 +147,29 @@ def _current_intervals(cfg: Config, pacer: Pacer) -> dict[str, float]:
     }
 
 
+def _remembered(state: State) -> dict[str, tuple[str, float | None]]:
+    """What the ledger holds for each watch, paired with when it was read.
+
+    Keyed over what the LEDGER holds rather than over the configured watches: a
+    watch the ledger has never resolved has nothing to remember, and
+    `status._remembered_rows` already states that case as UNKNOWN with no age, so
+    inventing an entry here would put the same default in two places.
+
+    The availability and its age are read AS ONE ACT, which is why this is a
+    helper rather than two attribute reads at each call site: a caller that took
+    one and forgot the other would publish a remembered verdict with no age,
+    silently and with every test still green — `monitor.State`'s one-act rule
+    (*"a key can never hold an availability from one reading and a stamp from
+    another"*) pointed at the read side.
+
+    BOTH `write_status` CALL SITES GO THROUGH IT, which is why `boty check` and
+    the daemon cannot publish differently shaped files — the same argument
+    `_current_intervals` carries one function up, and `tests/test_cli_watch.py`
+    asserts it statically over this module's AST rather than trusting it.
+    """
+    return {key: (availability, state.read_at.get(key)) for key, availability in state.seen.items()}
+
+
 def _report(results: list[Result], health: list[Health]) -> None:
     for r in results:
         price = f"${r.price:>8.2f}" if r.price is not None else " " * 9
@@ -336,6 +359,27 @@ def watch_cycle(
     # threshold. Guarded exactly as `paced` is, and through the same helper
     # `main`'s check path uses, so the two surfaces publish one number.
     intervals = _current_intervals(cfg, pacer) if pacer is not None else None
+    # EVERY CONFIGURED WATCH GETS A ROW, not only the ones this cycle read. A
+    # paced-out watch used to have no row at all rather than a stale one, and a
+    # row that is absent cannot answer *"so they are out of stock as of when?"*
+    # any better than an undated one can.
+    #
+    # THE ORDERING HERE IS LOAD-BEARING and a later edit could break it
+    # invisibly. `run_once` above has ALREADY committed this cycle's transitions
+    # to `state.seen` and saved them, so `_remembered(state)` sees this cycle's
+    # readings rather than the previous cycle's. That is correct, and it is what
+    # keeps the two branches disjoint: a watch READ this cycle is served by
+    # `status.write`'s fresh comprehension and its ledger entry is never
+    # consulted.
+    #
+    # THE CONSEQUENCE A READER WILL TRY TO "FIX": a watch read this cycle as
+    # UNKNOWN updates no ledger entry — `State.transitioned_to_stock` returns on
+    # UNKNOWN before it writes — and its row is still the FRESH one: `unknown`,
+    # `checked: true`, stamped now. It does NOT fall back to the memory, because
+    # `checked: true` would then be true of a row whose availability came from
+    # two days ago, which is precisely the conflation this phase exists to
+    # remove. Both Walmart watches on this host are that case today
+    # (`WALMART_STORE_ID` unset), so it is live rather than theoretical.
     write_status(
         cfg.status_path,
         results,
@@ -343,6 +387,8 @@ def watch_cycle(
         duration_seconds=time.monotonic() - started,
         paced=paced,
         intervals=intervals,
+        watches=cfg.watches,
+        remembered=_remembered(state),
     )
 
     # Alerts are edge-triggered, and `run_once` has already committed the
@@ -659,8 +705,31 @@ def main(argv: list[str] | None = None) -> int:
         pacer.load()
         intervals = _current_intervals(cfg, pacer)
         _report(results, health)
+        # THE SAME TWO KEYWORDS AS THE DAEMON, on a surface where the remembered
+        # block is always empty — `boty check` re-reads every watch, so every
+        # configured key is in `results` and `_remembered_rows` selects none of
+        # them. Passed anyway, for two reasons.
+        #
+        # 1. One call shape in two places is one fewer way for the two surfaces
+        #    to drift, which is the argument `_current_intervals` already carries
+        #    for the cadence.
+        # 2. It makes that emptiness a MEASURED property rather than a structural
+        #    accident. `tests/test_cli_watch.py` asserts this surface publishes a
+        #    row for every configured watch with `checked: true`, and that
+        #    assertion only means something because the remembered branch was
+        #    available here and produced nothing.
+        #
+        # THE PACER IS STILL NOT PASSED TO `run_once`, and this plan does not
+        # change that. Constraint 3 above stands: `boty check` shows every watch,
+        # and it must never start skipping.
         write_status(
-            cfg.status_path, results, health, duration_seconds=elapsed, intervals=intervals
+            cfg.status_path,
+            results,
+            health,
+            duration_seconds=elapsed,
+            intervals=intervals,
+            watches=cfg.watches,
+            remembered=_remembered(state),
         )
         if alerts:
             print(f"\n  {len(alerts)} alertable transition(s)")
