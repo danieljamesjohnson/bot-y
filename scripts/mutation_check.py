@@ -849,6 +849,100 @@ MUTATIONS = (
         replace="    if not isinstance(stamp, (int, float)) or isinstance(stamp, bool):\n        return now",
         breaks="`monitor._remembered_stamp`'s type guard stops meaning \"the age is not established\" and starts meaning \"the age is now\", so every entry with no believable stamp comes back off disk dated at the instant the daemon started. Applied to the document on this host that is all 13 entries — including `walmart:Pokémon GO Plus +`, which has not been updatable since 2026-08-12 and cannot be until a store is pinned — so a restart makes a two-day-old reading look four seconds old. That is criterion 4's failure in one line, and it is the same manufacture of an age nobody recorded that REQ-21 exists to end, moved from the reading to the restart",
     ),
+    # ------------------------------------------------------------------
+    # M33 — THE ACCESSOR IGNORES THE BACKOFF. REQ-21, 2026-08-13.
+    #
+    # Criterion 3 says a reading is stale when it is older than its retailer's
+    # current interval, "derived from the retailer's own pacing rather than a
+    # fixed clock". This mutation is that clause deleted: `current_interval`
+    # returns the STANDING config value and the backoff stops reaching any
+    # surface.
+    #
+    # THE ANCHOR IS MULTI-LINE, AND THAT SHAPE WAS MEASURED BEFORE IT WAS
+    # CHOSEN rather than after it misfired. `st.interval * BACKOFF_FACTOR **
+    # st.refusals` occurs TWICE in `boty/pacing.py`:
+    #
+    #     python -c "...src.count('st.interval * BACKOFF_FACTOR ** st.refusals')"
+    #         ->  2   (line 156, inside MAX_PERSISTED_REFUSALS' comment, which
+    #                  QUOTES the expression to argue the float-overflow cliff;
+    #                  and line 344, the accessor's own return)
+    #     python -c "...src.count(the four-line `return min(...)` form)"
+    #         ->  1
+    #
+    # `apply_mutation` replaces the FIRST occurrence, so a single-line anchor
+    # would mutate PROSE — changing no behaviour, surviving, and being reported
+    # as a hole in the suite with no attribution. That is M19's recorded trap,
+    # and this is the second time this repository has priced it; M2 carries the
+    # same multi-line `\n`-joined shape for the same reason.
+    #
+    # BEHAVIOURAL, NOT PROSE — an arithmetic expression and a `min`, carrying no
+    # message text, no rendered tag, no `detail` string and no version literal.
+    # § *Finding 1*'s hard rule after M25 and M26 both drifted on 2026-08-13 when
+    # the milestone version rolled.
+    #
+    # IT BREAKS TWO THINGS AT ONCE, AND THAT IS THE DESIGN BEING ASSERTED rather
+    # than sloppiness in the anchor. `record` computes its wait by CALLING this
+    # accessor, so the published cadence and the fetch schedule are one
+    # expression. A mutation that broke only the published number would mean the
+    # two had drifted apart — which is the thing 07-03 exists to make impossible.
+    # One mutation proving both is the join under test.
+    #
+    # WHICH TESTS CATCH IT — ELEVEN, MEASURED BY APPLYING IT BY HAND RATHER THAN
+    # PREDICTED. A gate is named after watching it fail, never after expecting it
+    # to; 07-02 paid for that rule when M32's predicted killer turned out not to
+    # bind. Nine in `tests/test_pacing.py`:
+    #
+    #   the REQ-21 accessor section —
+    #     test_the_current_interval_widens_with_the_backoff  (both intervals)
+    #     test_a_retailer_that_answers_is_back_on_its_standing_interval_at_once
+    #     test_the_backoff_schedule_is_exactly_the_schedule_it_was  (both)
+    #   and the 2026-08-04 backoff section, which predates REQ-21 entirely —
+    #     test_a_refusal_pushes_the_next_attempt_out_exponentially
+    #     test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring
+    #     test_the_restored_count_is_load_bearing_on_the_next_wait
+    #     test_the_persisted_count_is_clamped
+    #
+    # THOSE LAST FOUR ARE THE JOIN SHOWING UP IN THE MEASUREMENT. They were
+    # written before this accessor existed and they fail anyway, because `record`
+    # now computes its wait through it — which is the design claim above,
+    # observed rather than asserted. A version of this change that published a
+    # number beside the schedule instead of through it would leave all four
+    # green.
+    #
+    # Two in `tests/test_cli_watch.py`:
+    #     test_both_surfaces_publish_one_cadence_from_one_document, which asserts
+    #       the shared value is 2400.0 precisely so that "both surfaces agree on
+    #       300" cannot pass it
+    #     test_a_refusal_the_backoff_is_handling_is_recorded_not_pushed_across_a_restart,
+    #       from the REQ-16-across-a-restart section, whose MEASURED cycle counts
+    #       (10 cycles yields exactly 3 refusals) move the moment the schedule
+    #       does
+    #
+    # Measured: `pytest tests/test_pacing.py tests/test_cli_watch.py -q` exits 1
+    # at 11 failed / 100 passed. If it ever SURVIVES, the first thing to check is
+    # whether one of them acquired a skip decorator.
+    #
+    # WHY THERE IS NO PAIRED MUTATION FOR THE MIRROR DIRECTION. The opposite
+    # failure — a retailer on the standard cadence publishing a WIDER window than
+    # it is on, so a genuinely stale reading reads as fresh — is guarded by
+    # assertions rather than by a second ident: `current_interval` is asserted
+    # EQUAL to the standing interval at zero refusals, to the float, and
+    # `tests/test_status.py` pins the retailers array as a whole dict. Stated
+    # plainly rather than left to be noticed as an asymmetry.
+    #
+    # M34 IS NOT A NEW GAP. `07-PLAN-OUTLINE.md` assigns it to **07-04** (a
+    # remembered row published as `checked: true`, or with its stamp dropped).
+    # This plan consumes M33 only. `tests/test_support_matrix.py`'s own message
+    # governs: *"Idents are reserved across concurrent plans, not renumbered."*
+    #
+    # M21-M24 REMAIN THE INTENTIONAL GAP and are still not filled.
+    Mutation(
+        ident="M33",
+        target="boty/pacing.py",
+        search="        return min(\n            st.interval * BACKOFF_FACTOR ** st.refusals,\n            MAX_BACKOFF_SECONDS,\n        )",
+        replace="        return st.interval",
+        breaks="`Pacer.current_interval` returns the standing config interval however many refusals are in force, so the backoff stops reaching any surface. On this host that is target and walmart at seven refusals judged against 300 s instead of the six-hour cap they are actually on, and amazon against 1800 s instead of 7200 — every reading from a backed-off retailer reads as wildly stale on all three surfaces, which is criterion 3's \"derived from the retailer's own pacing rather than a fixed clock\" stated as a mutation. And because `record` computes its wait THROUGH this accessor, the fetch schedule collapses with it: a retailer that just walled us is asked again at full rate, which is the 2026-08-04 behaviour boty/pacing.py exists to prevent and the politeness constraint calls a hard limit",
+    ),
 )
 
 
