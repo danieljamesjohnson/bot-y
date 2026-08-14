@@ -65,13 +65,23 @@ def _result(
     return Result(watch, availability, price=54.99, detail="synthetic", store=store, **kwargs)
 
 
-def _payload(tmp_path: Path, results: list[Result], duration_seconds: object = _OMITTED) -> dict:
+def _payload(
+    tmp_path: Path,
+    results: list[Result],
+    duration_seconds: object = _OMITTED,
+    intervals: object = _OMITTED,
+) -> dict:
     path = tmp_path / "status.json"
     health = [Health("bestbuy", ok=True)]
-    if duration_seconds is _OMITTED:
-        write(path, results, health)
-    else:
-        write(path, results, health, duration_seconds=duration_seconds)  # type: ignore[arg-type]
+    # Built by omission for the reason `_OMITTED` exists at all: "this argument
+    # was not passed" is a different call shape from "this argument was passed
+    # None", and both are cases under test.
+    kwargs: dict[str, object] = {}
+    if duration_seconds is not _OMITTED:
+        kwargs["duration_seconds"] = duration_seconds
+    if intervals is not _OMITTED:
+        kwargs["intervals"] = intervals
+    write(path, results, health, **kwargs)  # type: ignore[arg-type]
     return json.loads(path.read_text())
 
 
@@ -217,6 +227,14 @@ def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path)
                 "checked": True,
                 "reason": "",
                 "failing_controls": [],
+                # REQ-21, added 2026-08-13, and ENUMERATED rather than the
+                # assertion being relaxed to a subset — this row is pinned as a
+                # whole dict on purpose, harder than the watch row above, and a
+                # `<=` here would stop noticing the next key entirely. `None`
+                # because this caller passes no `intervals`: the cadence is not
+                # established on this surface, which is a different fact from a
+                # cadence of zero. Appended last so no existing key moves.
+                "current_interval_seconds": None,
             }
         ]
 
@@ -290,6 +308,94 @@ def test_the_row_stamp_is_not_the_file_stamp(tmp_path: Path) -> None:
     assert payload["updated"] >= stamp + 172000, "`updated` is this cycle, not the reading"
     assert entry["read_at"] == stamp
     assert entry["read_at"] != payload["updated"]
+
+
+# --------------------------------------------------------------------------
+# REQ-21: the cadence each retailer is CURRENTLY on, published per retailer
+# --------------------------------------------------------------------------
+#
+# Criterion 3's threshold. A reading is stale when it is older than its
+# retailer's own current interval, so the page needs that interval to compare
+# against — and it is the BACKED-OFF one, not the operator's standing
+# `interval_seconds`. Measured on this host 2026-08-13: four of six retailers
+# were on a cadence different from their configured one, by factors of up to 72.
+#
+# PER RETAILER, NOT PER WATCH, and the retailers array is where the per-retailer
+# facts already live. A copy on each of fourteen watch rows is thirteen more
+# copies that can drift out of step.
+#
+# The assertions read the BYTES back for the same reason the `read_at` section
+# above does: `null` versus `0` is a question about what `json.dumps` wrote.
+
+
+def test_the_current_cadence_is_published_for_a_checked_retailer(tmp_path: Path) -> None:
+    """The number the dashboard, `boty check` and the daemon all judge against.
+
+    21 600 rather than a standing 300 because that is the state this key exists
+    to make visible: target and walmart sat at seven refusals on this host, i.e.
+    on the six-hour cap, while `config/products.yaml` still said 300.
+    """
+    payload = _payload(tmp_path, [_result()], intervals={"bestbuy": 21600.0})
+    (row,) = payload["retailers"]
+
+    assert row["current_interval_seconds"] == 21600.0
+    assert isinstance(row["current_interval_seconds"], float)
+
+
+def test_the_current_cadence_is_published_for_a_paced_out_retailer_too(tmp_path: Path) -> None:
+    """The PACED branch of the array, which is the row that actually matters.
+
+    A retailer deep in a backoff is skipped, so it is published from the second
+    comprehension rather than from `health` — and it is precisely the retailer
+    whose readings are oldest and whose staleness question is live. A key
+    published on only the checked branch would be absent from every row a reader
+    most needs it on.
+    """
+    path = tmp_path / "status.json"
+    write(
+        path,
+        [],
+        [],
+        paced={"walmart": "backing off after 7 refusal(s) — next attempt in ~53 min"},
+        intervals={"walmart": 21600.0},
+    )
+    (row,) = json.loads(path.read_text())["retailers"]
+
+    assert row["checked"] is False, "this is the paced branch, not the checked one"
+    assert row["current_interval_seconds"] == 21600.0
+
+
+def test_a_cadence_nobody_established_publishes_null_rather_than_zero(tmp_path: Path) -> None:
+    """`null`, NEVER `0`, and here the argument is sharper than for `store`.
+
+    A cadence published as `0` says *this retailer is checked continuously*, so
+    every reading against it is stale the instant it is taken — the most
+    confident possible lie about a number nobody established. `null` says the
+    cadence is not established on this surface, which is the same three-valued
+    honesty the `checked: false` row beside it already carries.
+    """
+    absent_from_the_map = _payload(tmp_path, [_result()], intervals={"walmart": 300.0})
+    (row,) = absent_from_the_map["retailers"]
+    assert row["retailer"] == "bestbuy", "the map deliberately does not mention this retailer"
+    assert row["current_interval_seconds"] is None
+
+    raw = (tmp_path / "status.json").read_text()
+    assert '"current_interval_seconds": null' in raw
+    assert '"current_interval_seconds": 0' not in raw
+
+
+def test_a_write_with_no_intervals_at_all_still_publishes_the_key(tmp_path: Path) -> None:
+    """Every pre-existing caller omits the argument and must keep working.
+
+    The key is present and `null`, never absent: omitting it would leave each
+    consumer to invent its own default, which is the same failure delegated one
+    level out.
+    """
+    payload = _payload(tmp_path, [_result()])
+    (row,) = payload["retailers"]
+
+    assert "current_interval_seconds" in row
+    assert row["current_interval_seconds"] is None
 
 
 # --------------------------------------------------------------------------
