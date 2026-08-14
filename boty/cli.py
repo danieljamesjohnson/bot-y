@@ -119,6 +119,95 @@ def _store_tag(r: Result) -> str | None:
     return f"[store {answered}]"
 
 
+def _age(seconds: float) -> str:
+    """A duration in one unit, in the dashboard's own three bands.
+
+    THE BANDS ARE DELIBERATELY `served/boty/index.html`'s. A reader comparing
+    `boty check` to the page must read the same number rather than translating
+    between two vocabularies — the same one-answer-in-two-places argument
+    `_current_intervals` carries for the cadence itself.
+
+    AND THIS IS THE RECORDED COST OF DERIVING AT RENDER TIME. The dashboard
+    cannot import Python, so `07-PLAN-OUTLINE.md` § Finding 7's *"three
+    consumers means three implementations of one comparison"* is paid here
+    explicitly, in four lines, rather than discovered later as drift. It is
+    cheaper than the alternative that argument rejects — a `stale` flag computed
+    at write time, which would be written `false` and go on saying `false` for
+    exactly the interval during which it became true.
+
+    No `" ago"`, unlike `fmtAge`: this formatter also renders a CADENCE, and a
+    threshold is not a time in the past.
+    """
+    if seconds < 90:
+        return f"{int(seconds)}s"
+    if seconds < 5400:
+        return f"{int(seconds // 60)}m"
+    return f"{int(seconds // 3600)}h"
+
+
+def _age_tag(r: Result, *, now: float, interval: float | None) -> str:
+    """How old this reading is, in one tag, in four forms.
+
+    Separate from `_report`'s comprehension for `_store_tag`'s own recorded
+    reason: that comprehension is `(label, bool)` pairs and an age is not a bool
+    — the tag's TEXT depends on which of the two values is present, not merely
+    on whether one is.
+
+    Four forms, and the distinction each one buys:
+
+    - `[age 4s]` — a stamp, inside the cadence its retailer is currently on. An
+      ordinary label; the monitor is doing exactly what it should.
+    - `[age 7h > 6h]` — a stamp, past that cadence. STALE, and it PRINTS BOTH
+      NUMBERS. A bare word `stale` cannot say which threshold produced the
+      verdict, and criterion 3's entire content is that the threshold is the
+      retailer's own current cadence rather than a fixed clock. This is
+      `[store Y != pinned X]`'s idiom one field over: show the two operands and
+      let the reader see the comparison rather than trust the verdict.
+    - `[age 3h, cadence ?]` — a stamp, and nothing to judge it against. The tag
+      says WHICH half is missing rather than collapsing to either verdict.
+    - `[age ?]` — no stamp. `?` rather than a blank, on `_store_tag`'s own
+      reasoning that *"the page did not tell us" is a fact worth printing*.
+      This form is reachable in production today, on this host: amazon, target
+      and walmart refused every watch this morning, and 07-01 stamps no refusal
+      arm — so five of thirteen rows print it.
+
+    `>` AND NOT `>=`. A reading exactly one cadence old is due to be replaced
+    this instant, not overdue. Asserted to the float at both sides in
+    `tests/test_status.py` rather than left to a reader's assumption.
+
+    `now` IS A REQUIRED PARAMETER AND IS NEVER READ INSIDE — § Finding 6's one
+    design rule, which is `Pacer.due(retailer, now)`'s convention applied one
+    module over. The consequence is what makes it worth the parameter: in
+    production `boty check` re-reads every watch, so every `Result` it prints
+    was constructed seconds before this runs and the stale branch is not
+    reachable on this surface at all. Purity is what makes it reachable from a
+    test to the float, with no clock frozen, injected or monkeypatched.
+
+    THIS FUNCTION NEVER RETURNS `None`, AND `_store_tag` DOES. Five of six
+    retailers can never produce a store, so their rows must stay clean; every
+    reading, by contrast, either has an age or has a stated absence of one.
+    There is no clean-row case here, and if fresh rows carried no tag then an
+    absent tag would MEAN fresh — an implicit claim, which is precisely what
+    this phase removes.
+
+    Nothing here is a verdict about stock. `SYMBOL` is untouched and still
+    three-membered.
+    """
+    # An absent stamp has NO AGE AT ALL — not `0.0`. An unmeasured value
+    # rendered as zero reads off the surface as the freshest row on it, which is
+    # `status.py:53-57`'s `duration_seconds` argument and `status.py:136-141`'s
+    # `store`-as-`0` argument for the fifth time in this phase, now pointed at a
+    # renderer instead of a serialiser.
+    age = None if r.read_at is None else now - r.read_at
+    if age is None:
+        return "[age ?]"
+    if interval is None:
+        return f"[age {_age(age)}, cadence ?]"
+    if age > interval:
+        return f"[age {_age(age)} > {_age(interval)}]"
+    return f"[age {_age(age)}]"
+
+
 def _current_intervals(cfg: Config, pacer: Pacer) -> dict[str, float]:
     """The cadence every configured retailer is currently on, from one place.
 
@@ -170,7 +259,34 @@ def _remembered(state: State) -> dict[str, tuple[str, float | None]]:
     return {key: (availability, state.read_at.get(key)) for key, availability in state.seen.items()}
 
 
-def _report(results: list[Result], health: list[Health]) -> None:
+def _report(results: list[Result], health: list[Health], *, intervals: dict[str, float] | None) -> None:
+    """Print one line per reading, and the health warnings under them.
+
+    `intervals` IS REQUIRED, AND THAT IS A DECISION. 07-04 gave `status.write`'s
+    new parameters `None` defaults for backward compatibility and paid for that
+    permissiveness with a static AST gate over both call sites. This function has
+    exactly ONE production call site and two in the tests, so the keyword can
+    simply be required — and then mypy, which runs inside `make verify-offline`,
+    is the gate: a call site that DROPS it is a type error rather than a surface
+    that quietly stops judging anything.
+
+    What mypy does NOT catch is `intervals=None`. That type-checks, renders
+    `[age Xs, cadence ?]` on every row, and satisfies criterion 3's letter with a
+    surface that never judges. That direction is closed by
+    `tests/test_status.py::test_the_check_path_passes_a_real_cadence_to_the_report`,
+    which asserts over this module's AST that the argument is not the constant
+    `None`.
+    """
+    # ONCE, NOT PER ROW. Every row in one report is judged against one instant,
+    # or two rows printed a millisecond apart are judged against two clocks —
+    # `status.py:42`'s "computed once per `write` call" rule applied to a
+    # printer.
+    #
+    # And this is the ONLY wall-clock read this plan adds. `_age_tag` takes `now`
+    # as a parameter and never reads one, so nothing here needs a seam and no
+    # clock library enters a project whose non-functional requirements name a
+    # small dependency surface.
+    now = time.time()
     for r in results:
         price = f"${r.price:>8.2f}" if r.price is not None else " " * 9
         # Composed rather than chosen: a browser-read control is both things at
@@ -195,6 +311,13 @@ def _report(results: list[Result], health: list[Health]) -> None:
         store_tag = _store_tag(r)
         if store_tag is not None:
             tags.append(store_tag)
+        # LAST, and appended UNCONDITIONALLY unlike the store tag above. The tag
+        # order is what was read -> where it came from -> WHEN it was read, which
+        # is the order a reader asks them in; and it is unconditional because an
+        # absent age tag would mean "fresh", which is the implicit claim this
+        # phase removes. `_age_tag` never returns `None` and its return type
+        # says so.
+        tags.append(_age_tag(r, now=now, interval=(intervals or {}).get(r.watch.retailer)))
         tag = f" {' '.join(tags)}" if tags else ""
         print(f"  {SYMBOL[r.availability]} {r.watch.retailer:<9} {r.watch.name[:30]:<30}{price}  {r.detail[:56]}{tag}")
 
@@ -704,7 +827,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         pacer.load()
         intervals = _current_intervals(cfg, pacer)
-        _report(results, health)
+        # 07-03 computes this local one line up for exactly this. The report is
+        # told the cadence rather than working one out: `Pacer.current_interval`
+        # is neither called nor re-derived here, so `boty check` and the daemon
+        # cannot answer "what cadence is this retailer on" differently.
+        _report(results, health, intervals=intervals)
         # THE SAME TWO KEYWORDS AS THE DAEMON, on a surface where the remembered
         # block is always empty — `boty check` re-reads every watch, so every
         # configured key is in `results` and `_remembered_rows` selects none of
