@@ -15,7 +15,9 @@ reading worth" — in two places, and the answer must not diverge.
 
 from __future__ import annotations
 
+import ast
 import json
+import re
 import time
 from pathlib import Path
 
@@ -73,6 +75,7 @@ def _payload(
     intervals: object = _OMITTED,
     watches: object = _OMITTED,
     remembered: object = _OMITTED,
+    paced: object = _OMITTED,
 ) -> dict:
     path = tmp_path / "status.json"
     health = [Health("bestbuy", ok=True)]
@@ -95,6 +98,14 @@ def _payload(
         kwargs["watches"] = watches
     if remembered is not _OMITTED:
         kwargs["remembered"] = remembered
+    # `paced` joins the sentinel under REQ-21's rendering plan for one reason:
+    # the retailers array — the only place `current_interval_seconds` is
+    # published — is built from `health` PLUS `paced`, so a test that wants a
+    # cadence for a retailer nobody checked has no other way to reach it. That
+    # is also the production shape: the retailer whose staleness question is
+    # live is exactly the one that was skipped.
+    if paced is not _OMITTED:
+        kwargs["paced"] = paced
     write(path, results, health, **kwargs)  # type: ignore[arg-type]
     return json.loads(path.read_text())
 
@@ -725,8 +736,20 @@ def test_remembered_rows_come_after_every_fresh_row_and_are_ordered_by_key(
 # --------------------------------------------------------------------------
 
 
-def _tags(capsys: pytest.CaptureFixture[str], result: Result) -> str:
-    _report([result], [])
+def _tags(
+    capsys: pytest.CaptureFixture[str],
+    result: Result,
+    intervals: dict[str, float] | None = None,
+) -> str:
+    """One printed row, tags and all.
+
+    `intervals` is threaded through because `_report` requires it since REQ-21's
+    rendering plan. It defaults to `None` HERE and is required THERE, and that
+    asymmetry is deliberate: a test that does not care about the cadence should
+    not have to name one, while a production call site that forgets it should be
+    a type error rather than a surface that prints `cadence ?` on every row.
+    """
+    _report([result], [], intervals=intervals)
     return capsys.readouterr().out
 
 
@@ -792,7 +815,7 @@ def test_report_does_not_raise_for_any_availability(
     printing a report, after some of the rows have already been written.
     """
     for availability in Availability:
-        _report([_result(availability=availability, rung=Rung.BROWSER)], [])
+        _report([_result(availability=availability, rung=Rung.BROWSER)], [], intervals=None)
     assert capsys.readouterr().out.count("[degraded]") == len(list(Availability))
 
 
@@ -919,3 +942,249 @@ def test_the_store_tag_did_not_touch_the_availability_symbols() -> None:
 
     assert set(SYMBOL) == set(Availability)
     assert len(SYMBOL) == 3
+
+
+# --------------------------------------------------------------------------
+# REQ-21: boty check says how old each reading is
+# --------------------------------------------------------------------------
+#
+# Four plans put the facts in place and nothing rendered any of them. This
+# section pins the CLI half of the rendering, and `tests/test_dashboard.py`
+# pins the page's. The two surfaces answer with the same four forms so a reader
+# comparing `boty check` to the page never has to translate:
+#
+#     stamp present, within its retailer's cadence   [age 4s]
+#     stamp present, past its retailer's cadence     [age 7h > 6h]
+#     stamp present, cadence unknown                 [age 3h, cadence ?]
+#     no stamp                                       [age ?]
+#
+# THE STALE FORM PRINTS BOTH NUMBERS. A bare word `stale` cannot say which
+# threshold produced the verdict, and criterion 3's entire content is that the
+# threshold is the retailer's OWN current cadence rather than a fixed clock.
+# `[store Y != pinned X]`'s idiom, one field over.
+#
+# NOTHING HERE FREEZES A CLOCK. `_age_tag` takes `now` as a required keyword and
+# never reads one, so the stale branch — which `boty check` cannot reach in
+# production, because it re-reads every watch and every `Result` it prints was
+# constructed seconds earlier — is reachable from a test to the float.
+
+
+def test_report_says_how_old_a_fresh_reading_is(capsys: pytest.CaptureFixture[str]) -> None:
+    """An ordinary label, no warning vocabulary: the monitor is doing its job."""
+    out = _tags(capsys, _result(read_at=time.time() - 4), intervals={"bestbuy": 21600.0})
+
+    assert "[age 4s]" in out
+    assert ">" not in out, "a reading inside its cadence must not print a comparison"
+
+
+def test_report_prints_both_numbers_when_a_reading_is_past_its_retailers_cadence(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`[age 7h > 6h]` — the verdict AND what it was taken against.
+
+    21 600 seconds because that is the six-hour cap two retailers on this host
+    sit on at seven refusals, and 25 200 because seven hours is past it. Both
+    numbers print for the reason `[store Y != pinned X]` prints both: showing the
+    operands lets a reader see the comparison rather than trust the verdict.
+    """
+    out = _tags(capsys, _result(read_at=time.time() - 25200), intervals={"bestbuy": 21600.0})
+
+    assert "[age 7h > 6h]" in out
+
+
+def test_report_says_unknown_for_a_reading_nobody_dated(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Criterion 2 on this surface: never a blank, never a number.
+
+    Both assertions are needed and neither implies the other. "renders as
+    UNKNOWN" and "renders as nothing" are both blank-shaped failures, and only
+    the second assertion tells them apart — an absent tag would MEAN fresh,
+    which is the implicit claim this phase exists to remove.
+
+    Reachable in production today: amazon, target and walmart refused every
+    watch this morning, and 07-01 gives every refusal arm `read_at=None`.
+    """
+    out = _tags(capsys, _result(), intervals={"bestbuy": 21600.0})
+
+    assert "[age ?]" in out
+    assert re.search(r"age \d", out) is None, (
+        "an unmeasured age printed as a number reads off the surface as the "
+        "freshest row on it"
+    )
+
+
+def test_report_says_which_half_is_missing_when_the_cadence_is_unknown(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The stamp is known and what to judge it against is not, and the tag says which."""
+    out = _tags(capsys, _result(read_at=time.time() - 10800), intervals={"walmart": 300.0})
+
+    assert "[age 3h, cadence ?]" in out
+
+
+def test_the_age_boundary_is_strict() -> None:
+    """A reading exactly one cadence old is DUE to be replaced, not overdue.
+
+    `>` and not `>=`, asserted at both sides of the float so nobody later
+    "fixes" the comparison. Called directly rather than through `_report`
+    because a millisecond cannot survive a formatter.
+    """
+    from boty.cli import _age_tag
+
+    now = time.time()
+    watch = Watch(name="goplusplus", retailer="bestbuy", target="6577129")
+    exactly = Result(watch, Availability.IN_STOCK, price=None, detail="x", read_at=now - 300.0)
+    over = Result(watch, Availability.IN_STOCK, price=None, detail="x", read_at=now - 300.001)
+
+    assert _age_tag(exactly, now=now, interval=300.0) == "[age 5m]"
+    assert _age_tag(over, now=now, interval=300.0) == "[age 5m > 5m]"
+
+
+def test_the_age_tag_does_not_read_the_clock() -> None:
+    """§ Finding 6's one design rule, and the reason no clock is frozen in this phase.
+
+    `now` is a required keyword-only parameter and is never read inside. That is
+    what makes every assertion above reachable against the real wall clock —
+    including the stale branch, which `boty check` cannot reach in production.
+    """
+    from boty.cli import _age_tag
+
+    now = time.time()
+    watch = Watch(name="goplusplus", retailer="bestbuy", target="6577129")
+    r = Result(watch, Availability.IN_STOCK, price=None, detail="x", read_at=now - 61)
+
+    assert _age_tag(r, now=now, interval=300.0) == _age_tag(r, now=now, interval=300.0)
+    with pytest.raises(TypeError):
+        _age_tag(r, interval=300.0)  # type: ignore[call-arg]
+
+
+def test_the_age_tag_never_returns_none() -> None:
+    """Where it departs from `_store_tag`, and why.
+
+    `_store_tag` returns `None` because five of six retailers can never produce
+    a store and their rows must stay clean. Every reading, by contrast, either
+    has an age or has a STATED absence of one — there is no clean-row case. If
+    fresh rows carried no tag, an absent tag would mean fresh.
+    """
+    from boty.cli import _age_tag
+
+    now = time.time()
+    watch = Watch(name="goplusplus", retailer="bestbuy", target="6577129")
+    for read_at in (None, now - 4, now - 25200):
+        for interval in (None, 300.0, 21600.0):
+            r = Result(watch, Availability.IN_STOCK, price=None, detail="x", read_at=read_at)
+            assert isinstance(_age_tag(r, now=now, interval=interval), str)
+
+
+def test_one_report_judges_every_row_against_one_instant(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """One wall-clock read per report, not one per row.
+
+    Two rows printed a millisecond apart and judged against two clocks is
+    `status.py:42`'s "computed once per `write` call" rule broken on a printer.
+    """
+    stamp = time.time() - 61
+    _report(
+        [_result(read_at=stamp, name="one"), _result(read_at=stamp, name="two")],
+        [],
+        intervals={"bestbuy": 21600.0},
+    )
+    out = capsys.readouterr().out
+
+    ages = re.findall(r"\[age [^\]]*\]", out)
+    assert len(ages) == 2
+    assert ages[0] == ages[1], ages
+
+
+def test_the_age_tag_did_not_touch_the_availability_symbols() -> None:
+    """`SYMBOL` is indexed unconditionally and must stay three-membered.
+
+    Fourth arrival in two phases of something that looks like it might want to
+    be a fourth `Availability` member. An age is not a verdict.
+    """
+    from boty.cli import SYMBOL
+
+    assert set(SYMBOL) == set(Availability)
+    assert len(SYMBOL) == 3
+
+
+def test_the_check_path_passes_a_real_cadence_to_the_report() -> None:
+    """The static gate, and a behavioural test cannot stand in for it.
+
+    mypy already stops a call site that DROPS the keyword — that is why it is
+    required rather than defaulted. What remains is a call site that passes
+    `intervals=None`: it type-checks, it prints `[age Xs, cadence ?]` on every
+    row of `boty check`, it satisfies criterion 3's letter with a surface that
+    never judges anything, and every other test in this file stays green.
+    """
+    source = (Path(__file__).resolve().parent.parent / "boty" / "cli.py").read_text()
+    tree = ast.parse(source)
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_report"
+    ]
+
+    assert len(calls) == 1, f"expected exactly one `_report(` call in boty/cli.py, found {len(calls)}"
+    (call,) = calls
+    keywords = {k.arg: k.value for k in call.keywords}
+    assert "intervals" in keywords, "the one production report is not told any cadence"
+    value = keywords["intervals"]
+    assert not (isinstance(value, ast.Constant) and value.value is None), (
+        "`intervals=None` at the production call site type-checks and renders "
+        "`cadence ?` on every row — criterion 3's letter with nothing behind it"
+    )
+
+
+def test_status_json_carries_everything_a_consumer_needs_to_judge_staleness(
+    tmp_path: Path,
+) -> None:
+    """Criterion 3's `status.json` third, which this plan adds no key for.
+
+    A `stale` flag computed inside `status.write` fails the way `pacing.py`
+    already records at lines 196-199: *"stamping at write time would refresh the
+    record forever and the age-out would never fire once — a bound that cannot
+    bind is worse than no bound, because it reads like one in the file."* A row
+    written fresh carries `stale: false` and goes on carrying `stale: false` for
+    exactly the interval during which it becomes stale.
+
+    So the file publishes raw facts and every consumer subtracts against its own
+    `now`. What this asserts is that the three facts already published are
+    JOINTLY SUFFICIENT: a verdict is derived here from `w["read_at"]`,
+    `w["checked"]` and the `current_interval_seconds` joined out of the
+    `retailers` array by `retailer` — and from nothing else.
+    """
+    stamp = time.time() - 25200
+    payload = _payload(
+        tmp_path,
+        [_read_this_cycle()],
+        watches=_THREE,
+        remembered={"walmart:memory": ("out_of_stock", stamp)},
+        intervals={"walmart": 21600.0, "gamestop": 900.0},
+        paced={"walmart": "backed off"},
+    )
+
+    cadence = {r["retailer"]: r["current_interval_seconds"] for r in payload["retailers"]}
+    row = _rows(payload)["walmart:memory"]
+
+    # The derivation, using published keys only.
+    assert row["checked"] is False
+    assert row["read_at"] == pytest.approx(stamp)
+    interval = cadence[row["retailer"]]
+    assert interval == 21600.0
+    assert time.time() - row["read_at"] > interval, (
+        "a seven-hour-old reading on a six-hour cadence derives as stale from "
+        "three published numbers and nothing else"
+    )
+
+    # And no fourth fact was smuggled in to make that work.
+    for w in payload["watches"]:
+        assert "stale" not in w, (
+            "a staleness flag computed at write time is written `false` and "
+            "keeps saying `false` for exactly the interval during which it "
+            "becomes true"
+        )
