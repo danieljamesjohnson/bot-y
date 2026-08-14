@@ -302,6 +302,137 @@ def test_run_once_without_a_pacer_is_unchanged(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------
+# REQ-21: the retailer's CURRENT interval, as a number
+# --------------------------------------------------------------------------
+#
+# Criterion 3 says a reading is stale when it is older than "its retailer's
+# current interval ... derived from the retailer's own pacing rather than a
+# fixed clock". That number existed nowhere before 2026-08-13: `interval` is the
+# STANDING config value and is unchanged by any backoff, `skipped_reason`
+# returns prose, and the backed-off figure lived for four lines inside `record`
+# before being folded into `due_at` — which is a position on a synthetic clock
+# that restarts at 0.0 every process and is deliberately never persisted.
+#
+# So there are two claims below and they are different claims. The first is that
+# the accessor answers with the cadence actually in force. The second is that
+# EXPOSING it did not move it.
+
+#: The cadence a retailer is on after N consecutive refusals, indexed by N, at
+#: each of the two intervals this project configures today (the 300 s default
+#: and the 1800 s Amazon override).
+#:
+#: LITERALS, AND THAT IS THE POINT OF THE LIST. Computing these through
+#: `current_interval` — or through `BACKOFF_FACTOR` and `MAX_BACKOFF_SECONDS` —
+#: would make every assertion below a re-derivation of the code it is checking,
+#: which is a test that cannot fail. Written out, a future edit to the backoff
+#: has to change this list BY HAND, and doing that is the moment somebody
+#: notices they are changing when a retailer is asked.
+#:
+#: The cap binds at 7 refusals for the 300 s interval (300 x 2**7 = 38 400 s,
+#: clamped to 21 600) and at 4 for the 1800 s one (28 800, clamped). Both
+#: sequences run to 8 so the flat tail past the cap is asserted rather than
+#: assumed. A third interval is one more row.
+_CADENCE_AFTER_N_REFUSALS = [
+    (300.0, [300.0, 600.0, 1200.0, 2400.0, 4800.0, 9600.0, 19200.0, 21600.0, 21600.0]),
+    (1800.0, [1800.0, 3600.0, 7200.0, 14400.0, 21600.0, 21600.0, 21600.0, 21600.0, 21600.0]),
+]
+
+
+def test_an_unrefused_retailer_is_on_its_standing_interval() -> None:
+    """The default and the override, to the float.
+
+    Equality rather than `pytest.approx`: this number is published and then
+    subtracted against, and "close to 300" is not a cadence anybody configured.
+    """
+    p = Pacer(default_interval=300, overrides={"amazon": 1800})
+
+    assert p.current_interval("walmart") == 300.0
+    assert p.current_interval("amazon") == 1800.0
+
+
+def test_a_retailer_never_seen_before_answers_with_its_configured_interval() -> None:
+    """No exception, and no requirement that a cycle has run first.
+
+    `boty check` calls this on a fresh clone with no `pacer-state.json` and no
+    recorded outcome for anybody, which is exactly this case.
+    """
+    p = Pacer(default_interval=300, overrides={"gamestop": 900})
+
+    assert p.current_interval("nobody-has-asked-this-one") == 300.0
+    assert p.current_interval("gamestop") == 900.0
+
+
+@pytest.mark.parametrize("interval,expected", _CADENCE_AFTER_N_REFUSALS)
+def test_the_current_interval_widens_with_the_backoff(
+    interval: float, expected: list[float]
+) -> None:
+    """What is published is the cadence in force, not the one in the config.
+
+    Measured on this host 2026-08-13: target and walmart sat at 7 refusals on
+    the 300 s default, so their real cadence was the 6-hour cap — 72 times the
+    standing value. A surface comparing a reading against 300 s there would
+    call every reading stale within five minutes of taking it.
+    """
+    p = Pacer(default_interval=interval)
+
+    for refusals, seconds in enumerate(expected):
+        assert p.current_interval("amazon") == seconds, (
+            f"at {refusals} consecutive refusal(s) the cadence read "
+            f"{p.current_interval('amazon')}, expected {seconds}"
+        )
+        p.record("amazon", refused=True, now=0.0)
+
+
+def test_a_retailer_that_answers_is_back_on_its_standing_interval_at_once() -> None:
+    """A reset, not a decay — the same claim `record` already makes for `due_at`.
+
+    Asserted at the CAP rather than one refusal in, because the interesting
+    direction is a retailer coming back from a 6-hour wait.
+    """
+    p = Pacer(default_interval=300, overrides={"amazon": 1800})
+    for _ in range(7):
+        p.record("amazon", refused=True, now=0.0)
+    assert p.current_interval("amazon") == MAX_BACKOFF_SECONDS
+
+    p.record("amazon", refused=False, now=0.0)
+
+    assert p.current_interval("amazon") == 1800.0
+
+
+@pytest.mark.parametrize("interval,expected", _CADENCE_AFTER_N_REFUSALS)
+def test_the_backoff_schedule_is_exactly_the_schedule_it_was(
+    interval: float, expected: list[float]
+) -> None:
+    """WHEN ANYTHING IS FETCHED DID NOT CHANGE, and this is the gate on that.
+
+    REQ-21 exposes a number that `record` was computing and throwing away. It
+    does not alter the schedule that number describes — the backoff, its
+    multiplier, the cap and the politeness cadence are correct and are not this
+    phase's subject.
+
+    The expected seconds are the literals in `_CADENCE_AFTER_N_REFUSALS`, never
+    `current_interval`'s return value. A test that asked the accessor what the
+    schedule should be would pass for an accessor and a schedule that had drifted
+    apart together, which is the one failure this section exists to detect.
+    """
+    p = Pacer(default_interval=interval)
+    now = 0.0
+
+    for refusals, seconds in enumerate(expected[1:], start=1):
+        p.record("amazon", refused=True, now=now)
+        assert p._for("amazon").due_at == now + seconds, (
+            f"refusal {refusals} scheduled the next attempt at "
+            f"{p._for('amazon').due_at - now}s, not {seconds}s — the fetch "
+            f"schedule moved, and nothing in REQ-21 is allowed to move it"
+        )
+
+    p.record("amazon", refused=False, now=now)
+    assert p._for("amazon").due_at == now + interval, (
+        "a retailer that answered is asked again at its standing interval"
+    )
+
+
+# --------------------------------------------------------------------------
 # The status page must not lose a paced retailer
 # --------------------------------------------------------------------------
 
