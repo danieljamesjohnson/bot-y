@@ -37,6 +37,15 @@
 # not optional here, and on this repo the tool's return value must not be trusted either — it has
 # now said "last_plan" about plan 3 and plan 4 of 6.**
 #
+# NOT RESTORED AT 07-06's CLOSE, 2026-08-17, BECAUSE THE TOOL WAS NOT INVOKED — and that is a
+# decision rather than an omission. Thirteen misfires, the last three byte-for-byte identical and
+# fully deterministic, are enough evidence: 07-06 took the `cp` and wrote every delta by hand
+# (`completed_phases: 0 -> 1`, `completed_plans: 5 -> 6`, `percent: 0 -> 100`, `status`,
+# `stopped_at`, `last_updated`, `last_activity`), so there is no fourteenth misfire to record and
+# the count stands at THIRTEEN. `gsd-tools query roadmap.update-plan-progress` was likewise not
+# invoked; the Phase 7 checkbox and `Plans:` list were ticked by hand. If a future run does invoke
+# either, the `cp`/`diff` protocol below is not optional.
+#
 # RESTORED BY HAND A FIFTH TIME, 2026-08-14, recording 07-05 — the THIRTEENTH misfire, byte-for-byte
 # the twelfth. `gsd-tools query state.advance-plan` returned `{"advanced": false, "reason":
 # "last_plan", "current_plan": 6, "total_plans": 6}` for a phase on its FIFTH of six plans — the
@@ -50,19 +59,20 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 IN PROGRESS — Phase 7 EXECUTING (6 plans, all serial); 07-01 and 07-02 complete 2026-08-13, 07-03, 07-04 and 07-05 complete 2026-08-14, 07-06 next and it checkpoints for Dan. v0.2 archived, complete in the tree and deployed 2026-08-12
-stopped_at: Completed 07-05-PLAN.md — both consumers render the age in the same four forms against the retailer's OWN current cadence, an undated reading renders `age ?` as a warning on both, `storeTag` stops claiming a page answered on a row nobody read, and M36/M37 were watched red by hand at one killer each and CAUGHT at 33/33
-last_updated: "2026-08-14T13:45:00.000Z"
-last_activity: 2026-08-14
+status: Milestone v0.3 — Phase 7 COMPLETE 2026-08-17, closed on three of five criteria MET as written with criteria 3 and 5 MET IN PART and no criterion text amended. All 6 plans landed (07-01/07-02 on 2026-08-13, 07-03/07-04/07-05 on 2026-08-14, 07-06 on 2026-08-17 after a blocking checkpoint Dan answered `keep defer`). REQ-21 complete in the tree and NOT on the wire — the running daemon predates the phase. v0.2 archived, deployed 2026-08-12
+stopped_at: Completed 07-06-PLAN.md — the phase closed: five verdicts recorded with two MET IN PART rather than rounded up, the registry shown rising from 26/26 to 33/33 with M21-M24 named as Phase 6's deliberate gap, the live `make verify` FAIL recorded verbatim with its three classes separated and none of them this phase's, and Dan's `keep defer` recorded verbatim with its date
+last_updated: "2026-08-17T12:55:00.000Z"
+last_activity: 2026-08-17
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 5
-  # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 0 of the
-  # 1 phase in v0.3 is complete, so 0 — even though 1 of 6 plans has landed. The plan counter
-  # above is where per-plan progress is read.
-  percent: 0
+  completed_plans: 6
+  # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 1 of the
+  # 1 phase in v0.3 is now complete, so 100. The plan counter above is where per-plan progress
+  # is read. (Restored by hand at 07-06's close together with the block at the top of this
+  # frontmatter; see the note under ## Session below for why neither was written by tooling.)
+  percent: 100
 ---
 
 # State: bot-y
@@ -106,6 +116,51 @@ page handles that old file correctly (every row renders `age ?`, every store tag
 the `=== false`-not-`!` decision paying off, but the restart is what makes the page say anything new.
 
 ## Status
+
+**Phase 7 — A Reading Has an Age: COMPLETE 2026-08-17.** Six of six plans landed. **Three of
+five criteria MET as written; criteria 3 and 5 MET IN PART**, each with the half that is met
+and the half that is not named separately, and **no criterion text anywhere in `ROADMAP.md`
+was reworded, shortened, merged or amended** — asserted by command (34 criterion bodies at
+baseline, 34 now, none removed, none added), with a second command asserting REQ-21's body
+byte-identical. REQ-21 is complete. Full working: `docs/retailer-evidence.md` § *Phase 7
+closing record*.
+
+- **Criterion 3 is MET IN PART** because `status.json` publishes the **ingredients** of a
+  staleness verdict — `read_at`, `checked`, `current_interval_seconds` — and not the verdict.
+  A join test proves those three jointly sufficient (and it passed **on the RED commit**), and
+  both other surfaces do present staleness; but *sufficient to derive* and *presented as* are
+  different sentences, and this is the milestone that exists because a difference of that size
+  was published as if it were none. **No key was added to make the row read MET.**
+- **Criterion 5 is MET IN PART** because *"every gate this phase adds"* is broader than *"every
+  mutation"*. All seven mutations were watched red by hand and CAUGHT at 33/33 with survivors
+  0, and every TDD gate was observed failing first at a recorded RED count — **with one named
+  exception**: 07-05's join test passed the moment it was written and was never observed
+  failing. That is a measurement, not a weak test, but the criterion says *every*.
+
+**The gate, re-measured at close on 2026-08-17 and identical to the 2026-08-14 run on every
+verdict line** (only the pytest wall-clock differs, 10.87s → 10.95s): `identity check: PASS —
+220 file(s)`, `865 passed`, mypy clean over 18 source files, `mutation check: 33/33 mutations
+caught`, `EXIT=0`. The registry rose **from 26/26 to 33/33** — **26 + 7 = 33** — with
+`M21`–`M24` a **deliberate Phase 6 gap** and not four lost mutations.
+
+**NONE OF THIS IS ON THE WIRE.** Re-measured 2026-08-17 and unchanged across the three days
+the checkpoint was open: `boty watch` `MainPID=547119`, `ActiveEnterTimestamp=Wed 2026-08-12
+17:28:29 CDT`, `ActiveState=active`. It predates 07-01 by ~15 hours and the
+`served/boty/status.json` it writes every cycle carries **none** of this phase's four keys.
+`boty` is an editable install, so **the phase reaches Dan's dashboard at the next
+`sudo systemctl restart boty`** — his action, neither performed nor recommended here. That
+restart now does four things: it migrates `state.json` to its dated shape, it starts
+publishing `read_at` / `checked` / `current_interval_seconds`, it makes the dashboard show 13
+rows instead of a varying 3–10, and it makes the age visible at all.
+
+**Dan answered 07-06's blocking checkpoint `keep defer` on 2026-08-17** — see § *Dan's answers*
+below. `workflow.auto_advance` is `true` on this project and was **not** applied to that
+checkpoint.
+
+**Next command:** `/gsd-new-milestone`, or a plan for the deferred live-`make verify` classes.
+`QUESTIONS.md` § 0e and § 0f are both still open.
+
+---
 
 **Milestone v0.2 — ARCHIVED 2026-08-11.** 2 of 2 phases, 11 of 11 plans, 84 commits from the
 scoping commit `79e0c84`, 75 files changed, +30,483 / −568. Audit status `passed` (it opened
@@ -640,6 +695,7 @@ Working and deployed on danserver before this roadmap was written:
 | Phase 06 P06 | 42min | 3 tasks (1 checkpoint, already answered 2026-08-11 and shipped as 06-07) | 5 files |
 | Phase 07 P04 | 25min | 3 tasks (2 TDD, so 5 code commits) | 5 files |
 | Phase 07 P05 | 34min | 3 tasks (2 TDD, so 5 code commits) | 5 files |
+| Phase 07 P06 | ~45min of execution, spread across 3 days | 3 tasks, 1 commit (no code). Task 1 measured 2026-08-14; **the blocking checkpoint held the plan open until Dan answered on 2026-08-17**; Task 3 wrote the record that day. Wall-clock elapsed is 3 days and execution time is ~45min, and the two are recorded separately because conflating them is this milestone's own defect | 5 files |
 
 ## Decisions
 
@@ -783,6 +839,16 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 07]: 07-05: `storeTag` returns early on `w.checked === false` and not `!w.checked` — a pre-07-04 `status.json` on disk during a deploy has no `checked` key, and `!undefined` would suppress the store tag on every row of it. Verified against the live pre-phase file, not argued in the abstract
 - [Phase 07]: 07-05: the `not checked` label uses the plain dim `.tag` weight — a paced-out retailer is an ordinary, expected and correct state, and the warning, if there is one, is the age beside it. Inventing a third visual weight for a non-problem would be inventing a visual language
 - [Phase 07]: 07-05: a comment that must reference a forbidden code shape DESCRIBES it rather than quoting it, and writes the banner constant as `1 800` with a space — both of this plan's source-scanning gates read comments too, and each went red on its own explanation before it ever saw the code. The gates were not weakened to fit the prose
+- [Phase 07]: 07-06: **THE IDENT ARITHMETIC, which a future reader needs more than any other decision here — 26 at phase start (`M1`-`M20`, `M25`-`M30`) + 7 this phase (M31 07-01, M32 07-02, M33 07-03, M34/M35 07-04, M36/M37 07-05) = 33 at close. `M21`-`M24` ARE A DELIBERATE PHASE 6 GAP, not four lost mutations** — 06-03 and 06-04 each registered no mutation by design, and `scripts/mutation_check.py` restates the gap three times in its own comments. Read the registry with comment lines filtered; a bare `grep -c` counts comment prose, which is the class that produced BOTH the wrong registry figure and the wrong watch count this phase had to correct
+- [Phase 07]: 07-06: `read_at` is a fact about **whether a page was read** and is derivable from neither `refused` nor `availability` — `availability is UNKNOWN` is true of a store-gap and of a parse failure, both of which read a page, and `bad api json` sets no `refused` and still received a response. Recorded in the field's own declaration so the "just derive it" simplification is answered where it will be proposed
+- [Phase 07]: 07-06: staleness touches neither `Availability` nor `alertable` — a `Result` is always fresh at construction, so the term could never fire there, and a staleness rule that moved a verdict would be inventing a reading rather than dating one
+- [Phase 07]: 07-06: **no `stale` flag is computed at write time** — raw facts are published and staleness is derived at render time in each consumer, against that consumer's own `now`. A flag written `false` keeps saying `false` for exactly the interval during which it becomes true: `pacing.py:196-199`'s own recorded rule, one file over. This is also why criterion 3 closed **MET IN PART** rather than MET, and the record argues both directions rather than picking the convenient one
+- [Phase 07]: 07-06: a bare string in `state.json` loads as **availability with an unknown age**, never as `now` — measured against the real 13-entry pre-07 document on this disk, with alert behaviour byte-for-byte unchanged, and no version field, because a version field does not answer the downgrade direction and per-entry tolerance does
+- [Phase 07]: 07-06: `boty check`'s `Pacer` is **load-only** and is never passed to `run_once`, so a surface routinely run while the daemon is writing can read the cadence document without ever writing to it
+- [Phase 07]: 07-06: the two staleness rules on the dashboard are **NOT unified** — the page's 30-minute banner constant asks a different question from a row's per-retailer cadence, and merging them would have painted correctly-paced rows stale. The banner was left exactly where it is
+- [Phase 07]: 07-06: **a criterion that is not fully met is recorded MET IN PART with its date and its reason, and its text is not touched** — Phase 3.1 declined a rewrite that would have made its criterion 1 meetable, Phase 4 recorded two UNMET, Phase 5 closed with every live row NOT OBTAINED, Phase 6 recorded criterion 1 MET IN PART. Phase 7 records two. The no-rewording claim is asserted by command rather than by eye, with a `HEAD~1` fallback so it cannot pass vacuously after its own commit
+- [Phase 07]: 07-06: the closing plan **writes no code**. 05-04's decision governs — *"a closing plan that implemented its way to a green table would be a phase measuring work it did in the act of measuring"* — and the changed-file set is asserted against an explicit allow-list rather than promised
+- [Phase 07]: 07-06: **`gsd-tools state` write subcommands were not invoked at all**, on the evidence of thirteen misfires with the last three byte-for-byte identical. Every delta was written by hand after a `cp`. Not invoking a deterministic corrupter is cheaper than restoring from it, and the count therefore stands at thirteen rather than fourteen
 
 ### Blockers
 
@@ -790,7 +856,8 @@ Working and deployed on danserver before this roadmap was written:
 - ~~Target: rung 3 is the only remaining route to its stock data, and it reaches that data only by making requests to redsky.target.com, which is Disallow:/ for every agent. Dan's 2026-08-03 reversal settled the Terms of Use, not robots.txt. Two options in QUESTIONS.md 0d; notify-dan sent.~~ **Cleared 2026-08-03.** Dan answered 0d explicitly and took option 2 — render the page, read the add-to-cart control, record it in the open. The ruling was then *measured* rather than left as a forecast: `performance.getEntriesByType('resource')` inside one rendered PDP found **31 hosts**, and **three** Target-owned hosts publish `Disallow: /`, not the one 0d named. The prohibition widened to match — no code here addresses `redsky.target.com`, `api.target.com` or `sapphire-api.target.com` directly.
 
 - **No open blockers.** The only thing still waiting on Dan is `QUESTIONS.md` § 0e (public git history carrying this host's ZIP in four fixtures), which is a decision rather than a blocker — nothing is stopped by it.
-- make verify FAILS live, first recorded 2026-08-06 and **re-measured once at Phase 5's close on 2026-08-10**: 'VERIFY: FAIL (live controls)', exit 2, in THREE classes now rather than two. Unchanged: Best Buy and Target cannot run at all (no Chrome/Chromium binary on this host, though nodriver 0.50.3 is installed, and STATE.md's 2026-08-10 entry records that Playwright's Chromium works when BOTY_BROWSER_PATH points at it). CHANGED: the Walmart/Amazon challenge-page class did NOT manifest on the 2026-08-10 pass — Amazon read IN_STOCK at $9.99 and Walmart served a judgeable page — so that class is intermittent rather than permanent. NEW, caused by Phase 5 and correct: 1/6 not reading IN_STOCK is Walmart through the config-gap guard, because make verify runs with no WALMART_STORE_ID. Everything still reads UNKNOWN rather than OUT_OF_STOCK, so the fail-safe is working, but real restocks are being missed. NOT a Phase 4 regression and NOT a Phase 5 regression — no plan in either phase touched a retailer, extractor or control. Still needs its own plan: polite probing plus fixture re-capture. Detail in .planning/phases/04-open-source-ready/deferred-items.md and docs/retailer-evidence.md § Phase 5 closing record
+- make verify FAILS live, first recorded 2026-08-06 and **re-measured once at Phase 7's close, 2026-08-14** (one live pass, spent immediately after a daemon write so the two were not in flight against the same six retailers; **not repeated after the checkpoint, so this verdict is a 2026-08-14 observation and is not restated as current**): 'VERIFY: FAIL (live controls)', exit 2, in the same THREE classes, **none of them this phase's**. (1) 2/6 could not run on THIS HOST — Best Buy and Target, no Chrome/Chromium binary; the tool itself says this 'says nothing about the DETECTOR'. (2) **The intermittent challenge class DID manifest this time**, on Amazon — 'blocked: challenge page matched ...' at HTTP 200 — after being ABSENT on both 2026-08-10 and 2026-08-11, so the record reads present-absent-absent-present across four passes and *intermittent* remains the supported reading. (3) Walmart through Phase 5's config-gap guard, because make verify runs in a shell with no WALMART_STORE_ID — that one is Phase 5's and it is CORRECT. The line reads '2/6 not reading IN_STOCK' where the baseline read 1/6, because class 2 manifested and NOT because a new class appeared; GameStop and Nintendo both read in_stock as before and no control's verdict moved in a way attributable to Phase 7, which touched no retailer, extractor, transport or control. Recorded, NOT diagnosed, and NOT re-run until green. Not run under the service's EnvironmentFile — 05-04's recorded departure still binds. Detail in docs/retailer-evidence.md § Phase 7 closing record.
+- **Superseded, kept as the record — the same line as re-measured at Phase 5's close on 2026-08-10**: 'VERIFY: FAIL (live controls)', exit 2, in THREE classes rather than two. Unchanged: Best Buy and Target cannot run at all (no Chrome/Chromium binary on this host, though nodriver 0.50.3 is installed, and STATE.md's 2026-08-10 entry records that Playwright's Chromium works when BOTY_BROWSER_PATH points at it). CHANGED: the Walmart/Amazon challenge-page class did NOT manifest on the 2026-08-10 pass — Amazon read IN_STOCK at $9.99 and Walmart served a judgeable page — so that class is intermittent rather than permanent. NEW, caused by Phase 5 and correct: 1/6 not reading IN_STOCK is Walmart through the config-gap guard, because make verify runs with no WALMART_STORE_ID. Everything still reads UNKNOWN rather than OUT_OF_STOCK, so the fail-safe is working, but real restocks are being missed. NOT a Phase 4 regression and NOT a Phase 5 regression — no plan in either phase touched a retailer, extractor or control. Still needs its own plan: polite probing plus fixture re-capture. Detail in .planning/phases/04-open-source-ready/deferred-items.md and docs/retailer-evidence.md § Phase 5 closing record
 
 ## v0.2 is on the wire — deployed and measured 2026-08-12
 
@@ -1139,3 +1206,153 @@ to the twelfth: it returned `{"advanced": false, "reason": "last_plan", "current
 4 -> 5`, `last_updated`) applied by hand. **The failure is now fully deterministic on this repo:
 three plans in a row, same wrong verdict, same three damages, across two subcommands.**
 `gsd-tools query roadmap.update-plan-progress 07` was run under the same protocol.
+
+## Session — 07-06 complete, Phase 7 CLOSED, 2026-08-17
+
+**Phase 7 closed on three of five criteria MET as written, with criteria 3 and 5 MET IN PART
+rather than rounded up.** No code was written; the changed-file set is asserted against an
+allow-list. No criterion text anywhere in `ROADMAP.md` was reworded, shortened, merged or
+amended — **34 criterion bodies at baseline, 34 now, none removed, none added** — and REQ-21's
+body is byte-identical after whitespace normalisation. Both facts are asserted by command with
+a `HEAD~1` fallback, not left to the eye.
+
+### Dan's answers, verbatim, with the date
+
+**`keep defer`** — 2026-08-17, at 07-06's blocking checkpoint. `autonomous: false` and
+`gate="blocking"`; `workflow.auto_advance` is `true` on this project and was **not** applied.
+
+- **`keep`** — the constant 13 rows stand as shipped, remembered ones labelled as memories.
+  **Recorded as seen and accepted.** He did **not** choose `note-it`, so **no follow-up plan for
+  a collapse/filter affordance was logged and none should be inferred.** Nothing was built on
+  the answer.
+- **`defer`** — no store pin now. **§ 0f stays open**, and Walmart's GO Plus + row publishes
+  `out_of_stock · age ? · not checked` **indefinitely, until a store is pinned**. That is the
+  honest output, not a defect: the age genuinely is not established and inventing one would be
+  the exact failure REQ-21 exists to remove.
+
+**How many deferrals, measured rather than repeated.** `07-06-PLAN.md` and two SUMMARYs call
+this *the third*. Measured: § 0f was created 2026-08-10 (`e55f733`) and has been put to Dan
+**twice** — 05-04's checkpoint on 2026-08-10 and 07-06's on 2026-08-17 — so it is the **second
+time he has answered it himself** and the **third time it has been deferred by any means**,
+counting the acknowledged deferral at v0.2's milestone close on 2026-08-11 which carried no new
+answer from him. Both readings recorded; neither edited away.
+
+**No store number was read, derived, inferred, requested or printed anywhere in this phase.**
+Presence measured as a count and never as a value: `grep -c 'WALMART_STORE_ID'` on the
+deployment env file → **0**, on 2026-08-14 and again on 2026-08-17. Nothing was run under the
+service's `EnvironmentFile`. `identity_check.py --all` PASSED at the checkpoint and again
+before the commit — **220 file(s), no host identity found**.
+
+### The dates are not all the same, and this record says so
+
+Task 1's measurements were taken **2026-08-14**. Dan answered **2026-08-17**, three days later.
+The gate was re-run at close on **2026-08-17**. **In a phase whose thesis is that a reading must
+carry the moment it was taken, the closing record does not get to call a three-day-old figure
+"today"** — so every measurement in `ROADMAP.md`, `REQUIREMENTS.md`, `QUESTIONS.md` and
+`docs/retailer-evidence.md` carries its own date, and the live `make verify` verdict is labelled
+a 2026-08-14 observation rather than restated as current.
+
+**Re-measured at close and unchanged:** the running daemon (`MainPID=547119`,
+`ActiveEnterTimestamp=Wed 2026-08-12 17:28:29 CDT` — the same process, across the whole
+checkpoint), the store pin count (`0`), and `state.json` (still **13 entries, all 13 bare pre-07
+strings**, with `walmart:Pokémon GO Plus +` still reading `out_of_stock` — **frozen through five
+days of the daemon rewriting that file every cycle**, which is the freeze demonstrated over time
+rather than argued from the code path alone).
+
+**Re-measured at close and identical:** `make verify-offline`. The 08-14 and 08-17 runs agree on
+every verdict line — `identity check: PASS — 220 file(s)`, `865 passed`, mypy clean over 18
+source files, `mutation check: 33/33 mutations caught`, `EXIT=0`, survivors **0**. The only byte
+that differs in the whole comparison is the pytest wall-clock (`10.87s` → `10.95s`). Saying that
+is the honest claim; silently substituting one run for the other would not be.
+
+**NOT re-measured, and labelled:** the live `make verify`. One pass was budgeted and it was spent
+on 2026-08-14; re-running a live probe against six retailers to attach a fresher date to it would
+have been a second pass for a cosmetic gain. Politeness is a hard constraint here.
+
+### The two criteria that closed MET IN PART
+
+**Criterion 3.** `status.json` publishes the **ingredients** of a staleness verdict —
+`read_at`, `checked`, `current_interval_seconds` — and not the verdict. A join test derives the
+verdict from those three and nothing else, and **it passed on the RED commit before any
+implementation existed**, which is the strongest form that sufficiency claim can take; both
+other surfaces do present staleness against the retailer's own published cadence. But the
+criterion says *presented as stale in `status.json`*, and *sufficient to derive* is a different
+sentence. Recorded MET IN PART with both arguments written out. **No key was added to make it
+read MET**, because a `stale` flag computed at write time is a bound that cannot bind.
+
+**Criterion 5.** *"Every gate this phase adds has been watched going red"* is broader than the
+mutation ratio. All seven mutations were watched red **by hand, alone**, each reverted to an
+empty porcelain before the next, then CAUGHT at 33/33 with survivors 0 — and every TDD gate was
+observed failing first at a recorded RED count (07-01 3/5/4 failed, 07-02 14 then 2, 07-03 5
+then 5, 07-04 10 then 3, 07-05 20 then 6). **One named exception:** 07-05's
+`test_status_json_carries_everything_a_consumer_needs_to_judge_staleness` passed the moment it
+was written and was never observed failing. Naming it is the point; rounding the row up on the
+strength of 33/33 would have been rewording a criterion one level in.
+
+### Corrections carried into the record, each beside its document and none edited into one
+
+`07-CONTEXT.md`, `07-PATTERNS.md`, `07-PLAN-OUTLINE.md` and REQ-21's own text are **flagged where
+they are wrong and edited nowhere.**
+
+- **Three documents, three different wrong registry figures.** CONTEXT's set counts to **24**
+  while claiming 26 and sends new idents to M29 when M29/M30 already existed; PATTERNS corrects
+  the set to `M1-M20, M25-M30` and calls it **28** in the same sentence (twenty plus six is 26);
+  the outline says **six** new idents when **seven** landed. CONTEXT was auto-generated under
+  `workflow.skip_discuss`, so **its errors are drafting errors and nothing Dan decided is being
+  re-opened.**
+- **The denominator is 13, not 14.** `Config.load` returns 13; the fourteenth
+  `grep -c "retailer:"` match is a **comment** at `config/products.yaml:309` about a watch that
+  deliberately does not exist. Recorded beside the ROADMAP's two unedited "14" lines.
+- **"~97-minute cadence" is a remaining-time figure, not a cadence.** `min(300 · 2⁷, 21600)` is
+  the **six-hour cap of 21 600 s**; a 1 800 s threshold would have painted every target and
+  walmart row stale while both behaved exactly as the politeness rule requires. M37's `breaks=`
+  rests on the corrected number.
+- **The absent-row finding, which reframed the phase.** Row counts against 13 configured watches
+  on an unchanged config: 3 at 2026-08-13 08:25:10, 8 at 09:24:54, 5 at 2026-08-14 07:36:57, and
+  **5 / 5 / 10 across three consecutive cycles on the morning of 08-14** — the count moving 5 →
+  10 in eleven minutes. **REQ-21's own sentence *"the page presents both as current"* is one
+  direction off**: the stale row was not presented at all, which is worse rather than better.
+  Recorded below REQ-21's unedited text.
+- **Three near-miss mutation anchors, with their measured counts.** M33's single-line candidate
+  occurs **twice** in `boty/pacing.py`, the first at **line 156 inside a comment** — it would
+  have mutated prose, changed no behaviour and **SURVIVED**. M34's single-line fragment counts
+  **2**, the first being **line 193, the retailers array's paced branch** — a gate on a rule it
+  was not written for. M36/M37 were pre-counted for the same reason (`read_at` occurs 3 times in
+  `boty/cli.py`; `intervals` occurs 4 times in `served/boty/index.html`). Every competing count
+  was taken **before** registration. A gate that cannot go red is this phase's own subject
+  wearing the fix's clothes.
+
+### The leaked-markup class, fourth instance, with the sweep re-measured at close
+
+The class recurred while `07-01-PLAN.md` was being written on 2026-08-13 and was **caught before
+commit** — the **fourth** instance, the **second** produced by an agent writing a PLAN into
+`.planning/`, and the second near-miss. The other three: `05-02-PLAN.md` (caught pre-commit,
+near-miss), `06-PATTERNS.md` (committed, produced in the act of measuring the sweep), and
+`06-07-SUMMARY.md` at `a71e79b` (committed one day after the gate for that byte-shape landed,
+removed at `7355034` and recorded rather than quietly fixed).
+
+**The sweep was re-run rather than remembered.** Pattern: the two closing tag forms, the opening
+call form, the parameter-open form and the namespace prefix, joined as alternatives and assembled
+at runtime so this file does not become the fifth instance. **Measured: 29 matching lines in 9
+files.** The whole-line tag shapes sit at `04-REVIEW.md:113-114` and `06-VERIFICATION.md:267-268`
+/ `:386-387` — **all inside fenced code blocks**, deliberate recorded evidence — and at
+`.planning/seeds/nothing-reads-the-changelog-body.md:15-16`, which is not fenced. The other 23
+are prose naming the class or `tests/test_changelog.py`'s own fixtures. **29 and "four instances"
+are different quantities and both are recorded; the pattern was NOT adjusted to make a number
+match a remembered one.** **No gate this repository ships covers `.planning/`** —
+`leaked_markup` is scoped to `CHANGELOG.md`, and the only `.planning/` file any test reads is
+this one, for a single frontmatter key. Flagged for the fourth time, fixed nowhere.
+
+### The tooling, and why the misfire count did NOT rise to fourteen
+
+**`gsd-tools state` write subcommands were not invoked at all**, and neither was
+`gsd-tools query roadmap.update-plan-progress`. Thirteen misfires are on the record, the last
+three byte-for-byte identical and fully deterministic — the command returns
+`{"advanced": false, "reason": "last_plan", "current_plan": 6}` regardless of the real plan
+number, deletes both frontmatter comment blocks, and regresses `stopped_at` to a stale
+`Completed 06-05-PLAN.md`. This run took the `cp` and wrote every delta by hand
+(`completed_phases: 0 → 1`, `completed_plans: 5 → 6`, `percent: 0 → 100`, `status`, `stopped_at`,
+`last_updated`, `last_activity`), and ticked the ROADMAP checkbox and `Plans:` list by hand. **So
+there is no fourteenth misfire and the count stands at THIRTEEN.** Not invoking a deterministic
+corrupter is cheaper than restoring from it. `milestone: v0.3` was **not touched** and
+`tests/test_packaging_metadata.py` was re-run green after the edit.

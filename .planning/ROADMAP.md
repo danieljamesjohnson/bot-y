@@ -24,7 +24,7 @@ under *Milestone v1.0.0 — Phase Details* below. v1.0.0 remains open and untagg
 
 ### Milestone v0.3 — Say When You Measured It (scoped 2026-08-13)
 
-- [ ] **Phase 7: A Reading Has an Age** - Stamp it, publish it, and show a stale reading as stale rather than as fact
+- [x] **Phase 7: A Reading Has an Age** - Stamp it, publish it, and show a stale reading as stale rather than as fact (completed 2026-08-17 — three of five MET as written, criteria 3 and 5 MET IN PART, no criterion text amended)
 
 ## Retailer Scope
 
@@ -400,6 +400,83 @@ that look identical to the fresh ones.** Detail and the reconstruction in
   4. The age survives a service restart, so a restart cannot make a two-day-old reading look fresh
   5. `make verify-offline` exits 0, and every gate this phase adds has been watched going red
 
+**Outcome, recorded 2026-08-17 by 07-06 — three of five MET as written; criteria 3 and 5 MET IN
+PART, each with the half that is met and the half that is not named separately. No criterion text
+anywhere in this document was reworded, shortened, merged or amended, and that is asserted by
+command rather than left to the eye.** The two partial rows are the two this phase had the most
+pressure to round up, and the reasons are recorded rather than absorbed: criterion 3's `status.json`
+third landed as three raw facts plus a join test rather than as a staleness verdict in the file, and
+criterion 5's *"every gate"* is broader than *"every mutation"* — one gate this phase adds was never
+observed failing, by construction, and is named below. **And as in Phases 5 and 6, none of this is
+confirmed on the deployed daemon:** `boty watch` `MainPID=547119`, `ActiveEnterTimestamp=Wed
+2026-08-12 17:28:29 CDT`, re-measured 2026-08-17 and unchanged — it predates 07-01 by ~15 hours and
+the file it writes every cycle carries none of this phase's four keys. Full working in
+`docs/retailer-evidence.md` § *Phase 7 closing record*.
+
+| # | Verdict | Measurement or reason |
+|---|---|---|
+| 1 | **MET in the tree — NOT ON THE WIRE** | `Result.read_at` is stated at **all 20** `Result(` construction sites in `boty/retailers.py` — not inherited from a default — and completeness is proved by a **static AST gate over the source** (`20/20 sites name read_at`) rather than by covering arms one at a time, so an arm added later cannot silently omit it. The read/non-read partition is **11 / 9**, and the two Best Buy arms the naive rule gets wrong (`bad api json`, `sku not found`) are stamped **as reads**, because Best Buy answered. An arm that read nothing carries **`null`, never `0`** — epoch 1970 renders as maximally stale, which is the same lie one direction over. `status.json` publishes `read_at` per watch row, with `tests/test_status.py`'s exact-keyset assertion **updated by enumeration rather than loosened**. `CAUGHT M31 boty/retailers.py: 2 test(s) failed` — the mutation stamps a refusal that never received a page, which is the 2026-08-12 defect REQ-21 exists to fix, rebuilt inside the fix. Quoted from `07-01-SUMMARY.md`. **Live confirmation NOT OBTAINED, 2026-08-17:** the daemon's rows carry no `read_at` key at all |
+| 2 | **MET in the tree — NOT ON THE WIRE. Spans two plans, and that is structure rather than dilution** | The criterion has a datum half and a rendering half, and the ROADMAP says so immediately below this table. **Datum, 07-01:** an unstamped reading is `None`, never `now` — red-watched by **M31**. **Rendering, 07-05:** `[age ?]` on `boty check` and an amber warn tag on the dashboard, both appended **unconditionally**, because if fresh rows carried no tag then an absent tag would *mean* fresh and the implicit claim would survive the fix. Red-watched by `CAUGHT M36 boty/cli.py: 1 test(s) failed — test_report_says_unknown_for_a_reading_nobody_dated`. **Measured on this host rather than argued:** the real payload renders **13 of 13 rows as `AGE ?`**, because `state.json` holds 13 availabilities and **0** stamps — re-confirmed 2026-08-17, still 13 bare pre-07 strings. The page was **looked at** with headless Chromium against a scratch copy, not inferred from source. Quoted from `07-01-SUMMARY.md` and `07-05-SUMMARY.md` |
+| 3 | **MET IN PART — the `boty check` and dashboard thirds MET; the `status.json` third NOT SETTLED, recorded 2026-08-17** | **What is MET.** The threshold is the retailer's own current cadence, not a fixed clock: `Pacer.current_interval` is one number, `record` computes its own wait *through* it so the number shown and the schedule kept cannot drift apart, and `tests/test_pacing.py`'s schedule characterisation asserts **literal expected seconds** so it cannot pass by re-deriving them through the code under test (`CAUGHT M33 boty/pacing.py: 11 test(s) failed`). A row that *can* be old exists at all only because of 07-04 — **13 rows published while 3 were fetched**, `checked: false`, `alertable: false` stated (`CAUGHT M34`, `CAUGHT M35`). Both renderings judge against that published per-retailer number and never against `index.html`'s 30-minute banner constant, which was left exactly where it is (`CAUGHT M37 served/boty/index.html`). **What is NOT settled, and why it is not rounded up.** 07-05 deliberately added **no staleness flag and no new key** to `status.json`: a `stale` boolean computed at write time is written `false` and keeps saying `false` for exactly the interval during which it becomes true — `pacing.py:196-199`'s own recorded lesson, one file over — so it is *a bound that cannot bind, which is worse than no bound because it reads like one in the file*. Instead the file publishes three raw facts (`read_at`, `checked`, `current_interval_seconds`) and a join test derives the verdict from those three **and nothing else**, passing **on the RED commit before any implementation existed** — the strongest form that sufficiency claim can take. **The argument that this MEETS the criterion:** everything needed to present staleness is published, proved jointly sufficient by execution, and both consumers do present it. **The argument that it does not:** the criterion says *presented as stale in `status.json`*, and the file presents the **ingredients** of the verdict, not the verdict — a reader opening it sees three numbers and must subtract against their own clock. Those are different sentences, and this is the milestone that exists because a difference of exactly that size was published as if it were none. **Verdict reached: MET IN PART.** The criterion's text is **not edited**, and no key was added to make the row read MET |
+| 4 | **MET in the tree — NOT ON THE WIRE, and the restart is the whole of what is missing** | `monitor.State` becomes a dated per-watch ledger, and the migration was measured against **the real pre-07 document on this disk** rather than a synthetic one: 13 bare strings loaded **without exception**, every availability preserved, every age **unknown**, and **alert behaviour byte-for-byte unchanged** — so nothing re-alerts on the migration itself. A stamp read back that is in the future, or a string, or a `True`, is **discarded rather than believed** (both ends of the bound validated). The age was observed surviving a **real two-process restart**, not a mocked one. `CAUGHT M32 boty/monitor.py: 7 test(s) failed` — the mutation defaults a missing stamp to `now`, which on this host's document dates all 13 entries at the instant the daemon starts and makes a two-day-old reading look four seconds old; that is this criterion's failure in one line. Quoted from `07-02-SUMMARY.md`. **NOT confirmed on the deployed daemon:** re-measured 2026-08-17, the running process is still the pre-phase one, so no service restart has yet exercised this path in production |
+| 5 | **MET IN PART — the gate half MET; *"every gate"* NOT fully MET, recorded 2026-08-17** | **`make verify-offline` exits 0** — re-run at close on 2026-08-17 and **identical** to the 2026-08-14 run on every count: `identity check: PASS — 220 file(s)`, `865 passed`, `Success: no issues found in 18 source files`, `mutation check: 33/33 mutations caught`, `VERIFY: PASS (OFFLINE …)`, `EXIT=0`. Survivor list **empty**. **All seven new mutations were watched going red BY HAND, alone, before the harness was ever asked** — M31, M32, M33, M34, M35, M36, M37 — each reverted to an empty `git status --porcelain` before the next was applied, and in every case the by-hand killer list and the harness's list agree by name, which is the only thing that makes CAUGHT mean anything. **But *"every gate"* is broader than *"every mutation"*, and rounding this row up on the strength of 33/33 would be rewording a criterion one level in.** Enumerated: every TDD gate in the phase was observed failing first at a recorded RED count — 07-01 (3 failed / 33 passed, then 5 failed, then 4 failed), 07-02 (14 failed / 29 passed, then 2 failed / 45 passed), 07-03 (5 failed / 68 passed, then 5 failed / 25 passed), 07-04 (10 failed / 29 passed, then 3 failed / 39 passed), 07-05 (20 failed / 30 passed, then 6 failed / 9 passed) — **with exactly one named exception**: 07-05's join test, `test_status_json_carries_everything_a_consumer_needs_to_judge_staleness`, **passed the moment it was written, on the RED commit, and was therefore never observed failing.** That is not a weak test — it is the measurement that the three published facts were *already* jointly sufficient, and 07-05 recorded it as such rather than manufacturing a red — but the criterion says *every* gate, and this one was not watched going red. **Verdict reached: MET IN PART**, with the exception named rather than absorbed |
+
+**The phase gate, recorded 2026-08-17.** `make verify-offline`, run once at close and allowed to
+finish, **exit 0**:
+
+```
+identity check: PASS — 220 file(s), no host identity found
+All checks passed!
+865 passed in 10.95s
+Success: no issues found in 18 source files
+control check: SKIPPED (--offline) — no live retailer request made.
+mutation check: 33 mutation(s), sandboxed (the working tree is never touched)
+  baseline  unmutated sandbox passes (836 passed, 29 skipped in 11.27s)
+mutation check: 33/33 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)
+EXIT=0
+```
+
+**The ratio rose from 26/26 to 33/33**, and the arithmetic is stated once: **26 at phase start + 7
+this phase = 33**. Read from the registry with comment lines filtered rather than counted with a bare
+`grep -c`, which counts comment prose and is the self-invalidating class this phase had to correct
+twice. The full ident list, in file order: `M1`–`M20`, `M25`–`M37`. **`M21`–`M24` ARE A DELIBERATE
+GAP left by Phase 6 and are not four lost mutations** — 06-03: *"NO MUTATION REGISTERED, and M21-M22
+left deliberately unallocated: `apply_mutation` cannot add a file, so the defect is outside the
+harness by construction"*; 06-04: *"M23-M24 left unallocated, joining 06-03's M21-M22, so the
+sequence carries a deliberate gap at M21-M24"*. The rise is **shown** rather than claimed: 531 / 8-8
+(Phase 4 close) → 667 / 16-16 (Phase 5) → 768→769 / 24-24 (Phase 6) → **778 / 26-26 (Phase 7 start,
+`dbc9d49`)** → 798 / 27-27 → 821 / 28-28 → 835 / 29-29 → 848 / 31-31 → 865 / 33-33.
+
+**The live gate, run ONCE on 2026-08-14 and NOT repeated — its verdict is a 2026-08-14 observation
+and is not restated as current.** Politeness is a hard constraint here and this close was budgeted
+exactly one live pass, spent on 08-14 immediately after a daemon write so the two were not in flight
+against the same six retailers. Verbatim, including the FAIL:
+
+```
+control check: FAIL — 2/6 control(s) not reading IN_STOCK
+    walmart/CONTROL — Great Value whole milk: unknown — no store_id pinned for this watch
+    amazon/CONTROL — Amazon Basics AA batteries (20-pack): unknown — blocked: challenge page
+      matched 'to discuss automated access to amazon data' (HTTP 200)
+control check: 2/6 control(s) could not run on THIS HOST
+    bestbuy/… : fetch failed: no Chrome/Chromium binary found
+    target/… : fetch failed: no Chrome/Chromium binary found
+VERIFY: FAIL (live controls)
+EXIT=2
+```
+
+The classes, separated, with **none of them this phase's**: (1) **2/6 cannot run on this host** —
+Best Buy and Target, no Chrome/Chromium binary, pre-existing since 2026-08-06, and the tool itself
+says this *"says nothing about the DETECTOR"*; (2) **the intermittent challenge class DID manifest on
+2026-08-14**, on Amazon — it was absent on both 2026-08-10 and 2026-08-11, so the record now reads
+present-absent-absent-present and *intermittent* remains the supported reading; (3) **Walmart through
+Phase 5's config-gap guard**, because `make verify` runs in a shell with no `WALMART_STORE_ID` — that
+one is Phase 5's and it is **correct**. The baseline's *"1/6 not reading IN_STOCK"* reads **2/6** here
+because class 2 manifested, not because a new class appeared. **No control's verdict moved in a way
+attributable to this phase**: GameStop and Nintendo both read `in_stock` as before, and no plan in
+this phase touched a retailer, an extractor, a transport or a control. Recorded, not diagnosed, and
+not re-run until green.
+
 **Why the interval and not a fixed clock.** A retailer in backoff is *legitimately*
 checked less often — Walmart at seven refusals is on a multi-hour interval and that
 is the politeness rule working. What is dishonest is not the age; it is presenting
@@ -438,7 +515,17 @@ Plans:
 - [x] 07-03: The retailer's current interval becomes one readable number, and both surfaces read the same one *(wave 3, blocked on 07-02)*
 - [x] 07-04: Every configured watch has a row, and a remembered reading says it is remembered — 3 rows for 14 watches today *(wave 4, blocked on 07-03)*
 - [x] 07-05: The three surfaces say the age out loud, and an absent one says UNKNOWN *(wave 5, blocked on 07-04)*
-- [ ] 07-06: Close — no code; the gates measured, the count observed rising from 26, five verdicts *(wave 6, blocked on 07-01 … 07-05, `autonomous: false`)*
+- [x] 07-06: Close — no code; the gates measured, the count observed rising from 26, five verdicts *(wave 6, blocked on 07-01 … 07-05, `autonomous: false`)*
+
+**Correction recorded beside the two lines above, which are not edited (2026-08-17):** the 07-04
+entry and the paragraph below this list both say *"14 configured watches"*. Measured through the
+loader that actually builds them — `Config.load('config/products.yaml')` — the count is **13**
+(gamestop 5, walmart 2, nintendo 2, amazon 2, bestbuy 1, target 1; 6 of them controls). The
+fourteenth `grep -c "retailer:"` match is a **comment** at `config/products.yaml:309` — *"There is no
+`retailer: pokemoncenter` entry and that is a finding, not a gap"* — a sentence about an **absent**
+watch counted as a present one. First measured by 07-04. The lines stay as written on Phase 3.1's
+precedent: a planning document is the record of what was believed when the work was scoped, and the
+"3 rows" half of both sentences is a real measurement that still stands.
 
 **Criteria 2 and 3 each span more than one plan, and that is structure rather than
 dilution.** Criterion 2 splits across 07-01 (the datum: an absent stamp is `None`, never

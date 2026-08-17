@@ -2,8 +2,9 @@
 
 Two credentials I cannot obtain myself. The one open decision (0d, Target/RedSky)
 was answered 2026-08-03 and is kept below as the record. **§ 0f was answered `defer` on
-2026-08-10 and is no longer blocking anything — the pin and the restart remain available as
-actions, and Phase 5 closed without them, on the record.** **One open decision:
+2026-08-10 and again on 2026-08-17 and is no longer blocking anything — the pin and the restart
+remain available as actions, and Phase 5 and Phase 7 both closed without them, on the record.**
+**One open decision:
 0e — every `tests/fixtures/` file is clean *now*, but the pushed public
 history is not.** (0e claimed a clean tree twice before it was true. The phase
 verifier caught both. Both corrections are recorded inside 0e rather than
@@ -20,7 +21,45 @@ number was your reversal of a written-terms reading, not a new technical
 finding, and a record that quietly agrees with itself afterwards is worth less
 than one that shows the turn.
 
-## 0f. Your Walmart store number — ANSWERED 2026-08-10: `defer`. Still outstanding as an action.
+## 0f. Your Walmart store number — ANSWERED TWICE, both times `defer` (2026-08-10, 2026-08-17). Still outstanding as an action.
+
+### 2026-08-17 — asked a second time, at Phase 7's closing checkpoint; answered `defer` again
+
+**Your answer, verbatim: `keep defer`.** Recorded exactly as given. The `defer` half is this
+section's; the `keep` half is the dashboard question and is recorded in `.planning/STATE.md` and in
+`docs/retailer-evidence.md` § *Phase 7 closing record*.
+
+**What you were shown before answering — measurements, not predictions.** That
+`walmart:Pokémon GO Plus + -> "out_of_stock"` in `state.json` **can no longer be updated by
+anything**: `WALMART_STORE_ID` is unset, so every Walmart reading comes back `Availability.UNKNOWN`
+through Phase 5's store-gap guard, and `State.transitioned_to_stock` returns on UNKNOWN at
+`boty/monitor.py:342` **before** it writes at line 346. Measured across the checkpoint itself: that
+entry read `out_of_stock` on 2026-08-14 and still read `out_of_stock` on 2026-08-17, unchanged
+through five days of the daemon rewriting that file every cycle. It is not merely undated; it is
+frozen.
+
+**What stays true as a consequence, stated plainly.** After the next restart, that row publishes
+**`out_of_stock · age ? · not checked` — indefinitely, until a store is pinned.** That is the honest
+output rather than a defect: the age genuinely is not established, and inventing one would be the
+exact failure REQ-21 exists to remove. Nothing breaks, nothing is worked around, and no criterion was
+reworded to absorb it. **§ 0f therefore stays open, and the action stays available** — take it
+whenever you like, or never.
+
+**The pin's absence, measured as a count and never as a value**, on 2026-08-14 and again on
+2026-08-17: `grep -c 'WALMART_STORE_ID' "$HOME/.config/boty/env"` → `0`. No store number was read,
+derived, inferred, requested or printed at any point in Phase 7, and nothing was run under the
+service's `EnvironmentFile`.
+
+**How many deferrals this is, measured rather than repeated.** `07-06-PLAN.md` and two SUMMARYs call
+this *the third*. Measured against the record: § 0f was created 2026-08-10 (`e55f733`) and has been
+put to you **twice** — 05-04's checkpoint on 2026-08-10 and 07-06's on 2026-08-17 — so this is the
+**second time you have answered it yourself**. It is the **third time it has been deferred by any
+means**, counting the acknowledged deferral at v0.2's milestone close on 2026-08-11, which carried no
+new answer from you. Both readings are recorded; neither is edited away.
+
+---
+
+### 2026-08-10 — the first answer
 
 **Your answer, verbatim: "Defer — no restart."** Recorded exactly as given, and the phase
 closed on offline evidence with every live row marked NOT OBTAINED, carrying its date and
