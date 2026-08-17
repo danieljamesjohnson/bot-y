@@ -198,7 +198,21 @@ def _age_tag(r: Result, *, now: float, interval: float | None) -> str:
     # `status.py:53-57`'s `duration_seconds` argument and `status.py:136-141`'s
     # `store`-as-`0` argument for the fifth time in this phase, now pointed at a
     # renderer instead of a serialiser.
-    age = None if r.read_at is None else now - r.read_at
+    #
+    # AND CLAMPED AT 0, for `index.html:219`'s stated reason and stated here for
+    # the same one. A negative duration on a surface a human reads is
+    # `status.py`'s own recorded `duration_seconds` defect, and a stamp in the
+    # future is the case `models.py` already names by name — *"a jump backwards
+    # leaves a stamp in the future for a reader to discard."* The dashboard
+    # discards it; until 2026-08-17 this renderer printed it, so the two
+    # surfaces this phase went to trouble to keep identical disagreed on exactly
+    # one input (`[age -10s]` here against a clamped `0s` there).
+    #
+    # THE CLAMP CANNOT MAKE A STALE READING LOOK FRESH. It only moves values
+    # already below zero, and a value below zero is a reading claiming to have
+    # been taken in the future. Nothing that was over its cadence crosses back
+    # under it.
+    age = None if r.read_at is None else max(0.0, now - r.read_at)
     if age is None:
         return "[age ?]"
     if interval is None:

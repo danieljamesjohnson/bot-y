@@ -1149,11 +1149,21 @@ MUTATIONS = (
     # phase at 33 and the phase added SEVEN idents (M31-M37), not the outline's
     # six. 07-06 still records the count rising FROM 26. M21-M24 remain the
     # intentional gap and are still not filled.
+    # M36'S ANCHOR WAS RE-POINTED ON 2026-08-17 (07-REVIEW WR-03), the sixth in
+    # this registry to drift and the second to drift because the CODE it gates
+    # changed shape rather than because prose or a version literal moved: the
+    # subtraction gained a `max(0.0, ...)` clamp, so the old one-line `search`
+    # matched nothing. The gate's meaning is untouched — it still replaces the
+    # `None` sentinel with `0.0`, which is the whole of what it tests — and both
+    # the mutated half and the surrounding clamp are carried in the new anchor so
+    # the ident cannot silently start gating a subtraction that is no longer
+    # there. Kill set re-measured against the new anchor rather than carried
+    # over.
     Mutation(
         ident="M36",
         target="boty/cli.py",
-        search="    age = None if r.read_at is None else now - r.read_at",
-        replace="    age = 0.0 if r.read_at is None else now - r.read_at",
+        search="    age = None if r.read_at is None else max(0.0, now - r.read_at)",
+        replace="    age = 0.0 if r.read_at is None else max(0.0, now - r.read_at)",
         breaks="every reading nobody dated renders as `[age 0s]` — the FRESHEST row on the surface — instead of `[age ?]`. Criterion 2's failure, on the surface that criterion names, rebuilt inside the fix written to remove it. The live case rather than a description: amazon, target and walmart refused every watch this morning and 07-01 stamps no refusal arm, so five of the thirteen configured watches print this form today; and walmart's `Pokémon GO Plus +` has been frozen at `out_of_stock` in state.json since before the store-gap guard shipped, with no stamp anywhere in the ledger and no way to acquire one while WALMART_STORE_ID is unset. Under this mutation that row prints as though it had been read this instant. An unmeasured value rendered as zero does not read as unknown, it reads as best-in-class",
     ),
     Mutation(

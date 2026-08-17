@@ -1041,6 +1041,46 @@ def test_the_age_boundary_is_strict() -> None:
     assert _age_tag(over, now=now, interval=300.0) == "[age 5m > 5m]"
 
 
+def test_a_stamp_in_the_future_renders_as_no_age_rather_than_a_negative_one() -> None:
+    """A negative duration on a surface a human reads, closed on all three.
+
+    Three places in this tree already say this must not happen and `_age_tag`
+    was the one that did it anyway. Measured before the clamp:
+
+        _age_tag(Result(read_at=1000.0), now=990.0, interval=300.0) -> '[age -10s]'
+        _age(-10.0)                                                 -> '-10s'
+
+    `served/boty/index.html` clamps at the sink for exactly this reason and
+    states the limit — *"a viewer's clock behind the host's yields a negative
+    age, and a negative duration in a served surface is the defect `status.py`
+    already records for `duration_seconds`"*. `status.py` records that defect.
+    `models.py` names the producing case: *"a jump backwards leaves a stamp in
+    the future for a reader to discard."* So the two surfaces this phase went to
+    trouble to keep identical disagreed on this one input, and the disagreeing
+    one was the surface that does not clamp.
+
+    THE CLAMP CANNOT MAKE A STALE READING LOOK FRESH, which is the only
+    direction that would matter: it moves values that are already below zero,
+    and a value below zero is a reading claiming to be from the future. Pinned
+    here at the boundary and one second either side of it.
+    """
+    from boty.cli import _age_tag
+
+    watch = Watch(name="goplusplus", retailer="bestbuy", target="6577129")
+    ahead = Result(watch, Availability.IN_STOCK, price=None, detail="x", read_at=1000.0)
+
+    assert _age_tag(ahead, now=990.0, interval=300.0) == "[age 0s]"
+    assert _age_tag(ahead, now=1000.0, interval=300.0) == "[age 0s]"
+    assert _age_tag(ahead, now=1001.0, interval=300.0) == "[age 1s]"
+    # The cadence-unknown form goes through the same value, so it cannot start
+    # printing a negative number after the other one stopped.
+    assert _age_tag(ahead, now=990.0, interval=None) == "[age 0s, cadence ?]"
+    # And a stamp in the future is never STALE: nothing below zero can exceed a
+    # positive cadence, before or after the clamp. Asserted rather than assumed
+    # because the clamp is what makes it true of `0.0` as well.
+    assert ">" not in _age_tag(ahead, now=990.0, interval=300.0)
+
+
 def test_the_age_tag_does_not_read_the_clock() -> None:
     """§ Finding 6's one design rule, and the reason no clock is frozen in this phase.
 
