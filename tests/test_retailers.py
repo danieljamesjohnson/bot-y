@@ -22,6 +22,7 @@ import json
 import os
 import re
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -2895,6 +2896,17 @@ def test_the_verdict_function_branches_on_the_store_ahead_of_every_verdict() -> 
 # NO CLOCK IS FROZEN, INJECTED OR MONKEYPATCHED. A stamp is asserted by
 # BRACKETING — `before = time.time()`, call, `after = time.time()` — which is
 # sufficient for everything below and is why this phase adds no time seam.
+#
+# THE COUNT MOVED FROM 20 TO 21 ON 2026-08-17, and both assertions below went
+# red on purpose the way the numbers in `tests/test_status.py` did three times
+# in this phase. 07-REVIEW WR-07 added `check_bestbuy_api`'s shape guard — a
+# body that is valid JSON but not an object (`[]`, `"error"`, `null`) parsed
+# cleanly and then reached `data.get`, raising `AttributeError` out of the
+# adapter. The new arm is STAMPED, so `check_bestbuy_api` goes from (1, 3) to
+# (1, 4): its non-read arm is still `api error` and only `api error`, because
+# `get()` returned before this new arm can be reached. Both numbers are
+# ENUMERATED rather than relaxed — a `>=` here would stop noticing the next
+# site, which is the whole reason the count is asserted at all.
 
 
 def _retailers_ast() -> ast.Module:
@@ -2923,7 +2935,7 @@ def _read_at_kind(call: ast.Call) -> str:
 
 
 def test_every_result_construction_in_retailers_names_read_at() -> None:
-    """All 20 sites, proved over the source rather than arm by arm.
+    """All 21 sites, proved over the source rather than arm by arm.
 
     THE COUNT IS ASSERTED AS WELL AS THE PROPERTY, and that is not belt-and-
     braces: a gate that finds zero `Result(` constructions — because the class
@@ -2932,9 +2944,9 @@ def test_every_result_construction_in_retailers_names_read_at() -> None:
     """
     calls = _result_calls(_retailers_ast())
 
-    assert len(calls) == 20, (
-        f"expected 20 `Result(` constructions in {Path(retailers.__file__).name}, found "
-        f"{len(calls)}. A site added here must state `read_at` like the other twenty: "
+    assert len(calls) == 21, (
+        f"expected 21 `Result(` constructions in {Path(retailers.__file__).name}, found "
+        f"{len(calls)}. A site added here must state `read_at` like the other twenty-one: "
         "the whole purpose of that field is to distinguish a reading from a non-reading, "
         "and a dataclass default cannot state which one this arm is."
     )
@@ -2947,11 +2959,12 @@ def test_every_result_construction_in_retailers_names_read_at() -> None:
 
 
 def test_the_read_and_non_read_arms_are_partitioned_exactly() -> None:
-    """11 stamped, 9 literal `None`, per enclosing function — the measured table.
+    """12 stamped, 9 literal `None`, per enclosing function — the measured table.
 
-    `(literal-None, variable)` per function. The two entries worth reading twice
-    are `check_bestbuy_api`'s: **1** literal and **3** variable, because Best Buy
-    ANSWERED on three of its four arms.
+    `(literal-None, variable)` per function. The entry worth reading twice is
+    `check_bestbuy_api`'s: **1** literal and **4** variable, because Best Buy
+    ANSWERED on four of its five arms. Only `api error` — where `get()` raised
+    and control never reached the stamp — is a non-reading.
     """
     expected = {
         # Every one of these eight follows a successful fetch and parse. They
@@ -2961,8 +2974,10 @@ def test_the_read_and_non_read_arms_are_partitioned_exactly() -> None:
         "check_amazon": (2, 0),
         "check_bestbuy_browser": (2, 0),
         "check_target_browser": (2, 0),
-        # `api error` alone is the non-read arm here.
-        "check_bestbuy_api": (1, 3),
+        # `api error` alone is the non-read arm here, and it stayed alone when
+        # 07-REVIEW WR-07 added the shape guard: that arm sits AFTER `get()`
+        # returned, so a body we cannot use is still a body Best Buy sent.
+        "check_bestbuy_api": (1, 4),
     }
 
     measured: dict[str, tuple[int, int]] = {}
@@ -2987,7 +3002,7 @@ def test_the_read_and_non_read_arms_are_partitioned_exactly() -> None:
         "refreshes the age of a reading nobody took (pacing.py:196-199 — 'a bound that "
         "cannot bind is worse than no bound')."
     )
-    assert sum(v for pair in measured.values() for v in pair) == 20
+    assert sum(v for pair in measured.values() for v in pair) == 21
 
 
 @pytest.mark.parametrize("exc", [Blocked("challenge page"), FetchError("HTTP 503")])
@@ -3091,3 +3106,125 @@ def test_best_buy_refusing_took_no_reading(monkeypatch: pytest.MonkeyPatch) -> N
     assert r.availability is Availability.UNKNOWN
     assert "api error" in r.detail
     assert r.read_at is None
+
+
+# --------------------------------------------------------------------------
+# 07-REVIEW WR-07: the API boundary narrows what it was handed
+# --------------------------------------------------------------------------
+#
+# NEITHER OF THE TWO BELOW IS MEASURED AGAINST THE LIVE API, and that is stated
+# rather than implied: there is no observation of Best Buy returning a
+# non-object body or a string `salePrice`. What IS measured is what this adapter
+# did when handed one, on this tree, before the guards existed — an
+# `AttributeError` out of the function in the first case and a `str` on a field
+# declared `float | None` in the second. A boundary that turns a foreign shape
+# into a traceback is worth closing on that alone.
+
+
+@pytest.mark.parametrize(
+    ("body", "shape"),
+    [("[]", "list"), ('"error"', "str"), ("null", "NoneType")],
+)
+def test_a_json_body_that_is_not_an_object_is_a_reading_and_not_a_traceback(
+    monkeypatch: pytest.MonkeyPatch, body: str, shape: str
+) -> None:
+    """`except ValueError` is a claim about BYTES, not about shape.
+
+    `page.json` is a bare `json.loads`, so `except ValueError` catches only
+    *"these bytes are not JSON"*. `[]`, `"error"` and `null` are all valid JSON
+    and all parse cleanly — and then reach `data.get("products")`. Measured
+    before the guard:
+
+        '[]'      -> AttributeError: 'list' object has no attribute 'get'
+        '"error"' -> AttributeError: 'str' object has no attribute 'get'
+        'null'    -> AttributeError: 'NoneType' object has no attribute 'get'
+
+    That escapes `check_bestbuy_api` entirely: an uncaught traceback in `boty
+    check`, and in `boty watch` a failure counted toward
+    `FAILURES_BEFORE_GIVING_UP` with no diagnosis naming Best Buy anywhere.
+
+    STAMPED, because `get()` returned. This arm is on the read side of the
+    partition for the same reason `bad api json` is, and the AST partition test
+    above records it as such: a response whose shape we cannot use is still a
+    response.
+    """
+    _serve(monkeypatch, body)
+
+    before = time.time()
+    r = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY)
+    after = time.time()
+
+    assert r.availability is Availability.UNKNOWN
+    assert "not an object" in r.detail
+    assert shape in r.detail, f"the detail does not say what came back instead: {r.detail!r}"
+    assert r.price is None
+    assert r.read_at is not None, "Best Buy answered; the answer has an age"
+    assert before <= r.read_at <= after
+
+
+@pytest.mark.parametrize("raw", ['"59.99"', "true", "null", '"free"', "[]"])
+def test_a_sale_price_that_is_not_a_number_is_dropped_rather_than_published(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    """`Result.price` is declared `float | None` and consumed as one.
+
+    `salePrice` used to be passed through verbatim. Measured before the
+    coercion, with `"salePrice": "59.99"`: `r.price == '59.99'` — a `str` on a
+    float field, which raises `TypeError` in `Result.alertable`'s `self.price <=
+    self.watch.max_price` for any watch carrying a ceiling and `ValueError` in
+    `cli._report`'s `f"${r.price:>8.2f}"` for every watch. That is the failure
+    `config._price`'s docstring already documents and fixes for `max_price`.
+
+    `true` IS IN THE PARAMETRISATION ON PURPOSE. `bool` is an `int` subclass, so
+    an unguarded numeric check accepts it and `True` becomes `$1.00` — a price
+    that would satisfy every ceiling in the config. `config._price` records that
+    trap; this is the same trap at the other end of the same number.
+
+    DROPPED AND NOT DEFAULTED: `None` means "no price recorded". `0.0` would
+    read off the dashboard as free and satisfy every `max_price` there is, which
+    is the null-never-zero rule on the one field that can actually send.
+
+    The AVAILABILITY is untouched by any of this. An unusable price is not a
+    verdict about stock, and the row still says what Best Buy said.
+
+    THE WATCH CARRIES A CEILING, which is what makes the `alertable` half of
+    this non-vacuous: `Result.alertable` returns `True` for any IN_STOCK reading
+    on a watch with `max_price is None` without ever touching `price`, so the
+    default `_bestbuy_watch()` would exercise nothing. With a ceiling, the
+    comparison `self.price <= self.watch.max_price` is REACHED — and that
+    comparison is the one that raised `TypeError` on a `str`.
+    """
+    _serve(
+        monkeypatch,
+        '{"products": [{"onlineAvailability": true, "salePrice": ' + raw + "}]}",
+    )
+    watch = replace(_bestbuy_watch(), max_price=80.0)
+
+    r = retailers.check_bestbuy_api(watch, API_KEY)
+
+    assert r.availability is Availability.IN_STOCK
+    assert r.price is None, f"a non-numeric salePrice reached Result.price as {r.price!r}"
+    # Both consumers RUN rather than being reasoned about — these are the two
+    # call sites that raised on the uncoerced value.
+    assert r.alertable is False, (
+        "an unusable price cleared a ceiling: 'I could not tell' resolving to "
+        "'cheap enough' is models.py's own named conflation"
+    )
+    assert f"{r.price}" == "None"
+
+
+def test_a_numeric_sale_price_still_arrives_as_a_float(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The guard must not move the goalposts on the shape Best Buy actually sends.
+
+    An `int` is accepted and becomes a `float`, because `59` and `59.0` are the
+    same price and `Result.price` is one type.
+    """
+    _serve(monkeypatch, '{"products": [{"onlineAvailability": true, "salePrice": 59.99}]}')
+    assert retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY).price == 59.99
+
+    _serve(monkeypatch, '{"products": [{"onlineAvailability": true, "salePrice": 59}]}')
+    whole = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY).price
+    assert whole == 59.0
+    assert isinstance(whole, float)

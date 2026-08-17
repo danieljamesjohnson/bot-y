@@ -983,6 +983,39 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
             read_at=read_at,
         )
 
+    # THE BODY IS NARROWED BEFORE IT IS INDEXED. `except ValueError` above
+    # catches `json.JSONDecodeError` from `page.json`, which is *"these bytes are
+    # not JSON"* — a strictly narrower claim than *"this body is an object"*. A
+    # body of `[]`, `"error"` or `null` parses cleanly and then reaches
+    # `data.get`, which raises `AttributeError` and escapes this function
+    # entirely: an uncaught traceback in `boty check`, and in `boty watch` a
+    # failure counted toward `FAILURES_BEFORE_GIVING_UP` with no diagnosis
+    # naming Best Buy. Measured on this tree before the guard, all three bodies:
+    #
+    #     '[]'      -> AttributeError: 'list' object has no attribute 'get'
+    #     '"error"' -> AttributeError: 'str' object has no attribute 'get'
+    #     'null'    -> AttributeError: 'NoneType' object has no attribute 'get'
+    #
+    # STAMPED, because this arm is on the read side of the partition for the
+    # same reason `bad api json` is: `get()` returned and these are bytes Best
+    # Buy sent. A response whose SHAPE we cannot use is still a response, and
+    # marking it unstamped would report a reading that happened as having no age.
+    #
+    # NOT MEASURED AGAINST THE LIVE API — 07-REVIEW WR-07 says so plainly and so
+    # does this comment. There is no observation of Best Buy returning a
+    # non-object body; what is observed is that this code raises if it ever
+    # does, and a boundary that turns a foreign shape into a traceback is worth
+    # closing on that alone.
+    if not isinstance(data, dict):
+        return Result(
+            watch,
+            Availability.UNKNOWN,
+            detail=f"api returned a body that is not an object: {type(data).__name__}",
+            url=product_url,
+            rung=Rung.API,
+            read_at=read_at,
+        )
+
     products = data.get("products") or []
     if not products:
         # STAMPED, AND THIS IS THE SECOND ARM THE OBVIOUS RULE GETS WRONG — and
@@ -1000,10 +1033,42 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
 
     p = products[0]
     available = bool(p.get("onlineAvailability"))
+    # THE PRICE IS COERCED HERE RATHER THAN TRUSTED, on `config._price`'s
+    # precedent one module over. `salePrice` used to be passed through verbatim,
+    # so a string in that field became a `str` on `Result.price` — and
+    # `Result.price` is declared `float | None` and consumed as one. Measured
+    # before this guard, with `"salePrice": "59.99"`: `r.price == '59.99'`, which
+    # raises `TypeError` in `Result.alertable`'s `self.price <= self.watch.
+    # max_price` for any watch that carries a ceiling, and `ValueError` in
+    # `cli._report`'s `f"${r.price:>8.2f}"` for every watch. `config._price`'s
+    # docstring already prices exactly that failure for `max_price`: *"in `boty
+    # check` that kills the command; in `boty watch` the loop's handler catches
+    # it, so the service stays up while every cycle aborts."*
+    #
+    # `isinstance` AND NOT `try: float(str)`, so a price is a number Best Buy
+    # sent rather than a number we manufactured from prose — the same choice
+    # `config._price` makes. `bool` is excluded because it is an `int` subclass
+    # and `True` would otherwise become `$1.00`, which is `config._price`'s own
+    # recorded trap.
+    #
+    # DROPPED, NOT DEFAULTED. An unusable price is `None` — "no price recorded" —
+    # never `0.0`, which would read off the dashboard as free and, worse, satisfy
+    # every `max_price` ceiling in the config. That is `status.py`'s
+    # null-never-zero rule, applied to the field where it would actually send.
+    #
+    # NOT MEASURED AGAINST THE LIVE API. No observation of Best Buy returning a
+    # string `salePrice` exists; what is observed is what this code does if it
+    # ever does.
+    raw_price = p.get("salePrice")
+    price = (
+        float(raw_price)
+        if isinstance(raw_price, (int, float)) and not isinstance(raw_price, bool)
+        else None
+    )
     return Result(
         watch,
         Availability.IN_STOCK if available else Availability.OUT_OF_STOCK,
-        price=p.get("salePrice"),
+        price=price,
         detail=f"bestbuy api: onlineAvailability={available}",
         url=product_url,
         rung=Rung.API,
