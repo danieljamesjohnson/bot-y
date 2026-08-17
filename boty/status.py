@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -384,8 +385,38 @@ def write(
     }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, indent=2))
-        tmp.replace(path)  # atomic, so the page never reads a half-written file
+        # A PER-PROCESS TEMP NAME, AND THE RENAME WAS NEVER THE PROBLEM. This
+        # used to be `path.with_suffix(".tmp")` — a FIXED SIBLING shared by every
+        # caller of this function — with the rename commented `# atomic, so the
+        # page never reads a half-written file`. The rename is atomic. The
+        # staging file was not private, and REQ-21 made two concurrent callers a
+        # documented workflow: `boty/pacing.py` states that *"`cli.main`'s
+        # `check` branch now loads this document too, on a surface routinely run
+        # while the daemon is writing"*, and that same `boty check` invocation
+        # also WRITES `cfg.status_path` through this function.
+        #
+        # The interleaving that allowed: the daemon truncates and begins writing
+        # `status.tmp`; a concurrent `boty check` truncates the same file and
+        # writes its own payload; the daemon renames. Whichever process renames
+        # last publishes whatever bytes are in that one file, `JSON.parse` in the
+        # dashboard's `tick()` throws, and the page reads `status unavailable`
+        # until the next write. Transient and self-healing — and not what the
+        # comment promised, which is the part that matters in a file where the
+        # comment is the argument.
+        #
+        # SAME DIRECTORY, so `replace` stays on one filesystem and stays atomic.
+        # A temp in `/tmp` would make the rename a cross-device copy, which is
+        # exactly the half-written read this whole dance exists to prevent.
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        try:
+            tmp.write_text(json.dumps(payload, indent=2))
+            tmp.replace(path)  # atomic, so the page never reads a half-written file
+        finally:
+            # `replace` consumed it on the happy path, so this is a no-op there.
+            # It is here for the unhappy one: a temp named after a process that
+            # has since exited is an orphan nothing will ever clean up, which is
+            # the cost of making the name unique and is paid rather than
+            # discovered.
+            tmp.unlink(missing_ok=True)
     except OSError:
         log.exception("could not write status to %s", path)

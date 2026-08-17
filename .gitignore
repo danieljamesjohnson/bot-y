@@ -29,3 +29,10 @@ pacer-state.json
 # of unguarded sites, but not part of bot-y
 docker-compose.yml
 served/boty/status.json
+# The per-process staging file `status.write` renames from (07-REVIEW WR-05).
+# `write` unlinks it in a `finally`, so it should never outlive a call — but a
+# SIGKILL between `write_text` and `replace` leaves one named after a pid that
+# has exited, and the whole point of the unique name is that nothing else will
+# reclaim it. An orphan offered for commit is how a half-written payload ends
+# up in history.
+served/boty/status.json.*.tmp

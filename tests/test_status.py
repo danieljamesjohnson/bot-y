@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -269,6 +270,65 @@ def test_publishing_a_duration_does_not_disturb_any_existing_key(tmp_path: Path)
                 "current_interval_seconds": None,
             }
         ]
+
+
+# --------------------------------------------------------------------------
+# 07-REVIEW WR-05: the rename is atomic; the temp file was not private
+# --------------------------------------------------------------------------
+
+
+def test_the_temp_file_a_write_stages_through_is_private_to_the_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`tmp.replace(path)` is atomic. `path.with_suffix('.tmp')` was not private.
+
+    The rename has never been the question. The temp file was a FIXED SIBLING
+    NAME shared by every caller of this function, and this phase made two
+    concurrent callers a documented workflow — `boty/pacing.py` states plainly
+    that *"`cli.main`'s `check` branch now loads this document too, on a surface
+    routinely run while the daemon is writing"*, and the same `boty check`
+    invocation also writes `cfg.status_path`.
+
+    The interleaving the shared name allows: the daemon truncates and begins
+    writing `status.tmp`; a concurrent `boty check` truncates the SAME file and
+    writes its own payload; the daemon renames. Whichever process renames last
+    publishes whatever bytes happen to be in that one file. `JSON.parse` in the
+    dashboard's `tick()` then throws and the page shows `status unavailable`
+    until the next write — transient and self-healing, and not what the comment
+    beside the rename promises.
+
+    ASSERTED ON THE NAME THE WRITE STAGES THROUGH, which is the property, rather
+    than by racing two real processes: a test that has to win a race to fail is
+    a test that reports flakiness instead of a defect.
+    """
+    staged: list[str] = []
+    real_write_text = Path.write_text
+
+    def spy(self: Path, *args: object, **kwargs: object) -> int:
+        staged.append(self.name)
+        return real_write_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "write_text", spy)
+
+    monkeypatch.setattr(os, "getpid", lambda: 1111)
+    _payload(tmp_path, [_result()])
+    monkeypatch.setattr(os, "getpid", lambda: 2222)
+    _payload(tmp_path, [_result()])
+
+    assert len(staged) == 2, f"expected one staged write each, got {staged}"
+    assert len(set(staged)) == 2, (
+        f"both writers staged through the same temp file {staged[0]!r} — a fixed "
+        "sibling name any concurrent caller can truncate mid-write, which is "
+        "what the `atomic` comment beside the rename does not cover"
+    )
+    for name in staged:
+        assert name.endswith(".tmp"), name
+
+    # And nothing is left behind. `replace` consumes the temp file on the happy
+    # path; the `finally` exists for the unhappy one, and an orphan named after
+    # a pid that has exited is worse than no temp file at all because nothing
+    # will ever clean it up.
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["status.json"]
 
 
 # --------------------------------------------------------------------------
