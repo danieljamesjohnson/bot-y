@@ -144,11 +144,42 @@ def _remembered_availability(entry: object) -> str | None:
     that value is a `str`.
 
     THE REMEMBERED AVAILABILITY IS NOT VALIDATED AGAINST THE `Availability` ENUM,
-    and that is a decision rather than an omission. The only comparison ever made
-    against this string is `!= Availability.IN_STOCK.value`, so a value outside
-    the enum already behaves as "not in stock" — the safe direction. Rejecting it
-    would add a branch that changes no outcome, which is a gate that cannot bite,
-    which is the defect this phase is being written to remove.
+    and that is still a decision rather than an omission. THE ARGUMENT THAT USED
+    TO CARRY IT WAS WITHDRAWN ON 2026-08-17. Until then this paragraph read:
+
+        "The only comparison ever made against this string is `!=
+        Availability.IN_STOCK.value`, so a value outside the enum already
+        behaves as 'not in stock' — the safe direction. Rejecting it would add a
+        branch that changes no outcome, which is a gate that cannot bite, which
+        is the defect this phase is being written to remove."
+
+    The premise stopped being true FOUR PLANS LATER IN THE SAME PHASE and the
+    conclusion rested entirely on it. 07-04 added a second consumer: `status.write`
+    publishes this string verbatim as `status.json`'s `availability`, and
+    `served/boty/index.html` interpolates it into the dot's `class` attribute. So
+    a value outside the enum no longer "changes no outcome" — it reaches a
+    rendered surface, where it was measured breaking out of that attribute before
+    the sink was escaped (`tests/test_dashboard.py`'s `w.availability` paragraph
+    carries the reproduction).
+
+    THE CONCLUSION SURVIVES AND THE REASON IS NEW, which is why this is a rewrite
+    rather than a validating branch:
+
+    1. THE FAIL-SAFE DIRECTION FOR A MEMORY IS KEEP IT. Rejecting an unrecognised
+       string here does not produce a safe value; it produces NO memory, and a
+       forgotten `in_stock` is a re-alert on the next cycle — the same cost
+       `pacing.py`'s version paragraph prices for `state.json` one module over.
+       Validation here trades a rendering problem for an alerting one.
+    2. THE SAFETY AT THE SINK IS CARRIED WHERE THE SINK IS. `esc()` in
+       `served/boty/index.html` escapes every interpolated value, and
+       `tests/test_dashboard.py`'s `UNTRUSTED` list NAMES THIS FIELD, so the day
+       somebody adds a second interpolation of it the escaping test goes red
+       instead of shipping. That is a gate that can bite; a second enum check
+       here would be the one that cannot.
+    3. THE `!= Availability.IN_STOCK.value` COMPARISON IS STILL THE ONLY
+       *DECISION* MADE ON THIS STRING. What changed is that it is no longer the
+       only READ. Stated that way so the next reader does not re-derive the
+       withdrawn sentence from the still-true half of it.
     """
     if isinstance(entry, str):
         return entry
