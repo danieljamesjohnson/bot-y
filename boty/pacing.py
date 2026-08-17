@@ -239,11 +239,24 @@ class Pacer:
     #: behaviour all of them have today.
     state_path: Path | None = None
 
+    def _standing_interval(self, retailer: str) -> float:
+        """This retailer's cadence with no backoff in force — override or default.
+
+        Extracted 2026-08-17 so `_for` and `current_interval` READ THE SAME
+        EXPRESSION rather than each carrying a copy of it. `current_interval` had
+        to stop going through `_for` (that call inserted a record as a side
+        effect — see the read-only paragraph there), and the obvious repair was
+        to inline `self.overrides.get(retailer, self.default_interval)` in both
+        places. That is a second copy of a number, which is the thing this module
+        argues against three times over: an override added to one and not the
+        other means the accessor and the constructor disagree about a retailer's
+        standing cadence, and they only have to disagree once.
+        """
+        return self.overrides.get(retailer, self.default_interval)
+
     def _for(self, retailer: str) -> _RetailerState:
         if retailer not in self._state:
-            self._state[retailer] = _RetailerState(
-                interval=self.overrides.get(retailer, self.default_interval)
-            )
+            self._state[retailer] = _RetailerState(interval=self._standing_interval(retailer))
         return self._state[retailer]
 
     def due(self, retailer: str, now: float) -> bool:
@@ -323,7 +336,31 @@ class Pacer:
         with whatever backoff is in force applied to it. At zero refusals the
         two are the same number.
         """
-        st = self._for(retailer)
+        # `.get` AND NOT `_for`, WHICH IS THE WHOLE OF THIS LINE'S CONTENT. A
+        # caller ASKING what the cadence is must not create the record that
+        # answers. `_for` inserts a `_RetailerState` for any retailer it has not
+        # seen, and `cli._current_intervals` calls this method once per
+        # configured retailer — so before 2026-08-17 a `boty check` run
+        # materialised an in-memory row for every retailer in the config,
+        # including ones `pacer-state.json` says nothing about.
+        #
+        # THE CONSEQUENCE WAS NOTHING, AND THAT IS STATED RATHER THAN INFLATED:
+        # `save` filters `if st.refusals`, and `boty check`'s pacer never calls
+        # `save` at all. The defect was that the only thing keeping a READ
+        # accessor from writing this document was a filter two methods away and
+        # a caller that happens not to save. `save`'s own docstring already
+        # concedes it may be promoted to temp-and-replace later; the day that
+        # filter is relaxed for any reason, `boty check` — routinely run while
+        # the daemon owns this file — starts writing rows for retailers it never
+        # asked about.
+        st = self._state.get(retailer)
+        if st is None:
+            # NO RECORD IS NOT AN ERROR AND NOT ZERO REFUSALS-BY-DEFAULT: it is
+            # the standing interval, which is the same answer the `not
+            # st.refusals` branch below gives, reached without writing anything.
+            # This is the fresh-clone case `boty check` hits with no
+            # `pacer-state.json`, and it must not warn.
+            return self._standing_interval(retailer)
         if not st.refusals:
             # NOT COSMETIC, though at every value this project configures today
             # it is indistinguishable from the general expression below:

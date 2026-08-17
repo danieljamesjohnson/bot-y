@@ -406,6 +406,39 @@ def test_a_retailer_never_seen_before_answers_with_its_configured_interval() -> 
     assert p.current_interval("gamestop") == 900.0
 
 
+def test_asking_what_the_cadence_is_does_not_create_the_record_that_answers() -> None:
+    """`boty check`'s pacer is load-only, and this is the method it calls most.
+
+    `current_interval` used to reach the state through `_for`, which INSERTS a
+    `_RetailerState` for any retailer it has not seen. `_current_intervals`
+    calls it once per configured retailer, so a `boty check` run materialised an
+    in-memory row for every retailer in the config — including ones
+    `pacer-state.json` says nothing about.
+
+    THE CONSEQUENCE TODAY IS NOTHING, AND THIS TEST SAYS SO RATHER THAN
+    INFLATING IT. `save` filters `if st.refusals`, the check-path pacer never
+    calls `save`, and `test_both_surfaces_publish_one_cadence_from_one_document`
+    proves the bytes on disk are unchanged. What this pins is that the ONLY
+    thing keeping a read accessor from writing that document is a filter two
+    methods away and a caller that happens not to save — the day either moves,
+    `boty check` starts writing rows for retailers it never asked about, and
+    `boty check` is routinely run while the daemon owns that file.
+
+    So: assert the accessor's read-only-ness where it lives, not where its
+    consequences currently happen to be absent.
+    """
+    p = Pacer(default_interval=300, overrides={"gamestop": 900})
+
+    assert p.current_interval("gamestop") == 900.0
+    assert p.current_interval("amazon") == 300.0
+    assert p.current_interval("walmart") == 300.0
+
+    assert p._state == {}, (
+        "reading the cadence created state for "
+        f"{sorted(p._state)} — a read accessor that writes"
+    )
+
+
 @pytest.mark.parametrize("interval,expected", _CADENCE_AFTER_N_REFUSALS)
 def test_the_current_interval_widens_with_the_backoff(
     interval: float, expected: list[float]
