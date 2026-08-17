@@ -238,12 +238,45 @@ def _interval(settings: dict[str, Any]) -> int:
     return interval
 
 
-def _retailer_intervals(settings: dict[str, object]) -> dict[str, int]:
+def _retailer_intervals(settings: dict[str, object], global_interval: int) -> dict[str, int]:
     """Parse `retailer_intervals:` — a mapping of retailer to seconds.
 
     Held to the same floor as the global interval. A per-retailer override is
     for asking LESS often; letting it undercut the floor would turn a politeness
     setting into its opposite, one typo at a time.
+
+    AND HELD TO THE GLOBAL INTERVAL AS WELL AS THE FLOOR, since 2026-08-17. The
+    sentence above stated the intent and nothing enforced it, so an override
+    BELOW `interval_seconds` was accepted in silence — and it is not merely
+    ineffective, it publishes a number the loop cannot keep.
+
+    `cli.watch_loop` sleeps `interval_seconds * uniform(0.85, 1.15)` per CYCLE,
+    not per retailer, so no watch can be polled more often than roughly the
+    global interval whatever its override says. Measured before this guard, at
+    `interval_seconds: 3600` with `gamestop: 900`:
+
+        published cadence for gamestop: 900
+        real gap between polls: >= ~3060 s
+
+    `status.write` publishes that 900 as `current_interval_seconds`, and all
+    three surfaces derive staleness against it — so every GameStop row renders
+    stale permanently while the monitor reads that watch as often as it
+    possibly can. That is REQ-21's own defect (a reading presented as something
+    it is not) produced by the mechanism built to remove it, and it is a 3.4x
+    drift between the displayed cadence and the schedule that the phase's
+    stated invariant says cannot happen.
+
+    EQUAL IS ACCEPTED, and that is the boundary rather than an oversight: an
+    override equal to the global asks exactly as often as the loop can manage,
+    which is keepable. The refusal is only for a cadence the schedule can never
+    reach.
+
+    THE OTHER DIRECTION IS NOT FIXED HERE AND IS RECORDED RATHER THAN LEFT TO BE
+    FOUND: `Pacer.due`'s tolerance is `self.default_interval * 0.5` regardless of
+    any override, so a 900-second-override retailer on a 300-second global is
+    actually asked roughly every 750 s while 900 is published. That direction
+    UNDER-reports staleness, by at most half the default interval, and it lives
+    in `pacing.due` rather than in the loader — a comment here, not a change.
     """
     raw = settings.get("retailer_intervals") or {}
     if not isinstance(raw, dict):
@@ -260,6 +293,18 @@ def _retailer_intervals(settings: dict[str, object]) -> dict[str, int]:
             raise ValueError(
                 f"retailer_intervals[{retailer!r}] must be >= {MIN_INTERVAL_SECONDS} "
                 f"(polite polling), got {seconds}"
+            )
+        # Checked SECOND so the floor keeps its own message: a 30-second
+        # override against a 3600-second global is wrong for both reasons, and
+        # "polite polling" is the one an operator needs to read first.
+        if seconds < global_interval:
+            raise ValueError(
+                f"retailer_intervals[{retailer!r}] must be >= interval_seconds "
+                f"({global_interval}), got {seconds}. A per-retailer override is "
+                "for asking LESS often. The loop sleeps interval_seconds per "
+                "cycle, so a shorter override cannot be kept — it would only "
+                "publish a cadence the schedule can never satisfy and paint "
+                "every row of that retailer stale while the monitor behaves."
             )
         out[str(retailer)] = seconds
     return out
@@ -329,13 +374,21 @@ class Config:
                 )
             )
 
+        # BOUND TO A LOCAL AND NOT CALLED TWICE, because `_retailer_intervals`
+        # now validates against this number. Two `_interval(settings)` calls
+        # would be two chances for a future edit to validate the overrides
+        # against a different global than the one that ends up in the config —
+        # and an override checked against a number the loop does not sleep is
+        # exactly the defect this argument was added to close.
+        interval = _interval(settings)
+
         return cls(
             watches=watches,
             notify_urls=[u for u in (raw.get("notify") or []) if u],
             bestbuy_api_key=settings.get("bestbuy_api_key", ""),
             first_party_only=bool(settings.get("first_party_only", True)),
-            interval_seconds=_interval(settings),
-            retailer_intervals=_retailer_intervals(settings),
+            interval_seconds=interval,
+            retailer_intervals=_retailer_intervals(settings, interval),
             state_path=Path(settings.get("state_path", "state.json")),
             status_path=Path(settings.get("status_path", "served/boty/status.json")),
             pacer_state_path=Path(settings.get("pacer_state_path", "pacer-state.json")),

@@ -247,6 +247,61 @@ def test_the_documented_interval_is_accepted(tmp_path: Path) -> None:
     assert cfg.interval_seconds == 300
 
 
+def test_a_retailer_override_below_the_global_interval_is_refused(tmp_path: Path) -> None:
+    """An override is for asking LESS often. Below the global it is unkeepable.
+
+    `_retailer_intervals`' own docstring stated the intent — *"A per-retailer
+    override is for asking LESS often"* — and held the value only to
+    `MIN_INTERVAL_SECONDS`. `watch_loop` sleeps `interval_seconds *
+    uniform(0.85, 1.15)` per CYCLE, so no retailer can be polled more often than
+    roughly the global interval however small its override.
+
+    Measured on the tree before this guard existed:
+
+        config accepted: interval_seconds=3600, retailer_intervals={'gamestop': 900}
+        published cadence for gamestop: 900
+        real gap between polls: >= ~3060 s
+
+    A published threshold the schedule can never satisfy, and it fails in the
+    direction that paints the rendering wrong: `status.write` publishes 900 as
+    `current_interval_seconds`, so every GameStop row on the dashboard and in
+    `boty check` renders `warn`/stale permanently while the monitor is reading
+    that watch as often as it possibly can. The phase's stated invariant is that
+    the displayed cadence and the interval actually used to schedule cannot
+    drift; here they drift by 3.4x on a config the loader accepted in silence.
+    """
+    with pytest.raises(ValueError, match="retailer_intervals"):
+        Config.load(
+            _write(
+                tmp_path,
+                "settings:\n  interval_seconds: 3600\n"
+                "  retailer_intervals:\n    gamestop: 900\n" + _WATCH,
+            )
+        )
+
+
+def test_a_retailer_override_at_or_above_the_global_interval_is_accepted(
+    tmp_path: Path,
+) -> None:
+    """The shipped config's own two overrides, and the boundary between them.
+
+    `config/products.yaml` carries `amazon: 1800` and `gamestop: 900` against a
+    global 300, so a guard that moved the goalposts would refuse the file this
+    project ships. EQUAL is accepted deliberately: an override equal to the
+    global asks exactly as often as the loop can manage, which is keepable — the
+    refusal is only for a cadence the schedule cannot reach.
+    """
+    cfg = Config.load(
+        _write(
+            tmp_path,
+            "settings:\n  interval_seconds: 300\n"
+            "  retailer_intervals:\n    amazon: 1800\n    gamestop: 900\n"
+            "    walmart: 300\n" + _WATCH,
+        )
+    )
+    assert cfg.retailer_intervals == {"amazon": 1800, "gamestop": 900, "walmart": 300}
+
+
 # --------------------------------------------------------------------------
 # where the runtime files land
 # --------------------------------------------------------------------------
