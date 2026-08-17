@@ -459,6 +459,84 @@ def test_check_prints_how_long_the_pass_took(
     assert re.search(r"\d+\.\d\s*s", out), f"no elapsed time printed:\n{out}"
 
 
+def test_a_check_that_catches_a_restock_does_not_consume_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`boty check` reports a transition. It must not also SPEND one.
+
+    `run_once` calls `state.transitioned_to_stock(r)` for every result and then
+    `state.save()` — committing the transition to `state.json` — before it
+    returns. `boty check` calls it, prints `N alertable transition(s)`, and
+    sends nothing. So a check that happened to catch a restock wrote "already
+    seen, in stock" to disk and no alert was delivered by anybody.
+
+    THE LOSS IS NOT IMMEDIATE AND THAT IS STATED RATHER THAN INFLATED: the
+    running daemon holds its own in-memory `State`, so it still fires on its
+    own next cycle and its next `save()` overwrites the file. It becomes real
+    if the daemon restarts, or is not running, between the check and the
+    daemon's own detection — which under `Restart=` semantics is not a rare
+    state, as `boty/pacing.py`'s own persistence argument already records.
+    `cli.py` states the governing principle for the class: *"a send that does
+    not arrive is not a retry — it is a drop nothing will ever mention again."*
+
+    THE RESIDUAL IS ASSERTED HERE TOO, in the third block: a check that does not
+    commit cannot report transitions relative to the DAEMON's memory, only
+    relative to the file as it stood. Two checks in a row therefore both report
+    the same restock. That is the correct behaviour for a read-only surface and
+    it is pinned so nobody later "fixes" it by committing.
+    """
+    config = _check_config(tmp_path)
+    cfg = Config.load(config)
+
+    # The ledger as the daemon left it: this watch was last seen out of stock.
+    seed = State.load(cfg.state_path)
+    seed.seen[KEY] = Availability.OUT_OF_STOCK.value
+    seed.save()
+    before = cfg.state_path.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(cli, "_make_checker", lambda c: _checker(Availability.IN_STOCK))
+    assert cli.main(["check", "-c", str(config)]) == 0
+
+    out = capsys.readouterr().out
+    assert "1 alertable transition(s)" in out
+    # The residual said out loud on the surface a human reads, so a repeated
+    # count is legible rather than alarming.
+    assert "not sent, and not consumed" in out, out
+
+    assert cfg.state_path.read_text(encoding="utf-8") == before, (
+        "`boty check` committed a restock to the daemon's ledger and sent "
+        "nothing — the transition is spent and no alert was delivered by anybody"
+    )
+    assert State.load(cfg.state_path).seen[KEY] == "out_of_stock"
+
+    # And again, because the file did not move: the same restock is still there
+    # to be found. This is the recorded residual, not an accident.
+    assert cli.main(["check", "-c", str(config)]) == 0
+    assert "1 alertable transition(s)" in capsys.readouterr().out
+
+
+def test_a_watch_cycle_still_commits_the_transition_it_alerts_on(
+    cfg: Config, sent: dict[str, list]
+) -> None:
+    """The other half, and the reason `commit` defaults to True.
+
+    The daemon MUST write. Its whole restock rule is "in stock now and not in
+    stock last time", so a cycle that alerted and did not commit would alert
+    again on the next cycle, and the next — the 20-pages-in-24-hours failure
+    this project already has a module dedicated to preventing.
+    """
+    state = State.load(cfg.state_path)
+    state.seen[KEY] = Availability.OUT_OF_STOCK.value
+    state.save()
+
+    cli.watch_loop(cfg, _checker(Availability.IN_STOCK), state, cycles=1, sleep=lambda s: None)
+
+    assert sent["restock"] == [["goplusplus"]], f"the daemon did not send: {sent['restock']}"
+    assert State.load(cfg.state_path).seen[KEY] == "in_stock", (
+        "the daemon alerted and did not commit — it will alert again next cycle"
+    )
+
+
 def test_check_publishes_the_time_it_measured(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

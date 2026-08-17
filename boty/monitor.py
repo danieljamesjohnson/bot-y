@@ -588,6 +588,8 @@ def run_once(
     state: State,
     pacer: Pacer | None = None,
     now: float = 0.0,
+    *,
+    commit: bool = True,
 ) -> tuple[list[Result], list[Health], list[Result]]:
     """Check every watch once. Returns (results, health, alerts).
 
@@ -597,6 +599,45 @@ def run_once(
     detector as broken, and page somebody about a check we chose not to make.
     Skipping means `assess_health` never sees the retailer, so it stays silent
     about it, and `status.write` publishes it as paced rather than as green.
+
+    `commit=False` REPORTS THE TRANSITIONS WITHOUT SPENDING THEM, and it exists
+    for exactly one caller. Added 2026-08-17 (07-REVIEW WR-06).
+
+    A restock is "in stock now and not in stock last time", and the only record
+    of "last time" is `state.json`. Every caller of this function used to write
+    that file, including `boty check` — which reports `N alertable
+    transition(s)` and SENDS NOTHING. So a check that happened to catch a
+    restock wrote "already seen, in stock" to disk and no alert was delivered by
+    anybody.
+
+    STATE THE LOSS PRECISELY RATHER THAN LOUDLY. It is not immediate: the
+    running daemon holds its own in-memory `State`, still fires on its own next
+    cycle, and its next `save()` overwrites the file. It becomes real when the
+    daemon restarts, or is not running, between the check and the daemon's own
+    detection — which under `Restart=` semantics is not a rare state, as
+    `boty/pacing.py`'s persistence argument already records for the other
+    document. `boty/cli.py` states the principle for the class: *"a send that
+    does not arrive is not a retry — it is a drop nothing will ever mention
+    again."*
+
+    THE DEFAULT IS `True` AND THAT IS THE LOAD-BEARING HALF. The daemon must
+    commit: a cycle that alerted and did not write would alert again next cycle,
+    and the next, which is the 20-pages-in-24-hours failure this project has a
+    whole module dedicated to preventing. Only the surface that CANNOT send is
+    allowed to abstain, and it abstains explicitly at its own call site.
+
+    THE RESIDUAL, RECORDED RATHER THAN DISCOVERED: a check that does not commit
+    reports transitions relative to THE FILE AS IT STOOD, not relative to the
+    daemon's memory. Two checks in a row therefore both report the same
+    restock. That is correct for a read-only surface and it is asserted in
+    `tests/test_cli_watch.py` so nobody later "fixes" it.
+
+    `state.seen` IS STILL MUTATED IN MEMORY EITHER WAY, and this is not an
+    oversight. `transitioned_to_stock` is the only thing that computes the
+    transition and it writes as it computes; splitting that would mean a second
+    implementation of the comparison, and the note below records why it must run
+    exactly once per result. What `commit` governs is whether that in-memory
+    memory reaches DISK — which is the only part another process can observe.
     """
     if pacer is not None:
         due = [w for w in watches if pacer.due(w.retailer, now)]
@@ -656,5 +697,6 @@ def run_once(
         for r, transitioned in zip(results, transitions, strict=True)
         if not r.watch.control and r.alertable and transitioned
     ]
-    state.save()
+    if commit:
+        state.save()
     return results, health, alerts

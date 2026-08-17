@@ -806,7 +806,37 @@ def main(argv: list[str] | None = None) -> int:
         # number that drifts with Python's import time is not a measurement of
         # retailers. `monotonic` for the reason in `boty.status.write`.
         started = time.monotonic()
-        results, health, alerts = run_once(cfg.watches, checker, state)
+        # `commit=False`: THIS SURFACE CANNOT SEND, SO IT MUST NOT SPEND.
+        # 07-REVIEW WR-06, 2026-08-17.
+        #
+        # `run_once` folds every result into the ledger and, by default, writes
+        # it. A restock is "in stock now and not in stock last time", and this
+        # file is the only record of "last time" — so a check that happened to
+        # catch one used to write "already seen, in stock" to disk, print `N
+        # alertable transition(s)`, and send nothing. The transition was spent by
+        # a surface with no notifier attached.
+        #
+        # NOT IMMEDIATE, AND SAID THAT WAY: the running daemon holds its own
+        # in-memory `State` and still fires on its next cycle, whose `save()`
+        # overwrites the file. It becomes real when the daemon restarts, or is
+        # not running, between this check and its own detection — and under
+        # `Restart=` semantics that is not a rare state, which is the same
+        # argument `boty/pacing.py` makes for persisting the backoff at all. The
+        # principle is already written down twelve lines further on in this file:
+        # *"a send that does not arrive is not a retry — it is a drop nothing
+        # will ever mention again."*
+        #
+        # THE SAME SHAPE AS THE PACER THREE BLOCKS DOWN, and that is the point.
+        # This branch already builds a load-only `Pacer` because `boty check` is
+        # routinely run while the daemon owns `pacer-state.json`; `state.json`
+        # has the same second writer and the more expensive failure, and until
+        # now only one of the two documents was protected from it.
+        #
+        # THE RESIDUAL IS PAID HERE, NOT HIDDEN: the count printed below is now
+        # relative to the file as it stood, not to the daemon's memory. Two
+        # checks in a row report the same restock. For a surface that reports
+        # rather than acts, that is the correct answer.
+        results, health, alerts = run_once(cfg.watches, checker, state, commit=False)
         elapsed = time.monotonic() - started
         # A LOAD-ONLY PACER, and every clause of that is a defect if a later
         # edit undoes it. It exists for one reason: to answer REQ-21's
@@ -873,7 +903,16 @@ def main(argv: list[str] | None = None) -> int:
             remembered=_remembered(state),
         )
         if alerts:
+            # THE SECOND SENTENCE IS THE RESIDUAL OF `commit=False` MADE
+            # VISIBLE, and it is on the human surface because the human is the
+            # one who will otherwise be surprised by it. This count is measured
+            # against `state.json` as it stood, so running `boty check` twice
+            # reports the same restock twice — which is right for a surface that
+            # reports and cannot send, and reads like a bug if nobody says so.
+            # The leading count keeps its wording: `tests/test_cli_watch.py`
+            # asserts on it, and the sentence is appended rather than folded in.
             print(f"\n  {len(alerts)} alertable transition(s)")
+            print("  (not sent, and not consumed — `boty watch` is what notifies)")
         # The human surface for REQ-08's two-minute budget; `duration_seconds`
         # in the status file is the machine one. Both are cheap, and a budget
         # whose only reading lives in a served file is one nobody looks at
