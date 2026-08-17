@@ -936,10 +936,25 @@ MUTATIONS = (
     # governs: *"Idents are reserved across concurrent plans, not renumbered."*
     #
     # M21-M24 REMAIN THE INTENTIONAL GAP and are still not filled.
+    # M33'S ANCHOR WAS RE-POINTED ON 2026-08-17 (07-REVIEW WR-01), and this is
+    # the fifth anchor in this registry to drift. It did NOT drift for a prose
+    # or version reason — the CODE it gates changed shape: `current_interval`'s
+    # non-zero-refusal return went from a bare `min(...)` to `max(st.interval,
+    # min(...))`, so the old four-line `search` matched nothing and the mutation
+    # would have raised rather than been caught. The gate's MEANING is unchanged
+    # (the accessor ignores the backoff and answers with the standing interval),
+    # its kill set was re-measured against the new anchor rather than carried
+    # over, and it is unchanged: 11 failed / 855 passed over the whole suite,
+    # the same eleven tests enumerated above.
+    #
+    # Note which test does NOT fire on M33 and should not: the new
+    # test_a_refusal_never_shortens_the_wait_however_long_the_standing_interval
+    # asserts a LOWER bound, and `return st.interval` satisfies it. That is M38's
+    # job below, which is why the two are a pair rather than one ident.
     Mutation(
         ident="M33",
         target="boty/pacing.py",
-        search="        return min(\n            st.interval * BACKOFF_FACTOR ** st.refusals,\n            MAX_BACKOFF_SECONDS,\n        )",
+        search="        return max(\n            st.interval,\n            min(\n                st.interval * BACKOFF_FACTOR ** st.refusals,\n                MAX_BACKOFF_SECONDS,\n            ),\n        )",
         replace="        return st.interval",
         breaks="`Pacer.current_interval` returns the standing config interval however many refusals are in force, so the backoff stops reaching any surface. On this host that is target and walmart at seven refusals judged against 300 s instead of the six-hour cap they are actually on, and amazon against 1800 s instead of 7200 — every reading from a backed-off retailer reads as wildly stale on all three surfaces, which is criterion 3's \"derived from the retailer's own pacing rather than a fixed clock\" stated as a mutation. And because `record` computes its wait THROUGH this accessor, the fetch schedule collapses with it: a retailer that just walled us is asked again at full rate, which is the 2026-08-04 behaviour boty/pacing.py exists to prevent and the politeness constraint calls a hard limit",
     ),
@@ -1147,6 +1162,66 @@ MUTATIONS = (
         search="  const interval = intervals.get(w.retailer) ?? null;",
         replace="  const interval = 1800;",
         breaks="the row tag stops asking *is this reading younger than its own retailer's current cadence* and starts asking the banner's question instead — 07-PLAN-OUTLINE.md § Finding 9's forbidden merge, built. It is WRONG IN BOTH DIRECTIONS ON THE SAME PAGE IN THE SAME SECOND, with the arithmetic rather than the principle: target and walmart sit on the 21 600-second cap while they are refusing us, so every one of their remembered rows renders stale while they behave exactly as the politeness rule requires — the ROADMAP's own sentence, *'a retailer in backoff is legitimately checked less often, and that is the politeness rule working'* — and gamestop runs on a 900-second override, so a 25-minute-old GameStop reading renders fresh when its own pacing says it is overdue. Criterion 3's *'derived from the retailer's own pacing rather than a fixed clock'* stated as a mutation. This is also the shape a future editor reaches for when 'simplifying' two staleness rules into one, which is why the anchor is the lookup expression itself",
+    ),
+    # ----------------------------------------------------------------------
+    # M38 — A BACKOFF THAT ASKS MORE OFTEN. 07-REVIEW WR-01, 2026-08-17.
+    # ----------------------------------------------------------------------
+    #
+    # NOT A PHASE-7 IDENT. M31-M37 were the phase's seven; this one is the
+    # review's, and it is registered by the fix pass rather than by a plan. The
+    # ident arithmetic is stated so 07-06 is not made wrong by it: 07-06 records
+    # the count rising FROM 26 TO 33 across phase 7, and this ident takes the
+    # registry to 34 AFTER that phase closed. M21-M24 remain the intentional gap
+    # and are still not filled.
+    #
+    # WHY IT PAIRS WITH M33 RATHER THAN STANDING ALONE, on the convention M27/M28
+    # and M29/M30 establish: the two share one `search` and gate the two
+    # DIRECTIONS a single expression can fail in. M33 removes the backoff (the
+    # accessor answers with the standing interval however many refusals are in
+    # force). M38 removes only the FLOOR (the accessor may answer with LESS than
+    # the standing interval). Fixing either does not fix the other, and the
+    # measured kill sets do not overlap by a single test — 11 for M33, 1 for M38,
+    # disjoint.
+    #
+    # WHAT IT REBUILDS, which is the code as it actually shipped through phase 7.
+    # `M38.replace` is a byte-for-byte restoration of `current_interval`'s
+    # pre-2026-08-17 body. Measured on that tree with `interval_seconds: 86400`:
+    #
+    #     interval at 0 refusals: 86400.0
+    #     after ONE refusal -> due_at: 21600.0, current_interval: 21600
+    #     log: "x refused us (1 in a row) — next attempt in ~360 min, not 1440"
+    #
+    # `record` schedules `due_at = now + wait` from this same call, so a refusal
+    # SHORTENED the wait by 4x and the log line printed that as a widening.
+    #
+    # NOT REACHABLE ON `config/products.yaml`, and that is why it is a gate. The
+    # largest standing interval configured today is Amazon's 1800 s against a
+    # 21 600 s cap. `config._interval` enforces a floor and NO upper bound, so
+    # the reaching config is one `Config.load` accepts in silence — a defect
+    # whose only guard would otherwise be that nobody has typed the number yet.
+    #
+    # THE ANCHOR IS BEHAVIOURAL AND PRE-COUNTED, 2026-08-17, against the file
+    # text: the seven-line `return max(...)` fragment occurs ONCE, and it is the
+    # only `max(` in `boty/pacing.py`. No message text, no rendered tag, no
+    # version literal — 07-PLAN-OUTLINE.md § Finding 1's rule.
+    #
+    # THE KILLER, MEASURED BY APPLYING THIS MUTATION ALONE AND REVERTING, not
+    # predicted — 1 failed / 865 passed, exit 1:
+    #     tests/test_pacing.py::
+    #       test_a_refusal_never_shortens_the_wait_however_long_the_standing_interval
+    #
+    # A ONE-TEST KILL SET IS THIN AND IS RECORDED AS THIN rather than padded. It
+    # is thin for a stated reason: no other test in this suite configures a
+    # standing interval above `MAX_BACKOFF_SECONDS`, because until this review
+    # nothing said one was allowed to exist. If M38 ever SURVIVES, the first
+    # thing to check is whether that test acquired a skip decorator or whether
+    # its `standing = MAX_BACKOFF_SECONDS * 4` drifted below the cap.
+    Mutation(
+        ident="M38",
+        target="boty/pacing.py",
+        search="        return max(\n            st.interval,\n            min(\n                st.interval * BACKOFF_FACTOR ** st.refusals,\n                MAX_BACKOFF_SECONDS,\n            ),\n        )",
+        replace="        return min(\n            st.interval * BACKOFF_FACTOR ** st.refusals,\n            MAX_BACKOFF_SECONDS,\n        )",
+        breaks="a refusal makes the monitor ask a refusing retailer MORE often, and the log line presents the increase in request rate as a backoff. Above `MAX_BACKOFF_SECONDS` the bare `min` returns a number smaller than the standing interval, and `record` computes its wait through this accessor — so at `interval_seconds: 86400` one refusal moves the next attempt from 1440 minutes to 360, a 4x increase in load aimed at the one retailer that has just walled us. That is `boty/pacing.py`'s own opening argument inverted: *'a retailer that walled us got asked again five minutes later ... precisely the behaviour the project's own politeness constraint calls a hard limit'*. It also inverts `Pacer.save`'s recorded direction claim, which is the second thing this ident guards: `save` argues a truncated read is safe because empty state judges a reading against the NARROWER standing interval and over-reports staleness, and above the cap the mutation makes the standing interval the WIDER of the two, so a truncated `pacer-state.json` under-reports staleness — the direction REQ-21 does not prefer",
     ),
 )
 

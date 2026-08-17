@@ -182,6 +182,50 @@ def test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring() -
     assert MAX_BACKOFF_SECONDS <= 6 * 60 * 60, "a cap beyond a few hours is not a monitor"
 
 
+def test_a_refusal_never_shortens_the_wait_however_long_the_standing_interval() -> None:
+    """The cap is a FLOOR on politeness, not a ceiling on it.
+
+    `current_interval` used to be `min(interval * FACTOR ** refusals, CAP)`
+    outright. Above the cap that `min` returns a number SMALLER than the
+    standing interval, and `record` schedules `due_at = now + wait` from the
+    same call — so a refusal made the monitor ask a refusing retailer MORE
+    often, and the log line printed the 4x increase in request rate as a
+    backoff. Measured on the pre-fix tree with `interval_seconds: 86400`:
+
+        interval at 0 refusals: 86400.0
+        after ONE refusal -> due_at: 21600.0, current_interval: 21600
+        log: "x refused us (1 in a row) — next attempt in ~360 min, not 1440"
+
+    `config._interval` enforces a floor (`MIN_INTERVAL_SECONDS`) and no upper
+    bound, so that is a config `Config.load` accepts in silence. Not reachable
+    on `config/products.yaml` today — the largest standing interval there is
+    Amazon's 1800 s — which is exactly why it needs a test rather than a
+    comment.
+
+    THE CAP IS NOT WEAKENED. Below it, the backoff still tops out at
+    `MAX_BACKOFF_SECONDS`, which the test above pins; the clamp only refuses to
+    move a wait DOWNWARDS, and it can only fire where the operator already chose
+    a cadence longer than the cap.
+    """
+    standing = MAX_BACKOFF_SECONDS * 4
+    p = Pacer(default_interval=standing)
+    assert p.current_interval("x") == standing
+
+    now = 0.0
+    p.record("x", refused=True, now=now)
+    assert p._for("x").due_at - now >= standing, (
+        "one refusal moved the next attempt CLOSER than the standing interval — "
+        "the politeness constraint inverted, on a config the loader accepts"
+    )
+    # Through the accessor as well as through the schedule, because `record`
+    # computes its wait through `current_interval` and the two must not be
+    # gated separately — the one-expression claim this module makes twice.
+    for refusals in range(1, 12):
+        assert p.current_interval("x") >= standing
+        p.record("x", refused=True, now=now)
+        assert p._for("x").refusals == refusals + 1
+
+
 def test_one_good_read_clears_the_backoff_completely() -> None:
     """Not a decay — a reset. The retailer is answering; there is nothing left
     to back off from, and creeping back over hours would keep a working

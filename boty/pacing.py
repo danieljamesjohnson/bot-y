@@ -340,9 +340,48 @@ class Pacer:
             # config, and nothing asserts against it as a gate. It is here so a
             # future config edit cannot make the two answers differ.
             return st.interval
-        return min(
-            st.interval * BACKOFF_FACTOR ** st.refusals,
-            MAX_BACKOFF_SECONDS,
+        # THE OUTER `max` IS WHY THIS METHOD IS THREE LINES AND NOT ONE, and it
+        # closes the other half of the divergence the paragraph above names.
+        # That paragraph closed it for `refusals == 0` and stopped there; the
+        # NON-ZERO branch is the one `record` actually schedules from, and until
+        # 2026-08-17 it was the bare `min` alone.
+        #
+        # WHAT THE BARE `min` DID, measured on this tree at `interval_seconds:
+        # 86400` before the clamp existed:
+        #
+        #     interval at 0 refusals: 86400.0
+        #     after ONE refusal -> due_at: 21600.0, current_interval: 21600
+        #     log: "x refused us (1 in a row) — next attempt in ~360 min, not 1440"
+        #
+        # A refusal SHORTENED the wait — the monitor asking a retailer that just
+        # walled us four times more often — and the log line presented that
+        # increase in request rate as a backoff. `config._interval` enforces a
+        # floor and no upper bound, so that is a config `Config.load` accepts in
+        # silence. This is the politeness constraint inverted, and this module's
+        # own opening argument calls politeness a hard limit.
+        #
+        # A BACKOFF MAY ONLY EVER WIDEN THE WAIT. That is the rule in one
+        # sentence, and `max(st.interval, ...)` is that sentence. The CAP IS NOT
+        # WEAKENED by it: below the cap the `min` still binds and the wait still
+        # tops out at `MAX_BACKOFF_SECONDS`; the `max` can only fire where the
+        # operator already chose a cadence longer than the cap, which is a
+        # retailer being asked LESS often than the cap, never more.
+        #
+        # IT ALSO RESTORES `save`'s DIRECTION CLAIM, which is why that docstring
+        # is not edited to hedge. `save` argues a truncated read is safe because
+        # empty state means every retailer reads at its STANDING interval, and a
+        # reading judged against a narrower window over-reports staleness rather
+        # than under-reporting it. With the bare `min` that inverted above the
+        # cap — the real document answered 21600 where empty state answered
+        # 86400, so the truncated read judged against the WIDER window. With the
+        # clamp, `current_interval >= st.interval` unconditionally, so the
+        # claim holds for every configurable value rather than for most of them.
+        return max(
+            st.interval,
+            min(
+                st.interval * BACKOFF_FACTOR ** st.refusals,
+                MAX_BACKOFF_SECONDS,
+            ),
         )
 
     def skipped_reason(self, retailer: str, now: float) -> str:
