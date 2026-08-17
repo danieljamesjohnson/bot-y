@@ -23,6 +23,9 @@ would not have, and a check that does not run is worse than one that is coarse.
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -421,4 +424,83 @@ def test_a_row_nobody_checked_does_not_claim_a_store_answered(page: str) -> None
     assert re.search(r"const storeTag[\s\S]{0,400}?w\.checked === false", page), (
         "`storeTag` still renders before it consults `checked`, so a row nobody "
         "read carries a warning about a page that was never fetched"
+    )
+
+
+# --------------------------------------------------------------------------
+# The page has to PARSE. Added 2026-08-17 after this gate's absence shipped.
+# --------------------------------------------------------------------------
+
+
+def test_no_html_comment_is_written_inside_the_script_block(page: str) -> None:
+    """The dependency-free half, and the one that actually bound the day it was written.
+
+    A `<!-- ... -->` inside the row's template literal is not a comment to
+    JavaScript — it is TEXT, and any backtick in it CLOSES THE TEMPLATE. That is
+    not hypothetical: it is how this test came to exist. The 07-REVIEW CR-01 fix
+    put a paragraph of this project's usual back-quoted prose beside the escaped
+    sink, inside the literal, and the page stopped parsing while every
+    structural assertion in this file stayed green.
+
+    THE RULE IS THE SHAPE OF THE COMMENT, NOT ITS CONTENT, because this codebase
+    argues in comments and always will. `//` above the statement is free and
+    carries any characters at all; `<!--` inside a template is a trap that only
+    springs on some prose. Banning the trap costs nothing and needs no runtime,
+    which is why this is the assertion that runs on a fresh clone rather than
+    the `node --check` below.
+    """
+    script = re.search(r"<script>(.*)</script>", page, re.S)
+    assert script, "the dashboard has no <script> block — update this test"
+
+    assert "<!--" not in script.group(1), (
+        "an HTML comment appears inside the <script> block. JavaScript does not "
+        "treat it as a comment; inside a template literal it is text, and a "
+        "backtick in it closes the literal and stops the whole page parsing. "
+        "Use `//` above the statement — it carries any characters, including "
+        "the back-quoted identifiers this codebase writes everywhere."
+    )
+
+
+def test_the_dashboard_script_parses(page: str) -> None:
+    """Every assertion in this module is a regex over source. None of them run it.
+
+    THIS TEST EXISTS BECAUSE THAT GAP WAS PAID FOR. Fixing 07-REVIEW CR-01 added
+    a comment beside the escaped sink, INSIDE the row's template literal, and the
+    comment contained backticks — which close a template literal. The page
+    stopped parsing and rendered nothing at all, and every structural assertion
+    in this file stayed green, because a regex looking for `esc(w.availability)`
+    finds it just as happily in a file the browser refuses to run.
+
+    That is this repository's own recorded failure shape — a gate that cannot
+    bite — pointed at the file whose module docstring claims *"it does not
+    execute what a retailer says"*. A page that does not parse does not execute
+    anything, which satisfies the letter of that claim and defeats all of it.
+
+    SKIPPED WHERE NO JS RUNTIME EXISTS, and that is the whole reason this is
+    shaped as a skip rather than a dependency. This module's docstring rejects
+    *requiring* a JavaScript runtime — *"`make verify` has to run from a fresh
+    clone with `pip install -e '.[dev]'` and nothing else"* — and that argument
+    is untouched: nothing here is required, nothing is installed, and a
+    contributor without node sees a skip rather than a failure. It is not
+    "verified" on such a machine and this docstring says so rather than
+    implying otherwise. On a box that HAS node — this one, and any CI image
+    built on a standard runner — a syntax error is caught before it is served.
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("no JavaScript runtime on PATH; the parse check is opportunistic")
+
+    script = re.search(r"<script>(.*)</script>", page, re.S)
+    assert script, "the dashboard has no <script> block — update this test"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        js = Path(tmp) / "dashboard.js"
+        js.write_text(script.group(1), encoding="utf-8")
+        proc = subprocess.run(
+            [node, "--check", str(js)], capture_output=True, text=True
+        )
+
+    assert proc.returncode == 0, (
+        "the dashboard's script does not parse, so the page renders nothing:\n"
+        + (proc.stderr.strip() or proc.stdout.strip())
     )

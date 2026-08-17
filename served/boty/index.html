@@ -266,17 +266,31 @@ async function tick() {
   // politeness rule working. The warning, if there is one, is the AGE, and the
   // age tag beside it is what carries it. Inventing a third visual weight for a
   // state that is not a problem would be inventing a visual language.
+  // `esc(w.availability)` ON THE DOT'S CLASS, FOR THE RULE ABOVE RATHER THAN
+  // FOR A KNOWN ATTACKER. Until 07-04 the only producer of this key was
+  // `r.availability.value`, an enum member, so the value was one of three
+  // literals; 07-04 added a second producer that is deliberately not
+  // enum-bounded, and this value now arrives from `state.json` by the same
+  // route `w.read_at` does. It was the one interpolation on this page the
+  // "escape every value" rule had not been applied to, which is that rule not
+  // surviving an edit. An attribute value is a sink like any other: an
+  // unescaped `"` closes it and everything after it is markup.
+  //
+  // AND THIS PARAGRAPH IS A `//` COMMENT OUT HERE RATHER THAN AN HTML COMMENT
+  // INSIDE THE TEMPLATE, which is not a style preference. An HTML comment is
+  // not a comment to JavaScript; inside a template literal it is TEXT, and a
+  // backtick in it closes the literal. Written that way first, on 2026-08-17,
+  // and it stopped the whole page parsing while every regex in
+  // tests/test_dashboard.py stayed green. Both halves are now gated there:
+  // test_no_html_comment_is_written_inside_the_script_block, and `node --check`
+  // where a runtime exists.
+  //
+  // (Written without the HTML comment's opening token on purpose. The gate
+  // above greps this block FOR that token, so quoting it here to explain it
+  // would trip the check that guards it — `boty/monitor.py`'s `strict=True`
+  // paragraph made the identical choice for the identical reason.)
   document.getElementById('list').innerHTML = d.watches.map(w => `
     <li>
-      <!-- `esc()` HERE FOR THE RULE ABOVE RATHER THAN FOR A KNOWN ATTACKER.
-           Until 07-04 the only producer of this key was `r.availability.value`,
-           an enum member, so it was one of three literals; 07-04 added a second
-           producer that is deliberately not enum-bounded, and this value now
-           arrives from `state.json` by the same route `w.read_at` does. It was
-           the one interpolation on this page the "escape every value" rule had
-           not been applied to, which is that rule not surviving an edit. An
-           attribute value is a sink like any other: an unescaped `"` closes it
-           and everything after is markup. -->
       <span class="dot ${esc(w.availability)}"></span>
       <div>
         <div>${w.url ? `<a class="name" href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a>` : `<span class="name">${esc(w.name)}</span>`}${w.control ? '<span class="tag">control</span>' : ''}${w.degraded ? '<span class="tag degraded" title="lower confidence: a page we rendered ourselves, or a reading lifted out of presentation markup">degraded</span>' : ''}${w.extraction === 'dom' ? '<span class="tag dom" title="read out of the page&#39;s presentation markup rather than the retailer&#39;s own structured feed — a reskin breaks this silently">dom</span>' : ''}${storeTag(w)}${ageTag(w, intervals, nowS)}${w.checked === false ? '<span class="tag" title="nobody read this watch this cycle — its retailer was not due, so the availability and the age beside this are what the monitor last recorded rather than what it just read">not checked</span>' : ''}</div>
