@@ -68,6 +68,34 @@ DASHBOARD = Path(__file__).resolve().parent.parent / "served" / "boty" / "index.
 #: threat, mitigated there with a both-ended bound. A value whose upstream is a
 #: file on disk is the last one to make an exception for.
 #:
+#: `w.availability` JOINS THE LIST FOR `w.read_at`'S OWN STATED REASON, and it
+#: should have joined it in the same commit. Its provenance is the third kind
+#: described directly above — a mutable file on the host — and it travels the
+#: SAME route out of the SAME file: `monitor._remembered_availability` returns
+#: whatever `str` a `state.json` entry carries, `status.write` publishes it
+#: verbatim as `availability`, and the page interpolates it into the dot's
+#: `class` attribute. *"A value whose upstream is a file on disk is the last one
+#: to make an exception for"* was written one paragraph up about `read_at`, and
+#: it was already true of this field when it was written.
+#:
+#: WHAT USED TO EXCUSE IT, and why the excuse expired. Before 07-04 the only
+#: producer of this key was `r.availability.value`, an `Availability` enum
+#: member, so the value was one of three literals and no escaper could change
+#: anything. 07-04 added a second producer that is deliberately NOT enum-bounded
+#: (`boty/monitor.py`'s `_remembered_availability` states the exemption and its
+#: reason). Measured against the tree that shipped it: a `state.json` entry of
+#: `'" onmouseover=alert(1) x="'` rendered as
+#: `<span class="dot " onmouseover=alert(1) x=""></span>` — the attribute broken
+#: out of and a handler attached, on Mission Control's origin because the page
+#: is proxied under `/tools/boty`.
+#:
+#: NO REMOTE WRITER REACHES `state.json` TODAY — `State.save` serialises
+#: `result.availability.value` and nothing else — so what was demonstrated is the
+#: sink and the flow, not an attacker. It is listed anyway, for the reason the
+#: `read_at` paragraph gives: this list is not "what is currently reachable".
+#: A rule of that shape does not survive the next edit to the template, and the
+#: omission of this one field is that rule already not surviving.
+#:
 #: `w.checked` is DELIBERATELY NOT LISTED. It is a boolean used as a CONDITION
 #: and never interpolated, exactly like `w.degraded`, `w.control` and
 #: `w.extraction`. The test below only fires on `${...}` interpolation, so
@@ -80,6 +108,7 @@ UNTRUSTED = (
     "w.store",
     "w.store_pinned",
     "w.read_at",
+    "w.availability",
     "r.retailer",
     "r.reason",
 )

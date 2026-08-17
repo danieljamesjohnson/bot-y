@@ -268,7 +268,16 @@ async function tick() {
   // state that is not a problem would be inventing a visual language.
   document.getElementById('list').innerHTML = d.watches.map(w => `
     <li>
-      <span class="dot ${w.availability}"></span>
+      <!-- `esc()` HERE FOR THE RULE ABOVE RATHER THAN FOR A KNOWN ATTACKER.
+           Until 07-04 the only producer of this key was `r.availability.value`,
+           an enum member, so it was one of three literals; 07-04 added a second
+           producer that is deliberately not enum-bounded, and this value now
+           arrives from `state.json` by the same route `w.read_at` does. It was
+           the one interpolation on this page the "escape every value" rule had
+           not been applied to, which is that rule not surviving an edit. An
+           attribute value is a sink like any other: an unescaped `"` closes it
+           and everything after is markup. -->
+      <span class="dot ${esc(w.availability)}"></span>
       <div>
         <div>${w.url ? `<a class="name" href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a>` : `<span class="name">${esc(w.name)}</span>`}${w.control ? '<span class="tag">control</span>' : ''}${w.degraded ? '<span class="tag degraded" title="lower confidence: a page we rendered ourselves, or a reading lifted out of presentation markup">degraded</span>' : ''}${w.extraction === 'dom' ? '<span class="tag dom" title="read out of the page&#39;s presentation markup rather than the retailer&#39;s own structured feed — a reskin breaks this silently">dom</span>' : ''}${storeTag(w)}${ageTag(w, intervals, nowS)}${w.checked === false ? '<span class="tag" title="nobody read this watch this cycle — its retailer was not due, so the availability and the age beside this are what the monitor last recorded rather than what it just read">not checked</span>' : ''}</div>
         <div class="meta">${esc(w.retailer)} · ${esc(w.detail)}</div>
