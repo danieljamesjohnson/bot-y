@@ -50,6 +50,43 @@ NODE_SEARCH_GLOBS = (
 )
 
 
+def _runs_javascript(candidate: str) -> bool:
+    """Ask a candidate to compute something, and check the answer.
+
+    WHY A NAME IS NOT EVIDENCE, MEASURED RATHER THAN ARGUED. `_js_runtime`
+    below trusts nothing but this function, because everything else it has is a
+    filename. With a two-line `#!/bin/sh` + `exit 0` script named `node` in a
+    version-manager root, the parse gate reported **1 passed** against a
+    dashboard whose script does not parse — measured, not imagined. That is a
+    false green in the exact shape the gate exists to prevent, in the phase
+    whose thesis is that a claim must not exceed its measurement. The weakness
+    is older than the glob: the `shutil.which("node")` this replaced took the
+    same filename on the same trust, so it is an unhardened edge rather than a
+    new defect.
+
+    WHY THIS PROBE AND NOT `--version`. `--version` exits 0 is the obvious
+    one-liner and it does not work: the shim above exits 0 for every argument,
+    including that one, so it certifies precisely the thing it was added to
+    reject. The probe has to make the candidate PRODUCE something only a
+    JavaScript engine produces. `6 * 7` is arithmetic no shell script emits by
+    accident, and both halves are load-bearing — the shim fails on the empty
+    stdout, and a candidate that exits non-zero fails on the return code.
+
+    WHY NOTHING IS CAUGHT HERE. A file at one of these paths that cannot be
+    executed at all raises `PermissionError` out of `subprocess.run`, and the
+    gate fails loudly with it. That is correct and deliberate: a broken thing
+    named `node` sitting exactly where a runtime lives is worth a red tick, and
+    swallowing it into a skip would turn a discoverable defect back into
+    silence. Only a candidate that RAN and answered wrongly is falsified here.
+    """
+    proc = subprocess.run(
+        [candidate, "-e", "process.stdout.write(String(6 * 7))"],
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0 and proc.stdout.strip() == "42"
+
+
 def _js_runtime() -> tuple[str, str] | None:
     """Find a runtime that can answer `--check`, or say where it looked.
 
@@ -66,12 +103,18 @@ def _js_runtime() -> tuple[str, str] | None:
     this repository's recorded failure shape, *a bound that cannot bind*, and
     widening the search is what makes it bind.
 
-    WHY THE FIRST MATCH IS TAKEN AND A VERSION IS NOT CHOSEN. The question this
-    gate asks is whether the script parses. Any runtime that can answer
-    `--check` answers it, so selecting a version would imply the answer depends
-    on one — it does not — and would invite a version floor that nothing here
-    needs and that would have to be maintained against a page with no version
-    dependency. The sort is for determinism between runs, not preference.
+    WHY THE FIRST WORKING MATCH IS TAKEN AND A VERSION IS NOT CHOSEN. The
+    question this gate asks is whether the script parses. Any runtime that can
+    answer `--check` answers it, so selecting a version would imply the answer
+    depends on one — it does not — and would invite a version floor that
+    nothing here needs and that would have to be maintained against a page with
+    no version dependency. The sort is for determinism between runs, not
+    preference. *Working* is the word this loop earns rather than assumes:
+    every candidate, on `PATH` and under a version-manager root alike, has to
+    satisfy `_runs_javascript` before it is returned, and one that does not is
+    stepped over rather than returned or allowed to end the search. So a shim
+    named `node` in front of a real runtime costs a subprocess, not a green
+    tick on an unparseable page.
 
     WHY THIS IS STILL A SKIP AND NOT A REQUIREMENT. The module docstring above
     rejects requiring a runtime in as many words — *"`make verify` has to run
@@ -83,12 +126,12 @@ def _js_runtime() -> tuple[str, str] | None:
     """
     for name in ("node", "nodejs"):
         found = shutil.which(name)
-        if found is not None:
+        if found is not None and _runs_javascript(found):
             return found, f"{name} on PATH"
     for pattern in NODE_SEARCH_GLOBS:
-        matches = sorted(glob.glob(os.path.expanduser(pattern)))
-        if matches:
-            return matches[0], pattern
+        for match in sorted(glob.glob(os.path.expanduser(pattern))):
+            if _runs_javascript(match):
+                return match, pattern
     return None
 
 #: Fields whose values originate with a retailer rather than with the operator.
@@ -554,17 +597,29 @@ def test_the_dashboard_script_parses(page: str) -> None:
     able to tell apart — *this host has no JavaScript runtime* and *this test
     did not find the one it has* — are now distinguishable from the transcript
     alone, because the skip reason enumerates everywhere it looked.
+
+    AND *A RUNTIME EXISTS* NOW MEANS ONE THAT WORKS. Widening the search
+    widened what could be believed on the strength of a filename, and that was
+    measurable: a `#!/bin/sh` + `exit 0` script named `node` in a
+    version-manager root made this test report **1 passed** on a page carrying
+    a syntax error. `_js_runtime` therefore makes every candidate answer
+    `_runs_javascript` before returning it, so the pass below is earned by a
+    runtime that demonstrated it is one.
     """
     runtime = _js_runtime()
     if runtime is None:
         pytest.skip(
             "SKIPPED, NOT PASSED: nothing below has been checked, and the "
-            "dashboard's script may or may not parse. No JavaScript runtime was "
-            "found in any of: `node` on PATH, `nodejs` on PATH, "
+            "dashboard's script may or may not parse. No WORKING JavaScript "
+            "runtime — one that ran a trivial script and returned the right "
+            "answer — was found in any of: `node` on PATH, `nodejs` on PATH, "
             + ", ".join(NODE_SEARCH_GLOBS)
             + ". If this host HAS a runtime somewhere else, that is a missing "
             "entry in NODE_SEARCH_GLOBS and not an acceptable skip — add it, "
-            "because a gate that cannot fire reads exactly like one that passed."
+            "because a gate that cannot fire reads exactly like one that "
+            "passed. If it has one in a location above, that location holds "
+            "something which is not a JavaScript engine, and this skip is the "
+            "gate refusing to certify a page it could not read."
         )
     node, _found_in = runtime
 
