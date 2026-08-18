@@ -22,6 +22,8 @@ would not have, and a check that does not run is worse than one that is coarse.
 
 from __future__ import annotations
 
+import glob
+import os
 import re
 import shutil
 import subprocess
@@ -31,6 +33,63 @@ from pathlib import Path
 import pytest
 
 DASHBOARD = Path(__file__).resolve().parent.parent / "served" / "boty" / "index.html"
+
+#: Where a JavaScript runtime lives on a machine that keeps one but does not put
+#: it on `PATH`. Every entry is a real install layout of a version manager —
+#: nvm, fnm, volta, asdf — rather than a guess, and the list is deliberately
+#: short: it is about the CLASS of problem (a runtime managed per-version, which
+#: is why it is not on a non-login shell's PATH) and not about one developer's
+#: laptop. A box that keeps node somewhere else needs a new entry here; the skip
+#: reason below says so, so the day that happens it is a visible gap and not an
+#: accepted skip.
+NODE_SEARCH_GLOBS = (
+    "~/.nvm/versions/node/*/bin/node",
+    "~/.local/share/fnm/node-versions/*/installation/bin/node",
+    "~/.volta/tools/image/node/*/bin/node",
+    "~/.asdf/installs/nodejs/*/bin/node",
+)
+
+
+def _js_runtime() -> tuple[str, str] | None:
+    """Find a runtime that can answer `--check`, or say where it looked.
+
+    WHY `PATH` ALONE WAS NOT ENOUGH, MEASURED RATHER THAN ASSUMED. `make`
+    inherits the invoking shell's environment and does not source a version
+    manager, so on a box whose only node is under `~/.nvm` the check below is
+    not opportunistic — it is unreachable. Measured on this host: `command -v
+    node` finds nothing, the same check inside a `make` recipe finds nothing,
+    and the only runtime present is `~/.nvm/versions/node/v24.16.0/bin/node`.
+    The gate added at `9e7d302` on 2026-08-17, specifically to catch a page that
+    had just stopped parsing, therefore never ran once inside `make
+    verify-offline` — the whole suite's only skip, for the whole of its life.
+    A gate that cannot fire in the environment the project's own gate runs in is
+    this repository's recorded failure shape, *a bound that cannot bind*, and
+    widening the search is what makes it bind.
+
+    WHY THE FIRST MATCH IS TAKEN AND A VERSION IS NOT CHOSEN. The question this
+    gate asks is whether the script parses. Any runtime that can answer
+    `--check` answers it, so selecting a version would imply the answer depends
+    on one — it does not — and would invite a version floor that nothing here
+    needs and that would have to be maintained against a page with no version
+    dependency. The sort is for determinism between runs, not preference.
+
+    WHY THIS IS STILL A SKIP AND NOT A REQUIREMENT. The module docstring above
+    rejects requiring a runtime in as many words — *"`make verify` has to run
+    from a fresh clone with `pip install -e '.[dev]'` and nothing else"* — and
+    `REQUIREMENTS.md` § Non-Functional's fresh-clone rule says the same. So
+    nothing here is installed and nothing is required: this widens what the
+    search can FIND, and never what the suite DEMANDS. A contributor with no
+    runtime anywhere still gets a skip, not a red tick on a correct tree.
+    """
+    for name in ("node", "nodejs"):
+        found = shutil.which(name)
+        if found is not None:
+            return found, f"{name} on PATH"
+    for pattern in NODE_SEARCH_GLOBS:
+        matches = sorted(glob.glob(os.path.expanduser(pattern)))
+        if matches:
+            return matches[0], pattern
+    return None
 
 #: Fields whose values originate with a retailer rather than with the operator.
 #: `detail` is the sharp one — `f"{source}: {offer.raw_availability} from
@@ -485,10 +544,29 @@ def test_the_dashboard_script_parses(page: str) -> None:
     "verified" on such a machine and this docstring says so rather than
     implying otherwise. On a box that HAS node — this one, and any CI image
     built on a standard runner — a syntax error is caught before it is served.
+
+    AND *NO RUNTIME EXISTS* NOW MEANS WHAT IT SAYS, WHICH IT DID NOT BEFORE.
+    Until 07-07 this read `shutil.which("node")`, so it meant *no runtime is on
+    this PATH* — and on the box that wrote it, that was true of every `make
+    verify-offline` run while a perfectly good runtime sat under `~/.nvm`. The
+    gate spent its entire life as the suite's only skip. `_js_runtime` looks
+    past PATH into the version-manager roots, so the two cases a reader must be
+    able to tell apart — *this host has no JavaScript runtime* and *this test
+    did not find the one it has* — are now distinguishable from the transcript
+    alone, because the skip reason enumerates everywhere it looked.
     """
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("no JavaScript runtime on PATH; the parse check is opportunistic")
+    runtime = _js_runtime()
+    if runtime is None:
+        pytest.skip(
+            "SKIPPED, NOT PASSED: nothing below has been checked, and the "
+            "dashboard's script may or may not parse. No JavaScript runtime was "
+            "found in any of: `node` on PATH, `nodejs` on PATH, "
+            + ", ".join(NODE_SEARCH_GLOBS)
+            + ". If this host HAS a runtime somewhere else, that is a missing "
+            "entry in NODE_SEARCH_GLOBS and not an acceptable skip — add it, "
+            "because a gate that cannot fire reads exactly like one that passed."
+        )
+    node, _found_in = runtime
 
     script = re.search(r"<script>(.*)</script>", page, re.S)
     assert script, "the dashboard has no <script> block — update this test"

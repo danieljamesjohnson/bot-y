@@ -55,8 +55,25 @@ check-venv:
 	  echo "  (or run: make PYTHON=\$$(command -v python3) ...)"; \
 	  exit 1; }
 
+# `-rs` prints every skip WITH ITS REASON in this stage's own output, and it is
+# here because a skip is one character away from a pass in a transcript. Under
+# bare `-q` a gate that stopped binding prints `1 skipped` and nothing else —
+# identical, to anyone reading the verify output, to a gate that never existed.
+# That is this repository's own recorded failure shape, `a bound that cannot
+# bind is worse than no bound, because it reads like one in the file`, pointed
+# at the verify transcript instead of at the code. Measured: the `node --check`
+# gate added on 2026-08-17 to catch a page that had stopped parsing skipped in
+# EVERY `make verify-offline` run on the box that wrote it, because `make`
+# inherits the invoking shell's PATH and does not source a version manager. It
+# was the suite's only skip and nothing in this output said so. With `-rs` the
+# next silent skip is loud on the day it appears rather than at the next audit.
+#
+# This is a FLAG, not a stage. README's `| Stage | Proves |` table is asserted
+# set-equal to this file's stages by tests/test_verify_makefile.py, so no stage
+# is added or removed here and that table is correctly left alone. And the line
+# gains no pipe and no `-` prefix, for the reason this file's header gives.
 test: check-venv
-	@$(PYTHON) -m pytest tests/ -q
+	@$(PYTHON) -m pytest tests/ -q -rs
 
 # `$(PYTHON) -m ruff`, not the bare `ruff` console script, for two reasons and
 # the second is the load-bearing one. It runs under the interpreter $(PYTHON)
