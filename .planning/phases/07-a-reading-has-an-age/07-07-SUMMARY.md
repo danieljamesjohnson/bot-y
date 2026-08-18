@@ -384,3 +384,11 @@ command against both the uncommitted diff and everything committed since `f0cd4e
 | 1 | `85b337d` | `fix(07-07)`: the parse gate had never once fired inside make verify-offline |
 | 2 | `bf64d58` | `docs(07-07)`: five superseded figures recorded beside, one never-true clause corrected in place |
 | 3 | (this commit) | `docs(07-07)`: STATE.md by hand, and the phase's record now matches the tree |
+
+## Self-Check: PASSED
+
+All seven modified/created files present on disk. All three commits present in `git log`
+(`85b337d`, `bf64d58`, `4826f3c`). Every artifact `contains` token verified by grep:
+`NODE_SEARCH_GLOBS` in `tests/test_dashboard.py`, `pytest tests/ -q -rs` in `Makefile`,
+`Phase 7 post-review addendum` in `docs/retailer-evidence.md`, `post-review addendum` in
+`ROADMAP.md`, `post-review` in `REQUIREMENTS.md`, `07-07` in `STATE.md`. Working tree clean.
