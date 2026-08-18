@@ -4606,6 +4606,18 @@ where it was weakest; and in `.planning/REQUIREMENTS.md`'s REQ-21 traceability c
 present tense — **a third site the verification report did not name**, found by re-grepping
 before editing rather than by trusting the report's list of two.
 
+**A fourth occurrence still stands, and is disclosed here rather than edited away.** The clause
+also survives at `.planning/phases/07-a-reading-has-an-age/07-06-PLAN.md:661`, where it is not a
+claim but an **instruction** — the criterion-4 row of the table at `:654` directing the
+closing-record writer to *read the SUMMARY and quote it*, and therefore the line that put this
+wording into all three documents named above, though the `07-02-SUMMARY.md` it points at never
+contained it — and it is left unedited on § 6's planning-document convention, exactly as
+`06-PATTERNS.md` and `06-PLAN-OUTLINE.md` were left naming a function that does not exist
+(§ 5e), with **both halves** of that convention honoured together this time rather than one: the
+plan keeps the record of what was believed when the work was scoped, and the error is named in
+the published record, because `07-06-PLAN.md` is the template a future closing-record plan would
+copy and an unmarked row is one a copy re-emits.
+
 **The exact phrase is deliberately not reproduced here, and that is not squeamishness.** A
 gate asserts it occurs **zero** times across those three files, so a record quoting it
 verbatim would be a record that defeats the gate keeping it gone — the same shape as the
