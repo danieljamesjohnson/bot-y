@@ -26,7 +26,7 @@ REQ-01…REQ-13 belong to **v1.0.0**, which is open and untagged.
 
 | Requirement | Phase | Status |
 |---|---|---|
-| REQ-21 | Phase 7 | **Complete 2026-08-17 — in the tree, NOT yet on the wire.** What was measured, not what was intended: `read_at` stated at **all 20** `Result(` construction sites and proved complete by a **static AST gate over the source**, published per watch row as `null`-never-`0`, with the read/non-read partition at **11 / 9** and two Best Buy arms the naive rule mis-stamps corrected by hand (07-01, `CAUGHT M31`). The age **survives a real two-process restart**, and the **real pre-07 document on this disk** — 13 bare strings — loads as *availability with an unknown age*, alert behaviour byte-for-byte unchanged (07-02, `CAUGHT M32`). The retailer's current cadence is **one number both surfaces read**, with the fetch schedule asserted unmoved against literal expected seconds (07-03, `CAUGHT M33`). **13 rows published where the live file had 3–10**, a remembered row carrying `checked: false` and a stated `alertable: false` (07-04, `CAUGHT M34`/`M35`). **Four rendered forms on both consumers**, judged against that published per-retailer cadence and never against the page's 30-minute banner constant (07-05, `CAUGHT M36`/`M37`). Gate: **26/26 → 33/33**, all seven watched red by hand and CAUGHT, survivors 0, `make verify-offline` exit 0 re-measured at close. **Two criteria closed MET IN PART rather than rounded up** — see `.planning/ROADMAP.md` § *Phase 7* and `docs/retailer-evidence.md` § *Phase 7 closing record*. **Not confirmed on the deployed daemon:** `MainPID=547119`, started 2026-08-12 17:28:29, re-measured 2026-08-17 and unchanged |
+| REQ-21 | Phase 7 | **Complete 2026-08-17 — in the tree, NOT yet on the wire.** What was measured, not what was intended: `read_at` stated at **all 20** `Result(` construction sites and proved complete by a **static AST gate over the source**, published per watch row as `null`-never-`0`, with the read/non-read partition at **11 / 9** and two Best Buy arms the naive rule mis-stamps corrected by hand (07-01, `CAUGHT M31`). The age **survives a restart modelled as two `watch_loop` calls sharing one `state_path`** — each building its own `State` and `Pacer`, so only the file crosses between them, with both ends asserted and **no process boundary crossed by any test in this phase** (clause corrected in place 2026-08-18; see note 4 below) — and the **real pre-07 document on this disk** — 13 bare strings — loads as *availability with an unknown age*, alert behaviour byte-for-byte unchanged (07-02, `CAUGHT M32`). The retailer's current cadence is **one number both surfaces read**, with the fetch schedule asserted unmoved against literal expected seconds (07-03, `CAUGHT M33`). **13 rows published where the live file had 3–10**, a remembered row carrying `checked: false` and a stated `alertable: false` (07-04, `CAUGHT M34`/`M35`). **Four rendered forms on both consumers**, judged against that published per-retailer cadence and never against the page's 30-minute banner constant (07-05, `CAUGHT M36`/`M37`). Gate: **26/26 → 33/33**, all seven watched red by hand and CAUGHT, survivors 0, `make verify-offline` exit 0 re-measured at close. **Two criteria closed MET IN PART rather than rounded up** — see `.planning/ROADMAP.md` § *Phase 7* and `docs/retailer-evidence.md` § *Phase 7 closing record*. **Not confirmed on the deployed daemon:** `MainPID=547119`, started 2026-08-12 17:28:29, re-measured 2026-08-17 and unchanged |
 
 ### Measurement notes recorded beside REQ-21, whose text is NOT edited (2026-08-17)
 
@@ -61,6 +61,19 @@ in this phase says **14 configured watches**, sourced from `grep -c "retailer:" 
 `Config.load` returns **13**; the fourteenth match is a comment at `config/products.yaml:309` about a
 watch that deliberately does not exist. A count taken off a grep, twice in one phase, in a milestone
 about claims that exceed what was measured.
+
+**A fourth note, recorded 2026-08-18 by 07-07: the traceability figures above are superseded, and
+they are left standing rather than edited.** A code review ran after the phase closed and found one
+Critical and eight Warnings; all nine were fixed, and 07-07 then made the dashboard parse gate
+execute inside `make verify-offline` for the first time. Re-measured 2026-08-18 at HEAD `85b337d`,
+each by its own command: `Result(` construction sites **21**, not `all 20` (WR-07 added an arm);
+read/non-read partition **12 / 9**, not `11 / 9`; the gate **34/34** with survivors 0, not
+`26/26 → 33/33` (M38 was registered by the WR-01 fix); the offline suite **884 passed, 0 skipped**;
+identity **224 file(s)**. The cell's figures are **not** edited, for note 1's stated reason — a
+measurement does not become false, it becomes superseded, and editing it destroys the evidence that
+a review happened at all. **REQ-21's own status does not move:** it stays satisfied in the tree with
+criterion 3's `status.json` third partial, no `stale` key was added, and nothing here is on the wire.
+Full working in `docs/retailer-evidence.md` § *Phase 7 post-review addendum*.
 
 ---
 

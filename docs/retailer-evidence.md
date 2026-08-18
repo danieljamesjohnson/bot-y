@@ -4097,7 +4097,7 @@ Both could have been rounded up on the strength of a green gate, and neither was
 | 1 | Every `Result` records when it was read, and that time is published per watch in `status.json` | **MET in the tree — NOT ON THE WIRE** | `read_at` stated at **all 20** `Result(` construction sites in `boty/retailers.py`, never inherited from a default, with completeness proved by a **static AST gate over the source** rather than arm by arm — so an arm added later cannot silently omit it. Read/non-read partition **11 / 9**; the two Best Buy arms the obvious rule mis-stamps (`bad api json`, `sku not found`) are stamped **as reads**, because Best Buy answered. An arm that read nothing carries **`null`, never `0`** — epoch 1970 renders as maximally stale, the same lie one direction over. `tests/test_status.py`'s exact-keyset assertion was **enumerated rather than loosened**. `CAUGHT M31 boty/retailers.py: 2 test(s) failed` |
 | 2 | A reading with no recorded time is shown as UNKNOWN age, never as current — watched going red | **MET in the tree — NOT ON THE WIRE; spans 07-01 and 07-05** | Datum half (07-01): an unstamped reading is `None`, never `now`, red-watched by **M31**. Rendering half (07-05): `[age ?]` on `boty check` and an amber warn tag on the page, both appended **unconditionally** — if fresh rows carried no tag then an absent tag would *mean* fresh, and the implicit claim would have survived the fix. `CAUGHT M36 boty/cli.py: 1 test(s) failed — test_report_says_unknown_for_a_reading_nobody_dated`. Measured on this host rather than argued: the real payload renders **13 of 13 rows as `AGE ?`**, because `state.json` holds 13 availabilities and **0** stamps — re-confirmed 2026-08-17, still 13 bare pre-07 strings. The page was **looked at** with headless Chromium against a scratch copy on `127.0.0.1`, not inferred from source |
 | 3 | A reading older than its retailer's current interval is presented as stale in `status.json`, `boty check` and the dashboard, derived from the retailer's own pacing rather than a fixed clock | **MET IN PART — two of three surfaces MET; the `status.json` third NOT SETTLED** | See § 3 below, where both readings are set out and the verdict is argued rather than asserted. In short: the threshold is the retailer's own cadence and both consumers render against it (`CAUGHT M33`, `CAUGHT M34`, `CAUGHT M35`, `CAUGHT M37`), but `status.json` publishes the **ingredients** of the verdict — `read_at`, `checked`, `current_interval_seconds` — and not the verdict, and *presented as stale* and *sufficient to derive staleness* are different sentences |
-| 4 | The age survives a service restart | **MET in the tree — NOT ON THE WIRE, and the restart is the whole of what is missing** | Measured against **the real pre-07 document on this disk**, not a synthetic one: 13 bare strings loaded **without exception**, every availability preserved, every age unknown, **alert behaviour byte-for-byte unchanged**, so nothing re-alerts on the migration itself. A stamp read back that is in the future, or a string, or a `True`, is **discarded rather than believed** — both ends of the bound validated. The age was observed surviving a **real two-process restart**. `CAUGHT M32 boty/monitor.py: 7 test(s) failed`: that mutation defaults a missing stamp to `now`, which on this host's document dates all 13 entries at daemon start and makes a two-day-old reading look four seconds old |
+| 4 | The age survives a service restart | **MET in the tree — NOT ON THE WIRE, and the restart is the whole of what is missing** | Measured against **the real pre-07 document on this disk**, not a synthetic one: 13 bare strings loaded **without exception**, every availability preserved, every age unknown, **alert behaviour byte-for-byte unchanged**, so nothing re-alerts on the migration itself. A stamp read back that is in the future, or a string, or a `True`, is **discarded rather than believed** — both ends of the bound validated. The age was observed surviving a restart **modelled as two `watch_loop` calls sharing one `state_path`**, each building its own `State` and its own `Pacer` so that **only the file crosses between them**, with **both ends asserted** — the bytes on disk and what a fresh `State.load` makes of them, because they fail in different ways. **No process boundary was crossed, and no test in this phase crosses one** (corrected in place 2026-08-18; see § *Phase 7 post-review addendum*). `CAUGHT M32 boty/monitor.py: 7 test(s) failed`: that mutation defaults a missing stamp to `now`, which on this host's document dates all 13 entries at daemon start and makes a two-day-old reading look four seconds old |
 | 5 | `make verify-offline` exits 0, and every gate this phase adds has been watched going red | **MET IN PART — the gate half MET; *"every gate"* NOT fully MET** | `make verify-offline` **exit 0**, re-run at close 2026-08-17 and identical to 08-14 on every count. All **seven** new mutations watched going red **by hand, alone**, each reverted to an empty porcelain before the next was applied, then observed CAUGHT at **33/33** with survivors **0** — and in every case the by-hand killer list and the harness's list agree by name, which is the only thing that makes CAUGHT mean anything. **But *"every gate"* is broader than *"every mutation"*.** Every TDD gate in the phase was observed failing first at a recorded RED count, with **exactly one named exception**: 07-05's join test passed the moment it was written, on the RED commit, and was never observed failing. Enumerated in § 2 |
 
 **Three of five MET as written; criteria 3 and 5 MET IN PART.** No criterion text
@@ -4513,3 +4513,189 @@ fixed.
    code.
 8. **`.planning/` is covered by no contents gate**, so the leaked-markup class remains
    detectable only by a sweep somebody chooses to run. Flagged for the fourth time.
+
+## Phase 7 post-review addendum (2026-08-18) — nine review findings fixed, and every figure in the record above re-measured after them
+
+The Phase 3, Phase 3.1, Phase 5, Phase 6 and Phase 7 closing records above are left exactly
+as they were written. This sits beside them rather than over them, on the convention this
+file already states — and it is **not a new closing record**. It is a dated correction to
+five figures in the § *Phase 7 closing record* directly above, whose numbers were measured
+on **2026-08-17 before a code review existed** and have not been edited by one character.
+
+Every figure below was measured on **2026-08-18 at HEAD `85b337d`** by a command run while
+writing this section. None was copied from `07-VERIFICATION.md`, from `07-REVIEW.md` or from
+`07-07-PLAN.md` — this phase has already been bitten twice by inherited numbers (the "14
+watches" that `Config.load` says is 13, and the "~97-minute cadence" that was the 21 600 s
+cap), and this is the document that certifies that stopped happening.
+
+### Why the figures moved
+
+A code review ran **after** the phase closed and found **one Critical and eight Warnings**.
+All nine were fixed. Established from `git log` rather than from a sentence: nine `fix(07):`
+commits, one per finding, and **every one carries a `Watched going red:` paragraph with a
+failure count except `bc23a02` (WR-08), which is a docstring rewrite that adds no gate and
+therefore has none to watch.** The fixes added tests and registered **one** further mutation.
+
+| Ident | What it was |
+|---|---|
+| **CR-01** `b1a3b88` | An unescaped retailer-controlled string — `w.availability`, out of `state.json` via `_remembered_availability` — reaching `innerHTML` through the dot-class path **07-04 itself opened** four plans earlier. The escaping gate existed and was blind to it |
+| WR-01 `6879a6f` | A backoff above the cap inverted and **shortened** the wait; the outer `max` makes a backoff only ever widen. **Registered M38** |
+| WR-02 `1092940` | A retailer override below the global interval published a cadence 3.4x tighter than the loop can keep; now refused |
+| WR-03 `bad7a63` | `boty check` rendered `[age -10s]` for a future stamp where the page clamped — a real divergence between the two surfaces criterion 3 requires to agree |
+| WR-04 `e986d01` | `current_interval` created the record it read; now `.get`, so an accessor cannot mutate |
+| WR-05 `d140aa4` | `status.write` stages through a per-process temp file |
+| WR-06 `a077b2e` | `boty check` reported a restock without consuming it |
+| WR-07 `d34468a` | `check_bestbuy_api` narrows the body and coerces the price. **Added the 21st `Result(` site** |
+| WR-08 `bc23a02` | Withdrew `_remembered_availability`'s one-consumer premise. Docstring only; **no gate, and no red-watch paragraph** |
+
+**`9e7d302` is a follow-up to the CR-01 fix, not a tenth finding.** The CR-01 fix's own
+comment — this project's usual back-quoted prose — went *inside* the row's template literal,
+a backtick in it closed the literal, and the page stopped parsing and rendered nothing at
+all, while every structural assertion in `tests/test_dashboard.py` stayed green. `9e7d302`
+added `test_the_dashboard_script_parses` the same day to close exactly that.
+
+**And that gate did not run inside `make verify-offline` on this host until 07-07.** `make`
+inherits the invoking shell's `PATH` and does not source a version manager; this box's only
+runtime is under `~/.nvm`; so the gate added to catch a page that had just stopped parsing
+spent its entire life as the suite's **only skip**. Measured, not inferred: `command -v node`
+finds nothing, and the same check inside a `make` recipe finds nothing.
+
+### The five drifted figures, claimed against measured
+
+| Figure in the record above | Claimed (2026-08-17, pre-review) | Measured 2026-08-18 at `85b337d` | Command |
+|---|---|---|---|
+| `Result(` construction sites | `all 20` | **21** | AST walk over `boty/retailers.py`; the gate that asserts it passes standalone (2 passed) |
+| read / non-read partition | `11 / 9` | **12 / 9** | same AST gate — WR-07 added the non-object-body arm |
+| offline suite | `865 passed` | **884 passed, 0 skipped** | `make verify-offline` |
+| mutation ratio | `33/33`, `rose from 26/26 to 33/33` | **34/34**, survivors **0** | `make verify-offline`; registry reads 34 idents with comment lines filtered |
+| identity check | `PASS — 220 file(s)` | **PASS — 224 file(s)** | `make verify-offline` |
+
+**Two of these differ from `07-VERIFICATION.md`'s own 2026-08-17 reading, and both are
+recorded with their dates rather than reconciled away.** That verifier measured `883 passed,
+1 skipped` and `identity 222 file(s)` at HEAD `9e7d302`. The suite figure moved because
+07-07 made the skipping gate execute — **the pass count rose by exactly one and the skip
+count went to zero, which is the same test counted differently, not a new test**. The
+identity count moved because two planning documents were committed between those heads
+(`07-VERIFICATION.md` and `07-07-PLAN.md`), which is the count doing its job.
+
+### The gate progression, with the one number that goes down
+
+The record's own per-plan table ends at the close. The two later readings sit beside it:
+
+| Reading | Date | Suite | Skipped | Mutations | Identity |
+|---|---|---|---|---|---|
+| At close (§ 2 above) | 2026-08-17 | 865 passed | not reported | 33/33 | 220 |
+| After the nine review fixes | 2026-08-17 | 883 passed | **1** | 34/34 | 222 |
+| After 07-07 | 2026-08-18 | **884 passed** | **0** | 34/34 | 224 |
+
+The skip count is carried explicitly because it is the one figure that goes **down**, and
+because a skip printed under `-q` as a bare `1 skipped` is one character away from reading
+like coverage. `make verify-offline`'s test stage now runs with `-rs`, so every skip prints
+its file, its line and its reason inside the gate's own transcript.
+
+### The restart-evidence correction, recorded as a correction
+
+Gap 2 of `07-VERIFICATION.md` is fixed by **editing**, and an edit nobody recorded is
+indistinguishable from a document that always said the new thing. So, explicitly:
+
+**Removed.** A sentence asserting the age *"was observed surviving"* a restart qualified as
+**real** and as **two-process** — the adjective and the boundary both. It stood in the
+criterion-4 row of § 1 of the closing record above; in the same row of `.planning/ROADMAP.md`
+§ *Phase 7*, there with *", not a mocked one"* appended, which sharpened the claim precisely
+where it was weakest; and in `.planning/REQUIREMENTS.md`'s REQ-21 traceability cell in the
+present tense — **a third site the verification report did not name**, found by re-grepping
+before editing rather than by trusting the report's list of two.
+
+**The exact phrase is deliberately not reproduced here, and that is not squeamishness.** A
+gate asserts it occurs **zero** times across those three files, so a record quoting it
+verbatim would be a record that defeats the gate keeping it gone — the same shape as the
+`<!--`-inside-a-template-literal defect two paragraphs of this file up. The original wording
+is recoverable from git history at HEAD `f0cd4e3` and earlier; what a reader needs is what it
+claimed, which is stated above, and what replaced it, which is stated below.
+
+**Replaced with** what `tests/test_cli_watch.py` says of itself: a restart *modelled* as two
+`watch_loop` calls sharing one `state_path`, each building its own `State` and `Pacer` so
+that only the file crosses between them, with **both ends asserted** — the bytes on disk and
+what a fresh `State.load` makes of them.
+
+**Why.** `grep -rn subprocess tests/test_monitor.py tests/test_cli_watch.py` returns nothing.
+No process boundary is crossed by any test in this phase. The behaviour the sentence
+described is genuinely verified — the age survives a real file round-trip, it is not invented
+on load, and a stamp read back in the future or as a string or as a `True` is discarded
+rather than believed — and **none of that is weakened by one word here**, including
+`CAUGHT M32 boty/monitor.py: 7 test(s) failed`, re-measured today. What was wrong was one
+clause about the *kind of boundary* crossed. **No subprocess test was written to rescue the
+sentence:** manufacturing a measurement to retro-justify a claim is the same act as the claim
+itself, in the other direction.
+
+### The rule this addendum applies, stated once
+
+Two wrong sentences in the same documents were fixed in **opposite** ways, and a reader who
+meets both without this paragraph will read one of them as inconsistent:
+
+- **A superseded MEASUREMENT is dated and recorded beside, never edited.** The five figures
+  were *true when written* — a reading taken on 2026-08-17 before a review existed. A
+  measurement does not become false; it becomes superseded. Editing the numbers would destroy
+  the evidence that a review happened at all, which is the only reason anybody would later
+  know to look. This file has a settled practice for exactly this: § *Amazon* keeps its rung-4
+  verdict quoted, dated and marked historical rather than rewritten.
+- **A DESCRIPTION OF EVIDENCE THAT NEVER EXISTED is corrected in place.** There is no instant
+  at which the removed clause — a restart called both *real* and *two-process* — was
+  accurate, so there is nothing to date and
+  nothing to supersede. A false claim left standing with a note beside it is still a published
+  false claim — in a phase whose entire thesis is that a claim must not exceed what was
+  observed.
+
+### What did NOT move, stated as plainly as what did
+
+**No criterion verdict changes.** Three of five MET, criteria 3 and 5 MET IN PART, exactly as
+the record above has it.
+
+- **Criterion 3 stays MET IN PART.** `status.json` still publishes `read_at`, `checked` and
+  `current_interval_seconds` and **no staleness verdict**; there is no `stale` key on any
+  watch row. That is 07-05's argued design, resting on `pacing.py`'s own recorded lesson that
+  a flag computed at write time is written `false` and keeps saying `false` for exactly the
+  interval during which it becomes true. **It is Dan's recorded decision to leave it there,
+  not an oversight and not an omission awaiting a fix.**
+- **Criterion 5 stays MET IN PART.** Its `every gate` half had **three** named reasons, and
+  07-07 closes the **third** only: a gate that skipped in the environment the project's own
+  gate runs in. The other two stand unchanged — **(a)** 07-05's join test
+  `test_status_json_carries_everything_a_consumer_needs_to_judge_staleness` was never observed
+  failing, and **(b)** CR-01 showed the phase's escaping gate could not bite on a sink 07-04
+  itself opened. **Closing one of three reasons is not closing the criterion**, and saying so
+  is the entire point of the phase.
+
+**The mutation registry is untouched: `M1`-`M20` and `M25`-`M38`, 34 idents, `M39` still
+free, and `M21`-`M24` still Phase 6's deliberate gap.** 07-07 registered none, and the reason
+is an argument rather than an omission: the obvious mutation would break the page's
+JavaScript and require the parse gate to kill it. On a box with a runtime it would be CAUGHT;
+**on a contributor's box with none the test skips, the mutation SURVIVES, and
+`make verify-offline` fails for somebody whose tree is perfectly correct.** A gate whose
+verdict depends on the host is not a gate, which is `mutation_check.py`'s own rule.
+
+**And the parse gate is still a skip rather than a requirement.** Nothing is installed and
+nothing is required; `REQUIREMENTS.md` § Non-Functional's fresh-clone rule outranks the
+convenience. What widened is what the search can *find*, never what the suite *demands* —
+measured both ways, in the same task: with the runtime off `PATH` it now executes, and under
+an empty `HOME` with `PATH=/usr/bin:/bin` it still skips, with a reason naming all six places
+it looked.
+
+### The gate, re-run after this record was written
+
+`make verify-offline`, 2026-08-18, allowed to finish, **exit 0**:
+
+```
+identity check: PASS — 224 file(s), no host identity found
+All checks passed!
+884 passed in 11.09s
+Success: no issues found in 18 source files
+control check: SKIPPED (--offline) — no live retailer request made.
+mutation check: 34/34 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)
+EXIT=0
+```
+
+**No live retailer read was made.** The close spent its one live pass on 2026-08-14 and
+nothing here needs a retailer; politeness is a hard constraint. **The daemon was not
+restarted and no restart is recommended** — deploy is Dan's decision, deferred by his own
+answer on 2026-08-17, so everything above remains true of the tree and not of the wire.
