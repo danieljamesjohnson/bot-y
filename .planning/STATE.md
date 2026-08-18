@@ -59,15 +59,15 @@
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 — Phase 7 COMPLETE 2026-08-17, closed on three of five criteria MET as written with criteria 3 and 5 MET IN PART and no criterion text amended. All 6 plans landed (07-01/07-02 on 2026-08-13, 07-03/07-04/07-05 on 2026-08-14, 07-06 on 2026-08-17 after a blocking checkpoint Dan answered `keep defer`). REQ-21 complete in the tree and NOT on the wire — the running daemon predates the phase. v0.2 archived, deployed 2026-08-12
-stopped_at: Completed 07-06-PLAN.md — the phase closed: five verdicts recorded with two MET IN PART rather than rounded up, the registry shown rising from 26/26 to 33/33 with M21-M24 named as Phase 6's deliberate gap, the live `make verify` FAIL recorded verbatim with its three classes separated and none of them this phase's, and Dan's `keep defer` recorded verbatim with its date
-last_updated: "2026-08-17T12:55:00.000Z"
-last_activity: 2026-08-17
+status: Milestone v0.3 — Phase 7 COMPLETE 2026-08-17, closed on three of five criteria MET as written with criteria 3 and 5 MET IN PART and no criterion text amended. Verification on 2026-08-17 found FOUR gaps; 07-07 closed THREE of them on 2026-08-18 and the fourth is OPEN BY DAN'S EXPLICIT DECISION. All 7 plans landed (07-01/07-02 on 2026-08-13, 07-03/07-04/07-05 on 2026-08-14, 07-06 on 2026-08-17 after a blocking checkpoint Dan answered `keep defer`, 07-07 the gap-closure plan on 2026-08-18). REQ-21 complete in the tree and NOT on the wire — the running daemon predates the phase. v0.2 archived, deployed 2026-08-12
+stopped_at: Completed 07-07-PLAN.md — three of four verification gaps closed: the dashboard parse gate now EXECUTES inside `make verify-offline` (the suite's only skip became a pass, 883+1 skipped → 884+0) and was watched going red against deliberately broken JavaScript; five superseded figures recorded in a dated addendum BESIDE the closing record with not one of them edited; and the never-true restart clause corrected IN PLACE in all three files that carried it, the third found by re-grepping rather than from the report. No criterion text reworded, no verdict moved, no mutation ident consumed
+last_updated: "2026-08-18T00:00:00.000Z"
+last_activity: 2026-08-18
 progress:
   total_phases: 1
   completed_phases: 1
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 7
+  completed_plans: 7
   # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 1 of the
   # 1 phase in v0.3 is now complete, so 100. The plan counter above is where per-plan progress
   # is read. (Restored by hand at 07-06's close together with the block at the top of this
@@ -117,7 +117,32 @@ the `=== false`-not-`!` decision paying off, but the restart is what makes the p
 
 ## Status
 
-**Phase 7 — A Reading Has an Age: COMPLETE 2026-08-17.** Six of six plans landed. **Three of
+**Phase 7 — A Reading Has an Age: COMPLETE 2026-08-17. Verified 2026-08-17 at 3/5 with four
+gaps; 07-07 closed three of them on 2026-08-18 and THE FOURTH IS OPEN BY DAN'S DECISION.**
+
+A reader should not have to open the verification report to learn that the open one is
+deliberate, so all four are named here, one line each:
+
+- **CLOSED — the closing record misstated the tree on five measurable numbers.** Fixed by a
+  **dated addendum beside** the record, in `docs/retailer-evidence.md`, `ROADMAP.md` and
+  `REQUIREMENTS.md`. **Not one original figure was edited**: a measurement does not become
+  false, it becomes superseded. Re-measured 2026-08-18 at `85b337d`: 21 `Result(` sites (not
+  20), partition 12/9 (not 11/9), 884 passed / 0 skipped (not 865), 34/34 mutations (not
+  33/33), identity 224 files (not 220).
+- **CLOSED — the record claimed the age survived a "real two-process restart".** No such test
+  exists; no subprocess appears anywhere in the phase's tests. Corrected **in place** in all
+  three files that carried it (the verifier named two; a re-grep found REQ-21's traceability
+  cell as a third), to what `tests/test_cli_watch.py` says of itself. The behavioural claim
+  is **not weakened by one word** and M32 stays CAUGHT with 7 tests failing.
+- **CLOSED — `test_the_dashboard_script_parses` skipped in the environment `make
+  verify-offline` actually runs in.** It was the suite's ONLY skip, for the whole of its
+  life. Now executes: 883 passed + 1 skipped became **884 passed + 0 skipped**.
+- **OPEN, BY DAN'S EXPLICIT DECISION — criterion 3's `status.json` third.** The file
+  publishes `read_at`, `checked` and `current_interval_seconds` and **no staleness verdict**.
+  Dan chose to leave this MET IN PART. **It is not an oversight, not a TODO and not work
+  queued for a later plan.** 07-07 was fenced against touching it and did not.
+
+**Six of six plans landed at the close, and 07-07 is a seventh appended after it.** **Three of
 five criteria MET as written; criteria 3 and 5 MET IN PART**, each with the half that is met
 and the half that is not named separately, and **no criterion text anywhere in `ROADMAP.md`
 was reworded, shortened, merged or amended** — asserted by command (34 criterion bodies at
@@ -849,6 +874,12 @@ Working and deployed on danserver before this roadmap was written:
 - [Phase 07]: 07-06: **a criterion that is not fully met is recorded MET IN PART with its date and its reason, and its text is not touched** — Phase 3.1 declined a rewrite that would have made its criterion 1 meetable, Phase 4 recorded two UNMET, Phase 5 closed with every live row NOT OBTAINED, Phase 6 recorded criterion 1 MET IN PART. Phase 7 records two. The no-rewording claim is asserted by command rather than by eye, with a `HEAD~1` fallback so it cannot pass vacuously after its own commit
 - [Phase 07]: 07-06: the closing plan **writes no code**. 05-04's decision governs — *"a closing plan that implemented its way to a green table would be a phase measuring work it did in the act of measuring"* — and the changed-file set is asserted against an explicit allow-list rather than promised
 - [Phase 07]: 07-06: **`gsd-tools state` write subcommands were not invoked at all**, on the evidence of thirteen misfires with the last three byte-for-byte identical. Every delta was written by hand after a `cp`. Not invoking a deterministic corrupter is cheaper than restoring from it, and the count therefore stands at thirteen rather than fourteen
+- [Phase 07]: 07-07: **a superseded MEASUREMENT is dated and recorded beside; a description of evidence that NEVER EXISTED is corrected in place** — one rule, two opposite treatments in the same documents, and the distinction future plans will need most. The five drifted figures were TRUE when written, so editing them would destroy the evidence that a review happened at all (this file's own § *Amazon* practice). The restart clause was true at no instant, so there is nothing to date and nothing to supersede, and a false claim left standing with a note beside it is still a published false claim
+- [Phase 07]: 07-07: **a gate that skips in the project's own gate environment is not a gate.** `test_the_dashboard_script_parses` was added to catch a page that had stopped parsing and then never ran once inside `make verify-offline`, because `make` inherits the invoking shell's PATH and does not source a version manager. The fix **widens what the search can FIND, never what the suite DEMANDS** — the fresh-clone rule outranks the convenience, so nothing is installed, nothing is required, and a contributor with no runtime still gets a skip rather than a red tick on a correct tree
+- [Phase 07]: 07-07: **a skip now prints its reason in the gate transcript** (`pytest tests/ -q -rs`), because under bare `-q` a gate that stopped binding prints `1 skipped` and is indistinguishable from one that never existed. A bound that cannot bind reads like one in the file; now the next silent skip is loud on the day it appears rather than at the next audit. A **flag, not a stage** — README's stage table is asserted set-equal to the recipe and was correctly left alone
+- [Phase 07]: 07-07: **no mutation was registered for a runtime-conditional gate, and the reason is recorded rather than left as an omission.** A mutation breaking the page's JavaScript would be CAUGHT where node exists and **SURVIVE** where it does not, so `make verify-offline` would fail for a contributor whose tree is perfectly correct — a gate whose verdict depends on the host is not a gate. **M39 is still free and M21-M24 are still Phase 6's deliberate gap**; the registry stands at 34 idents, `M1`-`M20` ∪ `M25`-`M38`
+- [Phase 07]: 07-07: **criterion 5 closes ONE of its three reasons and does not move.** The gate that could not fire is fixed; 07-05's join test that was never observed failing, and CR-01's escaping gate that existed and could not bite, **both stand unchanged**. Closing one of three is not closing the criterion, and the addendum says so in those words
+- [Phase 07]: 07-07: **`status.json` still publishes no staleness verdict and criterion 3 stays MET IN PART, by Dan's explicit decision** — not as an oversight and not as work queued for later. No `stale` key, no `stale_after` key, no derived field, and no inline suggestion of one: a closing addendum that mused about the fix it was told not to make would be a proposal wearing a record's clothes
 
 ### Blockers
 
@@ -1356,3 +1387,53 @@ number, deletes both frontmatter comment blocks, and regresses `stopped_at` to a
 there is no fourteenth misfire and the count stands at THIRTEEN.** Not invoking a deterministic
 corrupter is cheaper than restoring from it. `milestone: v0.3` was **not touched** and
 `tests/test_packaging_metadata.py` was re-run green after the edit.
+
+---
+
+## Session — 07-07 complete, three of four verification gaps closed, 2026-08-18
+
+**07-07 is a gap-closure plan appended AFTER the phase closed**, so Phase 7 has seven plans
+rather than six. It writes no product code: `boty/`, `scripts/`, `config/`, `served/` and
+`pyproject.toml` are untouched, and the only non-documentation edits are
+`tests/test_dashboard.py` and one flag in `Makefile`.
+
+**The measurements are recorded once, in
+`.planning/phases/07-a-reading-has-an-age/07-07-SUMMARY.md`**, and pointed at from here rather
+than duplicated — one copy can drift, two will. They are: the unfixed state verbatim
+(`command -v node` finding nothing, the same inside a `make` recipe, and `883 passed, 1
+skipped` with the skip's file, line and reason); the fixed state (`884 passed`, **0 skipped**);
+the red-watch against `const gate_red_watch = ;` with its failure count and the empty
+porcelain proving the revert; the nodeless-host skip under an empty `HOME` and
+`PATH=/usr/bin:/bin`; and the five re-measured figures with the claimed figure beside each.
+
+### What was NOT done, and each is a decision rather than an omission
+
+- **Criterion 3 was not closed and `status.json` gained no key.** Dan's explicit decision. The
+  plan fenced it three ways and all three were respected.
+- **No criterion verdict moved**, including criterion 5, of whose three named reasons this
+  plan closes exactly one.
+- **No mutation ident was consumed.** M39 is free; M21-M24 remain Phase 6's deliberate gap.
+- **No subprocess test was written.** Gap 2's fix is honesty about the evidence, not new
+  evidence — manufacturing a measurement to retro-justify a sentence is the same act in the
+  other direction.
+- **No live retailer read.** `make verify` (live) was not run; the close spent its one live
+  pass on 2026-08-14 and nothing here needs a retailer.
+- **The daemon was not restarted and no restart is recommended.** Deploy is Dan's decision,
+  deferred by his own answer on 2026-08-17. Everything above remains true of the tree and not
+  of the wire.
+- **`WALMART_STORE_ID` was never read, derived, inferred or printed**, and nothing ran under
+  the service's `EnvironmentFile`.
+- **No package was installed and none was needed.** The runtime search uses `shutil`, `glob`
+  and `os.path` — standard library — so the small-dependency-surface rule is untouched.
+
+### The tooling: the misfire count still stands at THIRTEEN
+
+**No `gsd-tools state` write subcommand was invoked**, on the evidence of thirteen recorded
+misfires whose last three are byte-for-byte identical and fully deterministic. A `cp` of this
+file was taken first regardless, and every delta above was written by hand: `total_plans:
+6 → 7`, `completed_plans: 6 → 7`, `status`, `stopped_at`, `last_updated`, `last_activity`, the
+Status block, six decisions and this session note. `percent` stays **100** — it is PHASE-based
+and the one phase in v0.3 was already complete; a gap-closure plan does not move a phase
+count. Both frontmatter comment blocks survive, including the `percent`-is-phase-based note.
+**`milestone: v0.3` was NOT touched** and `tests/test_packaging_metadata.py` was re-run after
+the edit. So there is no fourteenth misfire.
