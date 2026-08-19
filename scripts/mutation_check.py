@@ -1233,6 +1233,86 @@ MUTATIONS = (
         replace="        return min(\n            st.interval * BACKOFF_FACTOR ** st.refusals,\n            MAX_BACKOFF_SECONDS,\n        )",
         breaks="a refusal makes the monitor ask a refusing retailer MORE often, and the log line presents the increase in request rate as a backoff. Above `MAX_BACKOFF_SECONDS` the bare `min` returns a number smaller than the standing interval, and `record` computes its wait through this accessor — so at `interval_seconds: 86400` one refusal moves the next attempt from 1440 minutes to 360, a 4x increase in load aimed at the one retailer that has just walled us. That is `boty/pacing.py`'s own opening argument inverted: *'a retailer that walled us got asked again five minutes later ... precisely the behaviour the project's own politeness constraint calls a hard limit'*. It also inverts `Pacer.save`'s recorded direction claim, which is the second thing this ident guards: `save` argues a truncated read is safe because empty state judges a reading against the NARROWER standing interval and over-reports staleness, and above the cap the mutation makes the standing interval the WIDER of the two, so a truncated `pacer-state.json` under-reports staleness — the direction REQ-21 does not prefer",
     ),
+    # ------------------------------------------------------------------
+    # M39 — A SECURITY EXEMPTION THAT WIDENS PAST WHAT IT WAS ARGUED FOR.
+    # 2026-08-19, the v0.2/v0.3 milestone archive.
+    #
+    # NOT A PHASE IDENT. Like M38 it is registered by a fix pass rather than by
+    # a plan, and it takes the registry to 35. M21-M24 REMAIN THE INTENTIONAL
+    # GAP and are still not filled.
+    #
+    # WHY THIS EARNED AN IDENT AT ALL, since not every one-line fix does. Two
+    # things about `_is_probe_file` are unlike the rest of this repository:
+    #
+    #   1. It decides WHICH CHECK RUNS on a file, not what a check concludes.
+    #      A file it answers `True` for skips every pattern rule in
+    #      `_identity_leaks` — the sixteen carriers, the store rules, the
+    #      rendered-destination rule — and is held to the scrubbed-value hashes
+    #      instead. That is a stricter bar for a value already removed once and
+    #      NO bar at all for a class the repo has not met yet. Widening the set
+    #      of files on that side of the branch is the single cheapest way to
+    #      make this gate green, and `identity_check.py`'s own header records
+    #      seven leaks in two days, three of them in `.planning/`.
+    #
+    #   2. Its newest arm is a REGEX. `_PROBE_FILES` is a frozenset and
+    #      `_PROBE_DIR_PREFIXES` is a literal tuple: both widen by gaining a
+    #      visible entry. A pattern widens by LOSING CHARACTERS, and deleting
+    #      `v[0-9][^/]*-phases/` from it is a smaller diff than adding a file.
+    #
+    # WHAT IT REBUILDS is not hypothetical — it is the fix that was available
+    # and rejected on the day the archive move reddened this gate. Exempting
+    # `.planning/milestones/` wholesale fixes the reported failure exactly as
+    # well as the shipped line does, and takes the archived ROADMAP,
+    # REQUIREMENTS and MILESTONE-AUDIT documents out of the pattern rules as a
+    # side effect nobody asked for. Those are ordinary prose. The reason the
+    # archived PHASE directories are exempt — they quote the probes of the rule
+    # they were written to develop — does not apply to a single one of them.
+    #
+    # BEHAVIOURAL, NOT PROSE. The anchor is a compiled pattern, carries no
+    # message text, no rendered tag, no `detail` string and no version literal.
+    # The `v[0-9]` inside it is a CHARACTER CLASS matching any milestone, not a
+    # version this repo declares, so it does not drift when the milestone rolls
+    # — which is the drift that has already re-pointed M25, M26, M33 and M36.
+    #
+    # PRE-COUNTED against the file text before registration, 2026-08-19, which
+    # is the rule after M19's trap:
+    #     the anchor line                     -> 1
+    #     `re.compile(` anywhere in the file  -> 1
+    #     `.planning/milestones/` substring   -> 3  (two are prose in comments,
+    #                                                which is why the anchor is
+    #                                                the whole line and not the
+    #                                                path fragment)
+    #
+    # THE KILLERS, MEASURED BY APPLYING THIS MUTATION TO THE WORKING TREE AND
+    # REVERTING — not predicted. 2 failed / 886 passed, exit 1:
+    #     tests/test_identity_check.py::
+    #       test_an_archived_roadmap_is_not_exempt_from_the_pattern_rules
+    #       test_the_probe_file_exemption_cannot_quietly_grow
+    #
+    # THE TWO ARE NOT REDUNDANT AND THE PAIR IS THE POINT. The pin compares the
+    # pattern SOURCE, so it fires on any edit whatsoever including one that
+    # narrows; it says the exemption moved, not that the move was wrong. The
+    # roadmap test runs the real `scan` over a one-file tree and asserts a
+    # probe-shaped body in an archived roadmap still reports — it says what the
+    # widening COSTS. A pin alone would be satisfied by re-pinning the new text
+    # in the same diff, which is precisely how a gate gets quietly satisfied.
+    #
+    # BOTH KILLERS REACH THE SANDBOX, which had to be checked rather than
+    # assumed: `.planning/` is NOT in SANDBOX_CONTENTS and is not added here.
+    # Neither test reads it. They assert on `_is_probe_file`'s answer for a path
+    # STRING and on a tree built in `tmp_path`, so the rule under test travels
+    # into the sandbox even though the documents it was written for do not.
+    #
+    # IF IT EVER SURVIVES: check first whether the roadmap test was reduced to
+    # the `_is_probe_file` assertion alone and lost its `scan` call, and second
+    # whether the pin acquired a `startswith` or an `in` where it has an `==`.
+    Mutation(
+        ident="M39",
+        target="scripts/identity_check.py",
+        search='    re.compile(r"\\.planning/milestones/v[0-9][^/]*-phases/"),',
+        replace='    re.compile(r"\\.planning/milestones/"),',
+        breaks="the archived-phase exemption stops being about archived phases and becomes every document under `.planning/milestones/`. Archived ROADMAP, REQUIREMENTS and MILESTONE-AUDIT files — ordinary prose, with none of the probe-quoting reason the phase records have — skip all sixteen carrier rules and both store rules, and are held only to the hashes of values this repo has already scrubbed once. A class it has not met yet walks straight through, in the directory that held the worst leak of the seven this script exists to answer for. It is one character class shorter than the shipped line, it makes the gate green either way, and it is the fix that was on the table the day the archive move reddened it",
+    ),
 )
 
 
