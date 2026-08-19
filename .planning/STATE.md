@@ -56,13 +56,31 @@
 # from the `cp`. Thirteen for thirteen, and the failure is now fully deterministic on this repo:
 # three plans in a row, same wrong verdict, same three damages, two different subcommands. It is
 # not worth invoking again here — run the `cp`/`diff` and expect to write the deltas yourself.
+#
+# RESTORED BY HAND A FIFTH TIME, 2026-08-19, at phase close — the FOURTEENTH misfire, from a THIRD
+# subcommand (`gsd-tools query phase.complete 07`), and the first that INVENTED CONTENT rather than
+# only deleting or regressing. Its damage, in one call: deleted all 57 lines of this comment block;
+# deleted the `percent` block below; regressed `stopped_at` from 07-07 to `Completed 06-05-PLAN.md`
+# for the FOURTH time; replaced a five-sentence `status:` with the string `Milestone complete`; and
+# — the new failure — rewrote the `## Status` section's phase line from Phase 4's accurate
+# `**Phase:** 04 of 5 (Open Source Ready) — COMPLETE 2026-08-06 …` to `**Phase:** 07 of 5 (Open
+# Source Ready)` with `**Plan:** Not started`. Phase 7 is not "Open Source Ready", "07 of 5" is not
+# a coherent position, and 7 of 7 plans is not "Not started": it took an unrelated row and stamped
+# the new number onto it. It also reported `roadmap_updated: true` and `requirements_updated: true`
+# while changing NEITHER file — both were already correct, written by 07-06.
+#
+# **The tool's three claims and its one action were all wrong in the same call.** Restored from the
+# `cp`; the real deltas hand-written. Fourteen for fourteen across `advance-plan`, `begin-phase` and
+# `phase.complete` — this is the SUBSYSTEM, not a verb. On this repo, do not invoke a `gsd-tools`
+# state or phase WRITE at all; read-only queries (`roadmap.analyze`, `init.*`, `config-get`,
+# `roadmap.update-plan-progress`, `commit`) have been reliable throughout.
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 — Phase 7 COMPLETE 2026-08-17, closed on three of five criteria MET as written with criteria 3 and 5 MET IN PART and no criterion text amended. Verification on 2026-08-17 found FOUR gaps; 07-07 closed THREE of them on 2026-08-18 and the fourth is OPEN BY DAN'S EXPLICIT DECISION. All 7 plans landed (07-01/07-02 on 2026-08-13, 07-03/07-04/07-05 on 2026-08-14, 07-06 on 2026-08-17 after a blocking checkpoint Dan answered `keep defer`, 07-07 the gap-closure plan on 2026-08-18). REQ-21 complete in the tree and NOT on the wire — the running daemon predates the phase. v0.2 archived, deployed 2026-08-12
-stopped_at: Completed 07-07-PLAN.md — three of four verification gaps closed: the dashboard parse gate now EXECUTES inside `make verify-offline` (the suite's only skip became a pass, 883+1 skipped → 884+0) and was watched going red against deliberately broken JavaScript; five superseded figures recorded in a dated addendum BESIDE the closing record with not one of them edited; and the never-true restart clause corrected IN PLACE in all three files that carried it, the third found by re-grepping rather than from the report. No criterion text reworded, no verdict moved, no mutation ident consumed
-last_updated: "2026-08-18T00:00:00.000Z"
-last_activity: 2026-08-18
+status: Milestone v0.3 — Phase 7 COMPLETE, closed 2026-08-19 at FOUR of five criteria MET (three as written, criterion 5 MET-qualified) and ONE MET IN PART, with no criterion text amended. Criterion 5 moved 2026-08-19 on a measurement Dan chose over an override: 07-05's join test, which had passed on the RED commit and so was never observed failing, was watched red FIVE times out of five against five separate breaks — including a sincere implementation of the write-time `stale` flag the design refuses, not only a one-token null-out. **Non-vacuity is established; TDD ordering was NOT followed for that test and the record says so in the verdict cell itself.** Criterion 3 stays MET IN PART BY DAN'S EXPLICIT DECISION (2026-08-17, `keep defer`) — `status.json` publishes the ingredients of a staleness verdict and no verdict. Verification on 2026-08-17 found four gaps; 07-07 closed three on 2026-08-18, the fourth is criterion 3 and is open by that decision. A code review after the close found 1 Critical (a reproduced XSS sink at `served/boty/index.html`, reachable because 07-04 publishes any string from `state.json`) + 8 Warnings; all nine fixed 2026-08-17. All 7 plans landed. REQ-21 complete in the tree and NOT on the wire — the running daemon predates the phase. v0.2 archived, deployed 2026-08-12
+stopped_at: Phase 7 closed — criterion 5's join test watched red 5/5 (breaks A–E, 2–4 failures each, every one naming the test; reverted to an empty porcelain each time), non-vacuity recorded as established AFTER THE FACT in `docs/retailer-evidence.md` § *Phase 7 non-vacuity measurement (2026-08-19)*. Gate at close: identity 225 files, 884 passed / 0 skipped, mypy clean over 18 source files, 34/34 mutations caught, survivors 0, `make verify-offline` EXIT=0. M39 still free, M21–M24 still Phase 6's deliberate gap
+last_updated: "2026-08-19T12:00:00.000Z"
+last_activity: 2026-08-19
 progress:
   total_phases: 1
   completed_phases: 1
@@ -636,8 +654,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-02)
 
 2. **Pacing and backoff (2026-08-04), in response to a live alert.** Amazon and GameStop had been refusing us for a day. Not a detector bug: `interval_seconds` is per PASS, so load is `watches x 288/day` — Amazon 576, GameStop 1,440 — with no backoff at all. Worse, every failing control was reported as "the detector is probably broken", which is false for a refusal and sent 20 pages in 24 hours. Added `Result.refused` / `fetch.is_refusal`, split the health message, added `boty/pacing.py` (per-retailer cadence + exponential backoff, capped, reset on a good read), and stopped paging for refusals until they outlast the backoff. Verified live: 0 pages while both retailers refused, both published as `paced` rather than dropped.
 
-**Last Activity:** 2026-08-14
-**Last Activity Description:** Phase 07 execution started (waves 3–5 autonomous, wave 6 checkpoints)
+**Last Activity:** 2026-08-19
+**Last Activity Description:** Phase 07 COMPLETE — 7/7 plans, 4 of 5 criteria MET (one qualified), 1 MET IN PART by Dan's decision
 
 3. **Two live detector failures (2026-08-04 evening), both caught by control products within a cycle, neither a broken detector.** Best Buy began serving its JSON-LD **JavaScript-escaped** — `\'` inside strings, literal `\n` outside them — so `json.loads` refused all three blocks, `parse.py` skipped them silently, and the control read UNKNOWN with a detail naming the wrong cause. Proven against the shipped fixture, which parses 3/3 on the same SKU with no backslashes at all. `ldjson_read` now parses strictly first and only then offers an already-failed block to a string-state-aware repair; it reports `blocks`/`unparseable`/`repaired`, and a repaired read publishes as `ld+json (repaired)` so it cannot look ordinary. **Not claimed:** that the repair restored the live reading — Best Buy was serving valid markup again by 17:45 and the live read carried no `(repaired)` marker. The escaping is intermittent; a clean probe does not disprove it. Separately, **Target's UNKNOWN was our own render race**: ~35 KB of markup carrying the add-to-cart control arrives between 1s and 3s (measured: absent at `settle=1.0`, present at 3.0 and 6.0), and `fetch_rendered`'s default is exactly 3.0. `check_target_browser` now re-renders once at 10.0s before concluding — in the adapter, because it is a layout question and `boty/browser.py` is deliberately ignorant of layout. **M2's anchor was re-pointed** because this change moved the line it named, and the harness refused to run rather than quietly drop to seven mutations. Verified: mypy clean, 419 passed, 8/8 mutations, `VERIFY: PASS (OFFLINE)`, both new gates watched failing in both directions (removing the repair reddens 3 tests, making it over-reach reddens 22), **service restarted onto the fixed code** and publishing **6/6 retailers healthy**, 13 watches, 47.1s of REQ-08's 120s.
 
