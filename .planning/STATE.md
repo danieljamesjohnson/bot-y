@@ -74,12 +74,23 @@
 # `phase.complete` — this is the SUBSYSTEM, not a verb. On this repo, do not invoke a `gsd-tools`
 # state or phase WRITE at all; read-only queries (`roadmap.analyze`, `init.*`, `config-get`,
 # `roadmap.update-plan-progress`, `commit`) have been reliable throughout.
+#
+# NOT INVOKED AGAIN AT THE v0.3 MILESTONE ARCHIVAL, 2026-08-19 — so the count stands at FOURTEEN
+# and there is no fifteenth to record. The `cp` was taken anyway (the protocol is not conditional
+# on intent) and every delta below was written by hand: `status`, `stopped_at`, `last_updated`,
+# `last_activity`, and this block. `gsd-tools query commit` WAS used for the archival commit and
+# behaved, as it has throughout.
+#
+# `milestone:` STAYS AT v0.3 through this archival, exactly as it stayed at v0.2 through that one.
+# v0.3 is the version in the tree (`pyproject.toml` reads `0.3.0`), nothing was tagged or
+# published, and no next milestone has been scoped. Change it only together with
+# `pyproject.toml`, and re-run `tests/test_packaging_metadata.py` immediately afterwards.
 gsd_state_version: 1.0
 milestone: v0.3
 milestone_name: — Say When You Measured It
-status: Milestone v0.3 — Phase 7 COMPLETE, closed 2026-08-19 at FOUR of five criteria MET (three as written, criterion 5 MET-qualified) and ONE MET IN PART, with no criterion text amended. Criterion 5 moved 2026-08-19 on a measurement Dan chose over an override: 07-05's join test, which had passed on the RED commit and so was never observed failing, was watched red FIVE times out of five against five separate breaks — including a sincere implementation of the write-time `stale` flag the design refuses, not only a one-token null-out. **Non-vacuity is established; TDD ordering was NOT followed for that test and the record says so in the verdict cell itself.** Criterion 3 stays MET IN PART BY DAN'S EXPLICIT DECISION (2026-08-17, `keep defer`) — `status.json` publishes the ingredients of a staleness verdict and no verdict. Verification on 2026-08-17 found four gaps; 07-07 closed three on 2026-08-18, the fourth is criterion 3 and is open by that decision. A code review after the close found 1 Critical (a reproduced XSS sink at `served/boty/index.html`, reachable because 07-04 publishes any string from `state.json`) + 8 Warnings; all nine fixed 2026-08-17. All 7 plans landed. REQ-21 complete in the tree and NOT on the wire — the running daemon predates the phase. v0.2 archived, deployed 2026-08-12
-stopped_at: Phase 7 closed — criterion 5's join test watched red 5/5 (breaks A–E, 2–4 failures each, every one naming the test; reverted to an empty porcelain each time), non-vacuity recorded as established AFTER THE FACT in `docs/retailer-evidence.md` § *Phase 7 non-vacuity measurement (2026-08-19)*. Gate at close: identity 225 files, 884 passed / 0 skipped, mypy clean over 18 source files, 34/34 mutations caught, survivors 0, `make verify-offline` EXIT=0. M39 still free, M21–M24 still Phase 6's deliberate gap
-last_updated: "2026-08-19T12:00:00.000Z"
+status: Milestone v0.3 — Say When You Measured It — ARCHIVED 2026-08-19. 1 of 1 phase, 7 of 7 plans, 1 of 1 requirement (REQ-21), 72 commits from `b10df8c`, 41 files changed, +18,146 / −104. Complete IN THE TREE; **not deployed, not tagged, not published**. Closed at FOUR of five criteria MET (three as written, criterion 5 MET-qualified) and ONE MET IN PART, with no criterion text amended. Criterion 5 moved 2026-08-19 on a measurement Dan chose over an override: 07-05's join test, which had passed on the RED commit and so was never observed failing, was watched red FIVE times out of five against five separate breaks — including a sincere implementation of the write-time `stale` flag the design refuses, not only a one-token null-out. **Non-vacuity is established; TDD ordering was NOT followed for that test and the record says so in the verdict cell itself.** Criterion 3 stays MET IN PART BY DAN'S EXPLICIT DECISION (2026-08-17, `keep defer`) — `status.json` publishes the ingredients of a staleness verdict and no verdict. A code review after the close found 1 Critical (a reproduced XSS sink at `served/boty/index.html`, reachable because 07-04 publishes any string from `state.json`) + 8 Warnings; all nine fixed, three Info findings recorded and not fixed. Audit status `tech_debt` — no blockers, no unsatisfied requirements, six residuals carried. REQ-21 complete in the tree and NOT on the wire: the running daemon (`MainPID=547119`, started 2026-08-12 17:28:29) predates this milestone's first commit by ~15 hours. v0.2 archived 2026-08-11 and deployed 2026-08-12, except REQ-14
+stopped_at: Archived milestone v0.3 — ROADMAP and REQUIREMENTS extracted to `.planning/milestones/`, the audit moved there from `.planning/`, `.planning/REQUIREMENTS.md` removed for the next milestone, `ROADMAP.md` collapsed to one line with links, v1.0.0's material untouched, **no git tag created**. Gate at close: identity 225 files, 884 passed / 0 skipped, mypy clean over 18 source files, 34/34 mutations caught, survivors 0, `make verify-offline` EXIT=0. M39 still free, M21–M24 still Phase 6's deliberate gap
+last_updated: "2026-08-19T13:30:00.000Z"
 last_activity: 2026-08-19
 progress:
   total_phases: 1
@@ -90,6 +101,11 @@ progress:
   # 1 phase in v0.3 is now complete, so 100. The plan counter above is where per-plan progress
   # is read. (Restored by hand at 07-06's close together with the block at the top of this
   # frontmatter; see the note under ## Session below for why neither was written by tooling.)
+  #
+  # UNCHANGED BY THE 2026-08-19 ARCHIVAL, and that is deliberate rather than an oversight: these
+  # five numbers describe v0.3, `milestone:` still reads v0.3, and v0.2's close set the same
+  # precedent by leaving its own 2-phase / 11-plan block exactly where it stood. They are final
+  # for this milestone and are reset by whoever scopes the next one.
   percent: 100
 ---
 
@@ -97,10 +113,18 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-08-11, with a `## Current State` section)
+See: `.planning/PROJECT.md` (updated 2026-08-19 at the v0.3 close, with a `## Current State` section)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Phase 7 — *A Reading Has an Age*, milestone v0.3. 07-01 and 07-02 both landed
+**Current focus:** Nothing in flight. v0.3 is archived; the next milestone is unscoped. The one
+outstanding action from v0.3 is not planning work — it is `sudo systemctl restart boty`, which is
+Dan's and is deferred by his own twice-recorded answer.
+
+**The paragraph below is Phase 7's execution record, written while it was in flight. It is left
+exactly as written** — it is the record of what was believed as the work happened, and the
+archived milestone in `.planning/milestones/v0.3-ROADMAP.md` is the authority on what closed.
+
+**Phase 7 execution record (as written during the phase):** Phase 7 — *A Reading Has an Age*, milestone v0.3. 07-01 and 07-02 both landed
 2026-08-13: `Result.read_at` exists, is stated at all 20 construction sites in
 `boty/retailers.py`, is published per watch row in `status.json` as `null` when absent, and now
 SURVIVES THE PROCESS — `monitor.State` persists it per entry, tolerating the pre-07 bare-string
@@ -134,6 +158,82 @@ page handles that old file correctly (every row renders `age ?`, every store tag
 the `=== false`-not-`!` decision paying off, but the restart is what makes the page say anything new.
 
 ## Status
+
+**Milestone v0.3 — Say When You Measured It — ARCHIVED 2026-08-19.** 1 of 1 phase, 7 of 7 plans,
+1 of 1 requirement (REQ-21). **72 commits** from `b10df8c` (the milestone was *scoped* three
+commits earlier at `d837676`), **41 files changed, +18,146 / −104**, 2026-08-13 → 2026-08-19.
+Gate at close, re-measured by the audit at `b832643`: identity PASS over **225 files**, **884
+passed / 0 skipped**, mypy clean over 18 source files, **34/34 mutations caught, survivors 0**,
+`make verify-offline` **EXIT=0** — up from **778 passed / 26-26** at phase start (`dbc9d49`).
+Registry **26 → 34**: M31–M37 from the phase, **M38** from the post-close review. `M21`–`M24`
+remain Phase 6's deliberate gap; **`M39` is free**. Audit status `tech_debt` — **no blockers, no
+unsatisfied requirements, no broken flows, no orphans**; six residuals carried. Archive:
+
+- `.planning/milestones/v0.3-ROADMAP.md` — Phase 7 entire: goal, depends-on, requirements, all
+  five criteria, the closing verdict table with **both addenda intact** (the 2026-08-18
+  superseded-figures pointer and the 2026-08-19 criterion-5 update), both phase-gate blocks, the
+  live gate, *Why the interval and not a fixed clock*, the measurement that opened it, and the
+  plans list with **all seven** checked
+- `.planning/milestones/v0.3-REQUIREMENTS.md` — REQ-21 with its outcome, the long traceability
+  cell carried across whole, and all four *Measurement notes recorded beside REQ-21*
+- `.planning/milestones/v0.3-MILESTONE-AUDIT.md` — moved here from `.planning/`
+
+`.planning/REQUIREMENTS.md` was **removed** at close, exactly as v0.2's close removed its own; a
+fresh one comes with the next milestone, and the pre-deletion file is in git history at
+`6c3761b`. **The project-level sections were NOT parked a second time** — they were re-seeded
+into v0.3's `REQUIREMENTS.md` on 2026-08-13 from v0.2's archive appendix, and a second parked
+copy would leave a future reader with two and no way to choose. `.planning/ROADMAP.md` now
+carries v0.3 as one line with links, and **v1.0.0's material is untouched** — it is open,
+untagged and not archived.
+
+**NO GIT TAG WAS CREATED, and none exists.** `git tag -l` → **0**, re-measured at this archival.
+That decision is being handled separately and this archival did not touch it — and it is now a
+**recorded decision** rather than a deferral: **Dan chose no tag explicitly on 2026-08-12**
+(`4609d95`), matching v1.0.0. Nothing was pushed.
+
+**"Archived" is not "shipped", and that distinction is again the whole of what remains — more
+starkly than it was for v0.2.** None of the five criteria this milestone met is in effect on the
+deployed daemon, and the reason is not merely that a restart is pending: `boty watch`
+`MainPID=547119`, `ActiveEnterTimestamp=Wed 2026-08-12 17:28:29 CDT`, re-measured at this
+archival and unchanged, is **~15 hours older than this milestone's first commit**, so the running
+process has never at any moment held a line of this code. Measured on the live documents:
+`served/boty/status.json` carries **none** of the four keys v0.3 added and publishes **10** rows
+for 13 configured watches; `state.json` still holds **13 bare pre-07 strings**. **The restart is
+verified SAFE BY EXECUTION** — the new code was run against copies of all three live pre-phase
+documents: 13/13 availabilities survive, 0 ages invented, the pacer document round-trips, and the
+real `config/products.yaml` does not trip the new WR-02 config guard; rollback-after-restart cost
+is bounded at **2 duplicate restock pushes**, re-derived from the live ledger. It is deferred by
+Dan's decision recorded twice in `QUESTIONS.md` § 0f — **2026-08-10 and 2026-08-17**, the second
+verbatim `keep defer`. **His action; neither performed nor recommended here.**
+
+**Two verdicts did not close clean and neither was rounded up.** Criterion 3 is **MET IN PART by
+Dan's explicit decision (2026-08-17)** — `status.json` publishes the *ingredients* of a staleness
+verdict and no verdict; that is not an oversight, not a TODO, and not work queued for a later
+plan. Criterion 5 is **MET, QUALIFIED** — the join test was watched red 5/5 on 2026-08-19, but
+**after the fact, against an implementation that already existed; the original RED was never
+observed and TDD ordering was NOT followed for that test.** No criterion text was amended at any
+point in the phase.
+
+### Deferred at the v0.3 milestone close, 2026-08-19
+
+| Category | Item | Status |
+|---|---|---|
+| deploy | **`sudo systemctl restart boty`** — migrates `state.json`, publishes `read_at`/`checked`/`current_interval_seconds`, 13 rows instead of 3–10, makes the age visible at all | Open — **verified safe by execution**; deferred twice by Dan (`QUESTIONS.md` § 0f) |
+| deploy | `WALMART_STORE_ID` in the EnvironmentFile (REQ-14, v0.2) | Open — Dan's to give or not. Measured as a count, `0`. After the restart that row reads `out_of_stock · age ? · not checked` indefinitely until it is set, which is the honest output |
+| review | **IN-01/IN-02/IN-03** — the three Info findings from the post-close code review, recorded and **NOT** fixed. Re-measured at this archival: all three still stand | Open — **IN-03 is the one that deserves a plan**: the dashboard renders `d.updated`, `d.retailers`, `d.watches` and `w.price.toFixed(2)` with no shape guard outside its `try`, so a malformed payload freezes the page silently |
+| tech-debt | The audit's six residuals — W1 (`Pacer.due`'s tolerance ignores per-retailer overrides, under-reporting staleness by ≤150 s), W3 (`boty check` writes the daemon's live `status.json`), `pacer-state.json`'s non-atomic write (failure direction confirmed *over*-reporting), criterion 3's accepted partial, criterion 5's undischarged qualification, and `M21`–`M24` (by design, not debt) | Open — see `.planning/milestones/v0.3-MILESTONE-AUDIT.md` |
+| tooling | **`gsd-tools` state/phase WRITE subcommands are unusable on this repo** — fourteen misfires across three subcommands, the fourteenth of which invented content. Not invoked at this archival, so the count stands at fourteen | Open, and worked around: `STATE.md` is edited by hand after a `cp` |
+| security | `QUESTIONS.md` § 0e — the fix is **EXECUTED** (`git filter-repo`, 2026-08-04, verified against a fresh clone). What stays open is three residues: the records that document the leak still name the values, the pre-filter bundle is the only remaining copy and is Dan's to delete, and GitHub's unreferenced objects need a support request | Open, untouched by v0.3. **This corrects v0.2's account**, which listed it as an unexecuted fix |
+| verification | Phases 02, 03, 04 `human_needed`; 03.1 `gaps_found` | **v1.0.0's, not this milestone's** — listed so the count is not read as v0.3's |
+| verification | Phase 05 — `05-VERIFICATION.md` | `human_needed` — v0.2's; its three items were the deploy, done 2026-08-12, and the store pin, which remains |
+| live gate | `make verify` exits 2 on this host — 2/6 controls cannot run (no Chrome/Chromium: Best Buy, Target), Walmart UNKNOWN for want of a pin, Amazon's challenge class intermittent | Open and **unowned since v0.2**. Needs its own plan; none of it is v0.3's |
+
+**Next command:** `/gsd-new-milestone` when there is a next milestone to scope — or a plan for
+the deferred live-`make verify` classes, or one for IN-03.
+
+---
+
+**Phase 7's closing record follows, as it stood before this archival. Nothing below is edited.**
 
 **Phase 7 — A Reading Has an Age: COMPLETE 2026-08-17. Verified 2026-08-17 at 3/5 with four
 gaps; 07-07 closed three of them on 2026-08-18 and THE FOURTH IS OPEN BY DAN'S DECISION.**

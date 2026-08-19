@@ -67,7 +67,8 @@ looking yourself.
 - [ ] Type hints throughout
 - [ ] Contributor-facing docs: how to add a retailer, why controls are mandatory
 - [ ] Dan successfully buys a Pokémon GO Plus +
-- [ ] **Deploy v0.2** — `sudo systemctl restart boty` deploys REQ-15/16/17 (editable install); REQ-14 additionally needs `WALMART_STORE_ID`. Until then the running monitor makes every claim v0.2 fixed
+- [x] **Deploy v0.2** — DONE 2026-08-12 (`4609d95`), at Dan's direction, measured back off `status.json` rather than assumed. **REQ-14 is the exception and is still not in effect**: Walmart cannot alert on the GO Plus + until `WALMART_STORE_ID` is set (unset — measured as a count, `0`)
+- [ ] **Deploy v0.3** — `sudo systemctl restart boty` migrates `state.json`, publishes `read_at` / `checked` / `current_interval_seconds`, and makes the age visible at all. **Verified safe by execution** against copies of all three live pre-phase documents. Deferred by Dan twice (`QUESTIONS.md` § 0f). Until then every published row is a reading with no age — the exact claim v0.3 exists to remove
 
 ### Out of Scope
 
@@ -81,44 +82,77 @@ looking yourself.
 
 ## Current State
 
-_As of 2026-08-11, after milestone v0.2 closed._
+_As of 2026-08-19, after milestone v0.3 closed and was archived._
 
-**Milestone v0.2 — Say Only What You Measured — is COMPLETE IN THE TREE, and none of it is
-running.** Two phases, 11 plans, 84 commits, +30,483/−568 across 75 files. The gate went from
-**531 passed / 8 mutations** at the start to **769 passed / 24 mutations** at close
-(`make verify-offline`, exit 0, identity PASS over 201 files). Archived in
-[`.planning/milestones/v0.2-ROADMAP.md`](milestones/v0.2-ROADMAP.md),
-[`v0.2-REQUIREMENTS.md`](milestones/v0.2-REQUIREMENTS.md) and
-[`v0.2-MILESTONE-AUDIT.md`](milestones/v0.2-MILESTONE-AUDIT.md) (audit status `passed`; it
-opened `gaps_found` on one item, closed at `0d6d1b8`).
+**Milestone v0.3 — Say When You Measured It — is COMPLETE IN THE TREE, and NONE OF IT IS
+RUNNING.** One phase (7), one requirement (REQ-21), 7 plans, **72 commits**, **+18,146/−104
+across 41 files**, 2026-08-13 → 2026-08-19. The gate went from **778 passed / 26 mutations** at
+the start (`dbc9d49`) to **884 passed / 0 skipped, 34/34 mutations, survivors 0** at close, mypy
+clean over 18 source files, identity PASS over 225 files, `make verify-offline` **EXIT=0**.
+Archived in [`.planning/milestones/v0.3-ROADMAP.md`](milestones/v0.3-ROADMAP.md),
+[`v0.3-REQUIREMENTS.md`](milestones/v0.3-REQUIREMENTS.md) and
+[`v0.3-MILESTONE-AUDIT.md`](milestones/v0.3-MILESTONE-AUDIT.md) (audit status `tech_debt` — no
+blockers, no unsatisfied requirements, six residuals carried forward).
 
-**NOT DEPLOYED. This is the sentence that matters.** Dan answered `defer` on 2026-08-10, so
-`boty.service` still runs 2026-08-04 code (`MainPID=3059142`, up since 2026-08-04 17:48:52
-CDT). The daemon that is actually watching for restocks still publishes *"the detector is
-probably broken"* for `target`, still holds Amazon's backoff in memory with no
-`pacer-state.json` anywhere, and still publishes a Walmart GO Plus + verdict about a store
-nobody chose — the very defects v0.2 fixed. **The gap is one command wide:** `boty` is an
-**editable install**, so `sudo systemctl restart boty` deploys REQ-15, REQ-16 and REQ-17
-today with no store pin required. Only REQ-14 additionally needs `WALMART_STORE_ID`, which is
-still unset and is Dan's to give or not. The deferral was priced as one decision; it is two.
+**NOT DEPLOYED, and the running code is OLDER THAN THE MILESTONE. This is the sentence that
+matters.** `boty watch` `MainPID=547119`, `ActiveEnterTimestamp=Wed 2026-08-12 17:28:29 CDT` —
+roughly **fifteen hours before v0.3's first commit**, so the deployed daemon has never at any
+moment held a line of this milestone's code. Measured on the live documents rather than inferred:
+`served/boty/status.json` carries **none** of the four keys v0.3 added and publishes **10** rows
+for 13 configured watches; `state.json` still holds **13 bare pre-07 strings** with no version
+field. **The gap is one command wide** — `boty` is an editable install, so
+`sudo systemctl restart boty` migrates `state.json` to its dated shape, starts publishing
+`read_at` / `checked` / `current_interval_seconds`, makes the dashboard show 13 rows instead of a
+varying 3–10, and makes the age visible at all. **That restart is verified SAFE BY EXECUTION**,
+not argued: the new code was run against copies of all three live pre-phase documents — 13/13
+availabilities survive, 0 ages invented, the pacer document round-trips, and the real
+`config/products.yaml` does not trip the new WR-02 config guard — with rollback cost bounded at 2
+duplicate restock pushes. It is deferred by Dan's decision recorded twice (`QUESTIONS.md` § 0f,
+2026-08-10 and 2026-08-17, the second verbatim `keep defer`), and it is **his action**.
 
-**NOT TAGGED, NOT PUBLISHED.** Zero git tags exist, locally or on the remote — deliberate,
-and unchanged by the v0.2 archival. PyPI returns 404 for `bot-y`. `pyproject.toml` reads
-**`0.2.0`**, rolled down from the aspirational `1.0.0` as **the correction, not a bump**, and
-safe only because publishing was deferred: nobody can be pinned to a 1.0.0 that exists. The
-`Development Status` classifier is `4 - Beta`, bound to the version in both directions.
+**Two of v0.3's five criteria did not close clean, and neither was rounded up.** Criterion 3 is
+**MET IN PART by Dan's explicit decision of 2026-08-17** — `status.json` publishes the
+*ingredients* of a staleness verdict (`read_at`, `checked`, `current_interval_seconds`) and **no
+verdict**; both rendering surfaces do present one. Criterion 5 is **MET, QUALIFIED**: 07-05's join
+test was watched going red 5/5 on 2026-08-19, establishing non-vacuity, **but after the fact
+against an implementation that already existed — the original RED was never observed and TDD
+ordering was not followed for that test.** No criterion text was amended at any point.
 
-**v1.0.0 is still open and untagged, and was NOT archived.** Its definition of done includes
-*"Dan has successfully bought a Pokémon GO Plus +"* — a market condition, not a work item —
-and its audit recommended against tagging it shipped. Its phases (1–4 and 3.1) and their
-details stay in `.planning/ROADMAP.md`. REQ-11 (`pip install bot-y` from PyPI, plus a v1.0.0
-tag) remains **descoped from v1.0**, not complete.
+**A post-close code review found 1 Critical + 8 Warnings; all nine were fixed.** The Critical was
+a reproduced XSS sink — `served/boty/index.html` interpolated `w.availability` into a
+`class="dot ${...}"` attribute unescaped, reachable because v0.3 publishes any string from
+`state.json`, and the gate that should have caught it named a sibling field and omitted this one.
+Three Info findings were recorded and **not** fixed; the one worth a plan is IN-03, an unguarded
+dashboard render that freezes the page silently on a malformed payload.
 
-**Codebase:** ~18 source files under `boty/` (mypy clean), six retailers registered and
-control-verified, 13 watches, a full `boty check` pass in ~43 s of REQ-08's 120 s budget.
+**v0.2, by contrast, IS on the wire.** It was deployed on 2026-08-12 (`4609d95`) at Dan's
+direction and measured back off `status.json` rather than assumed. **Two statements in
+§ Requirements above are therefore one revision behind and are corrected here rather than
+silently:** the block headed *"Built and gated in v0.2 — in the tree, NOT in effect on the
+deployed daemon"* is true only of **REQ-14** now, which still needs `WALMART_STORE_ID` (unset —
+measured as a count, `0`, never a value); REQ-15, REQ-16 and REQ-17 have been in effect since
+2026-08-12.
+
+**NOT TAGGED, NOT PUBLISHED — and that is now a recorded decision rather than a deferral.**
+`git tag -l` → **0**, re-measured at the v0.3 archival; PyPI returns 404 for `bot-y`. **Dan chose
+no tag explicitly on 2026-08-12, matching v1.0.0.** `pyproject.toml` reads **`0.3.0`**, bound
+component-wise to `STATE.md`'s `milestone:` key and to three other records with `pyproject`
+authoritative. The `Development Status` classifier is `4 - Beta`, bound to the version in both
+directions.
+
+**v1.0.0 is still open and untagged, and was NOT archived by either close.** Its definition of
+done includes *"Dan has successfully bought a Pokémon GO Plus +"* — a market condition, not a work
+item — and its audit recommended against tagging it shipped. Its phases (1–4 and 3.1) and their
+details stay in `.planning/ROADMAP.md`, untouched. REQ-11 (`pip install bot-y` from PyPI, plus a
+v1.0.0 tag) remains **descoped from v1.0**, not complete.
+
+**Codebase:** 18 source files under `boty/` (mypy clean), six retailers registered and
+control-verified, **13** configured watches (not the 14 a `grep` reports — the fourteenth match is
+a comment), a full `boty check` pass in ~43 s of REQ-08's 120 s budget.
 **Known live-gate state:** `make verify` exits 2 on this host for three pre-existing reasons —
-two controls cannot run at all (no Chrome/Chromium binary on PATH: Best Buy and Target) and
-Walmart reads UNKNOWN for want of a store pin. None is a detector defect; none is owned yet.
+two controls cannot run at all (no Chrome/Chromium binary on PATH: Best Buy and Target), Walmart
+reads UNKNOWN for want of a store pin, and Amazon's challenge class is intermittent
+(present-absent-absent-present across four passes). None is a detector defect; none is owned yet.
 
 ## Milestone v0.2 — Say Only What You Measured (closed 2026-08-11)
 
@@ -215,4 +249,4 @@ when they disagree — retailers' JSON-LD does lie. Worth adopting.
 | Verification is an exit code, not a judgement | `make verify` / `make verify-offline`. 531 passed / 8 mutations at v0.2's start, 769 / 24 at its close, every new gate watched going red before it was trusted | ✓ Good |
 
 ---
-*Last updated: 2026-08-11 at the v0.2 milestone close — v0.2 complete in the tree and not deployed; v1.0.0 still open and untagged*
+*Last updated: 2026-08-19 at the v0.3 milestone close — v0.3 complete in the tree and NOT on the wire (the running daemon predates its first commit); v0.2 deployed 2026-08-12 except REQ-14; v1.0.0 still open and untagged; zero git tags, by Dan's explicit choice*
