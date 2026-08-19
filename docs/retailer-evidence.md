@@ -4711,3 +4711,231 @@ EXIT=0
 nothing here needs a retailer; politeness is a hard constraint. **The daemon was not
 restarted and no restart is recommended** — deploy is Dan's decision, deferred by his own
 answer on 2026-08-17, so everything above remains true of the tree and not of the wire.
+
+## Phase 7 non-vacuity measurement (2026-08-19) — 07-05's join test watched going red, after the fact
+
+The § *Phase 7 closing record* and the § *Phase 7 post-review addendum* above are left exactly as
+they were written and **not one character of either was edited**. This sits beside them on the same
+convention. It closes the last of criterion 5's three named shortfall reasons **by measurement
+rather than by override** — Dan's choice on 2026-08-19, taken in preference to accepting the
+override `07-VERIFICATION.md` had already drafted for him, on the ground that a measurement gets
+closer to the truth than an acceptance does.
+
+### What is established here, and what is not — stated before the numbers so neither can be read without the other
+
+- **ESTABLISHED 2026-08-19, by the measurement below:**
+  `test_status_json_carries_everything_a_consumer_needs_to_judge_staleness`
+  (`tests/test_status.py:1243`) **is not a vacuous gate.** It was watched going red on **five**
+  separate breaks of the behaviour it joins — each applied alone, each reverted to an empty
+  `git status --porcelain` — against a worktree baseline of **884 passed**.
+- **NOT ESTABLISHED, and claimed nowhere below: that TDD ordering was followed for this test. It
+  was not.** The original RED was never observed. This red was watched on **2026-08-19**, five days
+  after the test was written, **after the fact**, against an implementation that already existed —
+  by deliberately breaking working code, not by writing a test against code that was not there yet.
+- **Those are two different facts and only the first is now established.** *The gate bites* and
+  *the gate was written before the code it binds* are not the same sentence. This record says
+  **verified after the fact**, and the qualifier is load-bearing rather than decorative: this is
+  the phase that exists because a difference of exactly that size was once published as if it were
+  none, and laundering it here would be that same defect committed in the document that certifies
+  it removed.
+
+### The RED commit, re-executed rather than quoted
+
+`07-05-SUMMARY.md` records that the test *"passed the moment it was written, on the RED commit,
+before any implementation existed"*. That sentence was a report; it is now a measurement.
+`git log -S` over `tests/test_status.py` names **exactly one** commit introducing the test:
+**`dfbcf7b`**, 07-05's Task 1 RED commit. Checked out into a throw-away worktree and run there:
+
+```
+$ pytest tests/test_status.py -q                                   # at dfbcf7b
+20 failed, 30 passed in 0.24s
+
+$ pytest tests/test_status.py::test_status_json_carries_everything_… -q
+1 passed in 0.09s
+```
+
+**`20 failed / 30 passed` is the exact RED count `07-05-SUMMARY.md` recorded for that commit**, and
+the join test is one of the 30 that passed. The phase's own account of its one exception is
+therefore accurate in both directions: the test was green from birth, and **nobody hid it** — it
+was recorded as an exception by the plan that wrote it, by both verification passes, and by the
+ROADMAP.
+
+### The five breaks, each applied alone
+
+Measured **2026-08-19** in a throw-away `git worktree` at HEAD `bc31030`, using the repository's own
+`.venv`. **The main working tree was never touched:** `git status --porcelain` was empty before the
+worktree existed, empty after every revert inside it, and empty after it was removed and pruned.
+Worktree baseline before any break: **884 passed**, the join test **1 passed**.
+
+The test has two halves and each was broken separately. The first derives a staleness verdict for a
+remembered, paced-out row from three published facts joined by `retailer`; the second asserts no
+fourth fact was smuggled in to make that work.
+
+| # | The edit | Which half it attacks | Suite result | Join test named? |
+|---|---|---|---|---|
+| A | `boty/status.py:200` `"current_interval_seconds": (intervals or {}).get(retailer),` → `"current_interval_seconds": None,` | the cadence the join fetches | **3 failed / 881 passed**, `EXIT=1` | **Yes** |
+| B | `boty/status.py:374` `"read_at": read_at,` → `"read_at": None,` | the age | **3 failed / 881 passed** | **Yes** |
+| C | `boty/status.py:375` `"checked": False,` → `"checked": True,` | the provenance | **4 failed / 880 passed** | **Yes** |
+| D | insert `"stale": False,` after `boty/status.py:375` — the forbidden key, remembered row only | the no-fourth-fact half | **2 failed / 882 passed** | **Yes** |
+| E | insert `"stale": False,` on **both** the fresh and the remembered row comprehensions — the write-time flag as somebody would actually ship it | the no-fourth-fact half | **2 failed / 882 passed** | **Yes** |
+
+Every anchor was counted before it was replaced (`anchor count: 1` in each case), on this phase's
+own established rule that a first-occurrence replacement is safe only against a competing count.
+
+Break A fails at the join, on the line that performs it:
+
+```
+        interval = cadence[row["retailer"]]
+>       assert interval == 21600.0
+E       assert None == 21600.0
+tests/test_status.py:1278: AssertionError
+```
+
+Break E fails on the design decision, in the test's own words:
+
+```
+E   AssertionError: a staleness flag computed at write time is written `false` and keeps
+    saying `false` for exactly the interval during which it becomes true
+E   assert 'stale' not in {'name': 'fresh', 'retailer': 'bestbuy', …}
+tests/test_status.py:1286: AssertionError
+```
+
+**Break A is both the most direct edit available and the sharpest, and those do not always
+coincide.** Line 200 is the *paced* retailer branch — the one whose own comment says *"ON THIS
+BRANCH TOO, and this is the row it matters most on: a retailer deep enough in a backoff to be
+skipped is the one whose readings are oldest"* — and it is the branch this test's payload exercises.
+Nulling it is a one-token edit and it reds the join **at** the join.
+
+**And the asymmetry that would have been damning is not there.** The worry worth testing was that a
+trivial edit might red the test while a meaningful one slipped past. It is neither way round: break
+E — actually *implementing* the write-time `stale` flag on both row comprehensions, the way a
+contributor who found the raw-facts design inconvenient would sincerely ship it — reds the test
+exactly as reliably as break A's one-token null-out. The two halves fail on two different lines of
+the test, `:1278` and `:1286`, so both halves are live.
+
+### The finding that is not flattering, recorded because it is the honest shape of the result
+
+**The join test never goes red alone.** On all five breaks at least one other test failed beside it:
+
+| Break | The other tests that also failed |
+|---|---|
+| A | `test_the_current_cadence_is_published_for_a_paced_out_retailer_too`, `test_both_surfaces_publish_one_cadence_from_one_document` |
+| B | `test_a_remembered_row_publishes_the_availability_and_stamp_the_ledger_holds`, `test_a_remembered_row_publishes_the_age_the_ledger_holds` |
+| C | `test_every_configured_watch_has_a_row_whether_or_not_it_was_read`, `test_remembered_rows_come_after_every_fresh_row_and_are_ordered_by_key`, `test_every_configured_watch_has_a_row_while_only_the_due_ones_are_fetched` |
+| D | `test_a_fresh_row_and_a_remembered_row_carry_the_same_keys_in_the_same_order` |
+| E | `test_publishing_a_duration_does_not_disturb_any_existing_key` |
+
+Each of the three facts the join reads carries its own dedicated gate, so nothing can break beneath
+the join without reddening that ingredient's own test too. **That is redundancy, not vacuity** — a
+vacuous gate is one that *cannot* fail, and this one failed five times out of five — but it is also
+the same fact seen from the other side as its passing on the RED commit: the three facts were
+already published and already gated when the test was written, so **there was no instant at which
+it could have been red.** Its own contribution is the assertion that the three *compose*, and a
+composition is reachable only through its parts. Breaks D and E are the closest thing to a sole
+binding: the "no derived key" decision is held by this test plus one keyset gate and nothing else.
+
+**Two things this gate does not catch, said plainly so nobody later reads it as broader than it
+is.** `status.write` publishes whatever `intervals` mapping it is handed, so a cadence sourced from
+a fixed constant rather than from `Pacer.current_interval` is invisible here — that is M37's and
+M33's job, one surface and one file over. And the payload is built in-process, so this says nothing
+about what the daemon on this host publishes, which is still the pre-phase file.
+
+### Why no ident was registered, and `M39` is still free
+
+The obvious candidate is break E — publish `stale: false` at write time — and it was considered
+rather than skipped. **It is not registered**, for two reasons that are arguments rather than
+convenience:
+
+- **It would add a number without adding coverage.** All five breaks are already caught by a
+  second, independent test. The registry's ratio exists to prove gates bite; a 35th ident whose
+  killer list is *this test plus a keyset gate that already fires* raises the denominator and
+  defends nothing new.
+- **This is a historical question, not a standing risk.** Registering it would convert a one-off
+  answer to *"was this gate ever watched red?"* into a permanent per-run cost on every
+  `make verify-offline` any contributor ever runs.
+
+**The registry is untouched: `M1`–`M20` ∪ `M25`–`M38`, 34 idents, survivors 0, `M39` still free,
+and `M21`–`M24` still Phase 6's deliberate gap — not filled, and not to be filled.**
+
+### What this moves: criterion 5, and the argument for moving it
+
+Criterion 5 reads: *"`make verify-offline` exits 0, and every gate this phase adds has been watched
+going red."* The gate half has been MET and independently re-measured at three heads. The
+`every gate` half had **three** named shortfall reasons, taken one at a time on 2026-08-19:
+
+- **(a) 07-05's join test was never observed failing — CLOSED by the measurement above**, with the
+  qualifier that the red was watched after the fact and never as a TDD RED.
+- **(b) CR-01's escaping gate existed and could not bite on a sink 07-04 itself opened — CLOSED,
+  and it does bear on the verdict rather than being immaterial.** `b1a3b88` widened `UNTRUSTED` to
+  cover `w.availability`, and `07-VERIFICATION.md`'s 2026-08-17 pass then watched that gate red on
+  exactly that sink at **1 failed / 15 passed**. Under the criterion's text — *watched going red* —
+  it is closed. What closing it does **not** erase is that for the span between 07-04 opening the
+  sink and `b1a3b88` widening the tuple, this phase shipped a bound that read like one and was not
+  one. That belongs in the qualification below, not in the verdict.
+- **(c) the parse gate skipped in the environment the project's own gate runs in — CLOSED by
+  07-07**, and re-proved three separate ways by the 2026-08-18 verification.
+
+**The argument that the criterion is now MET.** It asks that every gate *have been watched going
+red*. It does not say *before the code existed*, and this repository's dominant instrument for
+answering that question is after-the-fact **by construction**: `mutation_check.py` breaks a working
+implementation 34 times on every single run, and this phase calls the gates those mutations kill
+proven. The 2026-08-17 verification did the same thing by hand, re-applying three already-fixed
+defects in a worktree under its own heading *"Gates re-watched going red"*. Measured against the
+operative definition this repository actually uses, the join test now stands exactly where every
+other gate in the phase stands.
+
+**The argument that it is not.** Every other gate in this phase was watched failing *first*, at a
+recorded RED count, and the phase's plans treat that ordering as part of what is being claimed. On
+that reading the join test can never satisfy the criterion and the row is permanently MET IN PART.
+
+**Verdict reached: MET, qualified — and the qualification is carried inside the verdict cell rather
+than beside it**, so the row cannot be read without it. The second argument is about TDD ordering,
+which the criterion's text does not require and which **this record explicitly does not claim was
+followed**. The first is grounded in what this repository does 34 times per gate run. What is
+emphatically not claimed anywhere is that the join test was test-driven: it was not, this section
+says so in as many words, and the distance between *the gate bites* and *the gate came first* is
+preserved rather than closed.
+
+**This is not the manufactured red the verification warned against.** Theatre would be editing the
+test until it failed, or breaking something the test does not bind, in order to produce a red line
+to point at. Every break above is a change to the **behaviour under test**, and break E is a design
+a future contributor could plausibly and sincerely ship. It is `mutation_check.py`'s own method
+applied by hand — which is exactly how M31 through M37 were each watched red in this same phase.
+
+**What does NOT move.** **Criterion 3 stays MET IN PART**, by Dan's explicit earlier decision:
+`status.json` still publishes `read_at`, `checked` and `current_interval_seconds` and no staleness
+verdict, and **no key was added here** — break E was reverted, and the tree ends this measurement
+byte-identical to `bc31030`. Criteria 1, 2 and 4 are untouched. The honest re-score is **5 of 5,
+with criterion 3 the one accepted partial and criterion 5 qualified as above**. The two WARNING
+items the 2026-08-18 verification raised — `_js_runtime()` trusting the first glob match, since
+addressed by `6abd3fe`, and the fourth site of the corrected restart clause, disclosed above by
+`e7230ae` — are unaffected by this section either way.
+
+### The gate, re-run after this record was written
+
+`make verify-offline`, 2026-08-19, allowed to finish, **exit 0**:
+
+```
+identity check: PASS — 225 file(s), no host identity found
+All checks passed!
+884 passed in 11.02s
+Success: no issues found in 18 source files
+fixtures: 11 fixture(s) under …/tests/fixtures
+control check: SKIPPED (--offline) — no live retailer request made.
+mutation check: 34 mutation(s), sandboxed (the working tree is never touched)
+mutation check: 34/34 mutations caught
+VERIFY: PASS (OFFLINE — live controls were NOT run, so nothing here says the retailers still work)
+EXIT=0
+```
+
+**884 passed, 0 skipped; 34/34 caught with survivors 0; identity 225 file(s) — every figure
+identical to the 2026-08-18 re-verification.** The identity count is unchanged because this
+measurement adds **no file**: it edits four tracked documents and creates none. Run twice, both
+times to completion, both times `EXIT=0`; the transcript above is the second. **No gate went red on
+this record's own prose** — a real risk in this repository, and the reason it was run after the
+record was written rather than before.
+
+**No live retailer read was made, no fixture was re-captured, and no clock was frozen, injected or
+monkeypatched** — the five breaks are edits to source, reverted. **The daemon was not restarted and
+no restart is recommended**; deploy remains Dan's decision, deferred by his own answers on
+2026-08-10 and 2026-08-17. `WALMART_STORE_ID` was not read, derived or printed.
