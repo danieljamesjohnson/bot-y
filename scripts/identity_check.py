@@ -429,9 +429,47 @@ _PROBE_FILES = frozenset({
 })
 _PROBE_DIR_PREFIXES = (".planning/phases/",)
 
+#: The same exemption, for the same documents, after a milestone roll has
+#: `git mv`d them out from under the prefix above.
+#:
+#: WHAT HAPPENED, 2026-08-19. Archiving moved three completed phase directories
+#: to `.planning/milestones/vX.Y-phases/`. Pure rename, no byte of any document
+#: changed — and the scan went from PASS to `FAIL — 6 leak(s)`, all six in the
+#: phase that WIDENED the store-number rule, all six probes that phase wrote in
+#: order to watch that rule go red. The exemption was keyed to a PATH, and a
+#: path is not what those documents are.
+#:
+#: A REGEX AND NOT ANOTHER PREFIX, because `str.startswith` cannot express a
+#: milestone version that does not exist yet. `_PROBE_DIR_PREFIXES` stays a
+#: literal tuple: it is exact, and demoting it to a pattern would make the
+#: cheap case pay for the general one.
+#:
+#: NARROW ON PURPOSE, AND THE NARROWNESS IS THE DESIGN. `.planning/milestones/`
+#: also holds the archived ROADMAP, REQUIREMENTS and MILESTONE-AUDIT documents,
+#: which are ordinary prose with no reason to quote a probe. They are NOT
+#: exempt and keep the full pattern rules. Exempting the parent directory would
+#: have fixed the reported failure just as well, which is exactly why
+#: `test_an_archived_roadmap_is_not_exempt_from_the_pattern_rules` exists — and
+#: why `M39` breaks this line rather than reasoning about it.
+#:
+#: Pinned by source text in `tests/test_identity_check.py`, on the same terms as
+#: `_PROBE_FILES`: this is a security exemption, and the failure mode of a
+#: pattern is that it widens without looking like it widened.
+_PROBE_DIR_PATTERNS = (
+    re.compile(r"\.planning/milestones/v[0-9][^/]*-phases/"),
+)
+
 
 def _is_probe_file(rel: str) -> bool:
-    return rel in _PROBE_FILES or rel.startswith(_PROBE_DIR_PREFIXES)
+    """The single place the exemption is decided. Keep it that way.
+
+    Three arms, one answer: an exact file, a literal directory prefix, an
+    archived-phase pattern. `re.Pattern.match` anchors at position 0, so the
+    pattern arm is a prefix test like the other two.
+    """
+    return (rel in _PROBE_FILES
+            or rel.startswith(_PROBE_DIR_PREFIXES)
+            or any(p.match(rel) for p in _PROBE_DIR_PATTERNS))
 
 
 def _scrubbed_value_leaks(rel: str, body: str) -> list[str]:

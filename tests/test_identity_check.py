@@ -12,6 +12,7 @@ file, put there by the commit that added the coverage grid.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import subprocess
 from pathlib import Path
@@ -102,6 +103,127 @@ def test_the_probe_file_exemption_cannot_quietly_grow() -> None:
         "and confirm the file is still covered by the deny-list check."
     )
     assert identity_check._PROBE_DIR_PREFIXES == (".planning/phases/",)
+    # The regex arm is pinned the same way and for the same reason. A literal
+    # prefix cannot express "the milestone version does not exist yet", so the
+    # archived-phase exemption is a pattern — and a pattern is exactly the shape
+    # that widens without looking like it widened. Compare the SOURCE, so
+    # loosening one character is a red diff.
+    assert tuple(p.pattern for p in identity_check._PROBE_DIR_PATTERNS) == (
+        r"\.planning/milestones/v[0-9][^/]*-phases/",
+    ), (
+        "the archived-phase exemption changed. It is deliberately narrower than "
+        "`.planning/milestones/`, which also holds archived ROADMAP, REQUIREMENTS "
+        "and AUDIT documents that keep the full pattern check — widen it and "
+        "test_an_archived_roadmap_is_not_exempt_from_the_pattern_rules goes red."
+    )
+
+
+# --------------------------------------------------------------------------
+# Archiving a phase must not change what its documents ARE
+#
+# A milestone roll `git mv`s completed phase directories from
+# `.planning/phases/` to `.planning/milestones/vX.Y-phases/`. Measured
+# 2026-08-19, on a pure rename with no content change: the identity scan went
+# from PASS to `FAIL — 6 leak(s)`, every one of them in Phase 5's planning
+# documents, and every one of them a probe written to develop and red-watch this
+# guard's own store-number rule. Nothing leaked. The move took documents whose
+# exemption was keyed to their PATH out from under that path, and their nature
+# had not changed at all.
+#
+# The probe bodies below are COMPOSED FROM PARTS rather than written as
+# literals. This file is not a probe file, so a literal probe here would redden
+# the very gate these tests exist to keep green — which is the trap
+# `tests/test_fetch.py` exists to absorb, and it only has room for one file.
+# --------------------------------------------------------------------------
+
+_INVENTED_DIGITS = "7" * 5
+_KEYED_PROBE = f"  store_id: {_INVENTED_DIGITS}\n"
+
+_ARCHIVED_PLAN = ".planning/milestones/v0.2-phases/05-a-reading-means-something/05-01-PLAN.md"
+_ARCHIVED_ROADMAP = ".planning/milestones/v0.3-ROADMAP.md"
+
+
+def _scan_one(tmp_path: Path, rel: str, body: str) -> list[str]:
+    """Run the real `scan` over a one-file tree rooted at `tmp_path`.
+
+    Not the live repo: these assertions are about the RULE for a path shape, and
+    a test that reads `.planning/` off disk cannot run inside the mutation
+    sandbox, which does not copy that directory.
+    """
+    target = tmp_path / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+    return identity_check.scan([target], tmp_path)
+
+
+def test_an_archived_phase_document_keeps_the_exemption_it_had_before_the_move() -> None:
+    """The exemption follows the document, because it was never about the path.
+
+    A planning record quotes the probes of the rule it was written to develop.
+    Phase 5 is the phase that WIDENED the store-number rule, so its documents
+    necessarily contain the strings that rule matches — under
+    `.planning/phases/` and under `.planning/milestones/v0.2-phases/` alike.
+    """
+    assert identity_check._is_probe_file(_ARCHIVED_PLAN), (
+        "an archived phase document is held to the pattern rules, so every probe "
+        "it quotes reports as a leak. Archiving is a `git mv`; it changes no byte "
+        "of the document and must not change what the guard thinks it is."
+    )
+
+
+def test_an_archived_phase_document_no_longer_reports_its_own_probes(tmp_path: Path) -> None:
+    """The failure as it was actually observed, reduced to one file."""
+    assert _scan_one(tmp_path, _ARCHIVED_PLAN, _KEYED_PROBE) == []
+
+
+def test_an_archived_roadmap_is_not_exempt_from_the_pattern_rules(tmp_path: Path) -> None:
+    """The exemption is narrow, and this is the half that proves it.
+
+    `.planning/milestones/` holds two different classes. The `vX.Y-phases/`
+    subtrees are archived planning records that quote probes. The ROADMAP,
+    REQUIREMENTS and MILESTONE-AUDIT documents beside them are ordinary prose
+    with no reason to carry a probe — so they keep the full pattern check.
+
+    Exempting the whole of `.planning/milestones/` would fix the reported
+    failure and pass every other test in this file. It is one character of
+    regex away, and this is the only thing standing in front of it.
+    """
+    assert not identity_check._is_probe_file(_ARCHIVED_ROADMAP)
+
+    leaks = _scan_one(tmp_path, _ARCHIVED_ROADMAP, _KEYED_PROBE)
+
+    assert leaks, (
+        "an archived roadmap is exempt from the pattern rules. The exemption was "
+        "widened past the archived PHASE directories it was argued for, and the "
+        "documents that gained it were never the ones quoting probes."
+    )
+
+
+def test_a_previously_scrubbed_value_is_still_caught_inside_an_archived_phase_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exemption SWAPS which check runs. It does not stop checking.
+
+    This is the whole reason it is safe to widen, so it is asserted rather than
+    argued. Probe-bearing files are held to `_is_known_real` — the exact hash of
+    every value this repo has had to scrub — which is a harder bar than the
+    pattern rules, not an easier one: the patterns ask "does this look like an
+    identity?", this asks "is this a value we already removed once?".
+
+    The deny-list is monkeypatched to the hash of an INVENTED token, because the
+    real entries are hashed precisely so that nobody has to handle the values to
+    work on this file.
+    """
+    invented = "not-a-real-value-0000"
+    monkeypatch.setattr(
+        identity_check,
+        "_SCRUBBED_VALUE_HASHES",
+        frozenset({hashlib.sha256(invented.encode()).hexdigest()[:16]}),
+    )
+
+    leaks = _scan_one(tmp_path, _ARCHIVED_PLAN, f"a document reusing {invented} here\n")
+
+    assert len(leaks) == 1 and "PREVIOUSLY-SCRUBBED VALUE" in leaks[0], leaks
 
 
 @needs_repo
