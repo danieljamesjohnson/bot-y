@@ -25,6 +25,17 @@ re_verification:
   new_findings:
     - "The never-true clause still stands, unrecorded, at `.planning/phases/07-a-reading-has-an-age/07-06-PLAN.md:661` — and the published addendum names three sites without disclosing a fourth."
     - "`_js_runtime()` accepts the first glob match without asking whether it works. Measured: a two-line shell script named `node` in a fake `~/.nvm` root makes the gate report `1 passed` against deliberately broken JavaScript."
+post_verification_measurement:
+  measured: 2026-08-19
+  measured_at_head: bc31030
+  chosen_instead_of: "the override drafted at the foot of this file — Dan's decision on 2026-08-19 was to WATCH IT RED rather than accept it, on the ground that a measurement gets closer to the truth than an acceptance"
+  what_moved: "SC-5's `every gate` half. Reason (a) — 07-05's join test never observed failing — is CLOSED by measurement. Verdict MET IN PART -> MET, QUALIFIED."
+  established: "`test_status_json_carries_everything_a_consumer_needs_to_judge_staleness` is NOT a vacuous gate. Watched going red on FIVE separate breaks of the behaviour it joins, each applied alone in a throw-away worktree at HEAD `bc31030`, each reverted to an empty `git status --porcelain`: 3 failed / 881 passed with EXIT=1 (null the cadence the join fetches), 3 failed / 881 passed (null the age), 4 failed / 880 passed (invert the provenance), 2 failed / 882 passed (publish the forbidden `stale` key on the remembered row), 2 failed / 882 passed (publish it on both row comprehensions, as somebody would actually ship it). Worktree baseline 884 passed; 884 passed again after the last revert. The main working tree was never touched."
+  not_established: "That TDD ordering was followed for this test. IT WAS NOT, and nothing in this block or in the published record claims it was. The red was watched on 2026-08-19, AFTER THE FACT, against an implementation that already existed. The original RED was never observed. Re-executed rather than quoted: at `dfbcf7b` — 07-05's own Task 1 RED commit, the single commit `git log -S` names as introducing the test — `tests/test_status.py` was 20 failed / 30 passed, the exact count 07-05-SUMMARY.md recorded, and this test was one of the 30 that PASSED. `the gate bites` and `the gate was written before the code it binds` are two different claims and ONLY THE FIRST IS NOW ESTABLISHED."
+  reason_b: "CR-01's escaping gate that could not bite is also closed — `b1a3b88` widened UNTRUSTED to `w.availability` and this file's 2026-08-17 pass watched it red at 1 failed / 15 passed. It bears on the verdict rather than being immaterial, but closing it does not erase that the phase shipped a bound that read like one and was not one between 07-04 opening the sink and the fix. That is carried in the qualification, not in the verdict."
+  unchanged: "Everything else in this file is left VERBATIM and unedited, including `status`, `score`, `overrides`, the `gaps` entries below and every figure the 2026-08-18 verifier measured — on this project's own convention that a superseded reading is recorded beside rather than edited away. Criterion 3 stays MET IN PART by Dan's explicit earlier decision; no key was added to `status.json` and the tree ends this measurement byte-identical to `bc31030`."
+  registry: "Untouched. M1-M20 and M25-M38, 34 idents, survivors 0. M39 still free and deliberately not spent here: every one of the five breaks is already caught by a second, independent test, so an ident would raise the denominator without defending anything new. M21-M24 remain Phase 6's deliberate gap and were not filled."
+  record: "docs/retailer-evidence.md § Phase 7 non-vacuity measurement (2026-08-19)"
 gaps:
   - truth: "SC-5: `make verify-offline` exits 0, and every gate this phase adds has been watched going red"
     status: partial
@@ -76,6 +87,62 @@ Every figure in this section came from a command run by this verifier on 2026-08
 taken from `07-07-SUMMARY.md`, from `07-07-PLAN.md`, or from the orchestrator's re-confirmation.
 Where the two disagree, both readings are printed with their heads.
 
+---
+
+## ADDENDUM 2026-08-19 — gap 1 closed by measurement, and what that measurement does NOT say
+
+**This section is the only part of this file written after 2026-08-18. Everything else — this
+report's figures, its `gaps` entries, its `status`, its `score`, its `overrides` and the superseded
+2026-08-17 pass at the foot — is left VERBATIM and unedited**, on this project's own convention that
+a superseded reading is recorded beside rather than edited away. Only the criterion-5 row of the
+table below and the frontmatter carry a dated pointer to this section, so that no reader can come
+away from either with the superseded verdict and no qualifier.
+
+**Dan's decision, 2026-08-19:** rather than accept the override this file drafted, **watch it red
+now** — break the implementation, observe the test fail, restore. The measurement was taken.
+
+**ESTABLISHED.** `test_status_json_carries_everything_a_consumer_needs_to_judge_staleness` is **not
+a vacuous gate.** Five separate breaks of the behaviour it joins, each applied alone in a
+throw-away `git worktree` at HEAD `bc31030`, each reverted to an empty `git status --porcelain`;
+worktree baseline **884 passed**, and **884 passed** again after the last revert:
+
+| Break | Suite | Join test named? |
+|---|---|---|
+| null the cadence the join fetches (`boty/status.py:200`, the *paced* retailer branch) | **3 failed / 881 passed**, `EXIT=1` | yes — `assert None == 21600.0` at `tests/test_status.py:1278` |
+| null the age (`:374`) | **3 failed / 881 passed** | yes |
+| invert the provenance (`:375`) | **4 failed / 880 passed** | yes |
+| publish the forbidden `stale` key, remembered row only | **2 failed / 882 passed** | yes |
+| publish it on **both** row comprehensions, as somebody would actually ship it | **2 failed / 882 passed** | yes — `assert 'stale' not in {…}` at `:1286` |
+
+Both halves of the test are live, failing on two different lines. The most direct edit is also the
+sharpest, and the *meaningful* break — actually implementing the write-time flag the design refuses
+— reds it exactly as reliably as the one-token null-out, so the damning asymmetry is not there.
+
+**NOT ESTABLISHED, and claimed nowhere.** That TDD ordering was followed for this test. **It was
+not.** This red was watched on **2026-08-19, after the fact**, against an implementation that
+already existed. The original RED was never observed — and that is now measured rather than
+inherited: at `dfbcf7b`, the single commit `git log -S` names as introducing the test and 07-05's
+own Task 1 RED commit, `tests/test_status.py` ran **20 failed / 30 passed** — the exact count
+`07-05-SUMMARY.md` recorded — and this test was one of the **30 that passed**.
+
+**These are two different facts and only the first is established.** *The gate bites* and *the gate
+was written before the code it binds* are not the same sentence. The verdict below therefore moves
+to **MET, qualified**, and the qualifier travels inside the verdict cell rather than beside it.
+
+**Recorded against interest:** the join test never goes red *alone*. All five breaks red at least
+one other test, because each of the three facts it joins carries its own dedicated gate. That is
+redundancy rather than vacuity — a vacuous gate cannot fail, and this one failed five times out of
+five — and it is the same fact, from the other side, as its passing on the RED commit: there was no
+instant at which it *could* have been red.
+
+**Gaps 2 and 3 of this report are not addressed here and their entries stand as written**, except
+to note without re-verifying that `e7230ae` and `6abd3fe` landed against them after this report's
+head. **Criterion 3 is untouched and stays MET IN PART** by Dan's explicit earlier decision; no key
+was added to `status.json` and the tree ends the measurement byte-identical to `bc31030`. Full
+working: `docs/retailer-evidence.md` § *Phase 7 non-vacuity measurement (2026-08-19)*.
+
+---
+
 ## Goal Achievement
 
 ### Observable Truths — the ROADMAP's five Success Criteria
@@ -88,7 +155,7 @@ Criterion text re-read at `.planning/ROADMAP.md:397-401` and **unchanged** from 
 | 2 | A reading with no recorded time is shown as UNKNOWN age, never as current — watched going red | ✓ VERIFIED | Re-executed `boty.cli._age_tag` at this HEAD: `undated → [age ?]`, `fresh → [age 4s]`, `stale → [age 7h > 6h]`, `no cadence → [age 3h, cadence ?]`. Re-executed `ageTag` lifted out of `served/boty/index.html` in node v24.16.0: `read_at: null → age ?` **warn**, **missing key → same warn**. `CAUGHT M36 boty/cli.py: 1 test(s) failed — test_report_says_unknown_for_a_reading_nobody_dated` in this verifier's own mutation run today |
 | 3 | A reading older than its retailer's current interval is presented as stale in `status.json`, `boty check` **and** the dashboard, derived from the retailer's own pacing | ⚠️ **PASSED (override)** — MET IN PART, accepted by Dan | **Rendering thirds re-MET by execution:** `[age 7h > 6h]` from the CLI, `<span class="tag age warn">…7h ago > 6h</span>` from the page, both reading the cadence from `intervals.get(w.retailer)` and never from the banner constant — `CAUGHT M37 served/boty/index.html: 1 test(s) failed` today. **`status.json` third unchanged and deliberately so:** executed `status.write` shows **0 rows with a `stale` key and 0 with a `stale_after` key**. Nothing was added to make this row read MET. Override recorded in frontmatter; acceptance sourced from `STATE.md` and `07-07-SUMMARY.md`, not witnessed here |
 | 4 | The age survives a service restart, so a restart cannot make a two-day-old reading look fresh | ✓ VERIFIED — behaviour **and** description now agree | Behaviour re-executed through real bytes: a stamp two days old written by `State.save` reads back **bit-identical** (`1786886154.2035534`), and the reload's own age computes to **2.000 days**. Hostile stamps re-executed against `_remembered_stamp`: `True` → `None`, `"1000000"` → `None`, `now + 10 000 000` → `None`, below-floor → `None`, **availability preserved in every case**. `CAUGHT M32 boty/monitor.py: 7 test(s) failed` today. **Description now matches:** `real two-process restart` occurs **0 times** in all three published documents (counted by this verifier); `grep -rn subprocess tests/test_monitor.py tests/test_cli_watch.py` still returns nothing and the corrected text now **says so in as many words** |
-| 5 | `make verify-offline` exits 0, and every gate this phase adds has been watched going red | ⚠️ **MET IN PART** — one of three reasons closed | **Gate half MET, re-run once end-to-end today:** `identity check: PASS — 225 file(s)`, `884 passed in 11.34s` (**0 skipped**), `Success: no issues found in 18 source files`, `mutation check: 34/34 mutations caught`, survivors none, `VERIFY: PASS (OFFLINE …)`, `EXIT=0`. **`every gate` half still not MET.** Reason (c) — the parse gate that skipped — is genuinely closed and re-proved three ways below. Reason (a) — the join test never watched red — **stands and is decisive alone**. See gap 1 |
+| 5 | `make verify-offline` exits 0, and every gate this phase adds has been watched going red | ⚠️ **MET IN PART** — one of three reasons closed | **Gate half MET, re-run once end-to-end today:** `identity check: PASS — 225 file(s)`, `884 passed in 11.34s` (**0 skipped**), `Success: no issues found in 18 source files`, `mutation check: 34/34 mutations caught`, survivors none, `VERIFY: PASS (OFFLINE …)`, `EXIT=0`. **`every gate` half still not MET.** Reason (c) — the parse gate that skipped — is genuinely closed and re-proved three ways below. Reason (a) — the join test never watched red — **stands and is decisive alone**. See gap 1. **SUPERSEDED 2026-08-19 — the reading above is the 2026-08-18 one and is left unedited because it was true when written.** **UPDATED 2026-08-19 → MET, QUALIFIED.** Reason (a) is closed by measurement rather than by the override drafted at the foot of this file: the join test was watched going red on **five** separate breaks of the behaviour it joins, each applied alone in a throw-away worktree at HEAD `bc31030` and each reverted to an empty `git status --porcelain` — **3 failed / 881 passed** (`EXIT=1`, null the joined cadence), **3 failed / 881 passed** (null the age), **4 failed / 880 passed** (invert the provenance), **2 failed / 882 passed** (publish the forbidden `stale` key on the remembered row), **2 failed / 882 passed** (publish it on both row comprehensions). Baseline 884 passed; 884 passed again after the last revert. **THE QUALIFICATION, WHICH IS THE POINT AND NOT A FORMALITY: this red was watched on 2026-08-19, AFTER THE FACT, against an implementation that already existed. The original RED was never observed and TDD ordering was NOT followed for this test.** Measured rather than quoted: at `dfbcf7b`, 07-05's own RED commit, `tests/test_status.py` was **20 failed / 30 passed** and this test was one of the 30 that **passed**. *The gate bites* and *the gate came first* are two different claims and **only the first is established** — hence MET **qualified**, not MET. Recorded against interest: the test never goes red *alone*; all five breaks red at least one other test, because each fact it joins carries its own gate. That is redundancy, not vacuity. Full working in `docs/retailer-evidence.md` § *Phase 7 non-vacuity measurement* |
 
 **Score:** 4/5 — three VERIFIED, one PASSED (override), one MET IN PART with no override.
 The 2026-08-17 pass scored 3/5. The delta is criterion 4 (gap closed) and criterion 3 (override

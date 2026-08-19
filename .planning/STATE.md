@@ -161,6 +161,21 @@ closing record*.
   0, and every TDD gate was observed failing first at a recorded RED count — **with one named
   exception**: 07-05's join test passed the moment it was written and was never observed
   failing. That is a measurement, not a weak test, but the criterion says *every*.
+- **Criterion 5 UPDATED 2026-08-19 → MET, QUALIFIED.** The bullet above is the 2026-08-17
+  reading, left unedited because it was true when written. Dan chose on 2026-08-19 to
+  establish the join test's non-vacuity **by measurement rather than by override**, and it
+  was measured: **five** separate breaks of the behaviour the test joins, each applied alone
+  in a throw-away worktree at HEAD `bc31030` and each reverted to an empty
+  `git status --porcelain` — 3 failed / 881 passed (`EXIT=1`), 3 failed / 881 passed, 4
+  failed / 880 passed, and 2 failed / 882 passed twice. Baseline 884 passed; 884 passed
+  again after the last revert. **THE QUALIFIER IS NOT OPTIONAL: this red was watched AFTER
+  THE FACT, against an implementation that already existed. The original RED was never
+  observed and TDD ordering was NOT followed for this test** — at `dfbcf7b`, 07-05's own RED
+  commit, `tests/test_status.py` was 20 failed / 30 passed and this test was one of the 30
+  that passed. *The gate bites* and *the gate came first* are two different claims and **only
+  the first is established.** Criterion 3 is untouched and stays MET IN PART by Dan's earlier
+  decision; no key was added to `status.json`. `M39` still free. Full working:
+  `docs/retailer-evidence.md` § *Phase 7 non-vacuity measurement*.
 
 **The gate, re-measured at close on 2026-08-17 and identical to the 2026-08-14 run on every
 verdict line** (only the pytest wall-clock differs, 10.87s → 10.95s): `identity check: PASS —

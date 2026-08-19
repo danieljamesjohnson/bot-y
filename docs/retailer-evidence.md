@@ -4930,8 +4930,10 @@ EXIT=0
 
 **884 passed, 0 skipped; 34/34 caught with survivors 0; identity 225 file(s) — every figure
 identical to the 2026-08-18 re-verification.** The identity count is unchanged because this
-measurement adds **no file**: it edits four tracked documents and creates none. Run twice, both
-times to completion, both times `EXIT=0`; the transcript above is the second. **No gate went red on
+measurement adds **no file**: it edits four tracked documents and creates none. **Run three times,
+each to completion and each `EXIT=0` on every verdict line** — twice while this record was being
+written and once more against the committed tree — with only the pytest wall clock differing
+(11.02s, 11.06s). The transcript above is the second. **No gate went red on
 this record's own prose** — a real risk in this repository, and the reason it was run after the
 record was written rather than before.
 
