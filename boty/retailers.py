@@ -596,8 +596,12 @@ def check_amazon(watch: Watch, *, first_party_only: bool = True) -> Result:
         #
         # `store` and `shipping` are NOT stated here, and that is left alone
         # deliberately: widening these arms is not this change's business.
-        # `read_at` is stated at all twenty sites only because the completeness
-        # gate in `tests/test_retailers.py` requires it of every one.
+        # `read_at` is stated at every site only because the completeness
+        # gate in `tests/test_retailers.py` requires it of every one. The count
+        # is deliberately not written here: it was twenty when this comment was
+        # first written and is twenty-one since WR-07 added the non-object-body
+        # arm, and a number in a comment is a second place to forget to update.
+        # The gate is count-agnostic — it asserts every call states the field.
         return Result(
             watch,
             Availability.UNKNOWN,

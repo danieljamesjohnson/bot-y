@@ -2,8 +2,23 @@
 phase: 07-a-reading-has-an-age
 verified: 2026-08-18T13:22:30Z
 verified_at_head: 580af4a
-status: gaps_found
-score: 4/5 must-haves verified (1 accepted by override, 1 MET IN PART with no override)
+status: passed
+score: 5/5 must-haves verified — 3 MET as written, SC-5 MET-QUALIFIED by the 2026-08-19 measurement below, SC-3 PASSED by Dan's accepted override
+# SUPERSEDED, recorded beside rather than edited away (this project's § 6 convention, the same
+# treatment this file already gives the 2026-08-17 pass). These two lines read, until 2026-08-19:
+#
+#   status: gaps_found
+#   score: 4/5 must-haves verified (1 accepted by override, 1 MET IN PART with no override)
+#
+# They were TRUE WHEN WRITTEN, at HEAD 580af4a on 2026-08-18. What moved is recorded in full under
+# `post_verification_measurement` below: SC-5's sole remaining shortfall — 07-05's join test never
+# observed failing — was closed on 2026-08-19 by watching it red FIVE times out of five, which Dan
+# chose over the override drafted at the foot of this file. The `gaps` entry for SC-5 at line ~40
+# is likewise left verbatim and is superseded by that block; it states the shortfall as it stood
+# before the measurement. **The qualification is not discharged:** non-vacuity is established, TDD
+# ordering was not followed for that test, and the verdict cell in all three documents says so.
+superseded_status_2026_08_18: gaps_found
+superseded_score_2026_08_18: 4/5 must-haves verified (1 accepted by override, 1 MET IN PART with no override)
 overrides_applied: 1
 overrides:
   - must_have: "SC-3: A reading older than its retailer's current interval is presented as stale in `status.json`, `boty check` and the dashboard, and the staleness is derived from the retailer's own pacing rather than a fixed clock"
