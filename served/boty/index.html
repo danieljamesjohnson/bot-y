@@ -224,14 +224,89 @@ const ageTag = (w, intervals, nowS) => {
   return `<span class="tag age" title="this reading is younger than the cadence its own retailer is currently on — the monitor is reading this watch as often as it should">${fmtAge(age)}</span>`;
 };
 
-async function tick() {
-  let d;
-  try {
-    d = await (await fetch('status.json?_=' + Date.now())).json();
-  } catch {
-    document.getElementById('age').textContent = 'status unavailable';
-    return;
-  }
+// THE TWO WAYS THIS PAGE CAN FAIL TO SAY ANYTHING TRUE, in one place and with
+// TWO SENTENCES rather than one.
+//
+// The fetch path always had a visible fallback. The RENDER path had none
+// (07-REVIEW IN-03): a document the row template could not walk threw halfway
+// through `tick`, and because the throw escaped, `list` kept whatever it last
+// held, the banner kept whatever it last SAID, and the header kept a duration
+// computed from the document that had just failed. Measured on the pre-fix
+// page, 2026-08-20: a `price` of `"54.99"` — WR-07's uncoerced `salePrice`, one
+// file upstream — left the previous tick's rows on screen under `0s ago` and a
+// green "All detectors verified by control products.". Stale, wrong and
+// confident, with nothing on the page saying which.
+//
+// TWO SENTENCES AND NOT ONE, deliberately. `status unavailable` for both would
+// trade an invisible state for a MERGED one, and the two have different next
+// moves: `unavailable` means the bytes never arrived — the web service, the
+// path, the proxy — while `unreadable` means they arrived and are not a
+// document this page can render — the daemon, the writer, a deploy in flight.
+// Collapsing two states into one word is the conflation this phase's own row
+// tags exist to remove one level down, where `age ?` and `4s ago` are
+// deliberately not the same word either.
+//
+// AND THE BANNER IS OVERWRITTEN TOO, which is the load-bearing half. The header
+// is one line of small dim text; the banner is the green sentence claiming
+// every detector is verified by its control products. Leaving that standing
+// beside a failure notice is the page still making the claim it lost the right
+// to make with the reading it could not read.
+//
+// The cause goes to the console rather than onto the page: a phone-sized
+// surface gets the sentence it can act on, and whoever opens devtools gets the
+// `TypeError` that names the key.
+const showFailure = (headline, cause) => {
+  document.getElementById('age').textContent = headline;
+  const banner = document.getElementById('banner');
+  banner.className = 'banner bad';
+  banner.textContent = `${headline} — nothing below was refreshed, so every row is whatever this page last rendered.`;
+  console.error('bot-y dashboard:', headline, cause);
+};
+
+// The render, LIFTED OUT OF `tick` UNCHANGED apart from the guard at its top.
+// A function boundary rather than a second `try` written around the same lines
+// in place, because `tick`'s two failures then have two catches and can say two
+// different things — which one widened `try` around fetch-and-render could not.
+function renderStatus(d) {
+  // A DOCUMENT THIS PAGE CAN RENDER IS AN ASSUMPTION, AND IT IS ASSERTED HERE
+  // RATHER THAN LEFT TO THROW SOMEWHERE INSIDE THE RENDER — because one third of
+  // it does not throw at all.
+  //
+  // `d.retailers` and `d.watches` fail loudly when they are missing: `.filter`
+  // and `.map` on `undefined` are `TypeError`s, and the caller's `try` turns
+  // either into the notice above. `d.updated` fails SILENTLY. Measured on the
+  // pre-fix page, 2026-08-20, with the key deleted and nothing thrown: the
+  // header rendered `0h ago` and the banner went green. The arithmetic, since it
+  // is the whole reason this line exists — `now - undefined` is `NaN`, and `NaN`
+  // is less than neither of `fmtDur`'s two band boundaries, so it falls to the
+  // hours band where `(NaN/3600)|0` is `0`; and `NaN` is not greater than the
+  // banner's staleness constant either, so the banner never fires. A document
+  // with no timestamp in it renders as the freshest reading this page can show.
+  //
+  // (Both constants are described rather than quoted. tests/test_dashboard.py
+  // counts each of them over the WHOLE file and cannot tell prose from code — a
+  // count that is the only way to gate a legitimate single occurrence. The CSS
+  // comment above writes its copy with a space for the same reason; this
+  // paragraph does not need the digits at all, so it does without them. Written
+  // with them first, on 2026-08-20, and both gates went red on the explanation
+  // of the code they guard, which is the check being coarse in the safe
+  // direction for the second time in this file's history.)
+  //
+  // A catch cannot see a failure that does not raise. That is the difference
+  // between wrapping the render and checking the document, and it is why this
+  // fix does both.
+  //
+  // THREE KEYS AND NOT THIRTEEN. The row keys are deliberately NOT checked here:
+  // a daemon running pre-07 code publishes rows with no `read_at`, no `checked`
+  // and no `current_interval_seconds`, this page is written to render exactly
+  // that (`w.read_at == null`, `w.checked === false`, the cadence lookup falling
+  // to `null`), and there is a window during every deploy where it must. A guard
+  // that rejected the old shape would turn a fix for a silent freeze into a
+  // scheduled outage on the day it ships. tests/test_dashboard.py asserts both
+  // halves: the malformed document is refused, and the pre-07 document renders
+  // every row.
+  if (typeof d.updated !== 'number' || !Array.isArray(d.retailers) || !Array.isArray(d.watches))
+    throw new TypeError('status.json has no usable `updated`, `retailers` or `watches`');
 
   // ONE INSTANT PER RENDER, hoisted rather than read twice. No two rows on this
   // page may be judged against two clocks — the same rule `cli._report` states
@@ -298,6 +373,34 @@ async function tick() {
       </div>
       <span class="price">${w.price != null ? '$' + w.price.toFixed(2) : ''}</span>
     </li>`).join('');
+}
+
+// `w.price.toFixed(2)` ABOVE IS LEFT TO THROW, and that is a decision rather
+// than an omission. A price that is not a number could be rendered as an empty
+// cell instead, costing one cell rather than the whole page — but an empty
+// price cell is ALREADY the ordinary and correct state here for every row whose
+// retailer publishes no price, so a malformed one rendered that way would be
+// indistinguishable from a normal row. Loud and total beats silent and partial
+// at this sink, which is the same choice `_age_tag` makes with `[age ?]`.
+
+async function tick() {
+  let d;
+  try {
+    d = await (await fetch('status.json?_=' + Date.now())).json();
+  } catch (err) {
+    // Includes a TRUNCATED file: `.json()` is inside this try, so WR-05's
+    // interleaved half-written `status.json` throws in `JSON.parse` and reports
+    // as a file that did not arrive. Measured, and pinned in
+    // tests/test_dashboard.py so a later edit cannot move it in silence.
+    showFailure('status unavailable', err);
+    return;
+  }
+
+  try {
+    renderStatus(d);
+  } catch (err) {
+    showFailure('status unreadable', err);
+  }
 }
 
 tick();

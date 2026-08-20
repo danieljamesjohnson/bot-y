@@ -1313,6 +1313,86 @@ MUTATIONS = (
         replace='    re.compile(r"\\.planning/milestones/"),',
         breaks="the archived-phase exemption stops being about archived phases and becomes every document under `.planning/milestones/`. Archived ROADMAP, REQUIREMENTS and MILESTONE-AUDIT files — ordinary prose, with none of the probe-quoting reason the phase records have — skip all sixteen carrier rules and both store rules, and are held only to the hashes of values this repo has already scrubbed once. A class it has not met yet walks straight through, in the directory that held the worst leak of the seven this script exists to answer for. It is one character class shorter than the shipped line, it makes the gate green either way, and it is the fix that was on the table the day the archive move reddened it",
     ),
+    # ------------------------------------------------------------------
+    # M40 — A FAILURE THE PAGE SWALLOWS. 07-REVIEW IN-03, 2026-08-20.
+    # ------------------------------------------------------------------
+    #
+    # NOT A PHASE IDENT. Like M38 and M39 it is registered by a fix pass rather
+    # than by a plan, and it takes the registry to 36. M21-M24 REMAIN THE
+    # INTENTIONAL GAP and are still not filled. Second ident in this registry
+    # under `served/`, after M37; `served` has been in SANDBOX_CONTENTS since
+    # before phase 7, so nothing is added there.
+    #
+    # WHAT IT REBUILDS is IN-03 itself, in one line. With the render failure
+    # caught and dropped where it happens, `showFailure` never runs: `list`
+    # keeps whatever it last held, the banner keeps whatever it last SAID, and
+    # the header keeps the duration it last computed. The page is frozen, wrong
+    # and confident, and nothing on it says which — the failure class this
+    # project exists to prevent one level up, rebuilt inside the surface built
+    # to report it.
+    #
+    # Measured on the pre-fix page, 2026-08-20, and this is what the mutation
+    # restores: a `price` of `"54.99"` (WR-07's uncoerced `salePrice`, one file
+    # upstream) left the previous tick's rows on screen under `0s ago` and a
+    # green "All detectors verified by control products."
+    #
+    # WHY THE ANCHOR IS THE CALL AND NOT THE `showFailure(...)` LINE. That line
+    # would be the more obvious anchor and it is the wrong one: it carries
+    # MESSAGE TEXT, which is 07-PLAN-OUTLINE.md § Finding 1's named anchor
+    # class after two drifted on 2026-08-13, and two tests already pin the same
+    # literal — so the day the wording changes, the ident would drift with it
+    # for no gain. `renderStatus(d);` is a call expression. It carries no
+    # message, no rendered tag and no version literal.
+    #
+    # ANCHOR PRE-COUNTS, TAKEN BEFORE REGISTRATION, 2026-08-20, against the file
+    # text — the rule after M19's trap:
+    #
+    #     `    renderStatus(d);` (the whole indented line)   -> 1
+    #     `renderStatus` anywhere on the page                -> 2
+    #     `showFailure` anywhere on the page                 -> 3
+    #
+    # `apply_mutation` replaces the FIRST occurrence, so anchoring on the whole
+    # indented call rather than the bare name is what keeps it off the function
+    # DEFINITION one screen above.
+    #
+    # THE KILLERS, MEASURED BY APPLYING THIS MUTATION ALONE TO THE WORKING TREE
+    # AND REVERTING — not predicted. 3 failed / 889 passed, exit 1:
+    #     tests/test_dashboard.py::
+    #       test_a_payload_the_row_template_cannot_render_says_so_rather_than_freezing
+    #       test_a_document_with_no_updated_key_is_not_rendered_as_a_fresh_one
+    #       test_a_file_that_never_arrived_and_one_that_cannot_be_read_do_not_say_the_same_thing
+    #
+    # All three run the page in a JavaScript runtime and SKIP without one, which
+    # is a property this registry has not had before and is recorded rather than
+    # discovered later: on a host with no runtime anywhere, this ident cannot be
+    # killed. It would then survive and be reported as a survivor — loudly, in
+    # the same run whose test stage prints the skip with `-rs`. That is the safe
+    # direction and it is why the fix is gated here as well as by the tests.
+    #
+    # WHY THE SHAPE GUARD DID NOT GET A SECOND IDENT, weighed rather than
+    # skipped, and measured: replacing `renderStatus`' three-key guard with
+    # `if (false)` and changing nothing else reddens EXACTLY ONE test —
+    # test_a_document_with_no_updated_key_is_not_rendered_as_a_fresh_one, 1
+    # failed / 891 passed. That is a strict SUBSET of this ident's kill set. The
+    # pair convention in this registry (M27/M28, M29/M30, M33/M38) is for two
+    # halves whose kill sets are DISJOINT and which fail in opposite directions;
+    # a second ident here would be two gates on one rule, which the M36/M37
+    # block above already records as the shape in which neither can be shown to
+    # bite. The suite still notices the guard's removal on its own — that is the
+    # measurement above — it simply is not pinned twice.
+    #
+    # IF IT EVER SURVIVES: check first whether the three tests acquired a skip
+    # because the JavaScript runtime moved (the test stage prints skips with
+    # their reasons, and `NODE_SEARCH_GLOBS` is where a new location goes), and
+    # second whether their `age` assertions were relaxed from an equality on the
+    # headline to something a frozen page also satisfies.
+    Mutation(
+        ident="M40",
+        target="served/boty/index.html",
+        search="    renderStatus(d);",
+        replace="    try { renderStatus(d); } catch { return; }",
+        breaks="a status document the page cannot render goes back to being invisible. The inner catch swallows the failure where it happens, so the outer one never runs and `showFailure` is never called: the rows stay exactly as the last good tick left them, the banner keeps saying every detector is verified by its control products, and the header keeps a duration computed from a document that failed halfway through. A dashboard that has stopped telling the truth and looks precisely like one that has not — which is the failure this whole project is one level of indirection away from preventing, and the reason 07-REVIEW IN-03 calls a frozen render worse than a broken one. It also takes the shape guard down with it: the three-key check reports a document with no `updated` key by THROWING, and a throw nobody sees is a check nobody made",
+    ),
 )
 
 

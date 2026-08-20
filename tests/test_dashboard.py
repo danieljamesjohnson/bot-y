@@ -23,11 +23,13 @@ would not have, and a check that does not run is worse than one that is coarse.
 from __future__ import annotations
 
 import glob
+import json
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -636,4 +638,372 @@ def test_the_dashboard_script_parses(page: str) -> None:
     assert proc.returncode == 0, (
         "the dashboard's script does not parse, so the page renders nothing:\n"
         + (proc.stderr.strip() or proc.stdout.strip())
+    )
+
+
+# --------------------------------------------------------------------------
+# 07-REVIEW IN-03: a document this page cannot render has to be VISIBLE
+# --------------------------------------------------------------------------
+#
+# Every assertion above this line is a regex over source plus one `node --check`,
+# and NONE of them runs the page against a document. That is precisely the gap
+# IN-03 names: `d.updated`, `d.retailers`, `d.watches` and `w.price.toFixed(2)`
+# were read with no shape guard, so a payload missing any of them threw halfway
+# through `tick`, `list` kept whatever it last held, the banner kept whatever it
+# last SAID — including "All detectors verified by control products." — and
+# nothing anywhere on the page said so. A regex cannot see any of that, because
+# every string it looks for is still in the file. `node --check` cannot either:
+# the page parses perfectly and then freezes.
+#
+# So these tests RUN the script, in a real runtime, against a stubbed DOM. Same
+# skip policy as the parse gate above and for the same stated reason: this
+# module's docstring refuses to REQUIRE a JavaScript runtime, and nothing here
+# changes that. A contributor without one gets a skip that names what went
+# unchecked.
+#
+# THE STUB IS AS SMALL AS THE PAGE'S REAL DOM SURFACE and no larger — three
+# elements by id, a `fetch` that answers from a queue, and `setInterval`
+# neutered so the process does not sit for thirty seconds waiting for a tick
+# nobody reads. Its ONE known departure from a browser is stated rather than
+# left to be discovered: `textContent` and `innerHTML` are independent fields
+# here, where a real element clears one when the other is assigned. Assertions
+# below therefore read BOTH before concluding the banner no longer says
+# something, and no test depends on the coupling.
+_HARNESS_PRELUDE = """
+const TICKS = JSON.parse(process.argv[2]);
+const els = {
+  age: {textContent: '', innerHTML: '', className: ''},
+  banner: {textContent: '', innerHTML: '', className: ''},
+  list: {textContent: '', innerHTML: '', className: ''},
+};
+globalThis.document = {getElementById: (id) => {
+  if (!(id in els)) throw new Error('the page asked for an element this harness does not stub: ' + id);
+  return els[id];
+}};
+let served = 0;
+globalThis.fetch = async () => {
+  const t = TICKS[served++];
+  if (t === undefined) throw new Error('the page ticked more times than this harness has payloads');
+  if (t.fetch === 'throw') throw new TypeError('Failed to fetch');
+  return {json: async () => JSON.parse(t.body)};
+};
+globalThis.setInterval = () => 0;
+const logged = [];
+globalThis.console = {
+  error: (...a) => logged.push(a.map(String).join(' ')),
+  log: () => {},
+  warn: () => {},
+};
+// A browser logs an unhandled rejection and keeps the DOM standing, which is
+// the whole shape of the defect under test — a page that is still there and
+// still wrong. Node kills the process instead, so without this the harness
+// would exit before it could report the frozen page. Nothing is swallowed that
+// the driver below does not record: the ticks IT drives are awaited in a
+// try/catch and their message is carried out in `threw`.
+process.on('unhandledRejection', () => {});
+"""
+
+_HARNESS_DRIVER = """
+const snap = (threw) => ({
+  age: els.age.textContent,
+  ageHtml: els.age.innerHTML,
+  bannerClass: els.banner.className,
+  bannerText: els.banner.textContent,
+  bannerHtml: els.banner.innerHTML,
+  list: els.list.innerHTML,
+  logged: logged.splice(0),
+  threw,
+});
+(async () => {
+  const out = [];
+  // The script's own `tick()` at the bottom of the page has already consumed
+  // TICKS[0] by now. One macrotask is enough for its microtask chain to settle,
+  // because every promise this harness hands it is already resolved.
+  await new Promise((r) => setTimeout(r, 10));
+  out.push(snap(null));
+  for (let i = 1; i < TICKS.length; i++) {
+    let threw = null;
+    try { await tick(); } catch (err) { threw = String((err && err.message) || err); }
+    out.push(snap(threw));
+  }
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+
+@pytest.fixture(scope="module")
+def node() -> str:
+    """The runtime, or a skip that says what was not checked.
+
+    Module-scoped because `_js_runtime` executes a probe per candidate and the
+    answer cannot change during a run.
+    """
+    runtime = _js_runtime()
+    if runtime is None:
+        pytest.skip(
+            "SKIPPED, NOT PASSED: the dashboard was never run, so nothing below "
+            "was measured and the page may freeze on a malformed payload without "
+            "saying so. No WORKING JavaScript runtime was found in any of: "
+            "`node` on PATH, `nodejs` on PATH, " + ", ".join(NODE_SEARCH_GLOBS)
+        )
+    return runtime[0]
+
+
+def _status_document() -> dict:
+    """One healthy `status.json` of exactly the shape `boty.status.write` publishes.
+
+    Written out in full rather than loaded from `served/boty/status.json`: that
+    file is gitignored runtime state owned by a running daemon, so a test that
+    read it would pass or fail according to what the monitor happened to be
+    doing, and would not exist at all in the mutation sandbox or a fresh clone.
+    """
+    now = time.time()
+    return {
+        "updated": now,
+        "healthy": True,
+        "duration_seconds": 4.0,
+        "retailers": [
+            {
+                "retailer": "gamestop",
+                "ok": True,
+                "reason": "",
+                "checked": True,
+                "refused": False,
+                "failing_controls": [],
+                "current_interval_seconds": 900,
+            }
+        ],
+        "watches": [
+            {
+                "name": "a control product",
+                "retailer": "gamestop",
+                "url": "https://example.invalid/p",
+                "detail": "jsonld: InStock from GameStop",
+                "availability": "in_stock",
+                "price": 54.99,
+                "control": True,
+                "degraded": False,
+                "extraction": "jsonld",
+                "rung": "html",
+                "alertable": False,
+                "store": None,
+                "store_pinned": None,
+                "read_at": now - 4,
+                "checked": True,
+            }
+        ],
+    }
+
+
+def _drive(node: str, page: str, ticks: list[dict]) -> list[dict]:
+    """Run the page's own script over a sequence of ticks and report what it rendered.
+
+    Each tick is `{"body": <json text>}` or `{"fetch": "throw"}`. The body is
+    passed as TEXT rather than as an object so a truncated file — WR-05's
+    interleaved write — can be handed over exactly as the browser would receive
+    it, half a document and all.
+    """
+    script = re.search(r"<script>(.*)</script>", page, re.S)
+    assert script, "the dashboard has no <script> block — update this test"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        js = Path(tmp) / "harness.js"
+        js.write_text(
+            _HARNESS_PRELUDE + script.group(1) + _HARNESS_DRIVER, encoding="utf-8"
+        )
+        proc = subprocess.run(
+            [node, str(js), json.dumps(ticks)], capture_output=True, text=True
+        )
+
+    assert proc.returncode == 0, (
+        "the harness did not finish, so NOTHING below was measured:\n"
+        + (proc.stderr.strip() or proc.stdout.strip())
+    )
+    return json.loads(proc.stdout)
+
+
+def test_a_payload_the_row_template_cannot_render_says_so_rather_than_freezing(
+    node: str, page: str
+) -> None:
+    """IN-03's own sentence, executed: `list` keeps what it held and nothing says so.
+
+    The trigger here is WR-07's, one file downstream: `check_bestbuy_api` passes
+    `p.get("salePrice")` through with no coercion, so a string price reaches
+    `status.json`, and `w.price.toFixed` is not a function. MEASURED AGAINST THE
+    PRE-FIX PAGE, 2026-08-20 — the row threw, and the page then showed:
+
+        header : `0s ago`               (a fresh-looking duration)
+        banner : `banner ok` — "All detectors verified by control products."
+        list   : the PREVIOUS tick's rows, unchanged
+
+    A page that is stale, wrong and confident, with nothing on it saying which.
+    That is the failure class this project exists to prevent one level up, built
+    into the surface built to report it.
+
+    THE FROZEN LIST IS ASSERTED AS A RESIDUAL, not as a defect. The fetch path
+    has always left the rows standing too, and rows plus a notice that says they
+    were not refreshed is a defensible surface; rows plus a green banner is not.
+    What had to change is that the page SAYS SO.
+    """
+    good = _status_document()
+    bad = _status_document()
+    bad["watches"][0]["price"] = "54.99"
+
+    fresh, broken = _drive(
+        node, page, [{"body": json.dumps(good)}, {"body": json.dumps(bad)}]
+    )
+
+    assert fresh["list"].count("<li>") == 1, (
+        "the harness never got a good render, so there is nothing here that "
+        "could freeze and this test proves nothing"
+    )
+    assert fresh["bannerClass"] == "banner ok"
+
+    assert broken["age"] == "status unreadable", (
+        "a payload the row template cannot render left the header saying "
+        f"{broken['age']!r}. The page is frozen on the previous tick's rows and "
+        "the one line that could say so is showing a duration instead"
+    )
+    assert broken["bannerClass"] == "banner bad", (
+        "the banner still carries the class it had before the render failed, so "
+        f"it reads as {broken['bannerClass']!r} beside rows nobody refreshed"
+    )
+    assert "All detectors verified" not in broken["bannerText"] + broken["bannerHtml"], (
+        "the page could not render the document and is still claiming every "
+        "detector is verified by its control products — a claim it lost the "
+        "right to make with the reading it could not read"
+    )
+    assert broken["logged"], (
+        "nothing was logged, so the CAUSE of the failure is nowhere: the page "
+        "says it cannot render the document and no console anywhere says why"
+    )
+    assert broken["list"] == fresh["list"], (
+        "the rows changed on a payload the page could not render — if this "
+        "starts failing, the fallback has begun clearing the list and this "
+        "test's stated residual needs rewriting rather than deleting"
+    )
+
+
+def test_a_document_with_no_updated_key_is_not_rendered_as_a_fresh_one(
+    node: str, page: str
+) -> None:
+    """The half a widened `try` cannot reach, which is why the shape is ASSERTED.
+
+    `d.retailers` and `d.watches` fail loudly when they are absent — `.filter`
+    and `.map` on `undefined` are `TypeError`s — so a `try` around the render
+    catches both. `d.updated` does not fail at all. MEASURED AGAINST THE PRE-FIX
+    PAGE, 2026-08-20: with the key deleted and NOTHING THROWN, the header
+    rendered `0h ago` and the banner went `banner ok`.
+
+    The arithmetic, because it is the whole reason this test exists:
+    `now - undefined` is `NaN`; `fmtDur`'s bands are `NaN < 90` and `NaN < 5400`,
+    both false, so it falls to the hours band and `(NaN/3600)|0` is `0`; and
+    `NaN > 1800` is false, so the staleness banner never fires. A document with
+    no timestamp in it renders as the freshest reading this page can show.
+
+    A catch cannot see a failure that does not raise. That is the difference
+    between wrapping the render and checking the document, and it is why the fix
+    does both.
+    """
+    good = _status_document()
+    undated = _status_document()
+    del undated["updated"]
+
+    _fresh, broken = _drive(
+        node, page, [{"body": json.dumps(good)}, {"body": json.dumps(undated)}]
+    )
+
+    assert broken["age"] == "status unreadable", (
+        "a status document with no `updated` key rendered as "
+        f"{broken['age']!r} — an age computed from a timestamp that is not "
+        "there, presented as a reading's age"
+    )
+    assert broken["bannerClass"] == "banner bad", (
+        "the banner is "
+        f"{broken['bannerClass']!r} on a document with no timestamp in it"
+    )
+
+
+def test_a_file_that_never_arrived_and_one_that_cannot_be_read_do_not_say_the_same_thing(
+    node: str, page: str
+) -> None:
+    """A single fallback for both would trade an invisible state for a merged one.
+
+    THE TWO ARE DIFFERENT QUESTIONS WITH DIFFERENT NEXT MOVES. `status
+    unavailable` means the bytes never arrived — the web service, the path, the
+    proxy. `status unreadable` means they arrived and are not a document this
+    page can render — the daemon, the writer, a deploy in flight. Collapsing
+    them into one sentence is the same conflation this phase's row tags exist to
+    remove one level down, where `age ?` and `4s ago` are deliberately not the
+    same word either.
+
+    AND THE THIRD TICK RECORDS WHERE A TRUNCATED WRITE ACTUALLY LANDS, measured
+    rather than assumed. WR-05's interleaved `status.tmp` produces half a JSON
+    document, `JSON.parse` throws inside `.json()`, and `.json()` is inside the
+    FETCH try — so a truncated file reports `unavailable`, not `unreadable`. Of
+    IN-03's three named triggers that is the one already covered before this fix,
+    and this pins it so a later edit cannot move it without saying so.
+    """
+    good = _status_document()
+    bad_price = _status_document()
+    bad_price["watches"][0]["price"] = "54.99"
+
+    snaps = _drive(
+        node,
+        page,
+        [
+            {"body": json.dumps(good)},
+            {"fetch": "throw"},
+            {"body": json.dumps(bad_price)},
+            {"body": '{"updated": 1755000000, "retailers": [], "wat'},
+        ],
+    )
+
+    assert [s["age"] for s in snaps[1:]] == [
+        "status unavailable",
+        "status unreadable",
+        "status unavailable",
+    ], (
+        "the page's failure states no longer read: a file that never arrived, a "
+        "file it cannot render, a file that arrived half-written. It reported "
+        + repr([s["age"] for s in snaps[1:]])
+    )
+
+
+def test_a_pre_07_status_document_still_renders_every_row(node: str, page: str) -> None:
+    """The guard must not refuse a shape this page already handles CORRECTLY.
+
+    A daemon running pre-07 code publishes a document with no `read_at`, no
+    `checked` and no `current_interval_seconds`, and there is a window during a
+    deploy — this deploy — where the new page reads exactly that file. The page
+    was written for it: `w.read_at == null` catches `undefined`, `w.checked ===
+    false` is deliberately not `!w.checked`, and the cadence lookup falls to
+    `null`. Measured against the pre-fix page on the live pre-07 file this box
+    was serving on 2026-08-20: 3 rows, 3 `age ?` tags, no throw.
+
+    So the shape guard is deliberately about the THREE KEYS THE PAGE CANNOT WORK
+    WITHOUT and not about the row keys, and this test is what says so. A guard
+    that rejected the old shape would turn a fix for a silent freeze into a
+    scheduled outage on the day it is deployed.
+    """
+    pre07 = _status_document()
+    del pre07["retailers"][0]["current_interval_seconds"]
+    for w in pre07["watches"]:
+        for key in ("read_at", "checked", "store", "store_pinned"):
+            del w[key]
+
+    (only,) = _drive(node, page, [{"body": json.dumps(pre07)}])
+
+    assert only["list"].count("<li>") == 1, (
+        "a pre-07 status document rendered no rows at all — during a deploy the "
+        "page would go blank rather than degrade"
+    )
+    assert only["list"].count("age ?") == 1, (
+        "a row from a daemon that never published `read_at` did not render as "
+        "undated, which is the claim this whole phase exists to make"
+    )
+    assert only["age"].endswith("ago"), (
+        "the header on a pre-07 document reads "
+        f"{only['age']!r} — the shape guard is rejecting a document this page "
+        "renders correctly"
     )
