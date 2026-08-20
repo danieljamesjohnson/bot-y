@@ -11,8 +11,25 @@ it is an explicit decision rather than a deferral: **Dan chose no tag** at the v
 
 ## v0.3 — Say When You Measured It
 
-**Closed:** 2026-08-19 · **Scoped:** 2026-08-13 (`d837676`)
-**Status:** ✅ Complete **in the tree** — **NOT deployed, NOT tagged, NOT published**
+**Closed:** 2026-08-19 · **Scoped:** 2026-08-13 (`d837676`) · **DEPLOYED 2026-08-20 07:43:22 CDT**
+**Status:** ✅ Complete in the tree **and now RUNNING** — still **NOT tagged, NOT published**
+
+> **The line above used to read "Complete in the tree — NOT deployed", and that was true from
+> 2026-08-13 until 2026-08-20.** It is recorded rather than edited away because "archived is not
+> shipped" was the standing fact of this project across three milestones, and v0.2's material
+> still says it of itself accurately. **Dan authorised the restart on 2026-08-20** and it was
+> performed: `sudo systemctl restart boty`, PID 547119 → **548295**, `NRestarts=0`, no unit
+> changes. **What the deploy actually did, measured on this host rather than predicted:**
+> `state.json` migrated 13 → 13 entries with **zero lost and every availability byte-identical**,
+> each bare pre-07 string becoming `{availability, read_at}`; `served/boty/status.json` went from
+> **3 watch rows to 13**, all 13 carrying `read_at` and `checked`, and the 6 retailer rows gaining
+> a real `current_interval_seconds` (gamestop 14400, walmart 21600 — both on backoff — amazon 1800,
+> target 600, bestbuy 300, nintendo 300). The page was **looked at**, not inferred: five rows carry
+> real ages (`1M AGO`, `80S AGO`, `78S AGO`, `71S AGO`, `68S AGO`), eight carry amber **`AGE ?`**,
+> zero console errors. `walmart:Pokémon GO Plus +` — the frozen entry Dan was shown at 07-06's
+> checkpoint — renders `out_of_stock · AGE ?` exactly as the closing record said it would, and
+> will until a store is pinned. **The pin remains deferred** (`QUESTIONS.md` § 0f, unchanged).
+> Pre-restart copies of all three state files were taken first.
 **Phases:** 7 (one phase) · **Plans:** 7 (six planned; 07-07 appended after the close) ·
 **Requirements:** 1 (REQ-21) · **Commits:** 72 from `b10df8c` · **Diff:** 41 files,
 +18,146 / −104
