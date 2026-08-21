@@ -75,18 +75,36 @@ another JS-executing gate, make sure it *binds* rather than skips, and prove it.
 **Do not invoke them. Edit `STATE.md` by hand with Edit.**
 
 Fourteen recorded corruptions across three subcommands (`state.advance-plan`,
-`state.begin-phase`, `phase.complete`). Root cause, reproduced: `state-document.cjs`
-edits by **regex over the whole file**, keyed on field name, with no scoping to the
-frontmatter block — and it tries the `**Bold:**` form *first*. This `STATE.md` retains
-historical body sections from earlier milestones containing `**Phase:**` and
-`**Stopped At:**` lines, so the writer finds *those* and overwrites them.
+`state.begin-phase`, `phase.complete`), all on gsd-core **1.4.5**.
 
-Symptoms seen: YAML frontmatter comment blocks deleted wholesale (nothing in those
-modules knows comments exist); `stopped_at` regressed to a stale value four separate
-times; and `phase.complete` rewriting the v1.0 status line into the incoherent
-`**Phase:** 07 of 5 (Open Source Ready)` / `**Plan:** Not started`. It also returns
-false data — `{"advanced": false, "reason": "last_plan", "current_plan": 6}` for a phase
-on plan 3 *and* plan 4 of 6, and `roadmap_updated: true` while changing nothing.
+Root cause, reproduced: `state-document.cjs` edits by **regex over the whole file**,
+keyed on field name, with no scoping to the frontmatter block — and it tries the
+`**Bold:**` form *first*. This `STATE.md` retains historical body sections from earlier
+milestones containing `**Phase:**` and `**Stopped At:**` lines, so the writer finds
+*those* and overwrites them.
+
+Symptoms on 1.4.5: YAML frontmatter comment blocks deleted wholesale; `stopped_at`
+regressed to a stale value four separate times; `phase.complete` rewriting the v1.0
+status line into the incoherent `**Phase:** 07 of 5 (Open Source Ready)` /
+`**Plan:** Not started`. It also returned false data — `{"advanced": false, "reason":
+"last_plan", "current_plan": 6}` for a phase on plan 3 *and* plan 4 of 6, and
+`roadmap_updated: true` while changing nothing.
+
+**Status on 1.11.0 (installed 2026-08-21), measured against a copy of this STATE.md:**
+
+| Symptom | 1.11.0 |
+|---|---|
+| Frontmatter comments deleted | **FIXED** upstream (#3257, `propagateCommentChannel`) — 79 comment lines in, 79 out |
+| `**Bold:**`-first clobbering | **STILL PRESENT** — same repro, byte-identical output on both versions |
+| Cosmetic reflow | **NEW** — inserts a blank line after every frontmatter comment (+93 lines here). One-time and idempotent; stable across runs 2–4 |
+
+So the *recoverable* symptom is fixed and the *data-losing* one is not. **The ban stands.**
+Note also that `state.advance-plan` rewrote the file even on the run where it returned
+`{"error": "Cannot parse Current Plan or Total Plans in Phase from STATE.md"}` — an error
+return is not evidence that nothing was written.
+
+If you ever must run one anyway: `cp .planning/STATE.md /tmp/x` first, `diff` after, and
+restore-and-hand-apply if it misfired. That protocol caught all fourteen.
 
 **Read-only `gsd-tools query` verbs are fine and have been reliable** —
 `roadmap.analyze`, `init.*`, `config-get`, `roadmap.update-plan-progress`, `commit`.
