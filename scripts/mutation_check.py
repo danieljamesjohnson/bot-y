@@ -1393,6 +1393,55 @@ MUTATIONS = (
         replace="    try { renderStatus(d); } catch { return; }",
         breaks="a status document the page cannot render goes back to being invisible. The inner catch swallows the failure where it happens, so the outer one never runs and `showFailure` is never called: the rows stay exactly as the last good tick left them, the banner keeps saying every detector is verified by its control products, and the header keeps a duration computed from a document that failed halfway through. A dashboard that has stopped telling the truth and looks precisely like one that has not — which is the failure this whole project is one level of indirection away from preventing, and the reason 07-REVIEW IN-03 calls a frozen render worse than a broken one. It also takes the shape guard down with it: the three-key check reports a document with no `updated` key by THROWING, and a throw nobody sees is a check nobody made",
     ),
+    # ------------------------------------------------------------------
+    # M41 — A TAG THAT PUBLISHES. The v0.3.0 ship, 2026-08-25.
+    # ------------------------------------------------------------------
+    #
+    # NOT A PHASE IDENT. Like M38, M39 and M40 it is registered by a fix pass
+    # rather than by a plan, and it takes the registry to 37. M21-M24 REMAIN
+    # THE INTENTIONAL GAP and are still not filled. First ident in this
+    # registry under `.github/`; that directory has been in SANDBOX_CONTENTS
+    # since 04-04, so nothing is added there to make this reachable — which is
+    # the test M21-M24 failed and the reason they stay empty.
+    #
+    # WHAT IT REBUILDS is the coupling this repository shipped with for twenty
+    # days: one trigger, `v*` tag push, starting one job that holds
+    # `id-token: write`. Under that wiring `git push origin v0.3.0` and
+    # `upload bot-y to pypi.org` were the same keystroke, and the only thing
+    # that looked like a brake — `environment: pypi` — is inert until required
+    # reviewers are attached to it. Measured against the live repository on
+    # 2026-08-25, before the tag: `repos/danieljamesjohnson/bot-y/environments`
+    # returned `total_count: 0`, so the environment did not exist, and one
+    # GitHub auto-creates on first use carries no protection rules at all.
+    #
+    # WHY IT EARNED AN IDENT, since not every one-line gate does. The deleted
+    # line leaves a file that parses, keeps both jobs, keeps every permission
+    # scope, keeps all five action pins and keeps the environment key — every
+    # other rule in `tests/test_ci_workflow.py`'s 80 stays green. The only
+    # visible consequence happens on a machine none of these tests run on, at
+    # the one moment nobody is watching a test suite: the next time somebody
+    # tags a release. A gate whose failure is invisible in-tree and irreversible
+    # out-of-tree is exactly the shape this registry exists for, and the
+    # irreversibility is not rhetorical — a name on PyPI is claimed for good
+    # and a bad upload can be yanked but never deleted.
+    #
+    # IT ALSO GUARDS A DECISION, not only a mechanism. Dan's words, 2026-08-25:
+    # "forget the pypi part, just get it to github". The gate is where that
+    # sentence lives in executable form, and restoring the old wiring silently
+    # reverses it.
+    #
+    # IF IT EVER SURVIVES: check first whether
+    # `test_a_tag_push_alone_cannot_reach_pypi` was reduced to asserting the
+    # key is merely present rather than equal to `PUBLISH_OPT_IN`, and second
+    # whether the gate moved onto the build job, where it would satisfy a
+    # presence check while leaving the publish job ungated.
+    Mutation(
+        ident="M41",
+        target=".github/workflows/release.yml",
+        search="    if: vars.PUBLISH_TO_PYPI == 'true'\n",
+        replace="",
+        breaks="a git tag becomes a PyPI upload again, with no person in between. The workflow still parses, both jobs still exist, `id-token: write` is still one scope on one job, all five actions are still pinned to a trusted owner and `environment: pypi` is still declared — so every other rule in this repository stays green while the single line separating a record from a publication is gone. The failure is invisible here and shows up only on GitHub's runners the next time anybody pushes a `v*` tag, which is the least attributable moment available: the release. And it reverses a maintainer decision rather than only a mechanism — `forget the pypi part, just get it to github`, 2026-08-25 — into an act that cannot be undone, because a claimed PyPI name is permanent and a bad release can be yanked but never removed",
+    ),
 )
 
 

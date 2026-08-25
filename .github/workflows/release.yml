@@ -131,6 +131,36 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
+    # A TAG IS A RECORD. AN UPLOAD IS A SEPARATE, DELIBERATE ACT.
+    #
+    # Until 2026-08-25 those were one event here. The only trigger is a `v*` tag
+    # push (pinned by the tests, and for good reasons stated above), and the job
+    # that trigger starts is this one — so `git push origin v0.3.0` WAS `upload
+    # to pypi.org`, with nothing in between that a person had to choose.
+    #
+    # The `environment:` key below reads like a brake and is not one on its own.
+    # It only stops anything once required reviewers are attached to the
+    # environment in repository settings, and measured against the live
+    # repository on 2026-08-25 the environment did not exist at all:
+    # `repos/danieljamesjohnson/bot-y/environments` returned `total_count: 0`.
+    # An environment GitHub auto-creates on first use has no protection rules,
+    # so the comment below describing it as a place to attach reviewers "later"
+    # is accurate about the intent and was never true of the deployed state.
+    #
+    # Dan's decision, 2026-08-25, verbatim: "forget the pypi part, just get it
+    # to github". So the repository ships tags and does not ship packages, and
+    # this line is where that lives. With the variable unset the tag still
+    # builds both artifacts on the declared floor — the build job is
+    # deliberately NOT gated — and stops before the network.
+    #
+    # To publish later, two acts, neither of them a code change: configure the
+    # trusted publisher on pypi.org for this repository, this workflow filename
+    # and the environment named below, then set the repository variable
+    # PUBLISH_TO_PYPI to `true`. Bare expression, no `${{ }}` — a job-level
+    # `if:` is evaluated as one already, and the interpolation rule that guards
+    # this file reads the comment-stripped view.
+    if: vars.PUBLISH_TO_PYPI == 'true'
+
     # `environment:` buys two things. It is a place to attach required reviewers
     # or a wait timer later without editing this file, and PyPI's
     # trusted-publisher form has an environment field that scopes the grant

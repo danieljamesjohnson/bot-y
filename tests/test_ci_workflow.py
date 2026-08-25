@@ -1489,6 +1489,13 @@ RELEASE = WORKFLOWS / "release.yml"
 #: fails with an error that reads like a configuration problem on the other side.
 PUBLISH_ENVIRONMENT = "pypi"
 
+#: The gate that makes an upload a separate act from a tag. Written as a BARE
+#: expression rather than `${{ ... }}` because this workflow's comment-stripped
+#: view must contain no interpolation at all — `test_the_publish_workflows_
+#: comments_name_what_it_forbids` asserts exactly that, and a job-level `if:`
+#: is evaluated as an expression without the braces.
+PUBLISH_OPT_IN = "vars.PUBLISH_TO_PYPI == 'true'"
+
 
 def _release_raw() -> str:
     """The publish workflow as written. Same two-view split as `_raw`."""
@@ -1587,6 +1594,53 @@ def test_the_publish_job_declares_an_environment() -> None:
     assert job.get("environment") == PUBLISH_ENVIRONMENT, (
         f"the publish job's environment is {job.get('environment')!r}. This string must match the "
         "environment field in PyPI's trusted-publisher form exactly."
+    )
+
+
+def test_a_tag_push_alone_cannot_reach_pypi() -> None:
+    """A tag is a record. An upload is a separate, deliberate act.
+
+    This repository was wired so that the two were the same event: the only
+    trigger is a `v*` tag push, and the job that trigger starts holds the OIDC
+    identity. So `git push origin v0.3.0` WAS `publish to pypi.org`, with
+    nothing in between — the `environment:` key reads like a brake but is not
+    one until somebody attaches required reviewers to it, and measured
+    2026-08-25 against the live repository, that environment did not exist:
+    `repos/danieljamesjohnson/bot-y/environments` returned `total_count: 0`.
+
+    Dan's decision, 2026-08-25, verbatim: *"forget the pypi part, just get it
+    to github"*. This gate is where that decision lives. Absent the repository
+    variable, the tag builds and stops.
+    """
+    name, job = _publish_job(_release())
+    condition = job.get("if")
+    assert condition is not None, (
+        f"the publish job {name!r} carries no `if:` gate, so a `v*` tag push reaches the upload "
+        "step with nothing between it and pypi.org."
+    )
+    assert str(condition).strip() == PUBLISH_OPT_IN, (
+        f"the publish gate reads {condition!r}, expected {PUBLISH_OPT_IN!r}."
+    )
+    # Belt and braces: the interpolation rule one test down reads the
+    # comment-stripped view, and a brace-wrapped form here would trip it.
+    assert "${{" not in str(condition), condition
+
+
+def test_the_build_job_is_not_gated_so_a_tag_still_proves_the_artifacts_build() -> None:
+    """The gate is on the upload, NOT on the build, and that is the point.
+
+    Gating both would make a tag prove nothing at all. Gating only the upload
+    means every tag still builds an sdist and a wheel from the tag's own tree
+    on the declared floor interpreter, and only the step that reaches the
+    network is withheld.
+    """
+    wf = _release()
+    publish, _ = _publish_job(wf)
+    other = [n for n in _jobs(wf) if n != publish]
+    assert len(other) == 1, other
+    assert (_jobs(wf)[other[0]] or {}).get("if") is None, (
+        f"the build job {other[0]!r} carries an `if:` gate. Gating the build as well would leave "
+        "a tag proving nothing — the artifacts would never be built at all."
     )
 
 
@@ -1754,3 +1808,15 @@ def test_removing_the_environment_from_the_publish_job_is_reported() -> None:
     broken = _corrupt_release("    environment: pypi\n", "")
     _, job = _publish_job(yaml.safe_load(broken))
     assert job.get("environment") is None
+
+
+def test_removing_the_opt_in_gate_from_the_publish_job_is_reported() -> None:
+    """The corruption direction, in this file's own established shape.
+
+    Deleting the gate is the whole failure mode: the file still parses, both
+    jobs still exist, every permission and pin is untouched, and the next `v*`
+    tag uploads. Nothing else in this suite notices.
+    """
+    broken = _corrupt_release(f"    if: {PUBLISH_OPT_IN}\n", "")
+    _, job = _publish_job(yaml.safe_load(broken))
+    assert job.get("if") is None
