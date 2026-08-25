@@ -133,12 +133,26 @@ deployed daemon"* is true only of **REQ-14** now, which still needs `WALMART_STO
 measured as a count, `0`, never a value); REQ-15, REQ-16 and REQ-17 have been in effect since
 2026-08-12.
 
-**NOT TAGGED, NOT PUBLISHED — and that is now a recorded decision rather than a deferral.**
-`git tag -l` → **0**, re-measured at the v0.3 archival; PyPI returns 404 for `bot-y`. **Dan chose
-no tag explicitly on 2026-08-12, matching v1.0.0.** `pyproject.toml` reads **`0.3.0`**, bound
-component-wise to `STATE.md`'s `milestone:` key and to three other records with `pyproject`
-authoritative. The `Development Status` classifier is `4 - Beta`, bound to the version in both
-directions.
+**TAGGED `v0.3.0` ON 2026-08-25 — NOT PUBLISHED, and the two are now separate decisions.**
+
+> **This paragraph read *"NOT TAGGED, NOT PUBLISHED — and that is now a recorded decision
+> rather than a deferral. `git tag -l` → 0, re-measured at the v0.3 archival ... Dan chose no
+> tag explicitly on 2026-08-12, matching v1.0.0"* until 2026-08-25.** Kept because it recorded
+> a decision, and a decision that gets reversed is not thereby a mistake. **Dan reversed the
+> tag half**, verbatim: *"shipping is fine. correct it so that it can ship. just not a 1.0
+> release."*
+
+`git tag -l` → **1** (`v0.3.0`, annotated, pushed, with a GitHub release beside it). PyPI still
+returns **404** for `bot-y`, deliberately: *"forget the pypi part, just get it to github"*, same
+day, on the 2026-08-06 reason that has not changed — *"I wouldn't publish it without more real
+testing."* A `v*` tag no longer uploads on its own; `.github/workflows/release.yml`'s publish job
+is gated on an unset repository variable (M41), so a tag builds both artifacts and stops.
+
+`pyproject.toml` reads **`0.3.0`**, bound component-wise to `STATE.md`'s `milestone:` key and to
+three other records with `pyproject` authoritative. The `Development Status` classifier is
+**`4 - Beta`** and **stays there** — it is bound to the version in both directions, and what the
+file says would move it to `5` is a published release somebody other than the maintainer has
+installed plus a live `make verify` that passes. Neither happened, so neither number moves.
 
 **v1.0.0 is still open and untagged, and was NOT archived by either close.** Its definition of
 done includes *"Dan has successfully bought a Pokémon GO Plus +"* — a market condition, not a work

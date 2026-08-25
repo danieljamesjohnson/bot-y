@@ -22,11 +22,32 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Nothing yet.
 
-## [0.3.0] - 2026-08-13
+## [0.3.0] - 2026-08-25
 
-**Nothing is tagged, uploaded or released here either** — `git tag -l` is empty and
-`pypi.org/pypi/bot-y/json` is 404, exactly as at `0.2.0`. This heading marks the line the
-tree is on, opened when milestone v0.3 was scoped on 2026-08-13.
+**This is the first release this project has ever tagged, and it is still not published.**
+The two are separate acts here and the distinction is the point of the paragraph below.
+
+**Tagged.** `v0.3.0`, annotated, with a GitHub release beside it. Dan reversed the standing
+no-tag decision on 2026-08-25: *"shipping is fine. correct it so that it can ship. just not
+a 1.0 release."* Every prior record in this repository saying the project has never been
+tagged was true when written and is superseded by this line rather than wrong.
+
+**Not published, deliberately.** *"forget the pypi part, just get it to github"*, same day.
+`pypi.org/pypi/bot-y/json` is 404 and `pip install bot-y` resolves nothing, exactly as at
+`0.2.0`. The reason has not changed since 2026-08-06 — *"I wouldn't publish it without more
+real testing"* — and a `v*` tag no longer uploads anything on its own: the publish job is
+gated behind a repository variable that is unset, so tagging builds both artifacts and
+stops. Publishing later needs no code change.
+
+**Not a 1.0, and that is a decision rather than a shortfall.** `Development Status ::
+4 - Beta` stays. v1.0.0's definition of done includes a market condition — the maintainer
+actually buying a GO Plus + — so it is not this release's to satisfy.
+
+> **The heading date moved from `2026-08-13` to `2026-08-25`, and the original is recorded
+> here rather than edited away.** `2026-08-13` was the date milestone v0.3 was *scoped*, and
+> this heading was opened then to mark the line the tree was on, when the entry read
+> *"Nothing is tagged, uploaded or released here either"*. Keep a Changelog dates a heading
+> by its release, and until 2026-08-25 there was no release to date it by.
 
 ### Changed
 

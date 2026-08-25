@@ -2,17 +2,38 @@
 
 Historical record. One entry per closed milestone, newest first.
 
-**No milestone in this project has ever been tagged or published.** `git tag -l` → 0;
-`git ls-remote --tags origin` → 0 refs; PyPI 404. That is deliberate, and as of 2026-08-12
-it is an explicit decision rather than a deferral: **Dan chose no tag** at the v0.2 deploy
-(`4609d95`), matching v1.0.0.
+**v0.3 IS TAGGED as of 2026-08-25 — the first tag in this project's history — and no
+milestone has ever been published.** Tagging and publishing were one rule here until that
+date; they are now two, and this file distinguishes them per entry.
+
+> **The paragraph this replaces stood from the file's creation until 2026-08-25 and is kept
+> verbatim, because it recorded a decision and the decision is what changed:** *"**No
+> milestone in this project has ever been tagged or published.** `git tag -l` → 0; `git
+> ls-remote --tags origin` → 0 refs; PyPI 404. That is deliberate, and as of 2026-08-12 it
+> is an explicit decision rather than a deferral: **Dan chose no tag** at the v0.2 deploy
+> (`4609d95`), matching v1.0.0."*
+>
+> **What reversed it**, Dan, 2026-08-25, verbatim: *"shipping is fine. correct it so that it
+> can ship. just not a 1.0 release."* And, on the second half: *"forget the pypi part, just
+> get it to github."* So the tag half is reversed and the publish half is not — PyPI stays
+> 404 by the same 2026-08-06 reason (*"I wouldn't publish it without more real testing"*),
+> and `Development Status :: 4 - Beta` stays with it.
 
 ---
 
 ## v0.3 — Say When You Measured It
 
 **Closed:** 2026-08-19 · **Scoped:** 2026-08-13 (`d837676`) · **DEPLOYED 2026-08-20 07:43:22 CDT**
-**Status:** ✅ Complete in the tree **and now RUNNING** — still **NOT tagged, NOT published**
+· **TAGGED `v0.3.0` 2026-08-25**
+**Status:** ✅ Complete in the tree, **RUNNING** since 2026-08-20, **TAGGED** since
+2026-08-25 — and still **NOT published**
+
+> **`NOT tagged` was true in this line from the close until 2026-08-25**, and is superseded
+> rather than wrong; the reversal that moved it is recorded at the top of this file. Note
+> that all three states are now separate and the milestone is in a different one of each:
+> complete-in-the-tree (2026-08-19), running-on-the-daemon (2026-08-20), tagged-on-GitHub
+> (2026-08-25), unpublished (still). "Shipped" on its own has stopped being a useful word
+> for this milestone — say which one you mean.
 
 > **The line above used to read "Complete in the tree — NOT deployed", and that was true from
 > 2026-08-13 until 2026-08-20.** It is recorded rather than edited away because "archived is not

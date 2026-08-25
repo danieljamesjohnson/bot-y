@@ -1,5 +1,33 @@
 # Publishing bot-y 1.0.0 — the four things only Dan can do
 
+> ## SUPERSEDED 2026-08-25 — READ THIS FIRST, THEN THE CARD
+>
+> **Steps 1 and 3 of this card have happened, for a different version. Step 2 and step 4
+> have not, and are no longer wanted.** Nothing below is edited: every value in it was read
+> out of the tree on 2026-08-05 and was accurate then. This banner says which parts events
+> have overtaken, so the card is not followed as if it were current.
+>
+> | This card's step | What actually happened |
+> |---|---|
+> | 1. `git push -u origin main` | **Done 2026-08-06**, by the orchestrator agent rather than by Dan, recorded in Phase 4's outcome table |
+> | 2. Claim the PyPI name / configure the trusted publisher | **NOT done, and now deliberately not wanted.** Dan, 2026-08-25: *"forget the pypi part, just get it to github"* |
+> | 3. Push the tag | **Done 2026-08-25 — as `v0.3.0`, NOT `v1.0.0`.** *"shipping is fine … just not a 1.0 release"* |
+> | 4. Confirm what came out of PyPI | **Not applicable** — nothing was uploaded, and `pypi.org/pypi/bot-y/json` is still 404 |
+>
+> **Three facts in the table below are stale and one is now dangerous to act on.** The
+> version is `0.3.0`, not `1.0.0`; the tag is `v0.3.0`; `main` has had an upstream since
+> 2026-08-06 so the unpushed-commit count is long gone. The dangerous one is the *tag
+> trigger* row: it is still true that `v*` starts `release.yml`, but since 2026-08-25 the
+> publish job is gated on `if: vars.PUBLISH_TO_PYPI == 'true'` (M41) and that variable is
+> unset — **so a tag no longer publishes, and following step 3 expecting an upload will
+> produce a build and nothing else.** That is the intended behaviour, not a fault.
+>
+> **What is still exactly right here and worth keeping:** the `git tag -a`-not-`-s`
+> reasoning (no signing key on this machine, and the tag is authenticated by the push), the
+> environment-name coupling to PyPI's form, and the argument for why `make release-check`
+> cannot prove PyPI serves the bytes. If publishing is ever taken up again, steps 2 and 4
+> are still the right steps.
+
 The ordered card for the one part of Phase 4 no agent here may perform: pushing
 `main`, claiming the PyPI name, pushing the tag, and confirming what came out.
 

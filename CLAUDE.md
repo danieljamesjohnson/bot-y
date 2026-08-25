@@ -159,13 +159,16 @@ leak in `.planning/`, not in fixtures. That is why this is loud.
 ## Registries and invariants
 
 **`scripts/mutation_check.py`** deliberately breaks source in a sandbox and asserts the
-suite notices. Currently **M1–M20 and M25–M40**.
+suite notices. Currently **M1–M20 and M25–M41**.
 
 > **M21–M24 are an intentional, documented gap. Never fill them.** Phase 6 recorded why:
 > `apply_mutation` cannot add a file, so the defect it would have covered is outside the
-> harness by construction. The script says so in six places (`grep -c "INTENTIONAL GAP"`).
+> harness by construction. The script says so in seven places (`grep -c "INTENTIONAL GAP"`)
+> — six until M41 added the seventh on 2026-08-25, which restates the rule rather than
+> weakening it: `.github/` was *already* in `SANDBOX_CONTENTS`, so M41 needed nothing added
+> to reach it. That is the test M21–M24 failed.
 
-Next free ident is **M41**. Register one only when it defends something new — if every
+Next free ident is **M42**. Register one only when it defends something new — if every
 break is already caught by a second independent test, an ident raises the denominator
 without defending anything, and the registry records that reasoning too.
 
@@ -207,11 +210,35 @@ page edits are live on next load without a restart.
 
 ## Git and records
 
-- **This project has never been tagged or published, deliberately.** `git tag -l` → 0.
-  Do not create a tag. v1.0.0's definition of done includes "Dan has successfully bought
-  a GO Plus +" — a market condition, so the audit recommended against calling it shipped.
-- **"Archived" is not "shipped."** Milestone records distinguish complete-in-the-tree from
-  running-on-the-daemon, and that distinction is usually the most important line in them.
+- **This project is TAGGED as of v0.3.0 (2026-08-25) and is still NOT published.** The two
+  halves used to be one rule and they are now separate, so read them separately.
+  - **Tagging is allowed and has happened.** Dan reversed the no-tag decision on
+    2026-08-25: *"shipping is fine. correct it so that it can ship. just not a 1.0
+    release."* `v0.3.0` is an annotated tag on GitHub with a release beside it. The rule
+    this bullet used to carry — *"never been tagged or published, deliberately; do not
+    create a tag"* — was true from the project's start until that date and is recorded
+    here rather than deleted, because his reversal is the reason it changed and a guide
+    that quietly agrees with itself teaches nothing.
+  - **Publishing to PyPI is still not done, and that is still deliberate.** His words the
+    same day: *"forget the pypi part, just get it to github."* `pip install bot-y`
+    resolves nothing and `pypi.org/pypi/bot-y/json` is 404. The reason from 2026-08-06
+    stands unchanged — *"I wouldn't publish it without more real testing"*.
+  - **A `v*` tag no longer uploads anything**, and you should know why before you tag
+    again. It used to: the only trigger on `.github/workflows/release.yml` is a `v*` tag
+    push and that starts the job holding `id-token: write`. The publish job is now gated
+    on `if: vars.PUBLISH_TO_PYPI == 'true'` (M41), the build job deliberately is not, so
+    a tag builds and stops. To publish, configure the trusted publisher on pypi.org and
+    set that repository variable — no code change. **Do not remove the gate to "make the
+    release work".**
+  - **Nothing above licenses a 1.0.** v1.0.0's definition of done still includes "Dan has
+    successfully bought a GO Plus +" — a market condition — so the audit's recommendation
+    against calling it shipped is untouched, and his instruction was explicitly *"just
+    not a 1.0 release."* The version ships from the `0.x` line; `Development Status ::
+    4 - Beta` stays.
+- **"Archived" is not "shipped", and now "tagged" is not "published" either.** Milestone
+  records distinguish complete-in-the-tree from running-on-the-daemon, and that
+  distinction is usually the most important line in them. v0.3 is all three of complete,
+  running (since 2026-08-20) and tagged, and is still not published — say which you mean.
 - Commits are atomic and conventional (`feat(07-03):`, `fix(identity):`, `docs(v0.3):`).
 - Commits use the repo's configured no-reply identity. An author email has silently gone
   wrong here once — check `git config user.email` before a push rather than after.
