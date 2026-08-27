@@ -22,6 +22,22 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Nothing yet.
 
+## [0.4.0] - 2026-08-27
+
+**Nothing is tagged, uploaded or released at this number.** `v0.3.0` is the tag that exists and
+`pypi.org/pypi/bot-y/json` is still 404. This heading marks the line the tree is on, opened when
+milestone v0.4 was scoped on 2026-08-27 — the same act, and the same wording, that opened `0.3.0`
+while it was still the open line.
+
+### Scoped, not yet built
+
+- **Milestone v0.4 — *Don't Get Locked Out*.** Three of six retailers began returning challenge
+  pages instead of product pages, leaving **one of four** Pokémon GO Plus + watches readable. A
+  spike established that the escalation ladder is exhausted rather than unclimbed: a real headless
+  browser is refused by Walmart exactly as impersonated HTTP is. The milestone attacks the shared
+  point of failure — one egress, one client fingerprint, one lockstep request pattern across all
+  six retailers — rather than the individual blocks.
+
 ## [0.3.0] - 2026-08-25
 
 **This is the first release this project has ever tagged, and it is still not published.**

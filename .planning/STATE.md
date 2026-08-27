@@ -85,28 +85,33 @@
 # v0.3 is the version in the tree (`pyproject.toml` reads `0.3.0`), nothing was tagged or
 # published, and no next milestone has been scoped. Change it only together with
 # `pyproject.toml`, and re-run `tests/test_packaging_metadata.py` immediately afterwards.
+# MOVED TO v0.4 ON 2026-08-27, together with `pyproject.toml` (0.3.0 -> 0.4.0), `README.md`'s
+# publication instruction and `CHANGELOG.md`'s top released heading — all four in ONE commit,
+# because `tests/test_packaging_metadata.py` binds them to each other component-wise and moving
+# one alone turns `make verify-offline` red naming both files. Re-run that test immediately after
+# any further edit to this key. v0.4.0 is NOT released: v0.3.0 is the tag that exists, and the
+# CHANGELOG heading for 0.4.0 says so in its own body, exactly as 0.3.0's did while it was open.
 gsd_state_version: 1.0
-milestone: v0.3
-milestone_name: — Say When You Measured It
-status: Milestone v0.3 — Say When You Measured It — ARCHIVED 2026-08-19. 1 of 1 phase, 7 of 7 plans, 1 of 1 requirement (REQ-21), 72 commits from `b10df8c`, 41 files changed, +18,146 / −104. Complete IN THE TREE; **not deployed, not tagged, not published**. Closed at FOUR of five criteria MET (three as written, criterion 5 MET-qualified) and ONE MET IN PART, with no criterion text amended. Criterion 5 moved 2026-08-19 on a measurement Dan chose over an override: 07-05's join test, which had passed on the RED commit and so was never observed failing, was watched red FIVE times out of five against five separate breaks — including a sincere implementation of the write-time `stale` flag the design refuses, not only a one-token null-out. **Non-vacuity is established; TDD ordering was NOT followed for that test and the record says so in the verdict cell itself.** Criterion 3 stays MET IN PART BY DAN'S EXPLICIT DECISION (2026-08-17, `keep defer`) — `status.json` publishes the ingredients of a staleness verdict and no verdict. A code review after the close found 1 Critical (a reproduced XSS sink at `served/boty/index.html`, reachable because 07-04 publishes any string from `state.json`) + 8 Warnings; all nine fixed, three Info findings recorded and not fixed. Audit status `tech_debt` — no blockers, no unsatisfied requirements, six residuals carried. REQ-21 complete in the tree and NOT on the wire: the running daemon (`MainPID=547119`, started 2026-08-12 17:28:29) predates this milestone's first commit by ~15 hours. v0.2 archived 2026-08-11 and deployed 2026-08-12, except REQ-14 **DEPLOYED 2026-08-20 — the milestone is now RUNNING, and every record written before that date saying `NOT ON THE WIRE` was true when written and is now superseded rather than wrong. See `.planning/MILESTONES.md` § v0.3 for the measured deploy record. Still NOT tagged (`git tag -l` -> 0) and NOT published. The Walmart store pin remains deferred, so `walmart:Pokémon GO Plus +` publishes `out_of_stock · AGE ?` indefinitely, exactly as the closing record predicted.** TAGGED 2026-08-25 — `v0.3.0`, annotated, pushed, with a GitHub release carrying both CI-built artifacts. `git tag -l` is now **1**, so the `-> 0` measurement above is superseded rather than wrong, on the same footing as the `NOT ON THE WIRE` clause before it. **STILL NOT PUBLISHED, and now by mechanism as well as by intent:** PyPI returned 404 for both `bot-y` and `bot-y/0.3.0` after the tag push, the publish job's conclusion on that run was `skipped`, and it is gated on a repository variable that is unset (M41). Dan's instruction, 2026-08-25: *"shipping is fine … just not a 1.0 release"* and *"forget the pypi part, just get it to github."* `Development Status :: 4 - Beta` and v1.0.0's open, untagged status are both untouched.
-stopped_at: SHIPPED v0.3.0 TO GITHUB on 2026-08-25 at Dan's instruction — annotated tag `v0.3.0` at `8a3faa9`, pushed, plus a GitHub release with the wheel and sdist CI built from the tag. NOT published to PyPI, deliberately: `.github/workflows/release.yml`'s publish job is now gated on an unset repository variable (M41, registry 36 -> 37) and its conclusion on the tag run was `skipped`; PyPI 404 for `bot-y` and `bot-y/0.3.0`, re-measured after the push. The gate that made this possible was watched failing first: 2 failed / 78 passed before, 80 after. `make release-check` PASSED 10/10 at 0.3.0. Six records that said the project is deliberately untagged were corrected beside, not over. Still 4 - Beta; v1.0.0 untouched; store pin still deferred
-last_updated: "2026-08-25T13:06:47.000Z"
-last_activity: 2026-08-25
+milestone: v0.4
+milestone_name: — Don't Get Locked Out
+status: Milestone v0.4 — Don't Get Locked Out — SCOPED 2026-08-27, phases 8-11, REQ-22...REQ-25, nothing executed yet. **The measurement that opened it:** 3 of 6 retailers return a challenge page (amazon, target, walmart) and **1 of 4** GO Plus + watches still reads (nintendo); gamestop's listing is HTTP 410 and best buy's control SKU stopped resolving. **A spike on 2026-08-27 removed the obvious plan**: this project's own rung-3 browser transport was driven at walmart's control and returned `rendered challenge page matched 'robot or human'` in 3.8s, so rung 1 and rung 3 are both refused and escalating a rung is not an available fix. The defect being attacked is that all six watches share one egress, one client fingerprint family and one request pattern, so one reputational event blinds all six. Phase 8 shrinks the footprint (a refused retailer is left alone for days, not knocked twice a day forever), phase 9 removes the lockstep signature, phase 10 stops a dead control being read as a broken detector, phase 11 establishes each blocked retailer's true position up to and including rung 4. **A lost-coverage alarm was proposed and declined by Dan the same day** — *"we don't want to inform the user it's broken, really. we want to prevent a broken state"* — so every requirement here is preventive and the residual undetected-blindness window stays open by decision rather than oversight. PREVIOUS MILESTONE: v0.3 archived 2026-08-19, DEPLOYED 2026-08-20, TAGGED v0.3.0 2026-08-25 with a GitHub release; still NOT published to PyPI, deliberately.
+stopped_at: Milestone v0.4 SCOPED 2026-08-27 and ready to run. ROADMAP.md carries phases 8-11 with success criteria; REQUIREMENTS.md is fresh at REQ-22...REQ-25; version moved 0.3.0 -> 0.4.0 across all four bound statements in one commit. NO PHASE PLANNED OR EXECUTED YET — next action is planning phase 8. The daemon is running v0.3 code (MainPID 667833, restarted 2026-08-27 07:23:34 with the walmart store pin live) and nothing in v0.4 exists yet
+last_updated: "2026-08-27T13:04:00.000Z"
+last_activity: 2026-08-27
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
-  # percent is PHASE-based, not plan-based, and this is the convention v0.2 recorded: 1 of the
-  # 1 phase in v0.3 is now complete, so 100. The plan counter above is where per-plan progress
-  # is read. (Restored by hand at 07-06's close together with the block at the top of this
-  # frontmatter; see the note under ## Session below for why neither was written by tooling.)
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  # percent is PHASE-based, not plan-based, and that convention is v0.2's, carried through v0.3.
+  # RESET FOR v0.4 ON 2026-08-27: 0 of the 4 phases (8, 9, 10, 11) are complete. `total_plans` is
+  # 0 rather than a guess because no phase has been planned yet and this project does not record
+  # an estimate in a field that reads as a measurement. It becomes real as each phase is planned.
   #
-  # UNCHANGED BY THE 2026-08-19 ARCHIVAL, and that is deliberate rather than an oversight: these
-  # five numbers describe v0.3, `milestone:` still reads v0.3, and v0.2's close set the same
-  # precedent by leaving its own 2-phase / 11-plan block exactly where it stood. They are final
-  # for this milestone and are reset by whoever scopes the next one.
-  percent: 100
+  # v0.3's final block read total_phases 1 / completed 1 / total_plans 7 / completed 7 / percent
+  # 100. It was NOT edited away at that milestone's close, on v0.2's precedent, and is reset here
+  # by whoever scopes the next one — which is this commit.
+  percent: 0
 ---
 
 # State: bot-y
@@ -116,9 +121,24 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-08-19 at the v0.3 close, with a `## Current State` section)
 
 **Core value:** A stock reading you can trust — never "out of stock" when the truth is "I couldn't tell", never "in stock" when the truth is "a reseller has one at 4x MSRP."
-**Current focus:** Nothing in flight. v0.3 is archived; the next milestone is unscoped. The one
-outstanding action from v0.3 is not planning work — it is `sudo systemctl restart boty`, which is
-Dan's and is deferred by his own twice-recorded answer.
+**Current focus:** **Milestone v0.4 — Don't Get Locked Out, scoped 2026-08-27. Phase 8 is next and
+nothing has been planned or executed yet.** See `.planning/ROADMAP.md` § *Milestone v0.4 — Phase
+Details* and `.planning/REQUIREMENTS.md` (REQ-22…REQ-25).
+
+**Both of v0.3's outstanding actions are now DONE and neither is a blocker any more.** The restart
+happened 2026-08-27 07:23:34 (`MainPID` 548295 → 667833, `state.json` 13 → 13 entries, zero lost),
+and the Walmart store pin was supplied by Dan on 2026-08-25 and is live in the running process —
+`QUESTIONS.md` § 0f, where the value is recorded as a **count and never a value**.
+
+**What the restart revealed, and it is why v0.4 exists.** Three of six retailers return a challenge
+page; **one of four** GO Plus + watches still reads. The paced-out view had been hiding it behind
+remembered rows for roughly two weeks. **A spike the same day removed the obvious fix**: the rung-3
+browser is refused by Walmart exactly as rung 1 is, so the ladder is exhausted rather than
+unclimbed.
+
+**Read before planning Phase 11:** live retailer requests are capped by that phase's own criterion
+5, and politeness is a hard constraint here rather than a preference. Phases 8, 9 and 10 need **no
+live requests at all** and are the safe autonomous ground.
 
 **The paragraph below is Phase 7's execution record, written while it was in flight. It is left
 exactly as written** — it is the record of what was believed as the work happened, and the

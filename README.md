@@ -92,7 +92,7 @@ this warning is the whole mitigation, which is why it sits above the command.
 pip install bot-y
 ```
 
-Publication happens from the `v0.3.0` tag. If pip reports no matching
+Publication happens from the `v0.4.0` tag. If pip reports no matching
 distribution, the tag has not been pushed yet and the clone is the way in:
 
 ```bash

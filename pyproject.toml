@@ -32,7 +32,7 @@ name = "bot-y"
 # instruction, CHANGELOG.md's top released heading and `.planning/STATE.md`'s
 # milestone, in both directions, and `make verify-offline` fails when any of them
 # moves without the others.
-version = "0.3.0"
+version = "0.4.0"
 description = "Self-hosted restock monitor for big retailers — TLS-impersonation fetching, structured stock data, and control products that catch broken detectors instead of failing silently."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -24,6 +24,8 @@ under *Milestone v1.0.0 — Phase Details* below. v1.0.0 remains open and untagg
 
 - ✅ **Milestone v0.3 — Say When You Measured It** (scoped 2026-08-13, closed 2026-08-19) — Phase 7, 7 plans, one requirement (REQ-21), complete **in the tree**, **DEPLOYED 2026-08-20**, **TAGGED `v0.3.0` 2026-08-25**; **still not published** (PyPI 404, deliberately). *This line read "not deployed, not tagged, not published — the running daemon predates the milestone's first commit by ~15 hours" from the close until 2026-08-25; it was true when written, and both halves were superseded by events rather than corrected as errors — see `MILESTONES.md` § v0.3.* Archived in full: [`milestones/v0.3-ROADMAP.md`](milestones/v0.3-ROADMAP.md) · [`milestones/v0.3-REQUIREMENTS.md`](milestones/v0.3-REQUIREMENTS.md) · [`milestones/v0.3-MILESTONE-AUDIT.md`](milestones/v0.3-MILESTONE-AUDIT.md)
 
+- 🚧 **Milestone v0.4 — Don't Get Locked Out** (scoped 2026-08-27) — Phases 8–11, REQ-22…REQ-25. **In progress.** Details under *Milestone v0.4 — Phase Details* below.
+
 ## Retailer Scope
 
 Deliberately narrowed from a padded list of ten. Newegg, B&H and Micro Center
@@ -60,6 +62,100 @@ works. Record which rung each retailer landed on in the support matrix.
 
 4. **Drop, with evidence** — documented as unreachable in the support matrix,
    including what was tried. Never left silently broken.
+
+## Milestone v0.4 — Phase Details
+
+**Scoped 2026-08-27. Open.** Requirements in [`REQUIREMENTS.md`](REQUIREMENTS.md) — REQ-22…REQ-25.
+
+**The measurement that opened it, 2026-08-27.** Three of six retailers return a challenge page;
+**one of four** GO Plus + watches still reads (Nintendo). A spike drove this project's own rung-3
+transport — a real headless browser — at Walmart's control and got
+`rendered challenge page matched 'robot or human'` in **3.8 s**. Rung 1 refused, rung 3 refused,
+and Target independently refused at rung 3 with `px-captcha`. **Escalating a rung is not a fix
+that is available here**, which is why no phase below proposes one.
+
+**What is actually being fixed:** every watch shares one egress, one client fingerprint family and
+one request pattern, so one reputational event blinds all six at once. Phases 8 and 9 shrink the
+footprint that earns a block and remove the lockstep signature that advertises one. Phase 10 stops
+a configuration failure from being read as a retailer failure. Phase 11 establishes what is
+actually true of each blocked retailer, up to and including *dropped*.
+
+**Not scoped, deliberately:** a lost-coverage alarm (declined by Dan on 2026-08-27 — *"we don't
+want to inform the user it's broken, really. we want to prevent a broken state"*), an egress
+change, and rung-2 API credentials. All three are argued in `REQUIREMENTS.md` § *What is
+deliberately NOT in this milestone*.
+
+- [ ] **Phase 8: Stop Knocking** — a persistently refused retailer is left alone for days, not knocked on twice a day forever
+- [ ] **Phase 9: Out of Lockstep** — six retailers stop being requested inside one short window from one origin
+- [ ] **Phase 10: A Control That Cannot Die** — a dead control is a fact about our config, never mistaken for a fact about the retailer
+- [ ] **Phase 11: The Honest Ladder Position** — what is actually true of Amazon, Target and Walmart, written down and gated
+
+### Phase 8: Stop Knocking
+
+**Goal**: A retailer that has refused 30-odd times in a row stops being asked twice a day, so the
+footprint that earns and sustains a block shrinks.
+**Depends on**: Nothing.
+**Requirements**: REQ-22
+**Success Criteria** (what must be TRUE):
+
+  1. After a bounded number of consecutive refusals, the wait returned for that retailer is measured in **days**, asserted against literal expected seconds — not against "greater than the old ceiling"
+  2. A retailer in cool-off is requested **exactly once** when the cool-off expires, not once per cycle. The single-probe behaviour is asserted over a simulated sequence of cycles, not inferred from the interval
+  3. The total number of requests made to a retailer that **never** recovers, over a simulated 30 days, is a **stated number** and is strictly smaller than the same simulation under the current rule. Both numbers are recorded
+  4. A retailer that answers during its probe returns to its normal cadence **immediately**, and the cool-off state is cleared — the failure mode where a recovered retailer stays throttled is asserted against
+  5. The cool-off **survives a restart**, the same guarantee the existing backoff already carries, and is discarded when stale by the existing rule rather than a second one
+  6. `make verify-offline` exits 0, with at least one new mutation registered, observed CAUGHT, and anchored on **behaviour** rather than on message text
+
+### Phase 9: Out of Lockstep
+
+**Goal**: The six retailers stop presenting as one coordinated crawler — independent schedules, so
+a single cycle does not fire six unrelated retailers inside one short window.
+**Depends on**: Phase 8 (both edit the scheduler; they serialize on `boty/pacing.py`)
+**Requirements**: REQ-23
+**Success Criteria** (what must be TRUE):
+
+  1. Two retailers whose intervals coincide are **not** dispatched inside the same short window; the bound is a stated number of seconds and is asserted on the schedule, never on a wall clock
+  2. Each retailer's next-attempt time is **independent**: changing one retailer's interval or backoff moves that retailer's schedule and no other's, asserted in both directions
+  3. Over a simulated day, the maximum number of retailers requested within any 60-second window is a **stated number**, and it is smaller than the current six
+  4. **No regression in what already works**: per-retailer cadence and backoff still hold, and `boty check` — a deliberate full pass, which is a different thing from the daemon's schedule — still completes inside REQ-08's 2-minute budget, re-measured rather than assumed
+  5. `make verify-offline` exits 0, with at least one new mutation registered and observed CAUGHT
+
+### Phase 10: A Control That Cannot Die
+
+**Goal**: A control that stops resolving is reported as a **dead control** — a fact about our
+configuration — and is never reported as a refusal or a broken detector, which are facts about the
+retailer.
+**Depends on**: Nothing (independent of 8 and 9)
+**Requirements**: REQ-24
+**Success Criteria** (what must be TRUE):
+
+  1. Three states are **distinct** and asserted separately: *dead control* (our SKU no longer resolves), *refused* (the retailer served a challenge), and *detector broken* (the page arrived and the extractor could not read it). Today the first is reported as the third
+  2. A dead control does **not** describe the retailer as refusing us, and does not silence a real refusal if both are true at once
+  3. Best Buy's control is repaired — measured against a real reading, not a fixture — or replaced with one that reads, with the replacement's durability argued
+  4. **The rule for what makes a control durable is written down and applied to every existing control**, with any control failing it named. Best Buy's died because it was a specific game SKU; a control that can be discontinued eventually will be
+  5. `make verify-offline` exits 0, with at least one new mutation registered and observed CAUGHT
+
+### Phase 11: The Honest Ladder Position
+
+**Goal**: What is actually true of Amazon, Target and Walmart is established by measurement and
+written down — including, where that is the answer, *dropped*.
+**Depends on**: Phase 8 (do not spend the probe budget before the cool-off exists)
+**Requirements**: REQ-25
+**Success Criteria** (what must be TRUE):
+
+  1. Each of Amazon, Target and Walmart has a recorded verdict in `docs/retailer-evidence.md` citing a **measurement with a date**, stating rung, extraction axis, and what was tried
+  2. The **egress-attached vs client-attached** question is either answered with evidence or recorded as **explicitly unanswered**, naming what was tried and what could not be. It is never left implied. *(The decisive test needs a second egress, which needs Dan; an unanswered verdict is a legitimate outcome of this phase and is not a failure)*
+  3. `README.md`'s support matrix reflects every changed row and still passes its two-directional gate against the code
+  4. A retailer whose honest position is **rung 4** is recorded as rung 4. **The count of working retailers is not padded** — the Phase 2 rot, in the opposite sign, is not available here
+  5. **The live probe budget is capped and the cap is stated**: no more than a stated number of requests per retailer for the whole phase, with the actual count recorded. Politeness is a hard constraint and a diagnosis is not a licence
+  6. `make verify-offline` exits 0
+
+### Why no phase here proposes escalating a rung
+
+Because it was measured and it does not work. The obvious plan on seeing three blocked retailers
+is *"walk them up the ladder"*, and one spike on 2026-08-27 removed it: Walmart refuses the rung-3
+browser exactly as it refuses rung 1, and Target has been refused at rung 3 all along. A milestone
+that spent a phase on it would have been spending it on a hypothesis already disproved. **The
+spike cost one request.**
 
 ## Milestone v1.0.0 — Phase Details
 
