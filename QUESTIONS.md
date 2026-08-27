@@ -21,7 +21,52 @@ number was your reversal of a written-terms reading, not a new technical
 finding, and a record that quietly agrees with itself afterwards is worth less
 than one that shows the turn.
 
-## 0f. Your Walmart store number — ANSWERED TWICE, both times `defer` (2026-08-10, 2026-08-17). Still outstanding as an action.
+## 0f. Your Walmart store number — SUPPLIED AND SET 2026-08-25, after two deferrals (2026-08-10, 2026-08-17). SET ON DISK, NOT YET IN EFFECT.
+
+### 2026-08-25 — answered by supplying it. The deferral ends here; the action does not.
+
+**Dan supplied his store number on 2026-08-25, unprompted, in the course of asking how to find
+one.** After two deferrals this closes the *question*. It does not yet close the *effect* — see
+the second half below, which is the part that matters today.
+
+**THE VALUE IS NOT RECORDED HERE, AND MUST NOT BE ADDED.** It was written to
+`/home/dan/.config/boty/env` — outside the repository, mode `600`, owner `dan:dan` — and every
+check on it since has been a **count, never a value**. This section names the key and not the
+number on the rule this repository has broken three times before: *a record that names what it
+removed is a copy of it.*
+
+**Measured at the time of writing, 2026-08-25:**
+
+| Check | Result |
+|---|---|
+| `grep -c '^WALMART_STORE_ID=' ~/.config/boty/env` | **1** — present, on its own line, nothing concatenated onto a previous one |
+| File mode / owner | `600 dan:dan`, unchanged by the append |
+| Tracked files containing the number | **0** |
+| `identity_check.py --all` | **PASS — 228 file(s), no host identity found** |
+| `git status --porcelain` | **empty** — nothing to commit, which is the correct outcome |
+
+### THE PIN IS SET AND NOT IN EFFECT — the daemon has not restarted
+
+**Measured 2026-08-27, and this is why the warnings did not stop.** `boty.service` is
+`MainPID=548295`, `ActiveEnterTimestamp=Thu 2026-08-20 07:43:22 CDT`, `NRestarts=0` — it has been
+running since **five days before the pin was written**. `EnvironmentFile=` is read **once, at
+process start**, so editing the file changes nothing for a process already running.
+`WALMART_STORE_ID` occurs **0 times** in `/proc/548295/environ`.
+
+**Two health warnings fired after the pin was set, for exactly this reason** — 2026-08-25 09:29:16
+and 2026-08-26 22:42:25. They are not a new fault and not a wrong alert: the store-gap warning is
+the one health state carrying an action, and from the running process's point of view the store is
+still unset, which is true of *it* even though it is no longer true of the disk.
+
+**What closes this section: `sudo systemctl restart boty`. Dan's, as every restart here is.**
+Neither performed nor run as a side effect of recording this.
+
+**What the restart will and will not do, stated before rather than after.** It will make Walmart
+readings produce real verdicts instead of `UNKNOWN`, and it will stop the store-gap warning. It
+will **not** make Walmart answer: as of 2026-08-25 Walmart was refusing at 9 in a row on a 6-hour
+backoff, so that row may sit at `AGE ?` until a fetch gets through. A restart more than one
+backoff-cap after the last refusal also discards the stored backoff, so Walmart and Target retry
+immediately rather than waiting out their timers — by design, and in this case convenient.
 
 ### 2026-08-17 — asked a second time, at Phase 7's closing checkpoint; answered `defer` again
 
