@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import time
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -180,6 +181,97 @@ def test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring() -
         p.record("amazon", refused=True, now=now)
     assert p._for("amazon").due_at - now == MAX_BACKOFF_SECONDS
     assert MAX_BACKOFF_SECONDS <= 6 * 60 * 60, "a cap beyond a few hours is not a monitor"
+
+
+#: Thirty days, counted in cycles rather than named as a duration.
+#:
+#: 8640 cycles at the 300 s default cadence is 8640 x 300 = 2 592 000 s, which is
+#: 30 days. The arithmetic is stated here rather than performed below.
+#:
+#: WRITTEN OUT RATHER THAN COMPUTED FROM A `DAYS` CONSTANT, for the same reason
+#: `_CADENCE_AFTER_N_REFUSALS` further down this file is written out: a future
+#: edit to the window has to change this number BY HAND, and doing that is the
+#: moment somebody notices the denominator moved underneath a count that is about
+#: to be compared against another count. A window that quietly shrank would
+#: present a smaller count as a reduction — a measurement reporting its own
+#: shortening as a result — which is the single failure the test below is
+#: arranged to be safe from.
+_THIRTY_DAYS_OF_CYCLES = 8640
+
+
+def test_the_current_rule_asks_a_never_recovering_retailer_this_many_times_in_thirty_days() -> None:
+    """The number of requests the CURRENT rule makes to a retailer that never comes back.
+
+    WHAT THIS NUMBER IS FOR, AND WHY IT IS TAKEN NOW. It is the `before` half of
+    Phase 8's criterion 3: "the total number of requests made to a retailer that
+    never recovers, over a simulated 30 days". The rule it measures is the fixed
+    six-hour ceiling applied indefinitely, and phase plan 08-02 replaces that
+    rule with a cool-off. Once `current_interval` grows a cool-off branch there
+    is no way to re-take this measurement except by reverting the change — a
+    synthetic revert, measured against code that is no longer the code, which is
+    not a measurement. So this is the only wave in which the number exists, and
+    that is why it is written down before anything moves.
+
+    IT STATES ONE COUNT AND NOTHING ELSE. No comparison, no claim of a
+    reduction, no threshold. The `after` number and the word *strictly* are
+    08-02's.
+
+    THE RESTART ASSUMPTION, STATED RATHER THAN LEFT TO BE INFERRED: the
+    simulation models ZERO restarts across the 30 days, and each restart would
+    cost exactly ONE extra request on top of this number. `boty/pacing.py`'s
+    module docstring, concession (b), is why: `due_at` is never persisted, so a
+    restart re-tests the condition at once at full rate. What a restart inherits
+    is the DEPTH the penalty resumes at, never the position on the schedule.
+    Under a systemd unit with `Restart=` semantics a restart is not a rare
+    event, so the assumption is named here rather than buried in the count.
+
+    WHY THIS ONE IS NOT WATCHED RED, which is this repo's standing rule for
+    every gate. There is no red to watch because there is no defect this test
+    defends against: its subject is the code as it stands, not a bug being
+    fixed. Writing a deliberately wrong literal and watching `assert ==` reject
+    it would prove that `assert ==` works and nothing else. What carries the
+    weight instead is three things that CAN fail and do have subjects — the
+    denominator assertion below (watched red on 2026-08-28 by running the loop
+    one cycle short), the two independent tallies, and the fact that the literal
+    was TRANSCRIBED from a run rather than predicted and then asserted.
+    08-01-SUMMARY.md carries the transcript.
+    """
+    p = Pacer(default_interval=300)
+    now = 0.0
+    offsets: list[float] = []
+    for _ in range(_THIRTY_DAYS_OF_CYCLES):
+        if p.due("walmart", now):
+            offsets.append(now)
+            p.record("walmart", refused=True, now=now)
+        now += 300.0
+
+    assert len(offsets) == 125, (
+        f"the current rule asked a never-recovering retailer {len(offsets)} times "
+        f"over a simulated thirty days at the 300-second standing cadence; the "
+        f"recorded before-number for criterion 3 is the literal in this assertion"
+    )
+
+    assert now == 2592000.0, (
+        f"the simulated clock finished at {now} s, not the 2 592 000 s that are "
+        f"thirty days — so the count above is a count over some other window. A "
+        f"run that exited early presents a smaller number as a shorter month, "
+        f"which is a reduction achieved by not asking rather than by waiting"
+    )
+
+    assert p._for("walmart").refusals == len(offsets), (
+        f"the schedule recorded {p._for('walmart').refusals} refusals but the "
+        f"simulation counted {len(offsets)} requests; `record` increments once "
+        f"per refusal, so a divergence means a request was made and not counted, "
+        f"or counted and not made"
+    )
+
+    assert all(a < b for a, b in pairwise(offsets)) and all(
+        0.0 <= t < 2592000.0 for t in offsets
+    ), (
+        f"the request offsets are not strictly increasing inside [0, 2 592 000); "
+        f"first {offsets[:3]}, last {offsets[-3:]} — a count is not a measurement "
+        f"if the things counted could fall outside the window they are attributed to"
+    )
 
 
 def test_a_refusal_never_shortens_the_wait_however_long_the_standing_interval() -> None:
