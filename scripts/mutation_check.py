@@ -378,12 +378,27 @@ MUTATIONS = (
         replace="                st.refusals = 0",
         breaks="the restored refusal count never reaches the schedule — every restart climbs the backoff again from 2x against a retailer that has already walled us, and asks once at full rate on the way",
     ),
+    # M12's DESTINATION MOVED ON 2026-08-28 AND ITS MECHANISM DID NOT, so the
+    # `breaks` clause below is repaired rather than rewritten. 08-03 judged the
+    # old wording "imprecise rather than false — it is still exactly right for
+    # every count this project has actually observed, and it understates the
+    # case past the threshold", and handed the edit to 08-04 rather than editing
+    # this file in a wave that owned nothing else in it. This is that edit.
+    #
+    # What moved: REQ-22 means a restored count at or past
+    # `REFUSALS_BEFORE_COOLOFF` now pins the retailer at the three-day cool-off
+    # instead of at the six-hour cap. What did NOT move is the sentence's whole
+    # point — a week is 604800 s and the window is 259200 s, so a week-old file
+    # is outside the window under the new derivation exactly as it was under the
+    # old one, and disabling the guard applies it anyway. Below the threshold
+    # the original wording is still literally correct, which is why "at the cap"
+    # survives in the repaired clause instead of being replaced by it.
     Mutation(
         ident="M12",
         target="boty/pacing.py",
         search="                if not 0.0 <= now - float(refused_at) <= STATE_MAX_AGE_SECONDS:",
         replace="                if False:",
-        breaks="stale state is applied regardless of its stamp — a file written before a machine was off for a week pins a retailer at the cap on startup, which is the exact objection the withdrawn docstring paragraph raised",
+        breaks="stale state is applied regardless of its stamp — a file written before a machine was off for a week pins a retailer at the cap on startup, or at the three-day cool-off if the count it restores is at or past the threshold, which is the exact objection the withdrawn docstring paragraph raised",
     ),
     # Re-anchored 2026-08-10 (05-REVIEW WR-01): the expression producing the
     # restored memory used to be a one-line set comprehension over a list. It is
@@ -1014,6 +1029,18 @@ MUTATIONS = (
     # The eleven originally enumerated above are all still in the set. If M33 ever
     # SURVIVES, the first thing to check is whether one of them acquired a skip
     # decorator.
+    #
+    # KILL SET RE-MEASURED AGAIN ON 2026-08-28 (08-04, and the 21 above stands as
+    # what was true when 08-02 wrote it rather than being edited away): **26**,
+    # up from 21. The five additions are 08-03's, and every one of them reaches
+    # this accessor through a depth restored off disk — the staleness-window
+    # table's rows at ages 1.0, 21601.0 and 259199.0, the real-`save` round trip,
+    # and the one-probe restart simulation. The table's 259201.0 and -1.0 rows
+    # restore ZERO refusals, so the accessor answers the standing interval with
+    # or without this mutation and M33 is invisible to them; that is why the
+    # move is +5 and not +7. Read off the run rather than carried over from
+    # 08-03-SUMMARY.md, on the protocol the 2026-08-17 paragraph above records:
+    # a count copied between documents is a claim about a run nobody made.
     Mutation(
         ident="M33",
         target="boty/pacing.py",
@@ -1323,6 +1350,28 @@ MUTATIONS = (
     # configures a standing interval above `MAX_BACKOFF_SECONDS`, and none of
     # 08-02's new gates does either — they all sit at 300 s or 1800 s, both far
     # below the cap, so not one of them widens this set.
+    #
+    # THE PARAGRAPH ABOVE WENT FALSE FIVE HOURS AFTER IT WAS WRITTEN, and it is
+    # left standing with this note beside it rather than edited away, because it
+    # was true of 08-02 and the interesting fact is that a later wave falsified
+    # it by accident. WITHDRAWN ON 2026-08-28 (08-04): "this phase did not
+    # improve it: no other test in this suite configures a standing interval
+    # above `MAX_BACKOFF_SECONDS`, and none of 08-02's new gates does either".
+    # 08-03's `test_a_standing_interval_above_the_window_makes_the_restored_
+    # depth_irrelevant` configures a standing interval of 259201.0 — above both
+    # wait arms — and kills M38. It was written to prove something else
+    # entirely: that a standing interval wider than the window makes a restored
+    # depth irrelevant. So the thinness 08-02 recorded and explicitly could not
+    # fix was narrowed by a test aimed somewhere else, which is the argument for
+    # recording thinness rather than padding it — a padded set would have hidden
+    # the improvement as surely as it would have hidden the hole.
+    #
+    # KILL SET RE-MEASURED ON 2026-08-28 (08-04) off the run that registered
+    # M42, not carried over from 08-03-SUMMARY.md: **2**, up from 1. It is still
+    # a two-test set and that is still thin; what is no longer true is the
+    # REASON. A standing interval above the cap now exists in this suite exactly
+    # once. If M38 ever SURVIVES, check both tests for a skip decorator, and
+    # check that neither standing interval drifted below `MAX_BACKOFF_SECONDS`.
     Mutation(
         ident="M38",
         target="boty/pacing.py",
@@ -1538,6 +1587,130 @@ MUTATIONS = (
         search="    if: vars.PUBLISH_TO_PYPI == 'true'\n",
         replace="",
         breaks="a git tag becomes a PyPI upload again, with no person in between. The workflow still parses, both jobs still exist, `id-token: write` is still one scope on one job, all five actions are still pinned to a trusted owner and `environment: pypi` is still declared — so every other rule in this repository stays green while the single line separating a record from a publication is gone. The failure is invisible here and shows up only on GitHub's runners the next time anybody pushes a `v*` tag, which is the least attributable moment available: the release. And it reverses a maintainer decision rather than only a mechanism — `forget the pypi part, just get it to github`, 2026-08-25 — into an act that cannot be undone, because a claimed PyPI name is permanent and a bad release can be yanked but never removed",
+    ),
+    # ------------------------------------------------------------------
+    # M42 — THE MONITOR STARTS KNOCKING AGAIN WHILE STILL SAYING IT HAS
+    # STOPPED. REQ-22 criterion 6, 08-04, 2026-08-28.
+    # ------------------------------------------------------------------
+    #
+    # A PHASE IDENT, and the first in a while: M38, M39, M40 and M41 were each
+    # registered by a fix pass rather than by a plan, and this one is registered
+    # by 08-04 because criterion 6 asks for it. It takes the registry to 38.
+    # M21-M24 REMAIN THE INTENTIONAL GAP and are still not filled, for the
+    # reason that has not changed: `apply_mutation` cannot ADD a file, so the
+    # defect they would have covered is outside this harness by construction.
+    # `boty/pacing.py` has been in SANDBOX_CONTENTS since before this registry
+    # existed, so nothing was added anywhere to make M42 reachable — which is
+    # exactly the test M21-M24 failed, and the same sentence M41 wrote about
+    # `.github/`.
+    #
+    # WHAT IT REBUILDS is the rule REQ-22 exists to overrule: the six-hour
+    # ceiling applied INDEFINITELY. Deleting one comparison makes the
+    # conditional expression take its `else` branch at every depth, so a
+    # retailer 30 refusals deep goes back to being asked every 21600 s instead
+    # of every 259200 s. Both constants stay defined, the file still parses, the
+    # outer `max` and the inner clamp are untouched, and every test that
+    # predates this phase stays green. The size of the regression is a measured
+    # pair rather than an adjective: 08-01 recorded **125** requests to a
+    # never-recovering retailer over 30 simulated days under the old rule and
+    # 08-02 recorded **37** under the new one, so this one word puts a
+    # 70.4% reduction back.
+    #
+    # WHY IT EARNED AN IDENT — AND BOTH OF THE CLAIMS 08-04's PLAN WROTE FOR IT
+    # CAME BACK WEAKER WHEN MEASURED. They are recorded in the weaker true form
+    # rather than left standing, because this registry's own rule is that an
+    # ident is never registered to raise the denominator, and an argument that
+    # survives only by not being checked is exactly what that rule is for.
+    # Everything below was measured on 2026-08-28: the mutations applied over
+    # the file text in memory, and the kill sets read off sandbox runs.
+    #
+    #   1. AS WRITTEN: "M42 is the only ident that removes the cool-off and
+    #      nothing else — M33 and M38 both take it down as collateral."
+    #      MEASURED: half of it. M33 does — its `replace` is
+    #      `return st.interval`, which deletes the whole conditional. M38 does
+    #      NOT: its `replace` carries the cool-off arm through verbatim, on
+    #      purpose, and its own block above says why. So exactly ONE existing
+    #      ident takes the cool-off down, and it does so while destroying the
+    #      accessor around it.
+    #
+    #   2. AS WRITTEN: "no existing ident covers the divergence between what the
+    #      monitor says and what it does." MEASURED, and this one is worse than
+    #      weaker — it is aimed at the wrong thing. The divergence is real:
+    #      driven directly at 30 refusals, unmutated `current_interval` answers
+    #      259200 while under M42 it answers 21600, and `skipped_reason` — left
+    #      byte-unchanged by this mutation, verified — goes on describing that
+    #      retailer as left alone for days in both cases. But NOTHING IN THE
+    #      SUITE CATCHES THE DIVERGENCE AS SUCH.
+    #      `test_a_retailer_in_cooloff_says_so_rather_than_reporting_a_minute_
+    #      count` exists and is NOT in M42's kill set. M42 is caught for the
+    #      cadence, never for the disagreement. So the divergence belongs in
+    #      `breaks` as what shipping this defect would look like, and it is NOT
+    #      the thing this ident gates. Registering an ident on the divergence
+    #      itself would be a mutation on a rule the suite does not hold, which
+    #      is a SURVIVOR and a self-inflicted exit 1.
+    #
+    # SO WHAT IS LEFT, STATED PLAINLY BECAUSE IT IS NARROWER THAN THE PLAN
+    # PROMISED. M42's kill set is a PROPER SUBSET of M33's: 14 tests, all 14 of
+    # them among M33's 26, with nothing in M42 that is not in M33. **M42
+    # therefore closes no hole in the test suite** — a real code change deleting
+    # this comparison would already be caught by those same 14 assertions
+    # whether or not this entry existed. What it adds is not detection but
+    # LOCALISATION, and one thing this registry can otherwise not do: it is the
+    # only entry whose failure signature says *the cool-off rule died* rather
+    # than *the accessor died*, and the twelve tests that kill M33 and do not
+    # kill M42 are the proof that the sub-threshold backoff, the cap and the
+    # clamp are all still standing. That is also what T-08-02 asks of it — a
+    # mitigation nobody can show would be noticed if it vanished is a mitigation
+    # on paper — and it is the whole of the case.
+    #
+    # IF A LATER READER JUDGES LOCALISATION INSUFFICIENT, THE HONEST REMEDY IS
+    # TO DELETE M42, not to reword this paragraph until it sounds like coverage.
+    # The measurements above are the ones that decide it and they are written
+    # down so the question can be re-asked rather than re-argued.
+    #
+    # THE COST, STATED RATHER THAN BURIED: three anchors, not two. M42's
+    # `search` is a substring of both M33's and M38's nine-line fragments —
+    # measured, both True — so one edit to `current_interval`'s return now
+    # drifts three anchors. That is accepted because drift here is a STOP and
+    # never a silent reduction: `apply_mutation` raises when its anchor is
+    # missing and `main` turns that into exit 2 and "This is not a result".
+    # Three loud anchors are cheaper than one quiet one. The alternative was
+    # considered and rejected — there is nowhere outside that block where the
+    # cool-off decides when a request is made, because `record` computes its
+    # wait THROUGH the accessor, which is the whole reason 08-02 put the branch
+    # inside it.
+    #
+    # THE ANCHOR IS BEHAVIOURAL AND PRE-COUNTED, 2026-08-28, against the file
+    # text: this one indented line occurs ONCE as a fixed substring.
+    # `skipped_reason`'s guard reads the same constant but is indented eight
+    # spaces and ends in a colon, so it is a different string and is not
+    # reachable by this replacement. No message text, no rendered tag, no
+    # docstring fragment, no version literal.
+    #
+    # KILL SET MEASURED OFF THE RUN THAT REGISTERED IT rather than carried over
+    # from M33 or M38 — M33's 2026-08-17 protocol paragraph, applied to a new
+    # ident, where it binds at least as hard: **14 test(s) failed**, listed in
+    # 08-04-SUMMARY.md test by test. Six of the fourteen are the boundary
+    # table's rows at 30 and 31 refusals at both standing intervals, three are
+    # 08-03's staleness-window rows at cool-off depth, and the rest are the
+    # single-probe test, the restart simulation, the recovery-at-depth test, the
+    # thirty-day count, the cross-surface tracer and the clamp test.
+    #
+    # IF IT EVER SURVIVES: check two things before anything else. First,
+    # whether the boundary table's rows at and past the threshold were
+    # re-derived through `COOLOFF_SECONDS` instead of being hand-written
+    # literals — a re-derivation passes under either branch and is the failure
+    # 08-02's table comment already argues against. Second, whether the
+    # single-probe test's simulated window was shortened below one cool-off:
+    # under a window shorter than the six-hour ceiling the probe count is 1 with
+    # or without this line, so the test would go on passing while measuring
+    # nothing.
+    Mutation(
+        ident="M42",
+        target="boty/pacing.py",
+        search="            if st.refusals >= REFUSALS_BEFORE_COOLOFF\n",
+        replace="            if False\n",
+        breaks="a retailer that has refused thirty times running is asked again every six hours forever, which is the behaviour REQ-22 exists to end — 125 requests over thirty days where the rule in force schedules 37. The backoff still climbs, the cap still binds, the clamp still holds and the accessor still refuses to shorten a wait, so nothing that guards the OTHER rules in this method can see it. And the monitor does not stop saying it has stopped: the cool-off arm one method along is guarded by its own comparison, which this leaves standing, so the status page and the daemon log go on describing that retailer as left alone for days while the schedule has quietly gone back to four requests a day at the one retailer most likely to be counting them. The request footprint that earns and sustains a block returns in full, and a surface that disagrees with the schedule is this project's core defect stated one level up. In production the regression is invisible in any single cycle — one cycle asks once either way — and shows up only as a count over weeks, which is the shape of defect a person is least likely to notice and a simulated month is most likely to",
     ),
 )
 
