@@ -512,11 +512,26 @@ def test_a_pre_07_document_loads_as_availability_with_an_unknown_age(tmp_path: P
 def test_a_dated_document_round_trips_to_the_float(tmp_path: Path) -> None:
     """Save then load returns the same stamp, exactly.
 
-    The stamp is deliberately two days old, which is well past
-    `pacing.STATE_MAX_AGE_SECONDS` (6 hours). That constant is NOT reused as this
-    field's far bound: a refusal count past the cap has outlived its reasoning, a
-    reading's age never does, and a 6-hour cap here would delete this phase's own
-    datum twice a day.
+    The stamp is deliberately two days old, and this test asserts it comes back
+    two days old.
+
+    THIS DOCSTRING SAID THE STAMP WAS "well past `pacing.STATE_MAX_AGE_SECONDS`
+    (6 hours)" UNTIL 2026-08-28, AND THAT SENTENCE IS NOW FALSE. REQ-22
+    re-derived that window from the longest wait the pacing module can produce,
+    so it is three days, and two days is INSIDE it. `_TWO_DAYS` is deliberately
+    NOT changed to restore the comparison: the stamp's age is this test's own
+    subject, and editing a test's subject to preserve a rhetorical yardstick
+    would be changing a test for a reason unrelated to what it checks.
+
+    THE POINT THE OLD SENTENCE WAS REACHING FOR SURVIVES, AND IS BETTER MADE
+    WITHOUT IT. That constant is NOT reused as this field's far bound, and
+    whether one bound happens to sit inside the other was never what made reuse
+    wrong. The two bounds answer DIFFERENT QUESTIONS: a refusal count past the
+    pacing window has outlived its reasoning because a refusal is a penalty and
+    penalties expire, whereas a reading's age never outlives its reasoning — the
+    older it is, the more the operator needs to see it. Reusing that constant
+    here would delete this project's own datum on a schedule, at any value the
+    constant ever takes.
     """
     path = tmp_path / "nested" / "state.json"
     stamp = time.time() - _TWO_DAYS

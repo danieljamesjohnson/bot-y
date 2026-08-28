@@ -107,13 +107,25 @@ STORE_PIN_ACTION = (
 #:
 #: WHAT IT DELIBERATELY DOES NOT DO: expire a real reading.
 #: `pacing.STATE_MAX_AGE_SECONDS` is NOT reused as the far bound here, and the
-#: difference is not a preference. There the far bound is six hours because a
-#: refusal COUNT past the cap "has outlived its reasoning" — a refusal is a
-#: penalty, and penalties expire. A reading's age does not: the older it is, the
-#: more the operator needs to see it. Applying that constant here would silently
-#: delete every stamp older than one backoff window, which is this phase's own
-#: datum evaporating twice a day — a bound that binds on the wrong thing, and
+#: difference is not a preference. There the far bound is the longest wait that
+#: module's policy can produce — three days since REQ-22 — because a refusal
+#: COUNT past that window "has outlived its reasoning": a refusal is a PENALTY,
+#: and penalties expire. A reading's age does not: the older it is, the more the
+#: operator needs to see it. Applying that constant here would silently delete
+#: every stamp older than one such window, which is this phase's own datum
+#: evaporating on a schedule — a bound that binds on the wrong thing, and
 #: therefore the very defect this phase exists to remove.
+#:
+#: THE NUMBER AND THE DERIVATION IN THAT PARAGRAPH WERE CORRECTED ON 2026-08-28;
+#: THE CONCLUSION WAS NOT TOUCHED. It said "six hours" and "one backoff window",
+#: both true until `pacing.STATE_MAX_AGE_SECONDS` was re-derived from
+#: `pacing.LONGEST_WAIT_SECONDS`. The argument is UNCHANGED and is in fact
+#: slightly stronger now, which is worth saying rather than leaving to be
+#: noticed: the two bounds are further apart than they were — a floor at the year
+#: 2000 against a three-day expiry — and this argument never rested on the gap
+#: being small. It rests on the two bounds answering DIFFERENT QUESTIONS. That is
+#: why re-pointing this at whatever `pacing` currently derives would still be
+#: wrong at any value it ever takes.
 #:
 #: WHY IT CAN NEVER BIND ON ANYTHING REAL: this repository's first commit is
 #: 2026-08-02, so the floor sits more than a quarter of a century below the

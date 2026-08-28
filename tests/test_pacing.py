@@ -1110,6 +1110,16 @@ def test_state_older_than_the_backoff_cap_is_discarded(tmp_path: Path) -> None:
 
     A file written before a machine was off for a week would otherwise restore a
     six-hour backoff against a condition that has had a week to clear.
+
+    THE NAME SAYS "THE BACKOFF CAP" AND THE WINDOW IS NO LONGER THAT, since
+    2026-08-28: it is `LONGEST_WAIT_SECONDS`, which past
+    `REFUSALS_BEFORE_COOLOFF` is the cool-off rather than the cap. The name is
+    KEPT deliberately — this test is written symbolically against
+    `STATE_MAX_AGE_SECONDS`, so its assertion is exactly as right as it was, and
+    a rename would cost its `git log -S` history while changing nothing it
+    checks. See
+    `test_the_age_out_is_derived_from_the_longest_wait_the_module_can_produce`
+    for where the derivation is asserted and the reversal recorded.
     """
     path = tmp_path / "pacer-state.json"
     path.write_text(_document(refusals=5, age=STATE_MAX_AGE_SECONDS + 1))
@@ -1118,8 +1128,8 @@ def test_state_older_than_the_backoff_cap_is_discarded(tmp_path: Path) -> None:
     p.load()
 
     assert p._for("amazon").refusals == 0, (
-        "state older than one full cap-length window was applied — it has "
-        "outlived the reasoning that produced it"
+        "state older than one full longest-wait-length window was applied — it "
+        "has outlived the reasoning that produced it"
     )
 
 
@@ -1141,13 +1151,22 @@ def test_a_paging_memory_older_than_the_backoff_cap_is_discarded(tmp_path: Path)
 
     The sibling of `test_state_older_than_the_backoff_cap_is_discarded`, which
     is where IN-04 said this belonged.
+
+    THE NAME SAYS "THE BACKOFF CAP" AND THE WINDOW IS NO LONGER THAT, since
+    2026-08-28 — it is `LONGEST_WAIT_SECONDS`. Name kept for the reason given at
+    the sibling above: the assertion is symbolic and unchanged. The widening does
+    have a real cost on THIS half, and it is argued at `STATE_MAX_AGE_SECONDS`
+    rather than hidden: a health warning about our own dead control can now be
+    suppressed for up to three days rather than six hours. Bounded, and never
+    unbounded. See
+    `test_the_age_out_is_derived_from_the_longest_wait_the_module_can_produce`.
     """
     path = tmp_path / "pacer-state.json"
     path.write_text(_document(refusals=1, age=1.0, warned_age=STATE_MAX_AGE_SECONDS + 1))
 
     assert _pacer(path).load() == set(), (
-        "a paging memory older than one full cap-length window was restored — the "
-        "retailer it names can never be paged about again"
+        "a paging memory older than one full longest-wait-length window was "
+        "restored — the retailer it names can never be paged about again"
     )
 
 
@@ -1156,6 +1175,11 @@ def test_a_paging_memory_younger_than_the_cap_is_restored(tmp_path: Path) -> Non
 
     Discarding every entry would restore REQ-16's "pushed once per process" from
     the other end, which is the regression M13 exists to catch.
+
+    THE NAME SAYS "THE CAP" AND THE WINDOW IS NO LONGER THAT, since 2026-08-28 —
+    it is `LONGEST_WAIT_SECONDS`. Name kept: the assertion is symbolic and holds
+    whatever the window is. See
+    `test_the_age_out_is_derived_from_the_longest_wait_the_module_can_produce`.
     """
     path = tmp_path / "pacer-state.json"
     path.write_text(_document(refusals=1, age=1.0, warned_age=1.0))
@@ -1225,7 +1249,15 @@ def test_a_retailer_that_leaves_the_paging_memory_leaves_the_stamps_too(
 
 
 def test_state_younger_than_the_cap_is_restored(tmp_path: Path) -> None:
-    """Bounded on both sides, so the age-out cannot pass by discarding everything."""
+    """Bounded on both sides, so the age-out cannot pass by discarding everything.
+
+    THE NAME SAYS "THE CAP" AND THE WINDOW IS NO LONGER THAT, since 2026-08-28 —
+    it is `LONGEST_WAIT_SECONDS`. Name kept: the assertion is symbolic and holds
+    whatever the window is, which is exactly why it could not pin where the
+    window moved TO and why `_RESTORE_ACROSS_THE_STALENESS_WINDOW` is written
+    out in literals instead. See
+    `test_the_age_out_is_derived_from_the_longest_wait_the_module_can_produce`.
+    """
     path = tmp_path / "pacer-state.json"
     path.write_text(_document(refusals=5, age=1.0))
 

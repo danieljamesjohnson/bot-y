@@ -265,6 +265,57 @@ COOLOFF_SECONDS = 3 * 24 * 60 * 60
 #: is treated as absent, which costs one repeated notification and one shallow
 #: backoff — the same price the config comment already quotes for deleting the
 #: file, and cheaper than reading a dateless list as if it were dated.
+#:
+#: NOT BUMPED TO 3 FOR REQ-22, 2026-08-28, AND THIS PARAGRAPH IS AN APPLICATION
+#: OF THE RULE ABOVE RATHER THAN A WITHDRAWAL OF IT. Nothing above is reversed;
+#: a reader must not take this as one. It is written here because `08-02` raised
+#: the question and handed it forward, and because the next person to hit the
+#: same question deserves the worked precedent and not only the rule.
+#:
+#: THE CASE FOR A BUMP, STATED FIRST AND IN ITS STRONGEST FORM, because a rule
+#: you only ever quote against yourself is not a rule. The paragraph above says
+#: this document carries a COUNT whose units are a policy decision — and REQ-22
+#: changed exactly that policy. Past `REFUSALS_BEFORE_COOLOFF` the same stored
+#: number now denotes a three-day wait where on 2026-08-27 it denoted six hours.
+#: That is precisely the shape the rule points at, and it is why the question is
+#: a real one rather than a formality.
+#:
+#: IT RESOLVES AGAINST A BUMP, on three measured legs.
+#:
+#: 1. THE DOCUMENT'S SHAPE IS UNCHANGED. No new key, no changed type, no changed
+#:    nesting; `save` writes the same two sections with the same fields it wrote
+#:    before the phase. A pre-phase document and a post-phase document are
+#:    parse-compatible in BOTH directions, so no misparse is possible either way
+#:    — and a misparse is what the v1 to v2 bump was actually bought for, when
+#:    `warned` changed from a list of names to a mapping and the old shape could
+#:    not be aged at all.
+#:
+#: 2. THE COUNT'S MEANING IS UNCHANGED, AND ONLY THE RESPONSE TO IT MOVED.
+#:    `refusals` is still the number of consecutive refusals — a true fact about
+#:    the retailer's history under either policy, and one neither policy
+#:    rescales. What the new policy does is give UNCHANGED evidence a new answer,
+#:    in the direction of asking LESS. So an old file read by new code produces a
+#:    longer wait, and a new file read by old code produces the six-hour cap.
+#:    Both directions are safe and neither is a wait nobody chose, which is the
+#:    hazard the opening paragraph names.
+#:
+#: 3. THE BUMP'S OWN PRICE, QUOTED FROM ABOVE, IS DECISIVE HERE. "Treated as
+#:    absent" means every retailer's refusal count is discarded on the upgrade.
+#:    So on the day this phase ships, every retailer at or past the threshold
+#:    would lose its cool-off, be asked at full rate, and climb the backoff from
+#:    the bottom — this phase's own defect, delivered by this phase's own safety
+#:    mechanism, to exactly the retailers the phase exists to protect. The price
+#:    would be paid in the currency the phase is denominated in.
+#:
+#: THE RESIDUAL, NAMED HONESTLY. A DOWNGRADE — an older binary reading a
+#: post-phase document — is unaffected by a version field, for the same reason
+#: this comment already gives about `monitor.State`: the code that would check it
+#: is the code that does not exist yet. What that older binary does is apply the
+#: six-hour cap to a count it understands, which is leg 2's safe direction.
+#:
+#: AND THE RULE IS LEFT STANDING UNWEAKENED. A future change that alters the
+#: document's SHAPE, or that RESCALES what a stored count denotes rather than
+#: what this module does about it, still owes a bump. This one does neither.
 STATE_VERSION = 2
 
 #: The longest wait this module's own POLICY can produce, in seconds. REQ-22,
@@ -296,14 +347,91 @@ STATE_VERSION = 2
 LONGEST_WAIT_SECONDS = max(MAX_BACKOFF_SECONDS, COOLOFF_SECONDS)
 
 #: Persisted state older than this is discarded rather than applied. DERIVED
-#: from `MAX_BACKOFF_SECONDS` rather than re-chosen, so the two cannot drift
+#: from `LONGEST_WAIT_SECONDS` rather than re-chosen, so the two cannot drift
 #: apart — the same argument `Result.degraded` makes about deriving rather than
-#: storing. The cap already IS this project's written answer to how long a
-#: refusal stays evidence ("long enough to outlast a rate-limit window and short
-#: enough that a retailer coming back is noticed the same day"), so a record
-#: older than one full cap-length window has outlived the reasoning that
-#: produced it. This is half the answer to the stale-file objection quoted at
-#: the top of this file; the other half is that `due_at` is never persisted.
+#: storing. That constant already IS this project's written answer to how long a
+#: refusal stays evidence, because it is the longest wait this module's own
+#: policy will ever schedule against one; so a record older than one full
+#: longest-wait-length window has outlived the reasoning that produced it. This
+#: is half the answer to the stale-file objection quoted at the top of this file;
+#: the other half is that `due_at` is never persisted.
+#:
+#: THE DERIVATION WAS WITHDRAWN ON 2026-08-28 — the CEILING it named, not the
+#: rule it states. Until then the two sentences above read, in full:
+#:
+#:     "DERIVED from `MAX_BACKOFF_SECONDS` rather than re-chosen, so the two
+#:     cannot drift apart — the same argument `Result.degraded` makes about
+#:     deriving rather than storing."
+#:
+#:     "The cap already IS this project's written answer to how long a refusal
+#:     stays evidence ("long enough to outlast a rate-limit window and short
+#:     enough that a retailer coming back is noticed the same day"), so a record
+#:     older than one full cap-length window has outlived the reasoning that
+#:     produced it."
+#:
+#: Both are quoted, because they are one argument in two halves and quoting half
+#: of it would make this reversal look larger than it is.
+#:
+#: WHAT OVERRULED THEM, measured:
+#:
+#: 1. REQ-22 and `08-02` made the cap stop being the longest wait this module
+#:    produces. `COOLOFF_SECONDS` is 259 200 s against a 21 600 s cap — twelve
+#:    times — so the second sentence's premise ("the cap already IS the answer")
+#:    became false on the day the cool-off landed.
+#: 2. The consequence was a fact, not a risk. `record` re-stamps `refused_at`
+#:    only when a retailer is actually refused, and a retailer in cool-off is
+#:    asked once every three days, so its record is TWELVE window-lengths old at
+#:    the moment its own next probe falls due. Every restart discarded it, and
+#:    the retailer came back on the climbing backoff.
+#: 3. `08-01` measured the old rule at 125 requests to a never-recovering
+#:    retailer over 30 simulated days; `08-02` measured the new one at 37. A
+#:    window that discarded the record turned that 37 back into something near
+#:    the 125 on every restart — the phase's own result undone by its own
+#:    persistence layer.
+#:
+#: WHAT SURVIVES IS THE ENTIRE ARGUMENT, and a reader who sees a reversal here
+#: and expects a fallen conclusion should be told plainly that none fell.
+#: Derived and never re-chosen, so the two cannot drift — untouched. "One full
+#: cap-length window" survives in substance as one full longest-wait-length
+#: window: the sentence's shape, its reasoning and its conclusion are all
+#: intact. What changed is the PREMISE that the cap was the longest wait. The
+#: constant survives as a name; only what it derives from moved.
+#:
+#: WHY ONE CONSTANT MUST GOVERN BOTH HALVES OF THE DOCUMENT — required, not
+#: merely tidy. `load` applies this window twice: to the refusal counts and to
+#: the paging memory. The persistence banner further down this file already
+#: argues why they cannot be separated — restoring one without the other
+#: "restores half a decision", and the half that goes missing is the worse one.
+#: The mechanism is concrete here: a retailer in a three-day cool-off is not
+#: CHECKED for three days, `cli.watch_cycle`'s `still_unhealthy` keeps an
+#: unchecked retailer in `warned` for exactly that reason, and a six-hour window
+#: against a three-day cool-off would therefore guarantee that every restart came
+#: back knowing the retailer is entrenched and NOT knowing somebody had already
+#: been told. One constant makes that split impossible, which is why REQ-22's
+#: criterion 5 forbids a second staleness rule rather than merely discouraging
+#: one, and why the two guard sites below read the same name.
+#:
+#: THE RESIDUAL, MEASURED RATHER THAN WAVED AT. This window now EQUALS the
+#: longest wait, so a record can age out only in the sliver between a cool-off
+#: expiring and the next cycle actually probing — the loop's schedule advances
+#: with jitter, so the probe lands at or slightly after the wait rather than
+#: exactly on it. That is roughly one cycle, about 300 s in 259 200, or 0.12% of
+#: the window; and it points the same direction the withdrawn six-hour window
+#: pointed 100% of the time, so this is a strict improvement rather than a trade.
+#: THE OPTION NOT TAKEN, named so it reads as a decision: a window with slack
+#: (`LONGEST_WAIT_SECONDS * 2`, say) would remove the sliver, and would re-choose
+#: a number the paragraph above forbids re-choosing — buying 0.12% with the one
+#: property that keeps these two constants from drifting apart. If the residual
+#: ever bites, the change to consider is to `LONGEST_WAIT_SECONDS`' definition,
+#: never a second constant beside this one.
+#:
+#: CHECKED ON 2026-08-28 AND LEFT UNEDITED: concession (a) in the module
+#: docstring says a file written before a machine was off for A WEEK is ignored
+#: rather than applied. A week is 604 800 s and this window is 259 200 s, so the
+#: sentence is still true and still says what it meant. Recorded rather than
+#: silently passed over — this project has been bitten by prose that quietly went
+#: false, and a sentence that survives a change is worth the one line that says
+#: it was tested.
 STATE_MAX_AGE_SECONDS = LONGEST_WAIT_SECONDS
 
 #: Ceiling on a refusal count read back off disk. A measured number, not a round
@@ -387,6 +515,44 @@ class _RetailerState:
     #: jump backwards leaves a stamp in the future, which `load` discards rather
     #: than trusting forever.
     refused_at: float = 0.0
+
+    #: FOUR FIELDS, AND THE COOL-OFF ADDED NONE. REQ-22, 2026-08-28. Recorded
+    #: here rather than in a planning document because the next person to ask
+    #: "shouldn't there be an `in_cooloff` flag?" will be reading this class, not
+    #: that document. Three legs, each checkable:
+    #:
+    #: 1. THERE IS NO FACT A FIELD WOULD CARRY. The cool-off is a THRESHOLD on
+    #:    `refusals`, and `refusals` is already persisted, already stamped by
+    #:    `refused_at`, already aged by `STATE_MAX_AGE_SECONDS` and already
+    #:    clamped by `MAX_PERSISTED_REFUSALS` — which sits above the threshold on
+    #:    purpose, so a restored count can cross it. An `in_cooloff` flag would
+    #:    store a value DERIVED from a value already stored, which is the second
+    #:    copy of a number this module argues against three times over. Two
+    #:    copies only have to disagree once, and the disagreement would be a
+    #:    retailer the file says is in cool-off and the arithmetic says is not.
+    #:
+    #: 2. THERE IS NO PROBE FLAG EITHER, AND THAT IS THE LEG WORTH ARGUING. The
+    #:    nearest analog in this class is `_warned_since` — a per-retailer
+    #:    wall-clock stamp that exists only to be written down — and copying its
+    #:    shape for "we are waiting on one specific probe" was the obvious move.
+    #:    It is not needed. "Exactly once" is produced by `record` re-scheduling
+    #:    `due_at` UNCONDITIONALLY on every outcome, refusal or not, so the probe
+    #:    cannot repeat inside a process; and across a restart `due_at` resets to
+    #:    0.0 by design, which is decided and priced at one immediate request.
+    #:    A stored probe flag would be a second memory of a decision `due_at`
+    #:    already makes, and the two would diverge at exactly the restart the
+    #:    flag was added for.
+    #:
+    #: 3. A FIELD WOULD HAVE COST A VERSION BUMP, which `STATE_VERSION`'s comment
+    #:    then argues against paying. So these are one argument rather than two,
+    #:    and the honest order is this one first: no field is owed, and no bump
+    #:    follows from it. Reversing the order would make the bump argument look
+    #:    like the reason for the field decision, when it is a consequence of it.
+    #:
+    #: WHAT WOULD REOPEN THIS: a cool-off that needed to remember something
+    #: `refusals` cannot express — a per-retailer duration, a probe outcome kept
+    #: across processes, an operator override. None exists today, and adding one
+    #: means coming back to `STATE_VERSION` as well as to here.
 
 
 @dataclass
@@ -781,10 +947,18 @@ class Pacer:
                 refused_at = entry.get("refused_at")
                 if not isinstance(refused_at, (int, float)) or isinstance(refused_at, bool):
                     continue
-                # BOTH bounds. Past the cap the record has outlived its
-                # reasoning; a stamp in the FUTURE is a clock that jumped
+                # BOTH bounds. Past the staleness window the record has outlived
+                # its reasoning; a stamp in the FUTURE is a clock that jumped
                 # backwards, and with only an upper bound it would hold the
                 # state for as long as the skew lasted.
+                #
+                # "Past the cap" is what this said until 2026-08-28. The bound
+                # is no longer the backoff cap — it is the longest wait the
+                # module's policy can produce, which past
+                # `REFUSALS_BEFORE_COOLOFF` is the cool-off. A plain correction
+                # rather than a dated reversal, because the words carried a
+                # LABEL for the bound and not an argument about it; the argument
+                # is at `STATE_MAX_AGE_SECONDS` and is where the reversal lives.
                 if not 0.0 <= now - float(refused_at) <= STATE_MAX_AGE_SECONDS:
                     continue
                 # `interval` comes from config, never from the file: it is a
@@ -808,8 +982,11 @@ class Pacer:
         # exists to send, silenced permanently by a stale runtime artifact.
         #
         # Same window, same both-ended bound, same reasoning as the counts: past
-        # the cap the record has outlived what produced it, and a stamp in the
-        # FUTURE is a clock that jumped backwards.
+        # the staleness window the record has outlived what produced it, and a
+        # stamp in the FUTURE is a clock that jumped backwards. ("Past the cap"
+        # until 2026-08-28, corrected for the reason given at its twin above —
+        # and "same window" is now load-bearing rather than incidental: one
+        # constant governs both halves so they cannot age apart.)
         warned = doc.get("warned")
         if not isinstance(warned, dict):
             return set()
