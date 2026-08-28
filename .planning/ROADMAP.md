@@ -105,6 +105,17 @@ footprint that earns and sustains a block shrinks.
   5. The cool-off **survives a restart**, the same guarantee the existing backoff already carries, and is discarded when stale by the existing rule rather than a second one
   6. `make verify-offline` exits 0, with at least one new mutation registered, observed CAUGHT, and anchored on **behaviour** rather than on message text
 
+**Plans**: 4 plans. `phases/08-stop-knocking/08-PLAN-OUTLINE.md` is the authority on the breakdown.
+Every plan touches `boty/pacing.py` or `tests/test_pacing.py`, so **every plan is its own wave** —
+the serialization is the schedule, not a scheduling failure.
+
+Plans:
+
+- [ ] 08-01: The number before — 30 days of cycles against the **unmodified** rule, recorded as a stated literal, plus `08-DECISIONS.md` and `COVERAGE.md`. Changes no production code, deliberately. *(PLAN written 2026-08-28, not executed)*
+- [ ] 08-02: The cool-off itself — criteria 1, 2, 3-after and 4. Leads with the end-to-end tracer. *(outlined; PLAN not yet written)*
+- [ ] 08-03: Criterion 5 — it survives a restart, and the rule that discards it is the one already there. *(outlined; PLAN not yet written)*
+- [ ] 08-04: Criterion 6 — M42 registered and observed CAUGHT; the consumer surfaces checked rather than assumed. *(outlined; PLAN not yet written)*
+
 ### Phase 9: Out of Lockstep
 
 **Goal**: The six retailers stop presenting as one coordinated crawler — independent schedules, so
