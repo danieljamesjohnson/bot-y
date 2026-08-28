@@ -267,6 +267,34 @@ COOLOFF_SECONDS = 3 * 24 * 60 * 60
 #: file, and cheaper than reading a dateless list as if it were dated.
 STATE_VERSION = 2
 
+#: The longest wait this module's own POLICY can produce, in seconds. REQ-22,
+#: 2026-08-28.
+#:
+#: WRITTEN AS THE EXPRESSION AND NEVER AS ITS CURRENT WINNER, and that is the
+#: whole of this constant's content. `COOLOFF_SECONDS` happens to be the larger
+#: arm today, so spelling this `= COOLOFF_SECONDS` would produce the identical
+#: number and would be wrong the day either arm moves — a later phase raising
+#: `MAX_BACKOFF_SECONDS` above the cool-off, or shortening the cool-off, would
+#: leave this understating a wait the module actually produces. A window shorter
+#: than a wait is precisely the defect this constant exists to remove, and the
+#: short form would rebuild it from the other end.
+#:
+#: THE ONE CASE IT DELIBERATELY EXCLUDES, said rather than left as a hole:
+#: `current_interval` returns `max(st.interval, ...)`, and `config._interval`
+#: enforces a floor with NO upper bound, so an operator standing interval can
+#: exceed this number — a retailer configured at a week. That is outside this
+#: constant's claim on purpose. Above it the outer `max` returns the standing
+#: interval at EVERY refusal depth (at 0 by the `not st.refusals` branch, from 1
+#: to 29 because the capped backoff cannot exceed `MAX_BACKOFF_SECONDS`, and at
+#: 30 and beyond because the cool-off cannot exceed `COOLOFF_SECONDS`), so no
+#: persisted count is load-bearing there at all and a depth aged out changes
+#: nothing about when the retailer is asked. This is the module's POLICY range;
+#: above it the wait is the operator's standing decision.
+#:
+#: THAT EXCLUSION IS ASSERTED RATHER THAN PROMISED, by
+#: `test_a_standing_interval_above_the_window_makes_the_restored_depth_irrelevant`.
+LONGEST_WAIT_SECONDS = max(MAX_BACKOFF_SECONDS, COOLOFF_SECONDS)
+
 #: Persisted state older than this is discarded rather than applied. DERIVED
 #: from `MAX_BACKOFF_SECONDS` rather than re-chosen, so the two cannot drift
 #: apart — the same argument `Result.degraded` makes about deriving rather than
@@ -276,7 +304,7 @@ STATE_VERSION = 2
 #: older than one full cap-length window has outlived the reasoning that
 #: produced it. This is half the answer to the stale-file objection quoted at
 #: the top of this file; the other half is that `due_at` is never persisted.
-STATE_MAX_AGE_SECONDS = MAX_BACKOFF_SECONDS
+STATE_MAX_AGE_SECONDS = LONGEST_WAIT_SECONDS
 
 #: Ceiling on a refusal count read back off disk. A measured number, not a round
 #: one.

@@ -49,6 +49,8 @@ from boty.fetch import Blocked, FetchError, is_refusal
 from boty.models import Availability, Health, Result, Watch
 from boty.monitor import CAUSE_UNKNOWN, State, assess_health, run_once
 from boty.pacing import (
+    COOLOFF_SECONDS,
+    LONGEST_WAIT_SECONDS,
     MAX_BACKOFF_SECONDS,
     MAX_PERSISTED_REFUSALS,
     REFUSALS_BEFORE_COOLOFF,
@@ -1249,6 +1251,252 @@ def test_a_stamp_in_the_future_is_discarded(tmp_path: Path) -> None:
     assert p._for("amazon").refusals == 0
 
 
+#: What a document carrying `REFUSALS_BEFORE_COOLOFF` refusals restores, and what
+#: cadence that restored depth produces, at five ages spanning both sides of the
+#: staleness window. `(age_seconds, expected_refusals, expected_interval)`.
+#:
+#: EVERY NUMBER HAND-WRITTEN, and that is the point of the table — restating
+#: `_CADENCE_AFTER_N_REFUSALS`' own argument in this table's terms. The six window
+#: tests above are written SYMBOLICALLY, against `STATE_MAX_AGE_SECONDS` itself,
+#: which is exactly right for what they check and exactly why they cannot pin
+#: where the window moved TO: they hold whatever the window is. An age written as
+#: `MAX_BACKOFF_SECONDS + 1` or `STATE_MAX_AGE_SECONDS + 1` here would be a
+#: re-derivation of the constant under test, which is a test that cannot fail.
+#: Written out, a future edit to the window has to change these numbers BY HAND,
+#: and doing that is the moment somebody notices they have changed how long a
+#: refusal stays evidence.
+#:
+#: WHAT EACH ROW IS FOR, because five rows that all just "check the window" would
+#: be one row four times:
+#:
+#: 1. `1.0` — a fresh record. Green before this change and after it; the control
+#:    that says the restore machinery was already there.
+#: 2. `21601.0` — ONE SECOND past the ceiling this phase stopped applying
+#:    indefinitely, and well inside a cool-off. THIS IS THE ROW THAT IS RED
+#:    BEFORE THE DERIVATION MOVES: today it restores 0 and a 300 s cadence, so a
+#:    restart throws away a three-day cool-off after six hours.
+#: 3. `259199.0` — one second inside the new window. Red before, green after.
+#: 4. `259201.0` — one second PAST the new window. The upper bound still binds,
+#:    so this change widened the window rather than removing it.
+#: 5. `-1.0` — a stamp one second in the FUTURE, i.e. a clock that jumped
+#:    backwards, still discarded at cool-off depth. The window is still
+#:    TWO-SIDED, which is criterion 5's no-second-rule clause asserted
+#:    behaviourally: the cheapest way to make a record survive is to stop
+#:    discarding it, and this row is what forbids that.
+#:
+#: BOTH COLUMNS ARE ASSERTED ON EVERY ROW. A restore that reached the field and
+#: not the arithmetic is the exact failure
+#: `test_the_restored_count_is_load_bearing_on_the_next_wait`'s docstring names,
+#: and asserting it once at one age would leave it unasserted at the age that
+#: matters.
+_RESTORE_ACROSS_THE_STALENESS_WINDOW = [
+    (1.0, 30, 259200.0),
+    (21601.0, 30, 259200.0),
+    (259199.0, 30, 259200.0),
+    (259201.0, 0, 300.0),
+    (-1.0, 0, 300.0),
+]
+
+
+@pytest.mark.parametrize(
+    "age_seconds, expected_refusals, expected_interval",
+    _RESTORE_ACROSS_THE_STALENESS_WINDOW,
+)
+def test_a_refusal_record_is_restored_across_the_whole_staleness_window(
+    tmp_path: Path,
+    age_seconds: float,
+    expected_refusals: int,
+    expected_interval: float,
+) -> None:
+    """Criterion 5, at the step, on both sides, at cool-off depth.
+
+    A retailer in a three-day cool-off is re-stamped only at its own probe, so
+    its record spends almost all of its life older than six hours. Before
+    `STATE_MAX_AGE_SECONDS` was re-derived, `load` discarded every such record
+    and the retailer came back from a restart on the climbing backoff — the
+    cool-off surviving in the file and not in the process.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=REFUSALS_BEFORE_COOLOFF, age=age_seconds))
+
+    p = _pacer(path)
+    p.load()
+
+    assert p._for("amazon").refusals == expected_refusals, (
+        f"a record stamped {age_seconds} s ago restored "
+        f"{p._for('amazon').refusals} refusals, not {expected_refusals}"
+    )
+    assert p.current_interval("amazon") == expected_interval, (
+        f"a record stamped {age_seconds} s ago produced a cadence of "
+        f"{p.current_interval('amazon')} s, not {expected_interval} — the depth "
+        f"was restored somewhere the arithmetic never reads"
+    )
+
+
+def test_a_cooloff_survives_into_a_brand_new_pacer_and_reaches_the_schedule(
+    tmp_path: Path,
+) -> None:
+    """The round-trip claim, at cool-off depth, through the REAL `save`.
+
+    Every other test on this window hand-builds its document with `_document`.
+    This one drives the threshold with `record` and lets `save` write the file,
+    so it is the only place that asserts a document this class actually PRODUCES
+    is a document it can read back at cool-off depth.
+
+    IT IS GREEN BEFORE THIS PLAN'S CHANGE, AND THAT IS A FINDING RATHER THAN A
+    FORMALITY. Its document is written and read in the same instant, so its age
+    is approximately zero and it sits inside the window either way. The survival
+    machinery — the counter, the stamp, the clamp, the round trip — already
+    existed and was already right; what this plan repairs is only how long the
+    window believes it. A reader meeting a green test inside a watched-red plan
+    deserves to know which kind it is, so: this one is a control.
+    """
+    path = tmp_path / "pacer-state.json"
+    first = _pacer(path)
+    for _ in range(REFUSALS_BEFORE_COOLOFF):
+        first.record("amazon", refused=True, now=0.0)
+    first.save(set())
+
+    second = _pacer(path)
+    second.load()
+
+    assert second._for("amazon").refusals == REFUSALS_BEFORE_COOLOFF, (
+        "the cool-off depth did not survive the process at all"
+    )
+    assert second.current_interval("amazon") == 259200.0, (
+        "the restored depth did not produce the cool-off cadence — the retailer "
+        "came back from the restart on the six-hour ceiling"
+    )
+
+    second.record("amazon", refused=True, now=0.0)
+
+    assert second._for("amazon").due_at == 259200.0, (
+        "the first refusal after a restart scheduled a backoff rather than a "
+        "cool-off — the restored depth never reached the schedule"
+    )
+
+
+def test_a_restart_mid_cooloff_is_probed_exactly_once_over_a_whole_window(
+    tmp_path: Path,
+) -> None:
+    """A restart mid-cool-off costs exactly one probe. Measured, not inferred.
+
+    864 cycles of 300 s is 259 200 s, which is one whole cool-off window. The
+    864 is WRITTEN OUT rather than computed from `COOLOFF_SECONDS`, on
+    `_THIRTY_DAYS_OF_CYCLES`' precedent: a future edit to the window has to
+    change this number by hand, and doing that is the moment somebody notices
+    the denominator moved underneath a count.
+
+    THE AGE IS HAND-WRITTEN AT 21 601 s for the same reason row 2 of
+    `_RESTORE_ACROSS_THE_STALENESS_WINDOW` is — one second past the ceiling this
+    phase stopped applying indefinitely, so this test is red before the
+    derivation moves and green after. With the record discarded the retailer
+    comes back on the climbing backoff and is probed many times inside the same
+    window.
+
+    THIS MEASURES A PRICE THAT WAS SET IN ADVANCE. `08-DECISIONS.md` § Collision
+    2 kept `due_at` unpersisted and priced a restart at exactly one immediate
+    request at full rate; this is the first place in the phase that price is
+    OBSERVED across an actual restart rather than decided. If the two ever
+    disagree, the run wins and the decision record is superseded beside itself.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(_document(refusals=REFUSALS_BEFORE_COOLOFF, age=21601.0))
+
+    p = _pacer(path)
+    p.load()
+
+    probes = 0
+    now = 0.0
+    for _ in range(864):
+        if p.due("amazon", now):
+            probes += 1
+            p.record("amazon", refused=True, now=now)
+        now += 300.0
+
+    assert probes == 1, (
+        f"a restart mid-cool-off cost {probes} probes over one whole cool-off "
+        f"window, not the 1 that 08-DECISIONS.md priced it at"
+    )
+
+
+def test_one_load_restores_the_count_and_the_paging_memory_together(
+    tmp_path: Path,
+) -> None:
+    """Criterion 5's no-second-rule clause, asserted behaviourally.
+
+    Not a duplicate of row 2 of `_RESTORE_ACROSS_THE_STALENESS_WINDOW`. That row
+    watches ONE half of the document cross the window; this watches BOTH halves
+    cross it in a single `load`, at an age where both used to be thrown away.
+    That is only possible if ONE constant governs both, so a future second
+    staleness rule written for the cool-off alone — a wider bound on the refusal
+    counts, a cool-off-specific age-out, a re-stamp on read — would split them
+    and redden this test and nothing else in the file.
+
+    WHY THE SPLIT WOULD MATTER RATHER THAN MERELY BE UNTIDY, in `Pacer.load`'s
+    own words: restoring one without the other "restores half a decision", and
+    the half that goes missing is the worse one — a process that comes back
+    knowing the retailer is entrenched and not knowing it has already said so
+    pages immediately about a refusal somebody was already told about. A
+    three-day cool-off against a six-hour window would have guaranteed exactly
+    that split on every restart, because a retailer left alone for three days is
+    not checked for three days and `cli.watch_cycle`'s `still_unhealthy` keeps it
+    in `warned` the whole time.
+    """
+    path = tmp_path / "pacer-state.json"
+    path.write_text(
+        _document(refusals=REFUSALS_BEFORE_COOLOFF, age=21601.0, warned_age=21601.0)
+    )
+
+    p = _pacer(path)
+    restored = p.load()
+
+    assert restored == {"amazon"}, (
+        "the paging memory was discarded at an age the refusal count survives — "
+        "the two halves of this document are aging on different schedules"
+    )
+    assert p._for("amazon").refusals == REFUSALS_BEFORE_COOLOFF, (
+        "the refusal count was discarded at an age the paging memory survives — "
+        "the two halves of this document are aging on different schedules"
+    )
+
+
+def test_a_standing_interval_above_the_window_makes_the_restored_depth_irrelevant() -> None:
+    """The one case `LONGEST_WAIT_SECONDS` does not bound, shown to cost nothing.
+
+    `config._interval` enforces a floor and NO upper bound, so an operator can
+    configure a retailer at a week and `current_interval` will return more than
+    the staleness window. Does the window then fail to cover the module's waits?
+
+    No, and it is provable rather than arguable. Once the standing interval
+    exceeds both wait arms, the outer `max` returns that interval at EVERY
+    refusal depth: at 0 by the `not st.refusals` branch, from 1 to 29 because the
+    capped backoff cannot exceed `MAX_BACKOFF_SECONDS`, and at 30 and beyond
+    because the cool-off cannot exceed `COOLOFF_SECONDS`. The persisted depth is
+    therefore not load-bearing at all there, so a depth aged out changes nothing
+    about when the retailer is asked. `LONGEST_WAIT_SECONDS` bounds the module's
+    own POLICY range; above it the wait is the operator's standing decision,
+    which no persisted count influences.
+
+    GREEN FROM BIRTH, and named as such: it reads no document and no clock, so
+    the staleness window cannot reach it. It converts the argument above from
+    prose in a comment into a gate, which is the only thing it is for.
+    """
+    p = _pacer(interval=259201.0)
+
+    assert p.current_interval("amazon") == 259201.0, "0 refusals"
+    p.record("amazon", refused=True, now=0.0)
+    assert p.current_interval("amazon") == 259201.0, "1 refusal"
+    for _ in range(REFUSALS_BEFORE_COOLOFF - 1):
+        p.record("amazon", refused=True, now=0.0)
+    assert p._for("amazon").refusals == REFUSALS_BEFORE_COOLOFF
+    assert p.current_interval("amazon") == 259201.0, "at the cool-off threshold"
+    for _ in range(MAX_PERSISTED_REFUSALS - REFUSALS_BEFORE_COOLOFF):
+        p.record("amazon", refused=True, now=0.0)
+    assert p._for("amazon").refusals == MAX_PERSISTED_REFUSALS
+    assert p.current_interval("amazon") == 259201.0, "at the persistence clamp"
+
+
 def test_the_persisted_count_is_clamped(tmp_path: Path) -> None:
     """A number out of a file reaching `BACKOFF_FACTOR ** refusals`.
 
@@ -1345,13 +1593,74 @@ def test_the_clamp_sits_above_the_cooloff_threshold_so_a_restored_count_can_cros
     )
 
 
-def test_the_age_out_is_derived_from_the_backoff_cap() -> None:
+def test_the_age_out_is_derived_from_the_longest_wait_the_module_can_produce() -> None:
     """Derived, not re-chosen, so the two can never drift apart.
 
-    The cap already IS this project's written answer to how long a refusal stays
-    evidence; a second number here would be a second answer to the same question.
+    RENAMED AND REWRITTEN ON 2026-08-28, from
+    `test_the_age_out_is_derived_from_the_backoff_cap` — the old name is written
+    out here so `git log -S` can still reach this function's history through the
+    text. The name stated the exact claim being withdrawn, so unlike the four
+    window tests further up this file (whose names are symbolic and stay), a
+    rename was the honest move: leaving it would leave the withdrawn claim
+    standing as an assertion's name.
+
+    THE ASSERTION WAS WITHDRAWN ON 2026-08-28. It read, in full:
+
+        assert STATE_MAX_AGE_SECONDS == MAX_BACKOFF_SECONDS
+
+    AND SO WAS THE SENTENCE THAT ARGUED FOR IT, which read, in full:
+
+        "The cap already IS this project's written answer to how long a refusal
+        stays evidence; a second number here would be a second answer to the
+        same question."
+
+    Two measured facts overruled them.
+
+    1. REQ-22 made the cap stop being the longest wait this module produces.
+       Past `REFUSALS_BEFORE_COOLOFF` the exponential is not evaluated at all
+       and a flat `COOLOFF_SECONDS` takes over, so "the cap" and "the longest
+       wait" — the same number until 2026-08-28 — are now different numbers.
+    2. `08-02` measured the cool-off at 259 200 s against a 21 600 s cap. A
+       retailer in cool-off is re-stamped only at its own probe, so its record
+       is TWELVE window-lengths old at the moment that probe falls due, and
+       every restart discarded it. `08-01` measured the old rule at 125
+       requests over 30 simulated days and `08-02` measured the new one at 37;
+       the 37 is the number a discarded record silently turned back into a 125.
+
+    WHAT SURVIVES IS THE ENTIRE PRINCIPLE, which is why this is a rewrite and
+    not a deletion. Derived and never re-chosen, so the two cannot drift apart —
+    untouched, and it is still the same argument `Result.degraded` makes about
+    deriving rather than storing. "One full cap-length window" survives in
+    substance as one full longest-wait-length window: the sentence's shape, its
+    reasoning and its conclusion are all intact. Only the premise that the cap
+    WAS the longest wait has fallen, and with it the ceiling the window derives
+    from. No conclusion fell, which is unusual for a reversal and worth saying
+    to a reader who arrives expecting one.
+
+    WHAT THE LAST TWO ASSERTIONS ARE AND ARE NOT. They are a gate against a
+    FUTURE re-definition that covers only one arm — someone spelling this
+    `= COOLOFF_SECONDS` because that is the winner today would pass the first
+    assertion and fail the second the day the cap overtakes it. They are NOT a
+    proof of the current expression, which they would follow from trivially: a
+    `max` of two numbers is greater than or equal to each of them by
+    construction. Stated rather than left to look stronger than it is.
+
+    THE VALUE ITSELF IS DELIBERATELY NOT PINNED HERE. 259 200 belongs in
+    `_RESTORE_ACROSS_THE_STALENESS_WINDOW`, whose subject is the behaviour.
+    Pinning it here as well would make an edit to `COOLOFF_SECONDS` fail in the
+    one place whose subject is the derivation rather than the number.
     """
-    assert STATE_MAX_AGE_SECONDS == MAX_BACKOFF_SECONDS
+    assert STATE_MAX_AGE_SECONDS == LONGEST_WAIT_SECONDS, (
+        "the staleness window stopped being derived from the longest wait this "
+        "module can produce — a record can now age out while the wait it "
+        "describes is still running"
+    )
+    assert LONGEST_WAIT_SECONDS >= MAX_BACKOFF_SECONDS, (
+        "the longest wait no longer covers the backoff cap"
+    )
+    assert LONGEST_WAIT_SECONDS >= COOLOFF_SECONDS, (
+        "the longest wait no longer covers the cool-off"
+    )
 
 
 def _versioned(**payload: object) -> str:
