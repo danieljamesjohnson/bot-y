@@ -21,10 +21,47 @@ anything is currently wrong.
 
 The backoff is a response to evidence: this retailer just refused us, so ask
 less often until it stops. It is exponential because a linear back-off against
-an exponential penalty loses, and it is capped because a monitor that has
-backed off to once a day has quietly stopped being a monitor — at the cap it
-keeps trying, and the health report keeps saying it is refused, which is a
-state somebody should eventually see rather than one that disappears.
+an exponential penalty loses, and it is capped.
+
+THE CAP IS NO LONGER THE LAST WORD, AND THAT CLAUSE WAS WITHDRAWN ON 2026-08-28.
+Until then the paragraph above ended:
+
+    "and it is capped because a monitor that has backed off to once a day has
+    quietly stopped being a monitor — at the cap it keeps trying, and the
+    health report keeps saying it is refused, which is a state somebody should
+    eventually see rather than one that disappears."
+
+Three measured facts overruled it.
+
+1. "At the cap it keeps trying" was the whole defence, and the trying is what
+   costs. Against a retailer that never recovers, the fixed six-hour ceiling
+   applied indefinitely makes 125 requests over a simulated 30 days — measured
+   2026-08-27 against this file unmodified. 118 of those 125 are the flat tail:
+   the ceiling repeating, four times a day, at a retailer that has said no
+   every single time. That is not a monitor keeping watch; it is a monitor
+   knocking.
+2. The state somebody "should eventually see" was, by 2026-08-20, four days old
+   and unseen. Recorded off the live daemon that day: gamestop at 14400 s and
+   walmart at 21600 s, both on backoff, neither recovering. Nothing about
+   asking them a fourth time that day was going to change either number.
+3. Past `REFUSALS_BEFORE_COOLOFF` the same simulation makes 37 requests —
+   measured 2026-08-28, same window, same retailer, same counting, one rule
+   changed.
+
+THE PREMISE SURVIVES AND THE CONCLUSION DOES NOT, which is why this is a
+rewrite rather than a deletion. A monitor that has quietly stopped being a
+monitor is still exactly the failure to avoid, and it is still the failure this
+project exists one level up to prevent. What changed is the answer. A retailer
+past the threshold is STILL on the schedule, STILL counted in `refusals`, STILL
+published with a cadence and a reason, and STILL probed — once every three
+days, and the probe is real. It is left alone, not dropped.
+
+SO: A COOL-OFF IS NEVER A NEVER-ASK-AGAIN. A wait that did not expire would be
+a silently dropped retailer wearing a row on the dashboard, which is this
+project's own defect rebuilt inside the fix for it. And a cool-off is never a
+way to silence a failure that is ours: if a refusal is really a dead control or
+a broken detector, three days of quiet hides it for three days, which is a
+different problem and not one to make worse here.
 
 IT IS PERSISTED NOW, AND THIS FILE USED TO ARGUE THE OPPOSITE
 -------------------------------------------------------------
@@ -88,9 +125,32 @@ log = logging.getLogger(__name__)
 #: Multiplier applied per consecutive refusal.
 BACKOFF_FACTOR = 2.0
 
-#: Never wait longer than this between attempts, however many refusals. Six
-#: hours is long enough to outlast a rate-limit window and short enough that a
-#: retailer coming back is noticed the same day.
+#: The longest the BACKOFF will wait between attempts. Six hours is long enough
+#: to outlast a rate-limit window and short enough that a retailer coming back is
+#: noticed the same day.
+#:
+#: THE OPENING CLAUSE WAS WITHDRAWN ON 2026-08-28. It read, in full:
+#:
+#:     "Never wait longer than this between attempts, however many refusals."
+#:
+#: The words "however many refusals" are now false: past
+#: `REFUSALS_BEFORE_COOLOFF` the wait is `COOLOFF_SECONDS`, which is twelve times
+#: this number.
+#:
+#: WHAT SURVIVES IS EVERYTHING EXCEPT THAT CLAUSE, and in particular THE VALUE IS
+#: UNCHANGED AT SIX HOURS. What REQ-22 replaced is this ceiling being applied
+#: INDEFINITELY, not its size — raising the value instead would have been the
+#: tempting cheap fix and it would have lost the distinction the whole phase is
+#: about. The cap still governs every refusal count below the threshold, which is
+#: every retailer this project has ever actually observed. See
+#: `REFUSALS_BEFORE_COOLOFF` for where it stops governing.
+#:
+#: THAT DISTINCTION IS HELD BY A TEST RATHER THAN BY THIS COMMENT.
+#: `test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring`
+#: still asserts `MAX_BACKOFF_SECONDS <= 6 * 60 * 60` — "a cap beyond a few hours
+#: is not a monitor" — live and unmodified, so a later edit that raised the value
+#: to approximate a cool-off would go red rather than read as agreeing with this
+#: paragraph.
 MAX_BACKOFF_SECONDS = 6 * 60 * 60
 
 #: How many consecutive refusals end the backoff and begin a cool-off. REQ-22,
@@ -239,11 +299,37 @@ STATE_MAX_AGE_SECONDS = MAX_BACKOFF_SECONDS
 #: 64 is far below the crash point and far above where the cap binds (7 refusals
 #: at the default 300 s interval), so clamping costs nothing operationally —
 #: only the number `skipped_reason` prints changes, and "64 refusal(s)" already
-#: says what it needs to. It must also stay comfortably above
-#: `cli.REFUSALS_BEFORE_PAGING`, or persistence would silently defeat the paging
-#: clause it exists to serve. That relationship is asserted by a test rather
-#: than by this comment, because this module must not import `boty.cli` — the
-#: dependency runs the other way.
+#: says what it needs to.
+#:
+#: THE SECOND RELATIONSHIP THIS COMMENT NAMED WAS WITHDRAWN ON 2026-08-28,
+#: because its subject had been deleted sixteen days earlier and nobody had
+#: come back for the comment. It read, in full:
+#:
+#:     "It must also stay comfortably above `cli.REFUSALS_BEFORE_PAGING`, or
+#:     persistence would silently defeat the paging clause it exists to serve."
+#:
+#: `REFUSALS_BEFORE_PAGING` and `_refusal_is_entrenched` were deleted on
+#: 2026-08-12 under the no-paging rule — a refusal is recorded and never pushed,
+#: however entrenched — so there is no paging threshold left to stay above.
+#: `boty/cli.py` carries the deletion note and
+#: `test_the_clamp_never_restores_a_shallower_wait_than_the_cap` was re-anchored
+#: off it the same day. This comment was missed then, found by 08-01 on
+#: 2026-08-28 while reading for the cool-off threshold, and fixed here.
+#:
+#: WHAT REPLACES IT IS A LIVE RELATIONSHIP, not a repair of the dead one. This
+#: number must stay ABOVE `REFUSALS_BEFORE_COOLOFF`, and the direction is the
+#: same one the withdrawn sentence was reaching for: a clamp at or below the
+#: threshold would mean a count restored from disk could never cross it, so a
+#: retailer deep in a cool-off would come back from a restart at the six-hour
+#: ceiling and the cool-off would be a state only a long-lived process could
+#: enter — persistence silently defeating the clause it exists to serve, one
+#: requirement along.
+#:
+#: THAT RELATIONSHIP IS ASSERTED BY A TEST RATHER THAN BY THIS COMMENT, which is
+#: the half of the withdrawn sentence that survives unchanged and is the reason
+#: it was written this way in the first place: this module must not import
+#: `boty.cli` — the dependency runs the other way — and a relationship stated
+#: only in prose is one nothing checks.
 MAX_PERSISTED_REFUSALS = 64
 
 
@@ -534,7 +620,34 @@ class Pacer:
         one level up: a green dashboard over a question nobody asked.
         """
         st = self._for(retailer)
-        mins = max(0.0, st.due_at - now) / 60
+        remaining = max(0.0, st.due_at - now)
+        mins = remaining / 60
+        # THE COOL-OFF ARM, REQ-22, 2026-08-28. Ahead of the backing-off arm
+        # rather than inside it, because the two say different things: one is a
+        # widening wait, the other is a state.
+        #
+        # DAYS RATHER THAN MINUTES, because a true wait of "~4320 min" is a number
+        # no reader of this page can act on. It is not wrong; it is right in units
+        # that hide what it means, which is the quieter cousin of the failure this
+        # method exists to prevent.
+        #
+        # ONE DECIMAL PLACE, NOT ZERO, and the difference is load-bearing. A
+        # partial day formatted to zero decimals renders a live wait as "0 days" —
+        # a retailer that is genuinely being left alone, described as one that is
+        # not being left alone at all. That is exactly the confident lie the
+        # docstring above says this method exists to prevent, reintroduced by a
+        # format specifier.
+        #
+        # THE FORMAT SPECIFIERS HERE ARE PRESENTATION AND NOTHING ELSE. They never
+        # feed the schedule: `record` computes `due_at` from `current_interval`'s
+        # float and never from this string, and nothing parses this prose back
+        # into a number. That is why the boundary tests over `current_interval`
+        # assert exact equality while this method is allowed to round.
+        if st.refusals >= REFUSALS_BEFORE_COOLOFF:
+            return (
+                f"cooling off after {st.refusals} refusal(s) — "
+                f"next attempt in ~{remaining / 86400:.1f} days"
+            )
         if st.refusals:
             return f"backing off after {st.refusals} refusal(s) — next attempt in ~{mins:.0f} min"
         # Through the accessor, not off `st.interval` directly: this was the only

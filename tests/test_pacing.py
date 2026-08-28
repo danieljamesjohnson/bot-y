@@ -506,6 +506,48 @@ def test_a_skipped_retailer_can_say_why(tmp_path: Path) -> None:
     assert "backing off after 3 refusal(s)" in p.skipped_reason("gamestop", 0.0)
 
 
+def test_a_retailer_in_cooloff_says_so_rather_than_reporting_a_minute_count() -> None:
+    """A true wait of "~4320 min" is a number no reader of the dashboard can act on.
+
+    This is the status page's sentence about a retailer nobody is asking, and the
+    module's own `skipped_reason` docstring says why it has to be right: a skipped
+    retailer published as if it had been checked and found fine is this project's
+    defect one level up. "Backing off, next attempt in ~4320 min" is not that
+    failure, but it is its quieter cousin — a true statement in units that hide
+    what it means. Four thousand minutes is three days, and nobody reads it as
+    three days.
+
+    THE SECOND ASSERTION IS WHY THIS IS A NEW BRANCH AND NOT A REPLACEMENT. Below
+    the threshold the prose must be byte-unchanged, so the arm is proved to have
+    been ADDED rather than to have swallowed the case it sits beside.
+    """
+    p = Pacer(default_interval=300)
+    for _ in range(REFUSALS_BEFORE_COOLOFF):
+        p.record("cooling", refused=True, now=0.0)
+    reason = p.skipped_reason("cooling", 0.0)
+
+    assert "cooling off" in reason, (
+        f"a retailer being left alone for days said {reason!r} — the page has to "
+        f"name the state, not just report a bigger number in the same units"
+    )
+    assert f"{REFUSALS_BEFORE_COOLOFF} refusal(s)" in reason, (
+        f"the count is what makes the state legible as evidence rather than as a "
+        f"policy nobody can audit; got {reason!r}"
+    )
+    assert "days" in reason and "min" not in reason, (
+        f"the remaining wait is still in minutes: {reason!r}"
+    )
+
+    # UNCHANGED BELOW THE THRESHOLD. The existing arm still owns its case.
+    p_shallow = Pacer(default_interval=300)
+    for _ in range(3):
+        p_shallow.record("shallow", refused=True, now=0.0)
+    shallow = p_shallow.skipped_reason("shallow", 0.0)
+    assert "backing off after 3 refusal(s)" in shallow and "min" in shallow, (
+        f"the cool-off arm swallowed the backing-off case: {shallow!r}"
+    )
+
+
 def test_run_once_without_a_pacer_is_unchanged(tmp_path: Path) -> None:
     """Every existing caller passes no pacer and must behave exactly as before."""
     watches = [_w("walmart"), _w("amazon")]
@@ -1273,6 +1315,34 @@ def test_the_clamp_never_restores_a_shallower_wait_than_the_cap() -> None:
 
     shallowest = min(300.0, MAX_BACKOFF_SECONDS)
     assert shallowest * BACKOFF_FACTOR**MAX_PERSISTED_REFUSALS >= MAX_BACKOFF_SECONDS
+
+
+def test_the_clamp_sits_above_the_cooloff_threshold_so_a_restored_count_can_cross_it() -> None:
+    """A threshold above the clamp is a cool-off no restart can ever reach.
+
+    REQ-22, 2026-08-28. `load` clamps every restored refusal count to
+    `MAX_PERSISTED_REFUSALS`, so if the threshold sat at or above that ceiling a
+    retailer three days deep in a cool-off would come back from a restart at the
+    six-hour cap and start knocking again — the cool-off would be a state only a
+    long-lived process could enter, which under a `Restart=` unit is close to no
+    state at all. Persistence silently defeating the clause it exists to serve.
+
+    THIS IS THE REPLACEMENT FOR A RELATIONSHIP THAT DIED. `MAX_PERSISTED_REFUSALS`
+    used to be pinned above `cli.REFUSALS_BEFORE_PAGING`, and that constant was
+    deleted on 2026-08-12 leaving the comment naming it and nothing checking
+    anything. The direction is the same one that sentence was reaching for; only
+    the requirement on the other side of it is new.
+
+    ASSERTED HERE RATHER THAN IN A COMMENT, because `boty/pacing.py` must not
+    import `boty.cli` and learned once already what a relationship stated only in
+    prose is worth.
+    """
+    assert MAX_PERSISTED_REFUSALS > REFUSALS_BEFORE_COOLOFF, (
+        f"the clamp restores at most {MAX_PERSISTED_REFUSALS} refusals but the "
+        f"cool-off begins at {REFUSALS_BEFORE_COOLOFF} — a count restored from "
+        f"disk can never cross the threshold, so the cool-off does not survive a "
+        f"restart at all"
+    )
 
 
 def test_the_age_out_is_derived_from_the_backoff_cap() -> None:
