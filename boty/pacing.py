@@ -93,6 +93,74 @@ BACKOFF_FACTOR = 2.0
 #: retailer coming back is noticed the same day.
 MAX_BACKOFF_SECONDS = 6 * 60 * 60
 
+#: How many consecutive refusals end the backoff and begin a cool-off. REQ-22,
+#: 2026-08-28.
+#:
+#: The phase goal says "30-odd times", and 30 is the value that makes the
+#: superseded assertion BIND rather than survive.
+#: `test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring`
+#: drives exactly `range(30)` refusals and asserts the six-hour ceiling. At 31 or
+#: more that test would survive untouched, which is cheaper and worse: the
+#: sentence REQ-22 exists to overrule would still be standing, unremarked, at the
+#: exact boundary the requirement is about. A test that survives by being routed
+#: around is a test that stopped meaning anything, and nobody would be at the
+#: moment of noticing.
+#:
+#: IT SITS UNDER `MAX_PERSISTED_REFUSALS = 64` ON PURPOSE, not incidentally. A
+#: threshold at or above the clamp could never be reached from a restart, because
+#: `load` clamps every restored count to 64 — so the cool-off would be a state
+#: only a long-lived process could ever enter. Under the clamp, a count restored
+#: from disk crosses it, which is what
+#: `test_the_persisted_count_is_clamped` now measures from the other side.
+#:
+#: THE LOWER BOUND THIS PROJECT USED TO STATE IS WITHDRAWN, and it is recorded
+#: rather than quietly satisfied. `08-PLAN-OUTLINE.md` and `08-01-PLAN.md` both
+#: give it as "comfortably above `cli.REFUSALS_BEFORE_PAGING = 5`". **That
+#: constant no longer exists** — it and `_refusal_is_entrenched` were deleted on
+#: 2026-08-12 under the no-paging rule, and `boty/cli.py`'s own note records the
+#: deletion. 30 is above 5 anyway, so the constraint is satisfied; but it is
+#: satisfied against a deleted symbol, and the honest form of that is to say so
+#: rather than to cite it.
+#:
+#: WHAT REPLACES IT IS AN ARGUMENT AND IS MARKED AS ONE. A threshold below about
+#: 7 would enter the cool-off before the six-hour ceiling had bound even once (7
+#: refusals at the 300 s default), which would make the cool-off a REPLACEMENT
+#: for the backoff rather than its successor. 30 is four times that, so the
+#: ceiling has bound for the better part of a week's worth of refusals before the
+#: cool-off begins. That is a reason, not a measurement, and it is written as a
+#: reason.
+REFUSALS_BEFORE_COOLOFF = 30
+
+#: How long a retailer past `REFUSALS_BEFORE_COOLOFF` is left alone before it is
+#: probed once. Three days — 259 200 s. REQ-22, 2026-08-28.
+#:
+#: WRITTEN AS `3 * 24 * 60 * 60` on `MAX_BACKOFF_SECONDS`' own precedent, so the
+#: units are legible at the definition site rather than in a comment beside a
+#: six-figure number.
+#:
+#: DAYS, BECAUSE REQ-22 SAYS "a period measured in days". Three rather than two:
+#: two is the smallest thing that can be called days and reads as a rounding-up
+#: of "a couple".
+#:
+#: THREE RATHER THAN SEVEN, and this is the whole of the duration argument — it
+#: stands alone and is not bought with a request count. `08-03` derives the
+#: persisted-state staleness window from this number. A week-long window would
+#: hold a refusal record as evidence for a week, which weakens at length the
+#: stale-file answer the module docstring gives at the top of this file. The only
+#: measurement that could reopen three days is one showing a three-day staleness
+#: window is itself too long to believe a refusal record for, and that is
+#: `08-03`'s to take.
+#:
+#: A LITERAL, NEVER A DERIVATION. No exponentiation, no `BACKOFF_FACTOR`, no
+#: multiple of the cap. `current_interval` reaches this value WITHOUT evaluating
+#: `st.interval * BACKOFF_FACTOR ** st.refusals` at all, because a conditional
+#: expression does not evaluate the branch it does not take — so past the
+#: threshold the float-exponentiation cliff `MAX_PERSISTED_REFUSALS` guards is
+#: not merely clamped but unreachable, and no rounding contract is entered. That
+#: is why the tests on this boundary assert exact equality rather than
+#: `pytest.approx`.
+COOLOFF_SECONDS = 3 * 24 * 60 * 60
+
 #: Schema version of the persisted document. A file carrying any other value is
 #: treated as absent.
 #:
@@ -413,9 +481,46 @@ class Pacer:
         # 86400, so the truncated read judged against the WIDER window. With the
         # clamp, `current_interval >= st.interval` unconditionally, so the
         # claim holds for every configurable value rather than for most of them.
+        #
+        # THE COOL-OFF ARM, REQ-22, 2026-08-28. Past
+        # `REFUSALS_BEFORE_COOLOFF` the wait stops being a backoff and becomes a
+        # flat, days-scale literal. Three things about WHERE it is written:
+        #
+        # 1. IT IS INSIDE THE `max`, NOT A GUARD CLAUSE ABOVE THE RETURN. A guard
+        #    returning `max(st.interval, COOLOFF_SECONDS)` before this line is the
+        #    cheaper edit and it was deliberately not taken: it would create a
+        #    SECOND `max(st.interval, ...)` site, and "a backoff may only ever
+        #    widen the wait" is a rule this method keeps in exactly one place on
+        #    purpose — see the paragraph above, which is the whole argument for
+        #    the `max` existing at all. Two copies of a rule are two things to
+        #    edit and they only have to disagree once. So the widen-only rule
+        #    applies to the cool-off for free, rather than by being restated.
+        #
+        # 2. `COOLOFF_SECONDS` IS A LITERAL REACHED WITHOUT EXPONENTIATION. A
+        #    conditional expression does not evaluate the branch it does not take,
+        #    so past the threshold `st.interval * BACKOFF_FACTOR ** st.refusals`
+        #    is never computed at all. The float-exponentiation cliff that
+        #    `MAX_PERSISTED_REFUSALS` exists to guard is therefore not merely
+        #    clamped on this arm but unreachable from it, and no rounding contract
+        #    is entered — which is why the tests on this boundary assert exact
+        #    equality rather than a tolerance.
+        #
+        # 3. `record` COMPUTES ITS WAIT THROUGH THIS ACCESSOR, so the cool-off
+        #    reaches `due_at` and `status.write`'s `current_interval_seconds` with
+        #    no second site. The published cadence and the fetch schedule are one
+        #    expression; a days-scale wait that the dashboard did not know about
+        #    would be a retailer silently off the schedule with a green-looking
+        #    row, which is this project's own defect one level up.
+        #
+        # A COOL-OFF IS NEVER A NEVER-ASK-AGAIN. The retailer stays on the
+        # schedule, stays counted, stays published with a cadence, and is probed
+        # once per window. A wait that never expired would be a dropped retailer
+        # wearing a row on the dashboard.
         return max(
             st.interval,
-            min(
+            COOLOFF_SECONDS
+            if st.refusals >= REFUSALS_BEFORE_COOLOFF
+            else min(
                 st.interval * BACKOFF_FACTOR ** st.refusals,
                 MAX_BACKOFF_SECONDS,
             ),

@@ -954,10 +954,70 @@ MUTATIONS = (
     # test_a_refusal_never_shortens_the_wait_however_long_the_standing_interval
     # asserts a LOWER bound, and `return st.interval` satisfies it. That is M38's
     # job below, which is why the two are a pair rather than one ident.
+    #
+    # M33'S ANCHOR WAS RE-POINTED AGAIN ON 2026-08-28 (08-02, REQ-22), AND THIS
+    # IS THE FIRST ANCHOR IN THIS REGISTRY TO DRIFT TWICE. Six anchors have
+    # drifted before it — M2 (2026-08-04), M4 (2026-08-11), M25 and M26 (both
+    # 2026-08-13), M33 itself (2026-08-17) and M36 (2026-08-17) — so this is the
+    # THIRD drift caused by the CODE changing shape rather than by prose or a
+    # version literal moving, after M33's own first and M36's.
+    #
+    # WHAT CHANGED: `current_interval`'s non-zero-refusal return grew a cool-off
+    # arm. The second argument of the `max` went from a bare `min(...)` to a
+    # conditional expression choosing `COOLOFF_SECONDS` past
+    # `REFUSALS_BEFORE_COOLOFF` and the old `min(...)` below it, so the old
+    # seven-line `search` matched nothing and the harness raised rather than
+    # catching anything.
+    #
+    # THE DRIFT WAS THE PRICE OF A DELIBERATE CHOICE, not an accident, and 08-02
+    # argues it: a guard clause returning `max(st.interval, COOLOFF_SECONDS)`
+    # above this return would have preserved both anchors verbatim and is the
+    # cheaper edit. It was rejected because it creates a SECOND
+    # `max(st.interval, ...)` site, and "a backoff may only ever widen the wait"
+    # is a rule that module keeps in exactly one place on purpose. Two anchors are
+    # cheaper to re-point than a duplicated invariant is to keep in step.
+    #
+    # THE GATE'S MEANING IS UNCHANGED: the accessor ignores the backoff entirely
+    # and answers with the standing interval. `replace` is byte-identical to what
+    # it was.
+    #
+    # THE ANCHOR IS BEHAVIOURAL AND PRE-COUNTED, 2026-08-28, against the file
+    # text: the nine-line fragment occurs ONCE. Note the count that CHANGED and is
+    # therefore stated rather than carried over — `boty/pacing.py` now holds TWO
+    # `max(` in code, this one and `skipped_reason`'s `max(0.0, st.due_at - now)`,
+    # so "the only `max(` in the file" is no longer the uniqueness argument; the
+    # nine-line fragment is. No message text, no rendered tag, no version literal.
+    #
+    # KILL SET RE-MEASURED FROM SCRATCH ON 2026-08-28 against the new anchor,
+    # NOT carried over — the same protocol the 2026-08-17 note above records, and
+    # the reason it is a protocol is that a carried-over count is a claim about a
+    # run that never happened. Measured by applying this mutation alone in a
+    # sandbox and reading the failures off the run: **21 test(s) failed, up from
+    # the 11 recorded on 2026-08-17.**
+    #
+    # ALL TEN ADDITIONS ARE TESTS THAT DID NOT EXIST IN AUGUST'S PHASE 7, so the
+    # widening is a phase adding gates over the same accessor rather than the
+    # anchor quietly grabbing more code:
+    #
+    #   test_the_cadence_across_the_cooloff_threshold_is_the_literal_it_is — all
+    #     SIX parametrized rows, including the 29-refusal ones: `return
+    #     st.interval` answers 300.0/1800.0 where the cap should still bind
+    #   test_a_retailer_in_cooloff_is_probed_exactly_once_when_it_expires
+    #   test_a_retailer_that_answers_during_its_probe_is_back_on_its_standing_interval_at_once
+    #   test_a_retailer_in_cooloff_publishes_the_days_scale_cadence_it_is_actually_on
+    #     (tests/test_cli_watch.py, the cross-surface tracer)
+    #   test_the_thirty_day_request_count_under_the_cooloff_is_a_stated_number —
+    #     08-01's baseline test, renamed here on 2026-08-28; it postdates the
+    #     2026-08-17 measurement, so its absence from the 11 is a date and not a
+    #     hole
+    #
+    # The eleven originally enumerated above are all still in the set. If M33 ever
+    # SURVIVES, the first thing to check is whether one of them acquired a skip
+    # decorator.
     Mutation(
         ident="M33",
         target="boty/pacing.py",
-        search="        return max(\n            st.interval,\n            min(\n                st.interval * BACKOFF_FACTOR ** st.refusals,\n                MAX_BACKOFF_SECONDS,\n            ),\n        )",
+        search="        return max(\n            st.interval,\n            COOLOFF_SECONDS\n            if st.refusals >= REFUSALS_BEFORE_COOLOFF\n            else min(\n                st.interval * BACKOFF_FACTOR ** st.refusals,\n                MAX_BACKOFF_SECONDS,\n            ),\n        )",
         replace="        return st.interval",
         breaks="`Pacer.current_interval` returns the standing config interval however many refusals are in force, so the backoff stops reaching any surface. On this host that is target and walmart at seven refusals judged against 300 s instead of the six-hour cap they are actually on, and amazon against 1800 s instead of 7200 — every reading from a backed-off retailer reads as wildly stale on all three surfaces, which is criterion 3's \"derived from the retailer's own pacing rather than a fixed clock\" stated as a mutation. And because `record` computes its wait THROUGH this accessor, the fetch schedule collapses with it: a retailer that just walled us is asked again at full rate, which is the 2026-08-04 behaviour boty/pacing.py exists to prevent and the politeness constraint calls a hard limit",
     ),
@@ -1229,11 +1289,45 @@ MUTATIONS = (
     # nothing said one was allowed to exist. If M38 ever SURVIVES, the first
     # thing to check is whether that test acquired a skip decorator or whether
     # its `standing = MAX_BACKOFF_SECONDS * 4` drifted below the cap.
+    #
+    # M38'S ANCHOR WAS RE-POINTED ON 2026-08-28 (08-02, REQ-22), THE SEVENTH
+    # ANCHOR IN THIS REGISTRY TO DRIFT and the fourth to drift because the CODE it
+    # gates changed shape rather than because prose or a version literal moved.
+    # The six before it: M2 (2026-08-04), M4 (2026-08-11), M25 and M26 (both
+    # 2026-08-13), M33 (2026-08-17) and M36 (2026-08-17). It drifted for exactly
+    # the same reason as M33 above and in the same commit, because the two anchor
+    # on the same block — the argued price of putting the cool-off INSIDE the
+    # `max` rather than in a second `max(st.interval, ...)` site.
+    #
+    # THE GATE'S MEANING IS UNCHANGED, and `replace` was chosen to keep it so.
+    # M38 strips the outer `max` and NOTHING ELSE, so a refusal can once again
+    # shorten the wait above the cap. The cool-off arm is carried through into the
+    # replacement verbatim: removing it too would make this a two-defect mutation
+    # and blur the line between what M38 gates and what M33 does. The old
+    # `replace` was a byte-for-byte restoration of the pre-2026-08-17 body, which
+    # is no longer available as a minimal edit now that the body has a second arm.
+    #
+    # THE KILLER STILL BITES BELOW THE THRESHOLD, which is why the ident survives
+    # the cool-off at all: `test_a_refusal_never_shortens_the_wait_however_long_
+    # the_standing_interval` drives 1 to 12 refusals, far under
+    # `REFUSALS_BEFORE_COOLOFF = 30`, so the conditional takes its `else` branch
+    # throughout and the missing `max` is what the test sees.
+    #
+    # KILL SET RE-MEASURED FROM SCRATCH ON 2026-08-28 rather than carried over,
+    # on M33's protocol: **1 test failed, unchanged from the 1 measured on
+    # 2026-08-17**, and it is the same test —
+    #     tests/test_pacing.py::
+    #       test_a_refusal_never_shortens_the_wait_however_long_the_standing_interval
+    # A ONE-TEST KILL SET IS STILL THIN AND IS STILL RECORDED AS THIN. The reason
+    # is unchanged and this phase did not improve it: no other test in this suite
+    # configures a standing interval above `MAX_BACKOFF_SECONDS`, and none of
+    # 08-02's new gates does either — they all sit at 300 s or 1800 s, both far
+    # below the cap, so not one of them widens this set.
     Mutation(
         ident="M38",
         target="boty/pacing.py",
-        search="        return max(\n            st.interval,\n            min(\n                st.interval * BACKOFF_FACTOR ** st.refusals,\n                MAX_BACKOFF_SECONDS,\n            ),\n        )",
-        replace="        return min(\n            st.interval * BACKOFF_FACTOR ** st.refusals,\n            MAX_BACKOFF_SECONDS,\n        )",
+        search="        return max(\n            st.interval,\n            COOLOFF_SECONDS\n            if st.refusals >= REFUSALS_BEFORE_COOLOFF\n            else min(\n                st.interval * BACKOFF_FACTOR ** st.refusals,\n                MAX_BACKOFF_SECONDS,\n            ),\n        )",
+        replace="        return (\n            COOLOFF_SECONDS\n            if st.refusals >= REFUSALS_BEFORE_COOLOFF\n            else min(\n                st.interval * BACKOFF_FACTOR ** st.refusals,\n                MAX_BACKOFF_SECONDS,\n            )\n        )",
         breaks="a refusal makes the monitor ask a refusing retailer MORE often, and the log line presents the increase in request rate as a backoff. Above `MAX_BACKOFF_SECONDS` the bare `min` returns a number smaller than the standing interval, and `record` computes its wait through this accessor — so at `interval_seconds: 86400` one refusal moves the next attempt from 1440 minutes to 360, a 4x increase in load aimed at the one retailer that has just walled us. That is `boty/pacing.py`'s own opening argument inverted: *'a retailer that walled us got asked again five minutes later ... precisely the behaviour the project's own politeness constraint calls a hard limit'*. It also inverts `Pacer.save`'s recorded direction claim, which is the second thing this ident guards: `save` argues a truncated read is safe because empty state judges a reading against the NARROWER standing interval and over-reports staleness, and above the cap the mutation makes the standing interval the WIDER of the two, so a truncated `pacer-state.json` under-reports staleness — the direction REQ-21 does not prefer",
     ),
     # ------------------------------------------------------------------

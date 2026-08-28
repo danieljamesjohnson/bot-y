@@ -798,6 +798,77 @@ def test_a_per_retailer_override_reaches_the_published_cadence(
     assert _published_cadence(cfg) == 900.0
 
 
+def test_a_retailer_in_cooloff_publishes_the_days_scale_cadence_it_is_actually_on(
+    tmp_path: Path,
+) -> None:
+    """The one path proving a cool-off reaches the schedule and the page as ONE expression.
+
+    REQ-22, 2026-08-28. A retailer past `REFUSALS_BEFORE_COOLOFF` is left alone
+    for days rather than asked every six hours. That days-scale number has to
+    arrive in two places at once — the wait `record` schedules, and the
+    `current_interval_seconds` the dashboard reads — and it has to arrive there
+    because they are the SAME expression rather than because two sites were kept
+    in step.
+
+    THAT IS WHY THE COOL-OFF BRANCH LIVES INSIDE `current_interval` and not in a
+    guard clause of its own. `record` computes its wait THROUGH the accessor and
+    `cli._current_intervals` publishes the accessor's answer, so one branch in
+    one method reaches both. A second site would be a second thing to edit, and
+    two copies of a rule only have to disagree once.
+
+    Asserted off the WRITTEN BYTES via `_published_cadence`, not off a returned
+    object: the dashboard has nothing else to read.
+
+    The depth is driven off `REFUSALS_BEFORE_COOLOFF` rather than off a hardcoded
+    30, so a later edit to the threshold cannot leave this test quietly exercising
+    an off-threshold depth. The EXPECTED number is the hand-written literal
+    259200.0 and never `COOLOFF_SECONDS`, so the assertion is not a re-derivation
+    of the constant it is checking.
+    """
+    from boty.pacing import REFUSALS_BEFORE_COOLOFF, Pacer
+
+    config = _check_config(tmp_path)
+    cfg = Config.load(config)
+
+    # Built exactly as `watch_loop` builds one.
+    pacer = Pacer(
+        default_interval=cfg.interval_seconds,
+        overrides=dict(cfg.retailer_intervals),
+        state_path=cfg.pacer_state_path,
+    )
+    for _ in range(REFUSALS_BEFORE_COOLOFF):
+        pacer.record("gamestop", refused=True, now=0.0)
+
+    cli.watch_cycle(
+        cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        State.load(cfg.state_path),
+        set(),
+        pacer=pacer,
+        now=0.0,
+    )
+
+    assert _published_cadence(cfg) == 259200.0, (
+        f"the dashboard was told this retailer is on a "
+        f"{_published_cadence(cfg)} s cadence while the schedule is holding it "
+        f"for three days — the published number and the fetch schedule have "
+        f"stopped being one expression"
+    )
+
+    # THE PACED BRANCH, which is the branch a cool-off always lands on. A row
+    # published as `checked: true` would be a cool-off reported as an observation.
+    published = json.loads(cfg.status_path.read_text())["retailers"]
+    (row,) = [r for r in published if r["retailer"] == "gamestop"]
+    assert row["checked"] is False, (
+        "a retailer nobody asked was published as checked — a green row over a "
+        "question this cycle deliberately did not ask"
+    )
+
+    # The schedule and the published number pinned to EACH OTHER rather than
+    # separately, so neither can move without the other.
+    assert pacer._for("gamestop").due_at == 259200.0
+
+
 # --------------------------------------------------------------------------
 # REQ-21: every configured watch has a row, on both surfaces
 # --------------------------------------------------------------------------

@@ -51,6 +51,7 @@ from boty.monitor import CAUSE_UNKNOWN, State, assess_health, run_once
 from boty.pacing import (
     MAX_BACKOFF_SECONDS,
     MAX_PERSISTED_REFUSALS,
+    REFUSALS_BEFORE_COOLOFF,
     STATE_MAX_AGE_SECONDS,
     STATE_VERSION,
     Pacer,
@@ -175,9 +176,50 @@ def test_a_refusal_pushes_the_next_attempt_out_exponentially() -> None:
 
 
 def test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring() -> None:
+    """The cap still governs — up to the point where it stops being the last word.
+
+    THE FIRST ASSERTION WAS WITHDRAWN ON 2026-08-28. It read, in full:
+
+        for _ in range(30):
+            p.record("amazon", refused=True, now=now)
+        assert p._for("amazon").due_at - now == MAX_BACKOFF_SECONDS
+
+    Two measured facts overruled it.
+
+    1. REQ-22 replaces the six-hour ceiling for a PERSISTENTLY refused retailer.
+       Thirty consecutive refusals is precisely the case the requirement exists to
+       stop treating as "keep asking every six hours forever", and 30 is
+       `REFUSALS_BEFORE_COOLOFF` exactly — so this test drove the loop to the
+       boundary and asserted the rule on the wrong side of it. Measured here the
+       same day: at 30 refusals the wait read **259200.0** where this line
+       expected **21600**.
+    2. The 30-day request count against a retailer that never recovers moved from
+       **125** (measured 2026-08-27 by `08-01`, against unmodified production
+       code) to **37** (measured 2026-08-28, this branch). The flat six-hour tail
+       this assertion was pinning is the overwhelming majority of the 125, and it
+       is the sentence REQ-22 exists to overrule, stated as arithmetic.
+
+    WHAT SURVIVES, AND WHY THIS IS A REWRITE RATHER THAN A DELETION. Both halves
+    survive, and neither is weakened:
+
+    - `MAX_BACKOFF_SECONDS <= 6 * 60 * 60` is untouched, still runs, and is still
+      true. **The cap's VALUE did not move.** What this phase replaces is that
+      ceiling being applied INDEFINITELY, not its size. Raising the value instead
+      would have tripped this very assertion and lost the distinction the phase is
+      entirely about — the backoff is still right, it just must not be the last
+      word. Holding that distinction in a live assertion rather than in a comment
+      is the whole reason this line is kept.
+    - The first assertion is re-pointed rather than dropped, at
+      `REFUSALS_BEFORE_COOLOFF - 1` — the deepest refusal count at which the cap
+      is still the governing rule. So the cap is still gated, one step below where
+      it now hands over.
+
+    The name is kept deliberately, because it is still true and because
+    `git log -S` reaches this test's history through it.
+    """
     p = Pacer(default_interval=300)
     now = 0.0
-    for _ in range(30):
+    for _ in range(REFUSALS_BEFORE_COOLOFF - 1):
         p.record("amazon", refused=True, now=now)
     assert p._for("amazon").due_at - now == MAX_BACKOFF_SECONDS
     assert MAX_BACKOFF_SECONDS <= 6 * 60 * 60, "a cap beyond a few hours is not a monitor"
@@ -199,42 +241,67 @@ def test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring() -
 _THIRTY_DAYS_OF_CYCLES = 8640
 
 
-def test_the_current_rule_asks_a_never_recovering_retailer_this_many_times_in_thirty_days() -> None:
-    """The number of requests the CURRENT rule makes to a retailer that never comes back.
+def test_the_thirty_day_request_count_under_the_cooloff_is_a_stated_number() -> None:
+    """Criterion 3, BOTH numbers: what the old rule cost, and what this one costs.
 
-    WHAT THIS NUMBER IS FOR, AND WHY IT IS TAKEN NOW. It is the `before` half of
-    Phase 8's criterion 3: "the total number of requests made to a retailer that
-    never recovers, over a simulated 30 days". The rule it measures is the fixed
-    six-hour ceiling applied indefinitely, and phase plan 08-02 replaces that
-    rule with a cool-off. Once `current_interval` grows a cool-off branch there
-    is no way to re-take this measurement except by reverting the change — a
-    synthetic revert, measured against code that is no longer the code, which is
-    not a measurement. So this is the only wave in which the number exists, and
-    that is why it is written down before anything moves.
+    RENAMED FROM `test_the_current_rule_asks_a_never_recovering_retailer_this_many_times_in_thirty_days`
+    ON 2026-08-28. The old name asserts the CURRENT rule, and that rule is gone —
+    leaving the name would leave a withdrawn claim standing as an assertion's
+    title. The old name is written out here so `git log -S` still reaches this
+    test's history through the text.
 
-    IT STATES ONE COUNT AND NOTHING ELSE. No comparison, no claim of a
-    reduction, no threshold. The `after` number and the word *strictly* are
-    08-02's.
+    THE BEFORE-LITERAL WAS WITHDRAWN ON 2026-08-28. It read, in full:
 
-    THE RESTART ASSUMPTION, STATED RATHER THAN LEFT TO BE INFERRED: the
-    simulation models ZERO restarts across the 30 days, and each restart would
-    cost exactly ONE extra request on top of this number. `boty/pacing.py`'s
-    module docstring, concession (b), is why: `due_at` is never persisted, so a
-    restart re-tests the condition at once at full rate. What a restart inherits
-    is the DEPTH the penalty resumes at, never the position on the schedule.
-    Under a systemd unit with `Restart=` semantics a restart is not a rare
-    event, so the assumption is named here rather than buried in the count.
+        assert len(offsets) == 125
 
-    WHY THIS ONE IS NOT WATCHED RED, which is this repo's standing rule for
-    every gate. There is no red to watch because there is no defect this test
-    defends against: its subject is the code as it stands, not a bug being
-    fixed. Writing a deliberately wrong literal and watching `assert ==` reject
-    it would prove that `assert ==` works and nothing else. What carries the
-    weight instead is three things that CAN fail and do have subjects — the
-    denominator assertion below (watched red on 2026-08-28 by running the loop
-    one cycle short), the two independent tallies, and the fact that the literal
-    was TRANSCRIBED from a run rather than predicted and then asserted.
-    08-01-SUMMARY.md carries the transcript.
+    **125** was measured on 2026-08-27 by `08-01`, with
+    `.venv/bin/python -m pytest tests/test_pacing.py -q`, against `boty/pacing.py`
+    at `git rev-parse --short HEAD` = `85a8d9f` — byte-identical to that file's
+    last-modified revision `e986d01`, with `git status --porcelain boty/` clean
+    before the run. The rule it measured was `MAX_BACKOFF_SECONDS = 6 * 60 * 60`
+    applied indefinitely, with no cool-off branch in `current_interval`. Its
+    shape, read off the offsets that run printed: 125 = 6 + 1 + 118 — six requests
+    while the backoff climbs, one where the cap first binds, and 118 in the flat
+    six-hour tail.
+
+    What overruled it: REQ-22's cool-off, which is the change this branch makes.
+
+    WHAT SURVIVES IS THE SIMULATION ITSELF, UNCHANGED, and that is the whole
+    reason this is a rewrite of `08-01`'s test rather than a new one beside it.
+    The denominator assertion, both independent tallies and the restart assumption
+    all stay exactly as they were, and `_THIRTY_DAYS_OF_CYCLES` does not move. The
+    same 8640 cycles, the same retailer, the same 300 s standing cadence, the same
+    counting idiom — with exactly ONE thing different: the rule. That is what
+    makes the two numbers comparable rather than two answers to two questions.
+
+    AFTER THIS REWRITE THE BEFORE-NUMBER IS A DATED RECORD RATHER THAN A
+    RE-RUNNABLE ASSERTION, and that is stated plainly rather than papered over.
+    Criterion 3 asks for both numbers RECORDED, not both re-runnable. Freezing a
+    hand-written reproduction of the old arithmetic to keep 125 re-runnable was
+    considered and rejected: it would be a second copy of a number, and the copy
+    would be of a RULE THAT NO LONGER EXISTS, so nothing could ever check it
+    again. A re-runnable assertion over dead arithmetic looks like evidence and is
+    not. This is the same footing every superseded measurement in this repository
+    stands on — recorded beside, never edited away.
+
+    THE AFTER-NUMBER IS A MEASUREMENT AND NOT A GATE, exactly as `08-01`'s
+    before-number was, and for the same stated reason: its subject is the code as
+    it stands rather than a defect, so it cannot be made to fail. It was
+    TRANSCRIBED from the failure message this very test produced the moment the
+    cool-off branch landed and this assertion still read 125. What carries the
+    weight instead is the denominator assertion, the two independent tallies, and
+    that transcription.
+
+    THE RESTART ASSUMPTION, STATED RATHER THAN LEFT TO BE INFERRED, and it applies
+    to both numbers. The simulation models ZERO restarts across the 30 days, and
+    the count holds only under that assumption. A restart costs exactly ONE extra
+    request, because `due_at` is deliberately never persisted —
+    `boty/pacing.py`'s module docstring, concession (b): *"A restart still tries
+    once, immediately, at full rate, so the condition is re-tested at once. What
+    is inherited is only the DEPTH the penalty resumes at IF that one request is
+    refused again"*. So the honest form of the claim is "N requests over 30 days,
+    plus one per restart", and a reader who needs the number for a flapping
+    service under a `Restart=` unit adds the restarts themselves.
     """
     p = Pacer(default_interval=300)
     now = 0.0
@@ -245,10 +312,20 @@ def test_the_current_rule_asks_a_never_recovering_retailer_this_many_times_in_th
             p.record("walmart", refused=True, now=now)
         now += 300.0
 
-    assert len(offsets) == 125, (
-        f"the current rule asked a never-recovering retailer {len(offsets)} times "
+    assert len(offsets) == 37, (
+        f"the cool-off rule asked a never-recovering retailer {len(offsets)} times "
         f"over a simulated thirty days at the 300-second standing cadence; the "
-        f"recorded before-number for criterion 3 is the literal in this assertion"
+        f"recorded after-number for criterion 3 is the literal in this assertion"
+    )
+
+    # THE WORD *STRICTLY* IN CRITERION 3, and the one thing the before-half has to
+    # stay a number for. 125 is the withdrawn literal quoted in the docstring
+    # above, written out here so the comparison is a comparison rather than a
+    # claim about one number.
+    assert len(offsets) < 125, (
+        f"the cool-off made {len(offsets)} requests where the six-hour ceiling "
+        f"applied indefinitely made 125 — criterion 3 asks for strictly fewer, "
+        f"and a count that did not fall is a rule that did not change"
     )
 
     assert now == 2592000.0, (
@@ -599,6 +676,182 @@ def test_the_backoff_schedule_is_exactly_the_schedule_it_was(
     assert p._for("amazon").due_at == now + interval, (
         "a retailer that answered is asked again at its standing interval"
     )
+
+
+# --------------------------------------------------------------------------
+# REQ-22: past 30 refusals, stop knocking for three days
+# --------------------------------------------------------------------------
+#
+# The six-hour ceiling was the LAST WORD until 2026-08-28: a retailer that had
+# refused us a hundred times running was still asked four times a day, forever.
+# `08-01` measured what that costs against a retailer that never recovers, and
+# the number is quoted in the 30-day test further down this file.
+#
+# What replaces it is not "ask less often". It is a different KIND of wait: past
+# `REFUSALS_BEFORE_COOLOFF` the exponential stops being evaluated at all and a
+# flat, days-scale literal takes over. That is why the assertions below are
+# exact-equality against hand-written seconds rather than `pytest.approx` — see
+# `_CADENCE_ACROSS_THE_COOLOFF_THRESHOLD`'s own note.
+
+#: The cadence a retailer is on at N-1, N and N+1 refusals, where N is
+#: `REFUSALS_BEFORE_COOLOFF`, at each of the two standing intervals this project
+#: configures today. `(standing_interval, refusals, expected_seconds)`.
+#:
+#: A SIBLING OF `_CADENCE_AFTER_N_REFUSALS` AND NOT AN EXTENSION OF IT. That list
+#: is indexed by N from 0, so running it out to 31 would bury this boundary in
+#: twenty-two flat entries — the one step this table exists to show, hidden
+#: inside the tail it is stepping out of.
+#:
+#: LITERALS, AND THAT IS THE POINT OF THE TABLE, on `_CADENCE_AFTER_N_REFUSALS`'
+#: own argument restated in this table's terms. Computing these through
+#: `current_interval`, `BACKOFF_FACTOR`, `MAX_BACKOFF_SECONDS` or
+#: `COOLOFF_SECONDS` would make every assertion below a re-derivation of the code
+#: it is checking, which is a test that cannot fail. Written out, a future edit to
+#: the threshold or the duration has to change these numbers BY HAND, and doing
+#: that is the moment somebody notices they have changed how long a retailer is
+#: left alone.
+#:
+#: THE ROWS ARE N-1, N AND N+1 ON PURPOSE, so the threshold is asserted AT the
+#: step rather than near it. A table that only checked 25 and 40 would pass for a
+#: cool-off that began anywhere in between, which is every value except the one
+#: that was chosen.
+#:
+#: 21600.0 is the six-hour cap, which BOTH standing intervals have long since
+#: reached by 29 refusals (the cap binds at 7 for the 300 s default and at 4 for
+#: the 1800 s override). 259200.0 is three days.
+_CADENCE_ACROSS_THE_COOLOFF_THRESHOLD = [
+    (300.0, 29, 21600.0),
+    (300.0, 30, 259200.0),
+    (300.0, 31, 259200.0),
+    (1800.0, 29, 21600.0),
+    (1800.0, 30, 259200.0),
+    (1800.0, 31, 259200.0),
+]
+
+
+@pytest.mark.parametrize(
+    "interval,refusals,expected", _CADENCE_ACROSS_THE_COOLOFF_THRESHOLD
+)
+def test_the_cadence_across_the_cooloff_threshold_is_the_literal_it_is(
+    interval: float, refusals: int, expected: float
+) -> None:
+    """Criterion 1: the threshold binds at the step, and the wait past it is exact.
+
+    `==` RATHER THAN `pytest.approx`, and that is a claim about the code rather
+    than a stylistic preference. Past the threshold `current_interval` never
+    evaluates `st.interval * BACKOFF_FACTOR ** st.refusals` at all — a
+    conditional expression does not evaluate the branch it does not take — so no
+    float rounding contract is entered and there is nothing for a tolerance to
+    absorb. An approximate assertion here would be hiding the very property being
+    asserted.
+    """
+    p = Pacer(default_interval=interval)
+    for _ in range(refusals):
+        p.record("x", refused=True, now=0.0)
+
+    assert p.current_interval("x") == expected, (
+        f"at {refusals} consecutive refusal(s) on a {interval} s standing "
+        f"interval the cadence read {p.current_interval('x')}, expected "
+        f"{expected}"
+    )
+
+
+#: Cycles simulated after the threshold is crossed, at the 300 s standing cadence.
+#:
+#: STATED RATHER THAN COMPUTED FROM `COOLOFF_SECONDS`, for the same reason the
+#: table above is written out: a number derived from the constant under test
+#: cannot contradict it. One cool-off window is 259 200 / 300 = 864 cycles, so
+#: 1000 is comfortably longer than one window and comfortably shorter than two —
+#: which is what makes "exactly one" a real bound in both directions rather than
+#: a floor.
+_CYCLES_ACROSS_A_COOLOFF_WINDOW = 1000
+
+
+def test_a_retailer_in_cooloff_is_probed_exactly_once_when_it_expires() -> None:
+    """Criterion 2: left alone, then probed — not dropped, and not probed twice.
+
+    WHY THIS IS A SIMULATION AND NOT AN INFERENCE. An interval of 259 200 s is
+    consistent with one probe over the window and with none at all; the number
+    alone cannot tell a cool-off from a retailer that has silently fallen off the
+    schedule, and "silently fallen off the schedule" is the failure this whole
+    project exists one level up to prevent. Only driving `due` on every cycle
+    distinguishes them.
+
+    The idiom is this repository's own — a plain float `now`, `if p.due(...)`,
+    `count += 1`, `p.record(...)`, `now += 300`. No clock library, no fixture, no
+    monkeypatched time: the class takes `now` as an argument precisely so a month
+    of cycles costs no seconds.
+
+    THE COOL-OFF IS SCOPED TO A RUNNING PROCESS, and that is recorded here rather
+    than discovered later. `due_at` is deliberately never persisted, so a restart
+    mid-cool-off re-probes immediately at full rate. The price is exactly one
+    request per restart.
+    """
+    p = Pacer(default_interval=300)
+    now = 0.0
+
+    # RAMP. Drive the schedule to the threshold the way the daemon would — one
+    # refusal per cycle it is actually due — rather than by calling `record` in a
+    # tight loop, so the cycle count below is a real position on a real schedule.
+    cycles_to_the_threshold = 0
+    while p._for("walmart").refusals < REFUSALS_BEFORE_COOLOFF:
+        if p.due("walmart", now):
+            p.record("walmart", refused=True, now=now)
+        now += 300.0
+        cycles_to_the_threshold += 1
+        assert cycles_to_the_threshold < 100_000, (
+            "the ramp never reached the threshold — either the backoff stopped "
+            "letting a refused retailer become due at all, or the threshold is "
+            "unreachable from a running process"
+        )
+
+    at_the_threshold = now
+
+    probes = 0
+    for _ in range(_CYCLES_ACROSS_A_COOLOFF_WINDOW):
+        if p.due("walmart", now):
+            probes += 1
+            p.record("walmart", refused=True, now=now)
+        now += 300.0
+
+    assert probes == 1, (
+        f"a retailer at {REFUSALS_BEFORE_COOLOFF} refusals was asked {probes} "
+        f"times over {_CYCLES_ACROSS_A_COOLOFF_WINDOW} cycles "
+        f"({_CYCLES_ACROSS_A_COOLOFF_WINDOW * 300} s) after crossing the "
+        f"threshold at t={at_the_threshold} — a cool-off is exactly one probe "
+        f"per window: more than one is still knocking, and none at all is a "
+        f"dropped retailer with a row on the dashboard"
+    )
+
+
+def test_a_retailer_that_answers_during_its_probe_is_back_on_its_standing_interval_at_once() -> None:
+    """Criterion 4: a cool-off is a wait, never a never-ask-again.
+
+    Asserted at COOL-OFF depth rather than at the cap, for the same stated reason
+    `test_a_retailer_that_answers_is_back_on_its_standing_interval_at_once` is
+    asserted at the cap rather than one refusal in: the interesting direction is a
+    retailer coming back from three days, not from ten minutes.
+
+    THREE ASSERTIONS AFTER THE GOOD READ, NOT ONE. The field, the accessor and the
+    schedule. A reset that cleared the count without reaching the schedule would
+    pass on `refusals == 0` alone while the retailer sat unasked for the rest of
+    its three days — the count saying "recovered" and the schedule saying
+    "cooling off", which is the two-surfaces-disagreeing defect this module keeps
+    to one expression to prevent.
+    """
+    p = Pacer(default_interval=300, overrides={"amazon": 1800})
+    for _ in range(REFUSALS_BEFORE_COOLOFF):
+        p.record("amazon", refused=True, now=0.0)
+    assert p.current_interval("amazon") == 259200.0, (
+        "the setup never reached cool-off depth, so what follows would be a "
+        "recovery from the cap and not from a cool-off"
+    )
+
+    p.record("amazon", refused=False, now=0.0)
+
+    assert p._for("amazon").refusals == 0
+    assert p.current_interval("amazon") == 1800.0
+    assert p._for("amazon").due_at == 1800.0
 
 
 # --------------------------------------------------------------------------
@@ -961,6 +1214,32 @@ def test_the_persisted_count_is_clamped(tmp_path: Path) -> None:
     Inside `record` that is an exception every cycle, caught by `watch_loop`,
     counted to FAILURES_BEFORE_GIVING_UP and returned as exit 1 — a one-line
     denial of service on the monitor, from a file the monitor wrote itself.
+
+    THE LAST ASSERTION'S LITERAL WAS WITHDRAWN ON 2026-08-28. It read, in full:
+
+        assert p._for("amazon").due_at == MAX_BACKOFF_SECONDS
+
+    What overruled it: REQ-22 put a cool-off past `REFUSALS_BEFORE_COOLOFF = 30`,
+    and `MAX_PERSISTED_REFUSALS = 64` is above that threshold **on purpose** — the
+    threshold is argued to sit under the clamp precisely so that a count restored
+    from disk can cross it, since a threshold at or above the clamp could never be
+    reached from a restart at all. So a clamped restore now lands in cool-off by
+    design, and the old literal was asserting the absence of the feature this
+    phase adds. Measured here at 65 refusals (64 restored by the clamp, plus the
+    one this test records): **259200.0 observed against an expected 21600**.
+
+    WHAT SURVIVES IS THIS TEST'S ENTIRE SUBJECT, untouched. The subject is the
+    measured `2.0 ** 1024` `OverflowError` above and the clamp that prevents it —
+    a denial of service on the monitor from a file the monitor wrote itself — and
+    a cool-off has nothing to do with it. Both assertions that carry that subject
+    are byte-unchanged: the clamp restoring exactly `MAX_PERSISTED_REFUSALS`, and
+    `record` completing without raising. Only the scheduled wait moved.
+
+    THE NEW LITERAL IS WRITTEN OUT AS `259200.0` RATHER THAN AS `COOLOFF_SECONDS`,
+    on the same discipline as the boundary table and for the same reason: a
+    symbolic literal here would be a re-derivation of the constant under test, and
+    it would let a future edit to `COOLOFF_SECONDS` pass in silence in the one
+    place that proves a RESTORED count crosses the threshold.
     """
     path = tmp_path / "pacer-state.json"
     path.write_text(_document(refusals=10**9, age=1.0))
@@ -970,7 +1249,7 @@ def test_the_persisted_count_is_clamped(tmp_path: Path) -> None:
 
     assert p._for("amazon").refusals == MAX_PERSISTED_REFUSALS
     p.record("amazon", refused=True, now=0.0)  # must not raise
-    assert p._for("amazon").due_at == MAX_BACKOFF_SECONDS
+    assert p._for("amazon").due_at == 259200.0
 
 
 def test_the_clamp_never_restores_a_shallower_wait_than_the_cap() -> None:
