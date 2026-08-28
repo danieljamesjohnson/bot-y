@@ -232,6 +232,75 @@ Note also that `fmtDur` is shared: `fmtAge` is defined through it, so a new band
 banner's age string too. That coupling is deliberate (one home for the bands) and is a reason to
 change it carefully, not a reason not to.
 
+### ANSWERED 2026-08-28 by `08-04`: the three bands stay, and nothing on the page moves
+
+**Measured first, decided second.** `08-03` established that the number now reaching the page is
+**259200** and that it survives a restart, so this is the wave that has the number. The page's own
+arrow function was extracted from `served/boty/index.html:118` with `sed -n '118p'` and evaluated
+under `node v24.16.0` (nvm sourced first, because `make` does not inherit it), beside a hypothetical
+four-band variant carrying an extra `s < 86400` boundary:
+
+| input | today, three bands | with an 86400 day band |
+|---|---|---|
+| `259200` — the cool-off wait `08-02` fixed | **`72h`** | `3d` |
+| `262800` — a reading one hour past that cool-off | **`73h`** | `3d` |
+| `21600` — the six-hour cap | **`6h`** | `6h` |
+| `NaN` — the measured silent-failure input | **`0h`** | `0d` |
+
+All eight strings match what `08-04-PLAN.md` projected on the same date, so nothing is re-argued
+against a surprise. **`fmtDur` is handed a CADENCE in exactly one place**, counted rather than
+assumed: `grep -n "fmtDur(" served/boty/index.html` returns two hits — line 119, where `fmtAge` is
+defined through it and is always given an age, and line 223, `ageTag`'s warn branch. So the day-band
+question is a question about one rendered string.
+
+**Decision: keep the three bands. `served/boty/index.html` is not edited by this phase, and neither
+is `boty/cli.py`.** Four reasons, each a fact about the tree rather than a preference:
+
+1. **The one site collapses.** Line 223 renders `${fmtAge(age)} > ${fmtDur(interval)}` under a title
+   whose stated job is *"both numbers are shown so you can see which threshold the verdict was taken
+   against"*. Today a cool-off row reads `73h ago > 72h`. With a day band it reads `3d ago > 3d` — a
+   true `>` rendered as an apparent equality, in the one tag that exists to show a comparison.
+2. **It would falsify a recorded byte-identical claim.** The comment above `fmtDur` records that
+   *"`fmtAge`'s output is UNCHANGED for every input — same bands, same coercions, same suffix"*. A
+   fourth band changes it for every input at or above the boundary, so the claim would owe a dated
+   reversal on a page whose comment gates have gone red on prose twice already.
+3. **It would falsify a measured silent-failure analysis.** `renderStatus`'s comment records, dated
+   2026-08-20, that a missing `updated` key yields `NaN`, that `NaN` is less than neither of
+   `fmtDur`'s **two** band boundaries, and that it therefore renders `0h`. The measurement above
+   confirms both halves live: `NaN` → `0h` today, `0d` under four bands. A third boundary makes that
+   recorded sentence false in its count and in its outcome.
+4. **It would have to be paid for twice, with no gate to notice if it were paid once.** The bands
+   live in a **second** place: `boty/cli.py:141-145`'s `_age`, whose own docstring says *"THE BANDS
+   ARE DELIBERATELY `served/boty/index.html`'s. A reader comparing `boty check` to the page must read
+   the same number rather than translating between two vocabularies."*
+
+**The counter-argument, recorded rather than omitted.** `72h` is a number a reader has to divide to
+understand as three days, and a monitor that makes its reader do arithmetic is worse than one that
+does not. That cost is real and it is accepted for a bounded reason: the cadence renders only in the
+branch where a reading is ALREADY older than its own cadence, which for a cool-off retailer means a
+reading already more than three days old — a row by then carrying a warn tag whose whole point is
+that something is wrong. What a reader meets on a healthy row is the *age*, and the age of a healthy
+row is never days-scale.
+
+### The `_age`/`fmtDur` mirror is UNPINNED — a finding, deliberately not fixed, and deliberately not given an ident
+
+Measured, not repeated: `grep -rn "5400" tests/ --include=*.py` returns three hits, **all in
+`tests/test_dashboard.py`** — line 502 asserts `len(re.findall(r"\b5400\b", page)) == 1` over
+`served/boty/index.html`, and lines 499 and 899 are prose about that assertion. Its subject is the
+**page**. (A fourth hit, in `tests/fixtures/walmart/milk-control.html`, is retailer markup and has
+nothing to do with the bands.) **Nothing in the suite pins `boty/cli.py`'s bands to the page's**, so
+the two could diverge with every gate green.
+
+Three things about it, and then this stops:
+
+- It is **pre-existing**. It was created in Phase 7 when `_age` was written to mirror the page, not
+  by this phase, which changes neither file.
+- It is **outside REQ-22** and is not fixed here.
+- **No mutation ident is registered for it, and that is the load-bearing part.** A mutation on a rule
+  the suite does not hold would SURVIVE, and a survivor is exit 1 and a self-inflicted red that names
+  a hole nobody chose to open today. Closing this needs an assertion **first** and an ident
+  **second**, in that order, in a later phase. Writing it down is the deliverable; fixing it is not.
+
 ---
 
 ## Collision C — the baseline test does not survive 08-02, and that is its second job
