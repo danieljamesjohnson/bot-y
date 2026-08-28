@@ -111,10 +111,36 @@ the serialization is the schedule, not a scheduling failure.
 
 Plans:
 
+**Wave 1**
+
 - [ ] 08-01: The number before — 30 days of cycles against the **unmodified** rule, recorded as a stated literal, plus `08-DECISIONS.md` and `COVERAGE.md`. Changes no production code, deliberately. *(PLAN written 2026-08-28, not executed)*
-- [ ] 08-02: The cool-off itself — criteria 1, 2, 3-after and 4. Leads with the end-to-end tracer. *(outlined; PLAN not yet written)*
-- [ ] 08-03: Criterion 5 — it survives a restart, and the rule that discards it is the one already there. *(outlined; PLAN not yet written)*
-- [ ] 08-04: Criterion 6 — M42 registered and observed CAUGHT; the consumer surfaces checked rather than assumed. *(outlined; PLAN not yet written)*
+
+**Wave 2** *(blocked on wave 1 — criterion 3's "before" number is unobtainable once the rule moves)*
+
+- [ ] 08-02: The cool-off itself — criteria 1, 2, 3-after and 4. Leads with the end-to-end tracer. Fixes `REFUSALS_BEFORE_COOLOFF = 30` and `COOLOFF_SECONDS = 3 * 24 * 60 * 60`. *(PLAN written 2026-08-28, not executed)*
+
+**Wave 3** *(blocked on wave 2)*
+
+- [ ] 08-03: Criterion 5 — it survives a restart, and the rule that discards it is the one already there. Re-derives `STATE_MAX_AGE_SECONDS` to 259200. *(PLAN written 2026-08-28, not executed)*
+
+**Wave 4** *(blocked on wave 3)*
+
+- [ ] 08-04: Criterion 6 — M42 registered and observed CAUGHT; the consumer surfaces checked rather than assumed; the six-criterion verdict table. *(PLAN written 2026-08-28, not executed)*
+
+**Cross-cutting constraints** — each holds across two or more plans, and each is asserted rather than
+assumed:
+
+- `MAX_BACKOFF_SECONDS` **stays 6 hours**. What REQ-22 replaces is the ceiling being applied
+  *indefinitely*, not its value — and `tests/test_pacing.py`'s surviving `<= 6 * 60 * 60` assertion is
+  what keeps that distinction visible.
+- **No second staleness rule.** `grep -c '<= STATE_MAX_AGE_SECONDS:' boty/pacing.py` is 2 today and
+  must stay 2; a cool-off moves that guard's right-hand side, it does not add a guard.
+- **M42 is the only new ident. M21–M24 stay empty** — `grep -c "INTENTIONAL GAP"` goes 7 → 8.
+- **No live retailer request, no `boty check`, no write to `state.json` / `pacer-state.json` /
+  `served/boty/status.json`, and no `systemctl restart boty`** anywhere in this phase.
+- **A recorded one-wave gap:** between waves 2 and 3 the tree holds a three-day cool-off that a
+  restart discards after six hours. `08-02` states it before it exists; `08-03` closes it. Nothing is
+  deployed mid-phase, so it is a recorded gap rather than a shipped defect.
 
 ### Phase 9: Out of Lockstep
 
