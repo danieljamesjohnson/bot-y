@@ -891,6 +891,18 @@ class Pacer:
         # docstring above says this method exists to prevent, reintroduced by a
         # format specifier.
         #
+        # AND ONE DECIMAL PLACE DID NOT CLOSE IT — MEASURED 2026-08-31. The
+        # paragraph above is kept because its argument is right; what was wrong
+        # was believing `.1f` discharged it. `f"{x:.1f}"` ROUNDS, so every
+        # remaining wait below 0.05 days (4320 s) still rendered as `~0.0 days`.
+        # The band is reachable and reached: `due` skips a retailer while the
+        # remaining wait exceeds `default_interval * 0.5` (150 s at the default),
+        # so (150 s, 4320 s) is about 14 cycles per cool-off window, each writing
+        # a `status.json` row saying the retailer is cooling off and that its next
+        # attempt is in ~0.0 days. The tail below therefore falls back to hours —
+        # a unit that survives the same rounding at that scale, and a number a
+        # reader of the page can act on.
+        #
         # THE FORMAT SPECIFIERS HERE ARE PRESENTATION AND NOTHING ELSE. They never
         # feed the schedule: `record` computes `due_at` from `current_interval`'s
         # float and never from this string, and nothing parses this prose back

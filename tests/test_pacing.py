@@ -1557,6 +1557,24 @@ def test_the_persisted_count_is_clamped(tmp_path: Path) -> None:
     are byte-unchanged: the clamp restoring exactly `MAX_PERSISTED_REFUSALS`, and
     `record` completing without raising. Only the scheduled wait moved.
 
+    THE PARAGRAPH ABOVE IS WRONG AND IS LEFT UNEDITED BESIDE THIS NOTE —
+    2026-08-31, `08-REVIEW.md` WR-02. It was written by this phase on 2026-08-28
+    and it got its own change backwards: a cool-off has EVERYTHING to do with it,
+    because the cool-off is now what prevents the overflow. `current_interval` is
+    a conditional expression, so past `REFUSALS_BEFORE_COOLOFF` the exponentiation
+    is never evaluated. MEASURED 2026-08-31 with the clamp bypassed: an unclamped
+    `refusals = 10**9` returns 259200.0 and does not raise.
+
+    SO THE SECOND ASSERTION IS NO LONGER A GATE, and saying so is the point. The
+    `record` call below now passes with or WITHOUT the clamp, which by this
+    repository's own rule — "a test that has never failed is not a gate" — means
+    it defends nothing and must not read as though it does. It is kept as a smoke
+    check. The live gate for this constant is
+    `test_the_clamp_sits_above_the_cooloff_threshold_so_a_restored_count_can_cross_it`,
+    which drives the relationship that IS still load-bearing. The first assertion
+    (the clamp restoring exactly `MAX_PERSISTED_REFUSALS`) is untouched and does
+    still bite.
+
     THE NEW LITERAL IS WRITTEN OUT AS `259200.0` RATHER THAN AS `COOLOFF_SECONDS`,
     on the same discipline as the boundary table and for the same reason: a
     symbolic literal here would be a re-derivation of the constant under test, and
@@ -1570,7 +1588,10 @@ def test_the_persisted_count_is_clamped(tmp_path: Path) -> None:
     p.load()
 
     assert p._for("amazon").refusals == MAX_PERSISTED_REFUSALS
-    p.record("amazon", refused=True, now=0.0)  # must not raise
+    # NOT A GATE — see the docstring. `# must not raise` stopped biting when
+    # REQ-22 made the exponentiation unreachable past the threshold; this call
+    # returns 259200.0 whether or not the clamp ran. Kept as a smoke check.
+    p.record("amazon", refused=True, now=0.0)
     assert p._for("amazon").due_at == 259200.0
 
 
