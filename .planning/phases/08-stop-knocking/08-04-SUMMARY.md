@@ -574,6 +574,38 @@ carry their *simulation* scope in the cell itself, because for those two the met
 | 5 | *"The cool-off **survives a restart**, the same guarantee the existing backoff already carries, and is discarded when stale by the existing rule rather than a second one"* | **MET AS WRITTEN — carrying `08-03`'s qualification, which is not optional and is not a footnote.** The cool-off survives as the **DEPTH the penalty resumes at, never as a position on the schedule**, and **a restart still costs one immediate probe at full rate**. That depth-only guarantee is *exactly* what the existing backoff already carries, which is what the criterion asks for — so this is the criterion met, not a weaker thing renamed. | `08-03` | `STATE_MAX_AGE_SECONDS` re-derived from `LONGEST_WAIT_SECONDS = max(MAX_BACKOFF_SECONDS, COOLOFF_SECONDS)`: **21600 → 259200**, one changed line. Five gates watched red, including `assert 17 == 1` on the restart probe count and `assert 21600 == 259200` on the derivation. **"Rather than a second rule" is proved by count:** `grep -c '<= STATE_MAX_AGE_SECONDS:' boty/pacing.py` = **2**, unchanged and un-added-to; both guard lines byte-unchanged. |
 | 6 | *"`make verify-offline` exits 0, with at least one new mutation registered, observed CAUGHT, and anchored on **behaviour** rather than on message text"* | **MET AS WRITTEN**, with the measured finding that M42 buys **localisation and not detection** recorded beside it rather than folded into it. | `08-04` (this plan) | `make verify-offline` **exit 0**, verdict line the OFFLINE pass, transcribed verbatim above. **M42** registered (registry **37 → 38**, `ident="M42"` count 1), **observed CAUGHT with 14 killers read off the run**, ratio `38/38`, survivors **0**. Anchored on a source line whose removal changes *when a request is made* — `current_interval` drops 259200 → 21600 at 30 refusals — carrying **no message text, no rendered tag, no docstring fragment**. The honest qualification: M42's kill set is a **proper subset** of M33's, so it closes no hole in the suite; the criterion asks for a mutation registered, caught and behaviour-anchored, and all three are literally true. |
 
+**CRITERION 5 IS AMENDED TO MET IN PART, 2026-08-31 — the row above is left unedited.** The verdict
+word in that row was written on 2026-08-28 and was believed then; the code review of 2026-08-31
+(`08-REVIEW.md` CR-01) established by measurement that the guarantee it asserts had a **systematic
+hole in production at the moment it was written**, and a table that quietly agrees with itself
+afterwards is worth less than one that shows the turn (`docs/retailer-evidence.md` § 6). The
+verifier raised this as WV-01; this is the note it asked for, beside the word rather than over it.
+
+**What was not established when the row said MET AS WRITTEN.** `cli.watch_loop` advanced the pacer's
+synthetic clock by the delay it asked for and never by what a cycle cost, so that clock lagged wall
+clock monotonically. `due_at` lives in the synthetic clock, `refused_at` in wall clock, and
+`Pacer.load` compares wall against wall — so the cool-off probe fired *later* in wall terms than the
+record aged out, and REQ-22 had made the two constants deliberately equal, leaving no slack. Measured
+at the live `duration_seconds: 20.43`: **17 741 s of drift per window — 4.93 h, or 6.84% of every
+cool-off window**. A restart landing there dropped the entry, the retailer returned at **0 refusals**,
+and had to climb the backoff and re-earn thirty consecutive refusals. `target` sat at **46 refusals**
+that day, so this bound on a real retailer.
+
+**So the honest reading of the criterion has two halves.** *"Discarded when stale by the existing rule
+rather than a second one"* — **MET AS WRITTEN**, unaffected, and it always was: there is one rule, and
+`grep -c '<= STATE_MAX_AGE_SECONDS:'` is still 2. *"The cool-off survives a restart"* — **was MET only
+outside a 6.84% window** on 2026-08-28, and is **MET now**, at a residual re-measured over 200 seeds
+as mean 151 s (0.06%) / worst 346 s (0.13%), bounded by one cycle and no longer a function of cycle
+duration. Fixed at the cause in `boty/cli.py` (`9ea42fe`); `LONGEST_WAIT_SECONDS` is deliberately
+UNCHANGED, because the drift was a defect in the clock and not a property of the policy.
+
+**Why this is MET IN PART and not simply MET.** The criterion is met in the tree today. But this
+phase's closing record asserted it while it was false, and the qualification that matters to a future
+reader is that *the assertion was not wrong about the test — it was wrong about production*. The
+restart test 08-03 wrote was valid and still passes; what no test covered was the clock the test's
+`now` argument stands in for. That gap is the finding, and rounding the row back up to MET AS WRITTEN
+would delete it.
+
 **Criterion 5's dependency was checked rather than assumed.** The verdict above is derived from
 reading `08-03-SUMMARY.md`, not from the fact that `08-03` was planned to close the gap. It did:
 § *The recorded one-wave gap is CLOSED* states it in the terms `08-02` opened it, and the two-hunk

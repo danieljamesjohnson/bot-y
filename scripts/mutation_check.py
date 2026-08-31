@@ -1714,6 +1714,15 @@ MUTATIONS = (
     # single-probe test, the restart simulation, the recovery-at-depth test, the
     # thirty-day count, the cross-surface tracer and the clamp test.
     #
+    # THAT "14" IS THE 2026-08-28 FIGURE AND IS NOW 16 — verifier finding WV-02,
+    # which is about reading order rather than about the number: the re-measured
+    # counts are already in this block above, but they PRECEDE the claim they
+    # correct instead of sitting beside it, so a reader arriving here meets the
+    # stale figure last. The 2026-08-31 code review added two tests that land in
+    # this kill set (`08-REVIEW.md` WR-01 and WR-03). The 14 is left as written
+    # because it is correctly scoped to the run that registered the ident; this
+    # line is the pointer that stops it being read as current.
+    #
     # IF IT EVER SURVIVES: check two things before anything else. First,
     # whether the boundary table's rows at and past the threshold were
     # re-derived through `COOLOFF_SECONDS` instead of being hand-written
