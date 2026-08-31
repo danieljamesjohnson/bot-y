@@ -425,6 +425,44 @@ LONGEST_WAIT_SECONDS = max(MAX_BACKOFF_SECONDS, COOLOFF_SECONDS)
 #: ever bites, the change to consider is to `LONGEST_WAIT_SECONDS`' definition,
 #: never a second constant beside this one.
 #:
+#: THE PARAGRAPH ABOVE WAS WRONG IN BOTH HALVES, AND IS KEPT UNEDITED BESIDE
+#: THIS CORRECTION RATHER THAN REPAIRED IN PLACE — 2026-08-31, found by the
+#: phase-8 code review, `08-REVIEW.md` CR-01. It was written on 2026-08-28 and
+#: believed then; it named a mechanism that does not bite and a number ~59x too
+#: small, and a record that quietly agreed with itself afterwards would teach a
+#: future reader nothing. `docs/retailer-evidence.md` § 6 is the convention.
+#:
+#: (a) THE MECHANISM NAMED — jitter — CANCELS EXACTLY. `cli.watch_loop` computed
+#: one `delay`, slept it, and advanced the pacer's clock by THE SAME FLOAT, so
+#: jitter contributed no differential drift at all. Simulated over a whole window
+#: with cycle duration held at zero, the residual is 3-326 s across 200 seeds: a
+#: random walk about zero, not a bias, and SMALLER than the 300 s claimed.
+#:
+#: (b) WHAT ACTUALLY BIT was the check pass's own wall-clock cost, which was
+#: never added back to that clock — systematic, unidirectional, and unbounded in
+#: the window's length. Measured on this host on 2026-08-31 at the live
+#: `duration_seconds: 20.43`: 865 cycles per window, 17 741 s of drift — 4.93 h,
+#: or 6.84% of every window, against a claimed 0.12%. `target` sat at 46
+#: refusals that day, past `REFUSALS_BEFORE_COOLOFF`, so it bound on a real
+#: retailer: a restart in that gap dropped the entry, the retailer returned at 0
+#: refusals, and REQ-22's own result was undone by REQ-22's own persistence
+#: layer — leg 3 of the argument this very comment gives for widening the window.
+#:
+#: (c) FIXED AT THE CAUSE, NOT ABSORBED HERE, and `LONGEST_WAIT_SECONDS` is
+#: therefore UNCHANGED — which is what the sentence four lines up told a future
+#: reader to consider, and the reason it is not what was done: the drift was a
+#: defect in the clock, not a property of the policy, and widening the window
+#: would have hidden it at every other retailer's expense. `cli.watch_loop` now
+#: advances by `delay + cycle_duration`; see the comment there for why adding the
+#: term rather than replacing it is load-bearing.
+#:
+#: (d) THE RESIDUAL AS IT NOW STANDS, RE-MEASURED over 200 seeds after the fix:
+#: the probe lands at the first cycle boundary at or after `due_at`, so the
+#: sliver is bounded by ONE CYCLE and no longer grows with cycle duration —
+#: mean 151 s (0.06%), worst 346 s (0.13%) at the live duration. That is the
+#: claim the paragraph above was reaching for; it is true now, for the
+#: quantisation reason stated here and not for the jitter reason stated there.
+#:
 #: CHECKED ON 2026-08-28 AND LEFT UNEDITED: concession (a) in the module
 #: docstring says a file written before a machine was off for A WEEK is ignored
 #: rather than applied. A week is 604 800 s and this window is 259 200 s, so the

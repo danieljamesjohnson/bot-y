@@ -648,8 +648,41 @@ def watch_loop(
     # time.monotonic(), which is both accurate in production (sleep really does
     # pass that long) and deterministic under a fake sleep in tests — where a
     # wall clock would stay frozen and make every retailer look never-due.
+    #
+    # CORRECTED 2026-08-31, AND THE SENTENCE ABOVE IS KEPT BECAUSE ITS SECOND
+    # HALF IS STILL THE REASON THIS IS NOT `time.monotonic()`. What was wrong was
+    # "accurate in production": the delay is what we sleep, but it is not what a
+    # cycle COSTS. `watch_cycle` runs before the sleep and consumes real wall
+    # time, and that time was never added back — so this clock lagged wall clock
+    # by the cumulative cost of every check pass, monotonically and always in the
+    # same direction. The two clocks that has to join are `due_at` (measured in
+    # THIS clock) and `refused_at` (wall clock, stamped in `Pacer.record`), which
+    # `Pacer.load` compares against `STATE_MAX_AGE_SECONDS`.
+    #
+    # MEASURED, NOT ARGUED: `served/boty/status.json` recorded
+    # `duration_seconds: 20.43` for a live cycle on 2026-08-31. At the 300 s
+    # standing cadence one cool-off window is 865 cycles, so the drift reached
+    # 17 741 s — 4.93 h, or 6.84% of every window. Because REQ-22 made
+    # `STATE_MAX_AGE_SECONDS` and `COOLOFF_SECONDS` deliberately EQUAL there is
+    # no slack to absorb that: a restart landing in the gap dropped the entry,
+    # the retailer came back at 0 refusals, and it had to climb the backoff and
+    # re-earn 30 consecutive refusals. `target` sat at 46 refusals that day, so
+    # this bound on a real retailer.
+    #
+    # THE FIX ADDS A TERM RATHER THAN REPLACING ONE. `scheduled_now +=
+    # time.monotonic() - cycle_started` is the shorter edit and it is WRONG here:
+    # under a fake sleep it would advance this clock by microseconds and make
+    # every retailer look never-due, which is exactly what the paragraph above
+    # says the delay term is for. `tests/test_cli_watch.py`'s
+    # `test_the_pacer_clock_is_still_deterministic_under_a_fake_sleep` exists to
+    # stop that being the fix.
     scheduled_now = 0.0
     while cycles is None or completed < cycles:
+        # Before the `try`, so a cycle that RAISES still pays for the wall time
+        # it burned. A failing cycle costs real seconds too, and charging the
+        # clock only for cycles that succeeded would reintroduce the same drift
+        # on exactly the path `FAILURES_BEFORE_GIVING_UP` is about.
+        cycle_started = time.monotonic()
         try:
             warned = watch_cycle(cfg, checker, state, warned, pacer=pacer, now=scheduled_now)
             consecutive_failures = 0
@@ -695,10 +728,18 @@ def watch_loop(
             pacer.save(warned)
 
         completed += 1
+        # Read BEFORE the sleep, so this is the check pass's own cost and not the
+        # cost plus the wait. `sleep(delay)` under a fake sleep returns instantly,
+        # so folding the sleep into a single monotonic delta would silently make
+        # the delay term zero in every test in this file.
+        cycle_duration = time.monotonic() - cycle_started
         # Jitter so we do not hammer on a fixed cadence, which is itself a signal.
         delay = cfg.interval_seconds * random.uniform(0.85, 1.15)
         sleep(delay)
-        scheduled_now += delay
+        # BOTH TERMS. `delay` keeps this deterministic under a fake sleep;
+        # `cycle_duration` is what stops it drifting behind wall clock in
+        # production. Dropping either one breaks a test that names which.
+        scheduled_now += delay + cycle_duration
     return 0
 
 

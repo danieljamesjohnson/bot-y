@@ -1705,3 +1705,114 @@ def test_the_same_state_pushes_once_somebody_writes_down_what_to_do(
         "a state that names a human action was suppressed, so the rule is "
         "'push nothing' rather than 'push what can be acted on'"
     )
+
+
+# --------------------------------------------------------------------------
+# CR-01: the pacer's clock must track wall clock, not just the sleeps
+# --------------------------------------------------------------------------
+
+
+def test_the_pacer_clock_advances_by_the_time_the_check_pass_really_took(
+    cfg: Config, sent: dict[str, list], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The clock `due_at` is measured in must not lag the clock `refused_at` is in.
+
+    THE TWO CLOCKS THIS JOINS. `Pacer.record` stamps `refused_at` from
+    `time.time()` — wall clock, because it is the moment evidence was collected
+    and the only thing a later process can date. `due_at` is `now + wait`, where
+    `now` is this loop's `scheduled_now`. `Pacer.load`'s two-sided bound then
+    compares wall against wall against `STATE_MAX_AGE_SECONDS`.
+
+    So if `scheduled_now` advances by less than the wall time a cycle really
+    consumed, the two clocks drift apart monotonically and in one direction, and
+    the cool-off probe fires LATER in wall terms than the record ages out.
+    `STATE_MAX_AGE_SECONDS` and `COOLOFF_SECONDS` are deliberately EQUAL, so
+    there is no slack to absorb it: every second of drift is a second in which a
+    restart drops the entry, the retailer returns at 0 refusals, and it must
+    climb the backoff and re-earn 30 consecutive refusals — REQ-22's own result
+    undone by REQ-22's own persistence layer.
+
+    MEASURED, NOT ARGUED, on 2026-08-31: `served/boty/status.json` recorded
+    `duration_seconds: 20.43` for a live cycle. At the 300 s standing cadence one
+    cool-off window is 865 cycles, so the drift is 17 741 s — 4.93 h, or 6.84% of
+    every window. `target` sat at 46 refusals on that date, past the threshold of
+    30, so this bound on a real retailer rather than a hypothetical one.
+
+    WHY THIS TEST INJECTS A SLOW CYCLE RATHER THAN READING THE CONSTANT. The
+    defect is not a wrong number anywhere; it is a missing term. Only a cycle
+    that actually consumes wall time can tell `+= delay` apart from
+    `+= delay + duration`, which is why the pass below sleeps for real.
+    """
+    seen: list[float] = []
+    real_cycle = cli.watch_cycle
+
+    def _slow_cycle(cfg_, checker, state_, warned, *, pacer, now):  # type: ignore[no-untyped-def]
+        seen.append(now)
+        time.sleep(0.05)
+        return real_cycle(cfg_, checker, state_, warned, pacer=pacer, now=now)
+
+    monkeypatch.setattr(cli, "watch_cycle", _slow_cycle)
+    delays: list[float] = []
+    state = State.load(cfg.state_path)
+
+    cli.watch_loop(
+        cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        state,
+        cycles=3,
+        sleep=lambda s: delays.append(s),
+    )
+
+    assert len(seen) == 3, seen
+    for i in range(len(seen) - 1):
+        advance = seen[i + 1] - seen[i]
+        assert advance >= delays[i] + 0.04, (
+            f"cycle {i}: the pacer's clock advanced {advance:.4f}s while the "
+            f"cycle really consumed {delays[i] + 0.05:.4f}s of wall time — the "
+            f"check pass's own duration was never added back, so `due_at` "
+            f"drifts behind `refused_at` and a cool-off ages out before its probe"
+        )
+
+
+def test_the_pacer_clock_is_still_deterministic_under_a_fake_sleep(
+    cfg: Config, sent: dict[str, list]
+) -> None:
+    """The fix for the test above must not cost the property the loop was built on.
+
+    `scheduled_now` advances by the delay we ASK for precisely so a test passing
+    `sleep=lambda s: None` still moves the clock a full interval per cycle. A fix
+    that replaced the delay term with a measured elapsed time — rather than
+    ADDING the duration to it — would advance the clock by microseconds here and
+    make every retailer look never-due, silently disarming every paced assertion
+    in this file. This test is what stops that being the fix.
+    """
+    seen: list[float] = []
+    real_cycle = cli.watch_cycle
+
+    def _record(cfg_, checker, state_, warned, *, pacer, now):  # type: ignore[no-untyped-def]
+        seen.append(now)
+        return real_cycle(cfg_, checker, state_, warned, pacer=pacer, now=now)
+
+    import boty.cli as _cli
+
+    _orig = _cli.watch_cycle
+    _cli.watch_cycle = _record  # type: ignore[assignment]
+    try:
+        state = State.load(cfg.state_path)
+        cli.watch_loop(
+            cfg,
+            _checker(Availability.OUT_OF_STOCK),
+            state,
+            cycles=3,
+            sleep=lambda s: None,
+        )
+    finally:
+        _cli.watch_cycle = _orig  # type: ignore[assignment]
+
+    for i in range(len(seen) - 1):
+        advance = seen[i + 1] - seen[i]
+        assert advance >= 0.85 * cfg.interval_seconds, (
+            f"cycle {i}: the clock advanced only {advance:.4f}s under a fake "
+            f"sleep — a retailer on a {cfg.interval_seconds}s cadence would "
+            f"never come due, disarming every paced assertion in this file"
+        )

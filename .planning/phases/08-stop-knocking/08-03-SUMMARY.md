@@ -43,6 +43,7 @@ key-decisions:
   - "No _RetailerState field: the cool-off is a threshold on an already-persisted counter, there is no probe flag either because `due_at` already makes that decision, and a field would have cost the bump the next argument refuses"
   - "No STATE_VERSION bump: shape unchanged, the count's meaning unchanged, and the bump's own quoted price — 'treated as absent' — would discard the cool-off of exactly the retailers this phase protects, on the day it ships"
   - "The boundary residual (~0.12% of the window) is recorded and NOT fixed: a window with slack would re-choose a number the derivation forbids re-choosing"
+  - "SUPERSEDED 2026-08-31 (08-REVIEW.md CR-01), left above unedited: the residual was ~59x larger than recorded (6.84%, not 0.12%) and jitter was the wrong mechanism — the check pass's own duration was never added back to the pacer's clock. Fixed at the cause in cli.watch_loop; LONGEST_WAIT_SECONDS deliberately UNCHANGED. Post-fix residual re-measured: mean 0.06%, worst 0.13%"
   - "The four window tests whose names say 'the cap' keep their names; only the derivation test was renamed, because its name stated the specific claim being withdrawn"
   - "scripts/mutation_check.py is not edited here: M33's and M38's now-stale kill-set counts are handed to 08-04, which owns that file for M42"
 
@@ -243,6 +244,40 @@ time**, so this is a strict improvement rather than a trade.
 forbids re-choosing** — buying 0.12% with the one property that keeps the two constants from
 drifting apart. Recorded, not fixed. If it ever bites, the change to consider is to
 `LONGEST_WAIT_SECONDS`' definition, never a second constant beside it.
+
+---
+
+#### SUPERSEDED 2026-08-31 — both figures above are wrong, and are left unedited
+
+The two paragraphs above were true as *beliefs* on 2026-08-28 and are kept byte-unchanged on this
+file's own convention (`docs/retailer-evidence.md` § 6). The phase-8 code review found them wrong in
+both halves (`08-REVIEW.md` CR-01), and the correction is recorded here rather than over them.
+
+- **The mechanism named — jitter — cancels exactly.** `cli.watch_loop` computed one `delay`, slept
+  it, and advanced the pacer's clock by *the same float*. Simulated over a whole window with cycle
+  duration held at zero: residual **3–326 s across 200 seeds** — a random walk about zero, and
+  *smaller* than the 300 s claimed. Jitter was never the mechanism.
+- **What actually bit** was the check pass's own wall-clock cost, never added back to that clock —
+  systematic and unidirectional. Measured on this host 2026-08-31 at the live
+  `duration_seconds: 20.43`: **865 cycles/window, 17 741 s of drift = 4.93 h = 6.84% of every
+  window**, against a claimed 0.12%. That is **~59× the recorded figure**.
+- **It bound on a real retailer.** `pacer-state.json` had `target` at **46 refusals** that day, past
+  `REFUSALS_BEFORE_COOLOFF`. A restart in the gap dropped the entry, the retailer returned at 0
+  refusals, and had to re-earn 30 consecutive refusals — REQ-22's result undone by REQ-22's own
+  persistence layer, which is leg 3 of the argument this plan gave for widening the window.
+- **Fixed at the cause; `LONGEST_WAIT_SECONDS` is UNCHANGED.** The sentence above tells a future
+  reader to consider changing its definition, and that is deliberately *not* what was done: the
+  drift was a defect in the clock, not a property of the policy, and widening the window would have
+  hidden it at every other retailer's expense. `cli.watch_loop` now advances by
+  `delay + cycle_duration`.
+- **The residual as it now stands, re-measured over 200 seeds after the fix:** bounded by one cycle
+  and no longer growing with cycle duration — **mean 151 s (0.06%), worst 346 s (0.13%)**. The
+  "~0.12%" figure above is approximately right *now*, for the quantisation reason, and was not right
+  when written for the jitter reason.
+
+**Criterion 5's verdict is amended by this, and not quietly.** It was recorded as MET on the strength
+of a restart test that is still valid; what was not established at the time is that the guarantee had
+a 6.84%-per-window hole in production. See the phase-8 verdict table for the amended reading.
 
 ---
 
