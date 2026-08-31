@@ -448,3 +448,42 @@ Traced and found no defect, recorded so the next reviewer does not re-derive the
 _Reviewed: 2026-08-31_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+---
+
+## Resolution — 2026-08-31
+
+All five findings were addressed the same day the review was written. The report
+above is left **unedited**: it is the record of what was found, and the outcomes
+belong beside it rather than over it (`docs/retailer-evidence.md` § 6).
+
+| ID | Outcome | Commit |
+|---|---|---|
+| CR-01 | **Fixed at the cause**, not absorbed in the window | `9ea42fe` |
+| WR-01 | **Fixed** — the label is derived from `current_interval` | `232565a` |
+| WR-02 | **Recorded beside itself**; the dead assertion marked a smoke check | `a58e7ac` |
+| WR-03 | **Fixed** — the tail falls back to hours | `232565a` |
+| WR-04 | **Fixed** — CLAUDE.md counts, and the M42 collision closed | `f2474f6` |
+
+**Two corrections to this report, both in its favour and both measured.**
+
+1. **CR-01's suggested fix would have broken five existing tests.** The report
+   proposes `scheduled_now += time.monotonic() - cycle_started`. That replaces the
+   delay term instead of adding to it, and `watch_loop`'s clock comment says the
+   delay term is what keeps the loop deterministic under the tests' fake `sleep`.
+   Measured: that variant fails **7 tests** — the two new clock gates plus five
+   pre-existing tests it would have silently disarmed. Shipped instead:
+   `scheduled_now += delay + cycle_duration`, with `cycle_duration` read *before*
+   the sleep. The diagnosis was right; the prescription was not.
+
+2. **CR-01's percentage used a different denominator.** The report gives 8.42% at
+   27.61 s/cycle, dividing the drift by the *wall* window. Against the cool-off
+   constant the same drift is 9.24%. Both are defensible framings and the
+   magnitude is identical; the tree records the figure at the live 20.43 s/cycle
+   (**6.84%**) so the number and the host that produced it travel together.
+
+**Gate after the fixes:** `make verify-offline` **EXIT 0** — identity PASS over
+242 files, **920 passed / 0 skipped** (up from 916, +4 gates), mypy clean over 18
+source files, **38/38 mutations caught, survivors 0**. Watched red first at
+**3 failed / 141 passed**; the fourth new test was green from birth and is
+recorded as a regression guard rather than claimed as a gate.
