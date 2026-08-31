@@ -159,18 +159,28 @@ leak in `.planning/`, not in fixtures. That is why this is loud.
 ## Registries and invariants
 
 **`scripts/mutation_check.py`** deliberately breaks source in a sandbox and asserts the
-suite notices. Currently **M1–M20 and M25–M41**.
+suite notices. Currently **M1–M20 and M25–M42**.
 
 > **M21–M24 are an intentional, documented gap. Never fill them.** Phase 6 recorded why:
 > `apply_mutation` cannot add a file, so the defect it would have covered is outside the
-> harness by construction. The script says so in seven places (`grep -c "INTENTIONAL GAP"`)
-> — six until M41 added the seventh on 2026-08-25, which restates the rule rather than
+> harness by construction. The script says so in eight places (`grep -c "INTENTIONAL GAP"`)
+> — seven until M42 added the eighth on 2026-08-28, which restates the rule rather than
 > weakening it: `.github/` was *already* in `SANDBOX_CONTENTS`, so M41 needed nothing added
 > to reach it. That is the test M21–M24 failed.
 
-Next free ident is **M42**. Register one only when it defends something new — if every
+Next free ident is **M43**. Register one only when it defends something new — if every
 break is already caught by a second independent test, an ident raises the denominator
 without defending anything, and the registry records that reasoning too.
+
+**M42 is kept on LOCALISATION alone, and its own comment block says so.** Its kill set is a
+proper subset of M33's, so it closes no hole in the suite — 08-04 recorded that as a measured
+finding rather than rounding it up into coverage it does not provide. If a future reader judges
+that insufficient, the honest remedy is to delete the ident, not to reword it.
+
+*(These three counts were stale for three days — M42 landed 2026-08-28 and this section still
+read M25–M41 / seven / "next free is M42" until 2026-08-31, when the phase-8 code review caught
+it as WR-04. Nothing in the suite gates them, which is exactly why they drift; and "next free
+ident is M42" would have handed the next agent a collision.)*
 
 A mutation must anchor on **behaviour**, not on message text or a prose comment.
 

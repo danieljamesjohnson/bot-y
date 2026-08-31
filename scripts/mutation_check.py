@@ -1668,6 +1668,24 @@ MUTATIONS = (
     # The measurements above are the ones that decide it and they are written
     # down so the question can be re-asked rather than re-argued.
     #
+    # RE-MEASURED 2026-08-31 AND THE FIGURES ABOVE HAVE MOVED — the counts are
+    # left unedited because they were right on 2026-08-28, and this is the note
+    # beside them. The phase-8 code review added three tests (`08-REVIEW.md`
+    # CR-01/WR-01/WR-03), two of which land in these kill sets:
+    #
+    #     M33 size: 28   M42 size: 16   M38 size: 3
+    #     M42 is a proper subset of M33: True
+    #     in M42 but not M33: []
+    #     in M33 but not M42 (count): 12
+    #
+    # SO THE CONCLUSION IS UNCHANGED AND ONLY THE ARITHMETIC MOVED: 14 -> 16
+    # killers, all 16 still among M33's 26 -> 28, still nothing in M42 that is
+    # not in M33. M42 still buys LOCALISATION and not detection, and the "delete
+    # it rather than reword it" remedy above still stands on its own terms.
+    # M38 went 2 -> 3, which is worth noting only because 08-02 called its kill
+    # set thin, 08-03 widened it to 2 by accident, and this widened it again the
+    # same way — by a test written about something else.
+    #
     # THE COST, STATED RATHER THAN BURIED: three anchors, not two. M42's
     # `search` is a substring of both M33's and M38's nine-line fragments —
     # measured, both True — so one edit to `current_interval`'s return now

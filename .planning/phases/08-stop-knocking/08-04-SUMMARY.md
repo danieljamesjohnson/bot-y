@@ -252,6 +252,21 @@ in M42 but not M33: []
 in M33 but not M42 (count): 12
 ```
 
+**RE-MEASURED 2026-08-31 — the counts above moved, the conclusion did not.** The figures are left
+unedited (they were right when written); this is the note beside them. The phase-8 code review added
+three tests, two of which land in these sets:
+
+```
+M33 size: 28   M42 size: 16   M38 size: 3
+M42 is a proper subset of M33: True
+in M42 but not M33: []
+in M33 but not M42 (count): 12
+```
+
+So M42 is **still** a proper subset — 14 -> 16 killers, all 16 still inside M33's 26 -> 28 — and it
+still buys localisation rather than detection. `scripts/mutation_check.py`'s M42 block carries the
+same note. M38 went 2 -> 3, widened for the third time by a test written about something else.
+
 Every one of M42's fourteen killers already kills M33. **So M42 closes no hole in the test suite** —
 a real code change deleting that comparison would be caught by those same fourteen assertions whether
 or not this registry entry existed. `CLAUDE.md`'s rule is that an ident is never registered to raise
