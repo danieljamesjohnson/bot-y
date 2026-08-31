@@ -1835,3 +1835,70 @@ def test_the_restored_interval_comes_from_config_not_from_the_file(tmp_path: Pat
     p.load()
 
     assert p._for("amazon").interval == 1800
+
+
+# --------------------------------------------------------------------------
+# WR-01 / WR-03: the page must not name a cause the schedule did not establish
+# --------------------------------------------------------------------------
+
+
+def test_a_standing_interval_above_the_cooloff_is_not_published_as_a_penalty() -> None:
+    """`skipped_reason` must derive the cool-off, not restate its threshold.
+
+    `current_interval` puts the cool-off INSIDE its single `max` precisely so the
+    widen-only rule is applied for free rather than restated — the module argues
+    that at three separate sites, and it is the whole reason the cool-off is not
+    a guard clause. `skipped_reason` then restated the comparison anyway, which
+    is the second copy that argument forbids.
+
+    THEY ALREADY DISAGREE, on a config `Config.load` accepts in silence.
+    `config._interval` enforces a floor and no upper bound, so `interval_seconds:
+    604800` loads. At a week's standing interval `max(604800, COOLOFF_SECONDS)`
+    returns the standing interval at EVERY depth — the retailer is asked at
+    exactly the cadence the operator chose, and would be at zero refusals too. No
+    cool-off is in force. The page nonetheless attributed the wait to a penalty
+    this module applied, which is REQ-15's rule: a surface naming a cause the
+    code did not establish.
+
+    The sibling test above drives this same config and asserts only
+    `current_interval`, which is why the divergence survived it.
+    """
+    p = Pacer(default_interval=604800)
+    for _ in range(REFUSALS_BEFORE_COOLOFF):
+        p.record("amazon", refused=True, now=0.0)
+
+    assert p.current_interval("amazon") == 604800, (
+        "precondition: at a week's standing interval the cool-off is not in force"
+    )
+    assert "cooling off" not in p.skipped_reason("amazon", 0.0), (
+        "the page called the operator's own standing cadence a cool-off "
+        f"penalty: {p.skipped_reason('amazon', 0.0)!r}"
+    )
+
+
+def test_a_cooloff_near_its_probe_does_not_render_as_zero_days() -> None:
+    """One decimal place does not close the hole its own comment says it closes.
+
+    `skipped_reason`'s comment states that zero decimals would render a live wait
+    as "0 days" — "a retailer that is genuinely being left alone, described as one
+    that is not being left alone at all" — and that one decimal place is
+    load-bearing against it. It is not: `f"{x:.1f}"` ROUNDS, so every remaining
+    wait below 0.05 days (4320 s) renders as `~0.0 days`.
+
+    THE BAND IS REACHABLE AND WRITTEN TO THE PAGE. `due` skips a retailer while
+    the remaining wait exceeds `default_interval * 0.5` (150 s at the default), so
+    the reachable window is (150 s, 4320 s) — about 14 cycles per cool-off window,
+    each writing a `status.json` row that says the retailer is cooling off and
+    that its next attempt is in ~0.0 days.
+    """
+    p = Pacer(default_interval=300)
+    for _ in range(REFUSALS_BEFORE_COOLOFF):
+        p.record("cooling", refused=True, now=0.0)
+
+    reason = p.skipped_reason("cooling", COOLOFF_SECONDS - 3600.0)
+
+    assert "cooling off" in reason, "precondition: the cool-off arm is the one under test"
+    assert "0.0 days" not in reason, (
+        "a live wait of one hour rendered as '~0.0 days' — the exact failure the "
+        f"decimal place is documented to prevent, one band down: {reason!r}"
+    )

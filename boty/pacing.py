@@ -495,6 +495,27 @@ STATE_MAX_AGE_SECONDS = LONGEST_WAIT_SECONDS
 #: only the number `skipped_reason` prints changes, and "64 refusal(s)" already
 #: says what it needs to.
 #:
+#: THE OVERFLOW ARGUMENT ABOVE WAS OVERRULED BY REQ-22 AND IS KEPT AS HISTORY —
+#: 2026-08-31, `08-REVIEW.md` WR-02. It was true when written on 2026-08-10 and
+#: it is not true now, and the interesting part is that the phase that falsified
+#: it re-argued this comment on 2026-08-28 without re-measuring it.
+#:
+#: `current_interval` is a CONDITIONAL EXPRESSION, so at or past
+#: `REFUSALS_BEFORE_COOLOFF` the branch holding `st.interval * BACKOFF_FACTOR **
+#: st.refusals` is not evaluated at all — a property REQ-22 argues for twice, at
+#: `COOLOFF_SECONDS` and inside `current_interval`, without following it here.
+#: MEASURED 2026-08-31 with the clamp bypassed: an UNCLAMPED `refusals = 10**9`
+#: returns 259200.0 and does NOT raise. The largest exponent this module can now
+#: reach is 29 (`300 * 2.0**29 = 1.61e11`), and the `2.0 ** 1024` cliff is ~35x
+#: further out than anything reachable. So the denial-of-service sentence above
+#: describes a door REQ-22 already closed.
+#:
+#: WHAT STILL MAKES THIS CONSTANT LOAD-BEARING is the relationship below — it
+#: must stay ABOVE `REFUSALS_BEFORE_COOLOFF`, or a restored count could not cross
+#: the threshold and persistence would silently defeat the cool-off. That one IS
+#: gated, by `test_the_clamp_sits_above_the_cooloff_threshold_so_a_restored_count_can_cross_it`.
+#: The constant is therefore kept on a live argument, not a withdrawn one.
+#:
 #: THE SECOND RELATIONSHIP THIS COMMENT NAMED WAS WITHDRAWN ON 2026-08-28,
 #: because its subject had been deleted sixteen days earlier and nobody had
 #: come back for the comment. It read, in full:
@@ -875,11 +896,30 @@ class Pacer:
         # float and never from this string, and nothing parses this prose back
         # into a number. That is why the boundary tests over `current_interval`
         # assert exact equality while this method is allowed to round.
-        if st.refusals >= REFUSALS_BEFORE_COOLOFF:
-            return (
-                f"cooling off after {st.refusals} refusal(s) — "
-                f"next attempt in ~{remaining / 86400:.1f} days"
+        # DERIVED FROM THE SCHEDULE, NEVER RESTATED — CORRECTED 2026-08-31.
+        # `st.refusals >= REFUSALS_BEFORE_COOLOFF` alone was a SECOND copy of the
+        # rule `current_interval` deliberately keeps in one place, and the
+        # argument for putting the cool-off inside that `max` is the same
+        # argument against this: two copies of a rule are two things to edit and
+        # they only have to disagree once.
+        #
+        # THEY ALREADY DISAGREED, on a config `Config.load` accepts in silence.
+        # `config._interval` enforces a floor and no upper bound, so
+        # `interval_seconds: 604800` loads; at a week's standing interval
+        # `max(604800, COOLOFF_SECONDS)` returns the standing interval at EVERY
+        # depth, and the retailer is asked at exactly the cadence the operator
+        # chose. No cool-off is in force — and this method said "cooling off"
+        # anyway, which is a surface naming a cause the code did not establish.
+        if (
+            self.current_interval(retailer) == COOLOFF_SECONDS
+            and st.refusals >= REFUSALS_BEFORE_COOLOFF
+        ):
+            left = (
+                f"~{remaining / 86400:.1f} days"
+                if remaining >= 0.05 * 86400
+                else f"~{remaining / 3600:.1f} hours"
             )
+            return f"cooling off after {st.refusals} refusal(s) — next attempt in {left}"
         if st.refusals:
             return f"backing off after {st.refusals} refusal(s) — next attempt in ~{mins:.0f} min"
         # Through the accessor, not off `st.interval` directly: this was the only
