@@ -838,10 +838,15 @@ class Pacer:
     #: `tests/test_pacing.py` held ELEVEN construction sites, two of which named a
     #: path, leaving the nine the sentence claims.
     #:
-    #: MEASURED TODAY BY AST over every tracked `.py` file (`ast.Call` with
-    #: `func.id == "Pacer"`, `.venv` excluded): 25 of 27 in `tests/test_pacing.py`
-    #: name no path, and there are 32 sites tree-wide — 27 here, 3 in
-    #: `tests/test_cli_watch.py`, 2 in `boty/cli.py`.
+    #: MEASURED BY AST over every tracked `.py` file (`ast.Call` with
+    #: `func.id == "Pacer"`, `.venv` excluded), AFTER this plan's own commits:
+    #: 27 of 30 in `tests/test_pacing.py` name no path, and there are 35 sites
+    #: tree-wide — 30 here, 3 in `tests/test_cli_watch.py`, 2 in `boty/cli.py`,
+    #: across 8 distinct keyword signatures and 16 distinct normalised call texts.
+    #: It was 32 / 27 / 25-of-27 immediately before this plan and 31 / 26 /
+    #: 24-of-26 before `09-01`; this plan's tracer and repairs added the three
+    #: newest, and stating that is cheaper than letting the next reader wonder
+    #: which pre-image they are holding.
     #:
     #: THE ARGUMENT THE SENTENCE SERVES IS STRENGTHENED RATHER THAN WEAKENED, and
     #: that is why the fix is a note rather than a smaller number: the count of
