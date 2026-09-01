@@ -1978,6 +1978,15 @@ _FLEET_INTERVALS = {
 #: (`config` is in `SANDBOX_CONTENTS`).
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "products.yaml"
 
+#: The same file as `_CONFIG`, named the way a READER names it. The assertions
+#: below quote this rather than `_CONFIG`, because an absolute path in a failure
+#: message is this machine's home directory printed into a transcript that gets
+#: pasted into planning documents and issues — the exact shape
+#: `scripts/identity_check.py` exists to keep out of a public repository, arriving
+#: from the one direction it cannot scan. DERIVED from `_CONFIG` rather than
+#: written out, so the two cannot name different files.
+_CONFIG_SHOWN = "/".join(_CONFIG.parts[-2:])
+
 
 def _max_in_any_window(times: list[float], span: float) -> int:
     """The most events falling inside any window of `span` seconds.
@@ -2091,19 +2100,19 @@ def test_the_max_retailers_in_any_sixty_seconds_over_a_day_is_a_stated_number() 
     # 3. THE FLEET. The literal table must still describe what is configured.
     cfg = Config.load(_CONFIG)
     assert {w.retailer for w in cfg.watches} == set(_FLEET_INTERVALS), (
-        f"{_CONFIG} configures watches on {sorted({w.retailer for w in cfg.watches})}, "
+        f"{_CONFIG_SHOWN} configures watches on {sorted({w.retailer for w in cfg.watches})}, "
         f"but the number above is about {sorted(_FLEET_INTERVALS)}. A stated number "
         f"must not outlive the fleet it describes"
     )
     assert cfg.retailer_intervals == {
         r: i for r, i in _FLEET_INTERVALS.items() if i != cfg.interval_seconds
     }, (
-        f"{_CONFIG} overrides {cfg.retailer_intervals}, but this table's non-default "
+        f"{_CONFIG_SHOWN} overrides {cfg.retailer_intervals}, but this table's non-default "
         f"cadences are {({r: i for r, i in _FLEET_INTERVALS.items() if i != cfg.interval_seconds})} "
         f"against a global interval_seconds of {cfg.interval_seconds}"
     )
     assert cfg.interval_seconds == _FLEET_DEFAULT_INTERVAL, (
-        f"{_CONFIG} sets interval_seconds to {cfg.interval_seconds}, but this "
+        f"{_CONFIG_SHOWN} sets interval_seconds to {cfg.interval_seconds}, but this "
         f"simulation cycles every {_FLEET_DEFAULT_INTERVAL} s and calls that the "
         f"global cadence — the number above would be a number about some other loop"
     )
