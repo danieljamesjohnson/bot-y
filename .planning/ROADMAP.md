@@ -86,7 +86,7 @@ change, and rung-2 API credentials. All three are argued in `REQUIREMENTS.md` §
 deliberately NOT in this milestone*.
 
 - [x] **Phase 8: Stop Knocking** *(COMPLETE 2026-08-31 — in the tree, NOT on the wire)* — a persistently refused retailer is left alone for days, not knocked on twice a day forever
-- [ ] **Phase 9: Out of Lockstep** — six retailers stop being requested inside one short window from one origin
+- [x] **Phase 9: Out of Lockstep** *(COMPLETE 2026-09-01 — in the tree, NOT on the wire)* — six retailers stop being requested inside one short window from one origin
 - [ ] **Phase 10: A Control That Cannot Die** — a dead control is a fact about our config, never mistaken for a fact about the retailer
 - [ ] **Phase 11: The Honest Ladder Position** — what is actually true of Amazon, Target and Walmart, written down and gated
 
@@ -201,6 +201,56 @@ a single cycle does not fire six unrelated retailers inside one short window.
   3. Over a simulated day, the maximum number of retailers requested within any 60-second window is a **stated number**, and it is smaller than the current six
   4. **No regression in what already works**: per-retailer cadence and backoff still hold, and `boty check` — a deliberate full pass, which is a different thing from the daemon's schedule — still completes inside REQ-08's 2-minute budget, re-measured rather than assumed
   5. `make verify-offline` exits 0, with at least one new mutation registered and observed CAUGHT
+
+**CLOSING RECORD — Phase 9 COMPLETE 2026-09-01. Four MET AS WRITTEN, one MET IN PART; nothing reworded.**
+
+Five plans, five waves, serialized on `boty/pacing.py` / `boty/cli.py` / `tests/test_pacing.py`.
+Full verdict table with citations: `09-05-SUMMARY.md`. Decisions: `09-DECISIONS.md`.
+
+| # | Verdict | Measurement |
+|---|---|---|
+| 1 | **MET AS WRITTEN** | **50.0 s** separation, written out at `_MIN_SEPARATION_SECONDS` and asserted on the *schedule* — never a wall clock. Hand-written rather than recomputed from the code under test, because a test that recomputes its expectation asserts only that the code agrees with itself |
+| 2 | **MET AS WRITTEN** | Independence in **both** directions, as two tests rather than one — the interval direction fails at `_standing_interval`/`slot_offset`, the backoff direction at `current_interval`, and a combined test would name the wrong one |
+| 3 | **MET AS WRITTEN** | **6 → 2** retailers in any 60 s window over a simulated day. 09-01 took the *before* against unmodified code in its own wave, because the number is unobtainable afterwards. **2 is also the arithmetic floor** — 6 × 60 s > 300 s forces some window to hold two — so a claim of 1 was never available |
+| 4a | **MET AS WRITTEN** | Per-retailer daily counts and the backoff/cool-off ladder unchanged under the new tick |
+| 4b | **MET IN PART** | `boty check`'s 2-minute REQ-08 budget is **BOUNDED, not re-measured** — `boty check` makes live retailer requests and writes the daemon's live `status.json`, and this phase makes none. **The verdict was committed in `09-DECISIONS.md` § Collision 8 BEFORE the attempt**, not promoted after one disappointed |
+| 5 | **MET AS WRITTEN** | **M43** registered and observed **CAUGHT** (5-test kill set); registry 38 → **39**, `M21`–`M24` still empty, `INTENTIONAL GAP` 8 → 9 |
+
+**The mechanism.** A deterministic per-retailer offset derived from the retailer name and the
+configured roster — never `hash()` (randomised per process), never a wall clock, never a pid, never
+anything host-derived, because a phase derived from host identity would encode a host fingerprint
+into request *timing*, which `scripts/identity_check.py` scans files for and can never see. Loop tick
+**50 s** = `default_interval / len(roster)` floored at `MIN_TICK_SECONDS = 30`, chosen from a
+ten-row measured sweep as the largest tick whose slots are all distinct. `record` advances on the
+retailer's own grid rather than re-anchoring to `now` — without that, a merged pair stays merged and
+the fleet collapses back to six-in-a-window inside a day.
+
+**Every standing invariant survived, checked by command at the close:** `Pacer.current_interval`'s
+body is **byte-unchanged** (SHA-256 gate); `cli.watch_loop` keeps **both** clock terms
+(`delay + cycle_duration`); `MAX_BACKOFF_SECONDS` 6 h; `COOLOFF_SECONDS` 259200; the staleness-rule
+count is still exactly **2**; `STATE_VERSION` is still **2** with no new persisted field — `roster`
+and `tick` live on `Pacer`, defaulted and never written to disk.
+
+**The finding this phase produced that nobody asked for.** Shortening the tick made roughly half of
+all wakes ask *nobody* — and `status.py` published `healthy` as `all(...)` over an empty list, which
+is `True`. This phase would have made **a green verdict over a question nobody asked** routine: this
+project's core defect, rebuilt inside the fix for a different one. A wake that asked nobody now
+publishes `healthy: null`. **No new key** — the published key set is unchanged; what the existing key
+can *say* changed. The same wave caught that the shorter tick would silently have turned "15 minutes
+to a push, 50 to a give-up" into 2.5 and 8.3, so both thresholds were re-derived as **durations**.
+
+**Gate at close:** `make verify-offline` **EXIT 0** — identity PASS over **259 files**, **946 passed
+/ 0 skipped** (from 921 at phase start), mypy clean over 18 source files, **39/39 mutations caught,
+survivors 0**. Verdict line is the **OFFLINE** pass: nothing in it says the retailers still work.
+
+**The plan-checker found 3 blockers and one was not real.** B1 (09-02 reddening eight tests while
+naming two, six of them in a file no later plan could open) and B4 (a verify gate whose polarity was
+inverted — it *failed* when the prohibition held) were both real and both fixed. **B3 was a misread**:
+`--all` was already present in the original planning commit. Recorded because an inflated blocker
+count is the same class of error as a rounded-up verdict.
+
+**NOT ON THE WIRE.** Phase 9 reaches the daemon only at `sudo systemctl restart boty` — Dan's action,
+still deferred with Phase 8's.
 
 ### Phase 10: A Control That Cannot Die
 
