@@ -19,7 +19,7 @@ from .config import Config
 from .models import Availability, Extraction, Health, Result, Watch
 from .monitor import State, run_once
 from .notify import send_health_warning, send_restock
-from .pacing import Pacer
+from .pacing import Pacer, loop_tick_seconds
 from .retailers import (
     check_amazon,
     check_bestbuy_api,
@@ -632,10 +632,27 @@ def watch_loop(
     # into this same one pacer, for the same reason — a second construction site
     # is exactly what the invariant above forbids, which is why `load` is an
     # instance method and not a `State`-style classmethod.
+    #
+    # THE ROSTER AND THE TICK, REQ-23, 2026-09-01. The roster is the configured
+    # retailers and nothing else — it is what `Pacer` derives each retailer's
+    # position on the schedule from, so it must come from the config rather than
+    # from whatever this cycle happens to be checking. `sorted` and a set because
+    # the derivation is by sorted position: a roster that arrived in watch order
+    # would give the same fleet a different schedule depending on how
+    # `products.yaml` was typed.
+    roster = tuple(sorted({w.retailer for w in cfg.watches}))
+    # ONE TICK VALUE, COMPUTED ONCE AND READ TWICE — by the sleep below and by
+    # the pacer's tolerance. Two sites deriving it separately is the "two copies
+    # only have to disagree once" defect this project argues against three times
+    # over, and here the disagreement would be a loop waking at one rate while
+    # the schedule granted grace sized for another.
+    tick = loop_tick_seconds(cfg.interval_seconds, roster)
     pacer = Pacer(
         default_interval=cfg.interval_seconds,
         overrides=dict(cfg.retailer_intervals),
         state_path=cfg.pacer_state_path,
+        roster=roster,
+        tick=tick,
     )
     # `warned` is restored rather than started empty, and it has to be assigned
     # HERE rather than above, because the pacer it reads through does not exist
@@ -734,11 +751,23 @@ def watch_loop(
         # the delay term zero in every test in this file.
         cycle_duration = time.monotonic() - cycle_started
         # Jitter so we do not hammer on a fixed cadence, which is itself a signal.
-        delay = cfg.interval_seconds * random.uniform(0.85, 1.15)
+        #
+        # A TICK RATHER THAN A CADENCE SINCE 2026-09-01, REQ-23. This read
+        # `cfg.interval_seconds * random.uniform(...)`, which made the loop's wake
+        # rate and the shortest standing cadence the same number — and while they
+        # were the same number the four retailers configured at that cadence had
+        # exactly one tick to be asked at, so no offset could separate them. The
+        # loop now wakes more often and asks NO MORE OFTEN: which retailers a wake
+        # dispatches is `Pacer.due`'s answer, and their cadences did not move.
+        delay = tick * random.uniform(0.85, 1.15)
         sleep(delay)
         # BOTH TERMS. `delay` keeps this deterministic under a fake sleep;
         # `cycle_duration` is what stops it drifting behind wall clock in
         # production. Dropping either one breaks a test that names which.
+        #
+        # ONLY THE SIZE OF `delay` MOVED IN 2026-09-01's TICK CHANGE — both terms
+        # are still here, and both are still here for the reasons stated above
+        # rather than by inheritance.
         scheduled_now += delay + cycle_duration
     return 0
 

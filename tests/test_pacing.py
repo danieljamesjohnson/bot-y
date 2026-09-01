@@ -39,6 +39,7 @@ and it is the subject of the persistence section at the foot of this file:
 from __future__ import annotations
 
 import json
+import random
 import time
 from itertools import pairwise
 from pathlib import Path
@@ -58,6 +59,8 @@ from boty.pacing import (
     STATE_MAX_AGE_SECONDS,
     STATE_VERSION,
     Pacer,
+    loop_tick_seconds,
+    slot_offset,
 )
 
 
@@ -2153,3 +2156,163 @@ def test_the_max_retailers_in_any_sixty_seconds_over_a_day_is_a_stated_number() 
         f"first {times[:3]}, last {times[-3:]} — a maximum is not a measurement if "
         f"the things counted could fall outside the window they are attributed to"
     )
+
+
+# --------------------------------------------------------------------------
+# REQ-23: two retailers at one cadence, out of lockstep — the tracer
+# --------------------------------------------------------------------------
+#
+# ONE PATH END TO END before anything is generalised: two retailers at the same
+# standing interval, through `loop_tick_seconds`, through `slot_offset`, through
+# `_for`, through `due`, through `record`'s grid advance, driven by the jittered
+# tick `cli.watch_loop` sleeps. The six-retailer number is further down; this is
+# the path it stands on.
+#
+# THE SEPARATION IS ASSERTED ON THE SCHEDULE — the recorded next-attempt times —
+# and never on elapsed time. Criterion 1 requires that in its own words, and the
+# reason is visible in this test's own jitter: the wake TIMES wander by ±15% per
+# cycle while the schedule does not move at all, so a bound read off the wall
+# clock would be a bound on the sleep's randomness rather than on the schedule.
+
+#: A deterministic jitter sequence. `cli.watch_loop` sleeps
+#: `tick * random.uniform(0.85, 1.15)`, and this reproduces that band exactly
+#: rather than approximating it with a fixed step — the convergence this test
+#: exists to rule out was a convergence UNDER jitter, and a fixed step cannot
+#: exhibit it. SEEDED, so a failure is reproducible and a passing run is not one
+#: lucky draw; it is one jitter sequence and not a proof over all of them, which
+#: is why the schedule assertions below are exact rather than statistical.
+_TRACER_SEED = 20260901
+
+#: Two retailers on ONE cadence — the case criterion 1 names. `config/products.yaml`
+#: puts four retailers on its global `interval_seconds`; these two are the tracer's
+#: slice of that group.
+_TRACER_ROSTER = ("bestbuy", "walmart")
+_TRACER_INTERVAL = 300.0
+
+
+def test_two_retailers_at_one_cadence_are_born_apart_and_stay_apart() -> None:
+    """The whole mechanism on one path: an offset that is a POSITION, held by the advance.
+
+    THREE ASSERTIONS ABOUT THE SEPARATION AND ONE ABOUT THE COUNT, and the count
+    is the one that makes the other three mean anything. Spreading two retailers
+    by asking each of them less often would satisfy every separation assertion
+    here and give away the coverage this project exists to provide — it is the
+    reduction-by-not-asking move Phase 2 already caught this project making. So
+    the day-long count is asserted against the cadence arithmetic
+    `config/products.yaml` implies, derived from the interval rather than read
+    back out of the schedule under test.
+
+    WHY THE SEPARATION SURVIVES, stated so a reader can check it rather than
+    trust it: `record` steps from the retailer's own previous due time, so the
+    half-tick of grace `due` grants is not compounded into a drift. Under the old
+    `now + wait` these two were handed the SAME next due time the first time they
+    fired together and stayed merged from then on.
+    """
+    tick = loop_tick_seconds(_TRACER_INTERVAL, _TRACER_ROSTER)
+    assert tick == 150.0, (
+        f"two retailers on a {_TRACER_INTERVAL} s cadence should wake the loop "
+        f"every {_TRACER_INTERVAL / 2} s; loop_tick_seconds says {tick}"
+    )
+
+    p = Pacer(
+        default_interval=_TRACER_INTERVAL,
+        roster=_TRACER_ROSTER,
+        tick=tick,
+    )
+    a, b = _TRACER_ROSTER
+
+    # 1. AT BIRTH. Nothing has fired yet, so this is the offset and nothing else.
+    born = abs(p._for(a).due_at - p._for(b).due_at)
+    assert born == tick, (
+        f"the two were born {born} s apart on a {_TRACER_INTERVAL} s cadence with "
+        f"a {tick} s tick — a starting offset of zero is the lockstep, whatever "
+        f"the advance does afterwards"
+    )
+
+    rng = random.Random(_TRACER_SEED)
+    now = 0.0
+    fired: dict[str, int] = dict.fromkeys(_TRACER_ROSTER, 0)
+    separations: list[float] = []
+    early: float | None = None
+
+    while now < float(_ONE_DAY_OF_SECONDS):
+        for retailer in _TRACER_ROSTER:
+            if p.due(retailer, now):
+                # COUNTED AT THE GRID POINT BEING SERVED, NOT AT THE WAKE THAT
+                # SERVES IT, and the difference is one request at the day
+                # boundary — measured here, not assumed. `due` grants half a tick
+                # of grace, so the first grid point of DAY TWO (t=86400) can be
+                # dispatched by a wake in the last 75 s of day one: counted by
+                # wake this run read `{'bestbuy': 289, 'walmart': 288}`, an
+                # asymmetry produced entirely by where the final wake landed under
+                # this seed. The cadence did not move and neither retailer was
+                # asked more often; a day's count simply is not a whole number of
+                # requests unless the day is cut at the same place the schedule
+                # is. Cutting it on the grid point is what makes 288 an exact
+                # number rather than a rounded one.
+                position = p._for(retailer).due_at
+                if position < float(_ONE_DAY_OF_SECONDS):
+                    fired[retailer] += 1
+                p.record(retailer, refused=False, now=now)
+        separations.append(abs(p._for(a).due_at - p._for(b).due_at))
+        if min(fired.values()) == 5 and early is None:
+            # 2. AFTER EACH HAS BEEN ASKED SEVERAL TIMES — read here rather than
+            #    at the end, because a schedule that decayed and then re-separated
+            #    would pass an endpoint check.
+            early = separations[-1]
+        now += tick * rng.uniform(0.85, 1.15)
+
+    assert early == tick, (
+        f"after five requests each the two were {early} s apart, not {tick} — the "
+        f"offset is being eroded, which is what a schedule re-anchored to the "
+        f"cycle's clock does one cycle at a time"
+    )
+
+    # 3. AT THE END OF THE DAY, and at every cycle in between. The `set` is what
+    #    makes this a statement about the WHOLE day rather than about its last
+    #    moment: a single merged cycle anywhere in the day puts a second value in
+    #    it, and the merge is absorbing, so one is all it takes.
+    assert set(separations) == {tick}, (
+        f"over a simulated day the separation took the values "
+        f"{sorted(set(separations))}; it must be exactly {tick} at every cycle, "
+        f"because a retailer that drifts into another's slot stays there"
+    )
+
+    # 4. AND NEITHER WAS ASKED LESS OFTEN FOR IT. Derived from the cadence, not
+    #    read back out of the schedule under test.
+    expected = _ONE_DAY_OF_SECONDS // int(_TRACER_INTERVAL)
+    assert fired == dict.fromkeys(_TRACER_ROSTER, expected), (
+        f"over one simulated day the two retailers were asked {fired}, against "
+        f"the {expected} a {_TRACER_INTERVAL} s cadence implies. A separation "
+        f"bought by asking less often is coverage sold for a number"
+    )
+
+
+def test_the_tracer_pair_publishes_the_cadence_it_published_before() -> None:
+    """An offset is a POSITION, and this is the assertion that says so.
+
+    `current_interval` is byte-unchanged in this phase and this test is what
+    makes that a claim about behaviour rather than about a diff: at zero refusals
+    and after refusals, both retailers publish exactly what they published before
+    REQ-23 — the same numbers `_CADENCE_AFTER_N_REFUSALS` states for a 300 s
+    standing interval.
+    """
+    p = Pacer(
+        default_interval=_TRACER_INTERVAL,
+        roster=_TRACER_ROSTER,
+        tick=loop_tick_seconds(_TRACER_INTERVAL, _TRACER_ROSTER),
+    )
+    for retailer in _TRACER_ROSTER:
+        assert p.current_interval(retailer) == 300.0, (
+            f"{retailer} publishes {p.current_interval(retailer)} s at zero "
+            f"refusals; an offset moved a cadence, which is the one thing it may "
+            f"never do"
+        )
+    for retailer in _TRACER_ROSTER:
+        for _ in range(3):
+            p.record(retailer, refused=True, now=0.0)
+        assert p.current_interval(retailer) == 2400.0, (
+            f"{retailer} publishes {p.current_interval(retailer)} s after three "
+            f"refusals, against the 2400 s the backoff has always produced at a "
+            f"300 s standing interval"
+        )

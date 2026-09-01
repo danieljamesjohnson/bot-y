@@ -116,7 +116,9 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -548,6 +550,142 @@ STATE_MAX_AGE_SECONDS = LONGEST_WAIT_SECONDS
 MAX_PERSISTED_REFUSALS = 64
 
 
+#: THE FLOOR UNDER THE LOOP'S WAKE INTERVAL, REQ-23, 2026-09-01. A tick shorter
+#: than one pass takes means the loop is behind before it sleeps, and the wait
+#: it publishes is then a wait it is not keeping.
+#:
+#: MEASURED, AND THE MEASUREMENT IS ONE READING RATHER THAN A GUARANTEE — that
+#: is stated here rather than in a planning document because the next person to
+#: move this number will be reading this comment. The only figure available
+#: offline is the last PUBLISHED whole-pass duration, `duration_seconds: 20.43`
+#: for all 13 configured watches across all six retailers, read from
+#: `served/boty/status.json` on 2026-08-31 by the phase-8 code review and QUOTED
+#: from that record rather than re-read (nothing in REQ-23 reads or writes that
+#: file). 30 s is that reading with about 1.5x of headroom on it.
+#:
+#: A TICK'S DUE SET IS A SUBSET OF THAT PASS, which is why one whole-pass figure
+#: bounds a tick at all: after this phase a tick asks the retailers whose grid
+#: point it just crossed, never all six, so 20.43 s is an over-estimate of what
+#: a tick costs rather than an estimate of it.
+#:
+#: WHAT HAPPENS AT THE FLOOR IS DEGRADATION AND NOT AN ERROR, and it is named
+#: because it is reachable: with `interval_seconds` at 300 the clamp binds past
+#: ten configured retailers, and beyond that point the slots below wrap and two
+#: retailers share one. They are still asked at their own cadences — the count
+#: does not move — but the separation this phase buys stops growing. Six are
+#: configured today.
+MIN_TICK_SECONDS = 30.0
+
+
+def loop_tick_seconds(default_interval: float, roster: Iterable[str]) -> float:
+    """How often `cli.watch_loop` wakes — NOT how often any retailer is asked.
+
+    ONE EXPRESSION, READ TWICE, which is the whole reason this is a function
+    rather than two literals: `cli.watch_loop` sleeps this and `Pacer` sizes
+    `due`'s tolerance from it, and a wake rate that had drifted away from the
+    tolerance would skip a retailer that is keeping to its cadence — the exact
+    failure `due`'s docstring exists to prevent, arriving from the other side.
+
+    THE CEILING IS WHAT PICKS THE DIVISOR. Four retailers sit on the 300 s
+    default, and a tick of 300 s offers exactly ONE tick per 300 s span — so all
+    four must be asked at that one tick whatever position they are given, and no
+    offset can rescue it. `default_interval / len(roster)` is the largest tick
+    that still gives every configured retailer its own slot inside the shortest
+    standing cadence: six retailers at 300 s give 50 s slots, and 6 x 50 = 300
+    exactly.
+
+    THE FLOOR IS `MIN_TICK_SECONDS` and is argued at its definition.
+
+    AN EMPTY ROSTER RETURNS THE STANDING DEFAULT, which is what the loop slept
+    before this phase — so a `Pacer` built without a roster keeps today's
+    tolerance rather than acquiring a schedule nobody configured.
+    """
+    names = {r for r in roster}
+    if not names:
+        return default_interval
+    return max(MIN_TICK_SECONDS, default_interval / len(names))
+
+
+def slot_offset(retailer: str, roster: Sequence[str], tick: float, standing_interval: float) -> float:
+    """WHERE on its own cadence this retailer's attempts land. A position, never a duration.
+
+    A retailer at a 300 s cadence with an offset of 150 s is still asked every
+    300 s and still publishes 300. Nothing here computes a wait;
+    `current_interval` is still the only expression that does.
+
+    DERIVED FROM THE RETAILER'S NAME AND THE CONFIGURED ROSTER, AND FROM NOTHING
+    ELSE. Two constraints, and both are prohibitions rather than preferences:
+
+    1. NOT `hash()`. CPython randomises `str.__hash__` per process unless the
+       interpreter is launched with a fixed `PYTHONHASHSEED`, so an offset built
+       on it would be a DIFFERENT schedule in every process — which is not a
+       schedule, and is the same "a number with no referent" defect this module's
+       docstring refuses a persisted `due_at` for. The sorted position of a name
+       in the roster is stable across processes, machines and Python builds.
+    2. NOT ANYTHING HOST-DERIVED — no hostname, pid, MAC, store id or wall clock.
+       An offset carrying host identity would encode a stable fingerprint in
+       REQUEST TIMING, which is the one place `scripts/identity_check.py` can
+       never look: it scans tracked files, and a schedule is not a file.
+
+    DERIVED RATHER THAN STORED, which is what keeps `STATE_VERSION` out of this
+    phase. Storing an offset would be a new key in the document, a bump, and —
+    per `STATE_VERSION`'s own argument — every retailer's refusal count discarded
+    on the day this ships. Two copies only have to disagree once; here there is
+    only ever one, recomputed from config.
+
+    THE MODULO IS WHAT MAKES IT A POSITION ON *THIS RETAILER'S* GRID. amazon at
+    1800 s and walmart at 300 s do not share a cadence, so a raw slot in seconds
+    would sit outside the shorter one's first interval and delay its first
+    request by more than that interval.
+
+    A RETAILER NOT IN THE ROSTER GETS 0.0 — today's behaviour, and the behaviour
+    every construction site that names no roster keeps.
+    """
+    names = sorted(set(roster))
+    if retailer not in names or tick <= 0 or standing_interval <= 0:
+        return 0.0
+    return (names.index(retailer) * tick) % standing_interval
+
+
+def _next_on_the_grid(previous_due: float, wait: float, now: float) -> float:
+    """The next attempt, stepped from the retailer's OWN previous due time.
+
+    READING A OF THE TWO THIS PHASE NAMED, chosen deliberately on 2026-09-01 and
+    recorded here because the alternative is one line shorter. Reading B stepped
+    once and fell back to `now + wait` whenever that landed in the past; it
+    re-anchors to the cycle's clock in EXACTLY the case a fixed-rate schedule
+    exists to survive — a retailer that fell behind after a long or failed pass —
+    and re-anchoring to the cycle clock is the lockstep mechanism this phase
+    removes. So the case that distinguishes them is the case the phase is about.
+
+    TWO PROPERTIES, AND THE FIRST IS THE ONE THE SEPARATION DEPENDS ON:
+
+    1. FIRING EARLY OR LATE DOES NOT MOVE THE POSITION. `due` grants half a tick
+       of grace, so a retailer routinely fires slightly before its grid point;
+       stepping from `previous_due` rather than from `now` means that grace is
+       not compounded into a drift. Under `now + wait` two retailers that fired
+       at one tick were given the SAME next due time and stayed merged from then
+       on — the merge was absorbing, and a birth offset alone was eroded back to
+       six-in-a-window inside a simulated day.
+    2. NO CATCH-UP STORM. `previous_due += wait` repeated blindly would queue one
+       attempt per missed interval after a long outage. Stepping to the FIRST
+       grid point strictly in the future spends the arrears rather than banking
+       them, at the cost of skipping the requests that were never made — which is
+       the safe direction for a monitor that must not knock.
+
+    `wait` IS THE CALLER'S, COMPUTED THROUGH `current_interval` AND NOWHERE ELSE.
+    This function changes WHERE the next attempt lands and never HOW LONG the
+    wait is.
+    """
+    if wait <= 0 or previous_due > now:
+        # A non-positive wait is unreachable through `current_interval`
+        # (`config._interval` enforces a floor), and the second clause is the
+        # early-firing case above: the grid point we just served is still ahead
+        # of the clock, so the next one is exactly one wait further on.
+        return previous_due + wait
+    return previous_due + (math.floor((now - previous_due) / wait) + 1) * wait
+
+
 @dataclass
 class _RetailerState:
     interval: float
@@ -602,6 +740,25 @@ class _RetailerState:
     #:    already makes, and the two would diverge at exactly the restart the
     #:    flag was added for.
     #:
+    #:    THE NUMBER IN LEG 2 MOVED ON 2026-09-01 AND THE CONCLUSION DID NOT —
+    #:    noted here rather than edited over, per `docs/retailer-evidence.md` § 6.
+    #:    The withdrawn clause, quoted in full: "and across a restart `due_at`
+    #:    resets to 0.0 by design, which is decided and priced at one immediate
+    #:    request." After REQ-23 a restart resets `due_at` to the retailer's own
+    #:    OFFSET (`slot_offset`), not to 0.0, so the price is one request within
+    #:    one standing interval rather than one immediate request — at most 300 s
+    #:    for the default group and at most 1800 s for amazon. Nothing is
+    #:    re-tested less often; each retailer is re-tested LATER within the same
+    #:    interval. The compensating fact, recorded beside it: under `Restart=`
+    #:    semantics a flapping service used to re-probe every retailer at full
+    #:    rate on every restart, and now does not.
+    #:
+    #:    WHAT SURVIVES IS THE WHOLE OF LEG 2'S CONCLUSION, which is why this is a
+    #:    note and not a rewrite: "exactly once" is still produced by `record`
+    #:    re-scheduling `due_at` UNCONDITIONALLY on every outcome, so the probe
+    #:    still cannot repeat inside a process, and no flag is owed. Only the
+    #:    number beside it moved.
+    #:
     #: 3. A FIELD WOULD HAVE COST A VERSION BUMP, which `STATE_VERSION`'s comment
     #:    then argues against paying. So these are one argument rather than two,
     #:    and the honest order is this one first: no field is owed, and no bump
@@ -644,7 +801,57 @@ class Pacer:
     #: construction site stays valid and keeps its meaning. There are nine in
     #: `tests/test_pacing.py` alone and not one names a path, and `None` is the
     #: behaviour all of them have today.
+    #:
+    #: THE COUNT ABOVE WAS EXACTLY TRUE WHEN IT WAS WRITTEN AND IS NOT TRUE NOW —
+    #: NOTED HERE RATHER THAN EDITED OVER, 2026-09-01, on
+    #: `docs/retailer-evidence.md` § 6's convention. At `46a0768`, 2026-08-10,
+    #: `tests/test_pacing.py` held ELEVEN construction sites, two of which named a
+    #: path, leaving the nine the sentence claims.
+    #:
+    #: MEASURED TODAY BY AST over every tracked `.py` file (`ast.Call` with
+    #: `func.id == "Pacer"`, `.venv` excluded): 25 of 27 in `tests/test_pacing.py`
+    #: name no path, and there are 32 sites tree-wide — 27 here, 3 in
+    #: `tests/test_cli_watch.py`, 2 in `boty/cli.py`.
+    #:
+    #: THE ARGUMENT THE SENTENCE SERVES IS STRENGTHENED RATHER THAN WEAKENED, and
+    #: that is why the fix is a note rather than a smaller number: the count of
+    #: sites a default protects went UP, not down, and this phase adds two more
+    #: defaulted fields below on the strength of it.
     state_path: Path | None = None
+    #: THE CONFIGURED ROSTER AND THE LOOP'S WAKE INTERVAL, REQ-23, 2026-09-01.
+    #: Declared LAST and defaulted for the reason `state_path` states directly
+    #: above, and measured against the same 32 sites: an empty roster gives every
+    #: retailer a 0.0 offset (`slot_offset`'s last paragraph) and a `None` tick
+    #: makes `due`'s tolerance half the standing default, which is exactly what
+    #: this class did before this phase.
+    #:
+    #: SAY PLAINLY WHAT THE DEFAULT DOES NOT COVER, because a comment that implied
+    #: otherwise would be a false prediction about a suite somebody is about to
+    #: run. THE DEFAULT PROTECTS THE TOLERANCE AND THE STARTING OFFSET. IT DOES
+    #: NOT PROTECT `record`'s ADVANCE, which is unconditional and which no field
+    #: here defaults away: a `Pacer` built with neither of these two fields still
+    #: steps its next attempt from the retailer's own previous due time rather
+    #: than from the cycle's clock. Ten existing tests read the old advance and
+    #: `09-02` repairs all ten in the plan that broke them.
+    #:
+    #: GATING THE ADVANCE ON A NON-EMPTY ROSTER WAS CONSIDERED AND REFUSED. It
+    #: would have kept every old test green with no edits at all, and it would
+    #: have made every defaulted site — most of the suite — exercise a code path
+    #: the daemon never takes, since `cli.watch_loop` always passes both fields.
+    #: That buys a small diff by making the evidence describe something that does
+    #: not ship.
+    roster: tuple[str, ...] = ()
+    tick: float | None = None
+
+    def _tolerance_interval(self) -> float:
+        """The cadence `due`'s grace is half of — the loop's tick where one is known.
+
+        `None` rather than a numeric default because `default_interval` is not
+        available as one, and because "no tick was configured" and "the tick
+        happens to equal the standing interval" are the same behaviour but not
+        the same fact.
+        """
+        return self.default_interval if self.tick is None else self.tick
 
     def _standing_interval(self, retailer: str) -> float:
         """This retailer's cadence with no backoff in force — override or default.
@@ -663,19 +870,60 @@ class Pacer:
 
     def _for(self, retailer: str) -> _RetailerState:
         if retailer not in self._state:
-            self._state[retailer] = _RetailerState(interval=self._standing_interval(retailer))
+            standing = self._standing_interval(retailer)
+            self._state[retailer] = _RetailerState(
+                interval=standing,
+                # BORN AT ITS OWN POSITION, not at 0.0. This is the only place an
+                # offset enters the schedule; `record` preserves it from here on
+                # and nothing else sets `due_at`.
+                due_at=slot_offset(retailer, self.roster, self._tolerance_interval(), standing),
+            )
         return self._state[retailer]
 
     def due(self, retailer: str, now: float) -> bool:
         """True when this retailer may be asked again.
 
-        The half-interval tolerance matters: the loop sleeps `interval` with
-        its own jitter, so a retailer running at the DEFAULT cadence would
-        otherwise be skipped roughly half the time purely because the sleep
-        came up 3% short. This class exists to stretch intervals BEYOND the
-        loop's, never to drop cycles from a retailer that is keeping to it.
+        The half-TICK tolerance matters: the loop sleeps its tick with its own
+        jitter, so a retailer whose grid point falls just past a tick would
+        otherwise wait a whole further tick purely because the sleep came up 3%
+        short. This class exists to stretch intervals BEYOND the loop's, never to
+        drop cycles from a retailer that is keeping to it.
+
+        THE UNIT WAS CORRECTED ON 2026-09-01 AND THE ARGUMENT WAS NOT. The
+        sentence above read, in full, before REQ-23:
+
+            The half-interval tolerance matters: the loop sleeps `interval` with
+            its own jitter, so a retailer running at the DEFAULT cadence would
+            otherwise be skipped roughly half the time purely because the sleep
+            came up 3% short.
+
+        WHAT OVERRULED IT: the loop no longer sleeps the standing interval. It
+        sleeps `loop_tick_seconds`, which at the six configured retailers is a
+        sixth of it, so a tolerance sized for that sleep was sized for a sleep
+        that no longer happens. Half the standing default would now be ten times
+        the gap between wake-ups and would let a retailer fire a third of a
+        cadence early, every cadence — a widening of the request rate dressed as
+        grace.
+
+        WHAT SURVIVES, AND IT IS THE WHOLE SENTENCE'S POINT: this class exists to
+        stretch intervals beyond the loop's, never to drop cycles from a retailer
+        keeping to one. Half a tick is that same claim measured against the sleep
+        that actually happens.
+
+        THE UNDER-REPORT THIS SHRINKS, named because `boty/config.py`'s
+        `_retailer_intervals` docstring quotes its old magnitude: a 900 s-override
+        retailer on a 300 s global was asked roughly every 750 s while 900 was
+        published, because the old `record` re-anchored to `now` and so COMPOUNDED
+        the grace — every cycle's 150 s of early firing became the next cycle's
+        starting point. It does not compound any more: the grid advance puts the
+        next attempt one whole wait past the previous GRID POINT, not past the
+        early firing, so the long-run count is exactly the published cadence and
+        the residual is one early firing of at most half a tick (25 s at the six
+        configured retailers). The direction is unchanged, the magnitude falls,
+        and the sustained error is gone rather than reduced. That docstring's note
+        is `09-04`'s — this plan does not edit `boty/config.py`.
         """
-        return now + self.default_interval * 0.5 >= self._for(retailer).due_at
+        return now + self._tolerance_interval() * 0.5 >= self._for(retailer).due_at
 
     def record(self, retailer: str, *, refused: bool, now: float) -> None:
         """Fold one cycle's outcome into the schedule.
@@ -711,7 +959,25 @@ class Pacer:
             st.refusals = 0
             st.refused_at = 0.0
             wait = st.interval
-        st.due_at = now + wait
+        # THE RETAILER'S OWN GRID, NOT THE CYCLE'S CLOCK — REQ-23, 2026-09-01.
+        # This line read `st.due_at = now + wait`, and that was the lockstep: two
+        # retailers that fired at one tick were handed the SAME next due time and
+        # stayed together from then on. Under the loop's jitter the merge was
+        # absorbing, so a starting offset alone was eroded back to
+        # six-retailers-in-a-window inside a simulated day.
+        #
+        # WHAT MOVED IS *WHERE*, NOT *HOW LONG*. `wait` above is still
+        # `current_interval(retailer)` on the refusal arm and `st.interval` on the
+        # other, computed through the accessor and nowhere else. Nothing here
+        # lengthens, shortens or clamps a wait; `_next_on_the_grid` only chooses
+        # which multiple of it the next attempt lands on. A second expression
+        # computing a wait would undo Phase 7's one-cadence property and Phase 8's
+        # widen-only rule in a single edit, and `current_interval_seconds` would
+        # stop describing the schedule that is actually running.
+        #
+        # UNCONDITIONAL, AND NOT DEFAULTED AWAY BY THE ROSTER OR THE TICK. See the
+        # fields' own comment for why gating it was refused.
+        st.due_at = _next_on_the_grid(st.due_at, wait, now)
 
     # THE CADENCE THIS RETAILER IS CURRENTLY ON, DERIVED AND NEVER STORED.
     # `STATE_MAX_AGE_SECONDS` above and `Result.degraded` one module over make
