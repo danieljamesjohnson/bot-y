@@ -1838,3 +1838,188 @@ def test_the_pacer_clock_is_still_deterministic_under_a_fake_sleep(
             f"sleep — a retailer on a {cfg.interval_seconds}s cadence would "
             f"never come due, disarming every paced assertion in this file"
         )
+
+
+# --------------------------------------------------------------------------
+# REQ-23: the tick reaches the loop, and both terms of the pacer clock survive
+# --------------------------------------------------------------------------
+#
+# WHAT THE SHORTER TICK COSTS THE DAEMON, AS NUMBERS AND NOT AS REASSURANCE.
+# DERIVED, NOT OBSERVED — every figure below comes from the day-long simulation
+# in `tests/test_pacing.py` and from counting the call sites in `watch_loop`.
+# NOTHING IN PHASE 9 RAN ON THE WIRE and `boty` is an editable install, so none
+# of it reaches the service until a `systemctl restart boty` that is the user's
+# call and is deliberately not part of this phase. The daemon is still running
+# the pre-REQ-23 schedule as this is written.
+#
+#     per day, six retailers, interval_seconds 300   before      after
+#     loop wake-ups (86 400 / tick)                     288       1728
+#     served/boty/status.json writes (1 per cycle)      288       1728
+#     pacer-state.json writes (1 per cycle)             288       1728
+#     retailer requests                                1296       1296
+#     retailers asked per wake, mean                    4.5       0.75
+#     wakes that ask NOBODY                               0        432
+#     most retailers a single wake asks                   6          1
+#
+# THE REQUEST COUNT IS THE ROW THAT DID NOT MOVE, and it is the one the
+# retailers can see. What rose six-fold is how often this process wakes, writes
+# two files and asks nobody: a quarter of all wakes now dispatch no retailer at
+# all, and a wake that dispatches anybody dispatches exactly one. Pricing that —
+# an empty tick publishing a vacuously green document, and two failure counters
+# that count CYCLES rather than time — is `09-04`'s, and these numbers exist so
+# `09-04` prices a recorded fact rather than discovering one.
+
+#: The six retailers `config/products.yaml` configures. Written out here rather
+#: than read, because these tests are about the LOOP and a config read would
+#: make a failure ambiguous between the two.
+_FLEET = ("amazon", "bestbuy", "gamestop", "nintendo", "target", "walmart")
+
+#: The tick a six-retailer fleet on a 300 s global cadence produces, written out
+#: for `_MIN_SEPARATION_SECONDS`'s reason: an edit to `loop_tick_seconds` has to
+#: change this by hand, and that is the moment somebody notices the daemon's
+#: wake rate moved.
+_FLEET_TICK_SECONDS = 50.0
+
+#: `cli.watch_loop` sleeps `tick * random.uniform(0.85, 1.15)`. THE BAND AND NOT
+#: AN EXACT VALUE, because the jitter is deliberate — "we do not hammer on a
+#: fixed cadence, which is itself a signal" — and a test pinning one delay would
+#: forbid the property it exists to preserve.
+_JITTER_LOW = 0.85
+_JITTER_HIGH = 1.15
+
+
+@pytest.fixture
+def fleet_cfg(cfg: Config) -> Config:
+    """`cfg` with all six configured retailers, which is what makes a tick a tick.
+
+    Every other `watch_loop` fixture in this file carries ONE retailer, and
+    `loop_tick_seconds` returns the standing interval for a one-retailer roster
+    — so those fixtures wake at exactly the rate they woke at before REQ-23.
+    `09-02` recorded that as a finding: a regression sweep built on
+    single-retailer fixtures cannot fail for the reason it exists. This fixture
+    is the answer to it.
+    """
+    return replace(
+        cfg,
+        watches=[Watch(name="goplusplus", retailer=r, target=f"https://x/{r}") for r in _FLEET],
+    )
+
+
+def test_the_loop_sleeps_the_tick_and_not_the_standing_cadence(
+    fleet_cfg: Config, sent: dict[str, list]
+) -> None:
+    """The wake rate the schedule's separation is bought with, observed at the sleep.
+
+    `Pacer` can lay six retailers out at 50 s apart all it likes; if the loop
+    still wakes once per 300 s cadence there is exactly one wake per cadence for
+    the four retailers configured on it, and all four are dispatched at it
+    whatever position they hold. That is `09-DECISIONS.md` § *Collision 1*, and
+    it is why this test asserts on the LOOP rather than on the pacer.
+
+    THE BAND, NOT A VALUE. `_JITTER_LOW` and `_JITTER_HIGH` are the loop's own
+    multipliers; an assertion on an exact delay would pass only by forbidding
+    the jitter.
+    """
+    delays: list[float] = []
+    state = State.load(fleet_cfg.state_path)
+
+    cli.watch_loop(
+        fleet_cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        state,
+        cycles=12,
+        sleep=delays.append,
+    )
+
+    assert len(delays) == 12, delays
+    low = _FLEET_TICK_SECONDS * _JITTER_LOW
+    high = _FLEET_TICK_SECONDS * _JITTER_HIGH
+    for i, d in enumerate(delays):
+        assert low <= d <= high, (
+            f"wake {i} slept {d:.3f}s, outside the [{low}, {high}] band a "
+            f"{_FLEET_TICK_SECONDS}s tick jittered by "
+            f"[{_JITTER_LOW}, {_JITTER_HIGH}] can produce"
+        )
+
+    # AND THE BAND IS NOT THE STANDING CADENCE'S. Stated as its own assertion
+    # rather than left implied by the numbers above: the whole of criterion 1
+    # rests on there being more than one wake per cadence, and a change that put
+    # the loop back on `cfg.interval_seconds` would satisfy every "the delay is
+    # inside a band" check if the band moved with it.
+    assert high < fleet_cfg.interval_seconds * _JITTER_LOW, (
+        f"the tick band tops out at {high}s and the standing cadence's band "
+        f"starts at {fleet_cfg.interval_seconds * _JITTER_LOW}s — they overlap, so "
+        f"this test cannot tell a loop sleeping the tick from one sleeping the "
+        f"cadence, which is the only thing it is for"
+    )
+
+
+def test_the_loops_tick_and_its_pacers_tolerance_are_one_number(
+    fleet_cfg: Config, sent: dict[str, list], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One expression read twice, rather than two that happen to agree today.
+
+    `watch_loop` computes `tick` once and hands it to BOTH the sleep and the
+    `Pacer`. If the two were derived separately the disagreement would be a loop
+    waking at one rate while the schedule granted grace sized for another —
+    `Pacer.due`'s tolerance is half a TICK, so a pacer that never received one
+    falls back to half the standing default and lets a retailer fire a third of a
+    cadence early, every cadence.
+
+    THE ROSTER IS ASSERTED HERE TOO. It must be the CONFIGURED retailers, sorted
+    — not whatever this cycle happens to be checking — because `slot_offset`
+    derives each retailer's position from its index in it, and a roster that
+    arrived in watch order would give the same fleet a different schedule
+    depending on how `products.yaml` was typed.
+    """
+    built: list[dict] = []
+    real_pacer = cli.Pacer
+
+    class _Capturing(real_pacer):  # type: ignore[valid-type,misc]
+        def __init__(self, **kwargs: object) -> None:
+            built.append(dict(kwargs))
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(cli, "Pacer", _Capturing)
+
+    delays: list[float] = []
+    state = State.load(fleet_cfg.state_path)
+    cli.watch_loop(
+        fleet_cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        state,
+        cycles=4,
+        sleep=delays.append,
+    )
+
+    assert len(built) == 1, (
+        f"the loop built {len(built)} pacers; the backoff is memory and a pacer "
+        f"rebuilt per cycle would forget every refusal"
+    )
+    # `.get` rather than `[...]`, so a loop that stopped passing these fields at
+    # all fails with the sentence below rather than with a `KeyError` naming the
+    # test's own dictionary. Measured: it does, and a KeyError is what this read
+    # produced before the change.
+    assert built[0].get("roster") == tuple(sorted(_FLEET)), (
+        f"the loop handed its pacer roster {built[0].get('roster')!r}, not the "
+        f"sorted configured retailers {tuple(sorted(_FLEET))} — every retailer's "
+        f"position on the schedule is its index in this tuple, and a pacer that "
+        f"never receives one gives every retailer the same position"
+    )
+    assert built[0].get("tick") == _FLEET_TICK_SECONDS, (
+        f"the loop handed its pacer a tick of {built[0].get('tick')!r} against the "
+        f"{_FLEET_TICK_SECONDS}s six retailers on a "
+        f"{fleet_cfg.interval_seconds}s cadence produce; a pacer with no tick "
+        f"falls back to half the standing default for its grace"
+    )
+
+    # THE TWO READERS OF THAT ONE NUMBER, joined by an assertion rather than by
+    # a comment: every delay the loop asked for is the band around the same tick
+    # the pacer was given.
+    handed = built[0]["tick"]
+    for i, d in enumerate(delays):
+        assert handed * _JITTER_LOW <= d <= handed * _JITTER_HIGH, (
+            f"wake {i} slept {d:.3f}s, which is not the jitter band around the "
+            f"{handed}s tick the pacer was built with — the loop's wake rate and "
+            f"the schedule's tolerance have become two numbers"
+        )
