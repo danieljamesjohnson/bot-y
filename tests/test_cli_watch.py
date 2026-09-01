@@ -33,6 +33,13 @@ from boty import cli
 from boty.config import Config
 from boty.models import Availability, Health, Result, Watch
 from boty.monitor import State
+from boty.pacing import (
+    COOLOFF_SECONDS,
+    MAX_BACKOFF_SECONDS,
+    REFUSALS_BEFORE_COOLOFF,
+    Pacer,
+    loop_tick_seconds,
+)
 
 WATCH = Watch(name="goplusplus", retailer="gamestop", target="https://x/1")
 KEY = "gamestop:goplusplus"
@@ -2391,3 +2398,312 @@ def test_the_loop_gives_up_on_the_derived_count_on_the_shipping_fleet(
         )
         == 1
     ), "sixty failed cycles at a 50s tick is fifty minutes and the loop kept going"
+
+
+# --------------------------------------------------------------------------
+# Criterion 4, first half: per-retailer cadence and Phase 8's backoff still hold
+# --------------------------------------------------------------------------
+#
+# "No regression in what already works" is a claim about Phase 8's BEHAVIOURS
+# surviving Phase 9's change, and it is asserted here rather than inferred from a
+# green suite. Two things make that harder than it sounds and both are named
+# before anything is run.
+#
+# FIRST: SEVERAL OF PHASE 8'S TESTS WERE ADJUSTED IN 09-02, so "unchanged" is the
+# wrong question. `09-02-SUMMARY.md` enumerated them and 09-04 re-measured the
+# enumeration against the whole phase (`87871b4..HEAD`) by comparing each test's
+# source segment rather than trusting the list:
+#
+#     RE-POINTED ASSERTIONS — the behaviour is unchanged and only the
+#     arithmetic's anchor moved, because `record` steps from the retailer's own
+#     previous due time instead of re-anchoring to the cycle's clock:
+#       1. test_pacing::test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring
+#       2. test_pacing::test_the_backoff_schedule_is_exactly_the_schedule_it_was[300.0]
+#       3. test_pacing::…[1800.0]
+#       4. test_pacing::test_one_good_read_clears_the_backoff_completely
+#       5. test_pacing::test_a_retailer_that_answers_during_its_probe_is_back_on_its_standing_interval_at_once
+#       6. test_cli_watch::test_a_retailer_in_cooloff_publishes_the_days_scale_cadence_it_is_actually_on
+#
+#     DATED REVERSALS — a withdrawn claim, quoted in full with what overruled it:
+#       9.  test_pacing::test_a_retailer_at_the_default_cadence_is_due_every_cycle
+#       10. test_pacing::test_the_restored_pacer_starts_its_schedule_from_zero
+#
+# and no others. Of the four gates `09-04-PLAN.md` names, THREE CAME THROUGH
+# BYTE-IDENTICAL — the cool-off literal-seconds table, the exactly-one-probe
+# simulation, and four of the five restart tests — while
+# `test_one_good_read_clears_the_backoff_completely` is a re-pointed assertion
+# and `test_the_restored_pacer_starts_its_schedule_from_zero` is a dated
+# reversal. No repair weakens a Phase 8 claim: the `MAX_BACKOFF_SECONDS <= 6h`
+# ceiling, the 259200.0 cool-off literal at every site, and the depth literals in
+# `_CADENCE_AFTER_N_REFUSALS` are all untouched.
+#
+# SECOND, AND IT IS THE HALF THAT WOULD HAVE MADE THIS SWEEP TAUTOLOGICAL: most
+# of `tests/test_pacing.py` builds a `Pacer` with NO ROSTER AND NO TICK. Such a
+# pacer gets a phase of 0.0 for every retailer and sizes `due`'s tolerance off
+# the standing default — so the tolerance and the birth phase are DEFAULTED AWAY
+# on those sites, and `cli.watch_loop` never builds one that way. 09-02 measured
+# exactly what that costs: `test_the_max_retailers_in_any_sixty_seconds_over_a_
+# day_is_a_stated_number` "still read 6 against the landed mechanism … it went
+# red only once its pacer was given a roster and a tick."
+#
+# `record`'S GRID ADVANCE IS UNCONDITIONAL, and that is stated rather than
+# assumed either way: it is not gated behind a non-empty roster, which is why the
+# defaulted sites DID redden and why 09-02 had to repair seven of them. So those
+# sites exercise half the mechanism honestly. What they cannot reach is the other
+# half, and this section is that half — every assertion below builds the pacer
+# the way `watch_loop` builds one, or drives `watch_loop` itself.
+
+
+def _shipping_pacer(cfg: Config) -> Pacer:
+    """A `Pacer` constructed exactly the way `cli.watch_loop` constructs one.
+
+    Roster and tick both present, from the same two expressions the loop uses.
+    Not a copy of the loop's arithmetic: `loop_tick_seconds` is imported and the
+    roster is derived from `cfg.watches`, so a change to either reaches here.
+    """
+    roster = tuple(sorted({w.retailer for w in cfg.watches}))
+    return Pacer(
+        default_interval=cfg.interval_seconds,
+        overrides=dict(cfg.retailer_intervals),
+        roster=roster,
+        tick=loop_tick_seconds(cfg.interval_seconds, roster),
+    )
+
+
+def test_the_shipping_pacer_is_built_the_way_the_loop_builds_one(
+    configured_fleet_cfg: Config, sent: dict[str, list], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The helper above is bound to the loop, so this section cannot drift off it.
+
+    A sweep whose "shipping construction" was a hand-written imitation would keep
+    passing after the loop stopped constructing pacers that way — which is the
+    single-retailer-fixture finding one level up.
+    """
+    built: list[dict] = []
+    real = cli.Pacer
+
+    class _Capturing(real):  # type: ignore[valid-type,misc]
+        def __init__(self, **kwargs: object) -> None:
+            built.append(dict(kwargs))
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(cli, "Pacer", _Capturing)
+    cli.watch_loop(
+        configured_fleet_cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        State.load(configured_fleet_cfg.state_path),
+        cycles=1,
+        sleep=lambda s: None,
+    )
+
+    mine = _shipping_pacer(configured_fleet_cfg)
+    assert built[0].get("roster") == mine.roster
+    assert built[0].get("tick") == mine.tick
+    assert built[0].get("default_interval") == mine.default_interval
+    assert built[0].get("overrides") == dict(configured_fleet_cfg.retailer_intervals)
+
+
+def test_each_retailer_is_asked_the_same_number_of_times_a_day_as_before(
+    configured_fleet_cfg: Config, sent: dict[str, list]
+) -> None:
+    """Criterion 4's first half, driven through `cli.watch_loop` over a whole day.
+
+    NOT through a `Pacer` simulation. Every other statement of this claim in the
+    suite steps the pacer directly; this one runs the daemon's own loop for the
+    1728 wakes a 50 s tick makes in 86 400 s and counts what reached
+    `status.json` as `checked: true`. The literals are `09-DECISIONS.md`'s
+    recorded BEFORE-numbers, measured on 2026-09-01 against the pre-REQ-23 rule
+    at `87871b4` — so this is a comparison against the old schedule and not a
+    re-derivation from the new one.
+
+    THE REDUCTION-BY-NOT-ASKING GUARD. 09-02 recorded that the max-in-60s literal
+    is BLIND to a fleet asked half as often — it still read 2 while every count
+    halved. The per-retailer counts are what is not blind to it, and criterion 4
+    is the criterion they answer.
+    """
+    counted: dict[str, int] = {}
+
+    def _count(_delay: float) -> None:
+        for row in json.loads(configured_fleet_cfg.status_path.read_text())["retailers"]:
+            if row["checked"]:
+                counted[row["retailer"]] = counted.get(row["retailer"], 0) + 1
+
+    random.seed(_IDLE_SEED)
+    cli.watch_loop(
+        configured_fleet_cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        State.load(configured_fleet_cfg.state_path),
+        cycles=_WAKES_PER_DAY,
+        sleep=_count,
+    )
+
+    assert dict(sorted(counted.items())) == _BEFORE_PER_RETAILER_PER_DAY, (
+        f"over a simulated day the loop asked {dict(sorted(counted.items()))}, "
+        f"against the {_BEFORE_PER_RETAILER_PER_DAY} the OLD rule produced. A "
+        f"schedule spread out by asking less often is coverage sold for a number"
+    )
+    assert sum(counted.values()) == 1296, (
+        f"{sum(counted.values())} requests over a simulated day against 1296 — "
+        f"the total the retailers can see, and the row 09-03 recorded as the one "
+        f"that did not move"
+    )
+
+
+#: 86 400 s of simulated day at the six-retailer fleet's 50 s tick. Written out
+#: rather than computed for `_FLEET_TICK_SECONDS`'s reason.
+_WAKES_PER_DAY = 1728
+
+#: PHASE 8'S THREE NUMBERS, WRITTEN OUT, AND THE SECOND DRAFT OF THIS SECTION
+#: DID NOT DO THIS — which is the finding these three lines exist to record.
+#:
+#: The cool-off assertions below originally read `REFUSALS_BEFORE_COOLOFF` and
+#: `COOLOFF_SECONDS` from `boty.pacing`. Perturbing `REFUSALS_BEFORE_COOLOFF`
+#: from 30 to 31 left **60 passed, 0 failed**: every assertion moved with the
+#: constant it was supposed to be checking, so the gate could not fail for the
+#: reason it exists. That is `_CADENCE_ACROSS_THE_COOLOFF_THRESHOLD`'s own rule
+#: — "a number derived from the constant under test cannot contradict it" —
+#: rediscovered by measurement rather than inherited.
+#:
+#: Written out, the same perturbation reddens. The module constants are still
+#: BOUND to these literals, immediately below, so the two cannot drift apart
+#: silently; what changed is which of them is the authority.
+_COOLOFF_THRESHOLD_REFUSALS = 30
+_COOLOFF_SECONDS_LITERAL = 259200.0
+_MAX_BACKOFF_LITERAL = 21600.0
+
+
+def test_phase_eights_three_numbers_are_the_numbers_this_section_asserts() -> None:
+    """The binding between the literals above and the constants they describe.
+
+    Separate from the behaviour tests deliberately. If `boty.pacing` moves one of
+    these, exactly this test says so — rather than five behavioural assertions
+    failing in five different sentences about backoff.
+    """
+    assert REFUSALS_BEFORE_COOLOFF == _COOLOFF_THRESHOLD_REFUSALS
+    assert float(COOLOFF_SECONDS) == _COOLOFF_SECONDS_LITERAL
+    assert float(MAX_BACKOFF_SECONDS) == _MAX_BACKOFF_LITERAL
+
+#: `09-DECISIONS.md`'s recorded before-numbers, measured at `87871b4` against the
+#: PRE-REQ-23 rule. Literals rather than `86400 // interval` arithmetic: a number
+#: derived from the config under test cannot contradict the config under test,
+#: and these have to be comparable to something the old code produced.
+_BEFORE_PER_RETAILER_PER_DAY = {
+    "amazon": 48,
+    "bestbuy": 288,
+    "gamestop": 96,
+    "nintendo": 288,
+    "target": 288,
+    "walmart": 288,
+}
+
+
+def test_the_backoff_ladder_and_the_cooloff_hold_under_the_shipping_construction(
+    configured_fleet_cfg: Config,
+) -> None:
+    """Phase 8's literal seconds, on the pacer the daemon builds rather than a bare one.
+
+    The three literals are Phase 8's own and are written out here rather than
+    imported from `_CADENCE_AFTER_N_REFUSALS`, so this cannot agree with that
+    table by construction — it has to agree with it by both being right.
+
+    Read as an INCREMENT from the retailer's own previous due time, which is
+    09-02's re-pointing: `record` steps the grid rather than re-anchoring on the
+    cycle clock, so `due_at - now` at a frozen clock is the sum of every wait
+    rather than the last one. The claim asserted is the one Phase 8 always made.
+    """
+    p = _shipping_pacer(configured_fleet_cfg)
+
+    # One refusal on the 300 s standing group: 300 x 2 = 600.
+    previous = p._for("walmart").due_at
+    p.record("walmart", refused=True, now=0.0)
+    assert p._for("walmart").due_at - previous == 600.0
+    assert p.current_interval("walmart") == 600.0
+
+    # Climbing to the six-hour ceiling and staying there.
+    for _ in range(12):
+        p.record("walmart", refused=True, now=0.0)
+    assert p.current_interval("walmart") == _MAX_BACKOFF_LITERAL, (
+        f"the backoff ceiling read {p.current_interval('walmart')} on a pacer "
+        f"built the way the daemon builds one, against {_MAX_BACKOFF_LITERAL}"
+    )
+    previous = p._for("walmart").due_at
+    p.record("walmart", refused=True, now=0.0)
+    assert p._for("walmart").due_at - previous == _MAX_BACKOFF_LITERAL
+
+    # And the cool-off past thirty consecutive refusals.
+    while p._for("walmart").refusals < _COOLOFF_THRESHOLD_REFUSALS:
+        p.record("walmart", refused=True, now=0.0)
+    assert p.current_interval("walmart") == _COOLOFF_SECONDS_LITERAL, (
+        f"the cool-off read {p.current_interval('walmart')} against the "
+        f"{_COOLOFF_SECONDS_LITERAL} s (three days) Phase 8 fixed"
+    )
+
+    # One good read clears it completely — one standing interval on, not a
+    # fraction of the backoff still being paid off.
+    previous = p._for("walmart").due_at
+    p.record("walmart", refused=False, now=0.0)
+    assert p._for("walmart").refusals == 0
+    assert p.current_interval("walmart") == 300.0
+    assert p._for("walmart").due_at - previous == 300.0
+
+
+def test_a_cooled_off_retailer_is_probed_exactly_once_over_a_window_at_the_new_tick(
+    configured_fleet_cfg: Config,
+) -> None:
+    """Phase 8's exactly-one-probe property, on the pacer the daemon builds.
+
+    The property is a bound in BOTH directions, and the tick is what makes
+    re-asserting it here worth the lines: the loop wakes six times more often
+    than the cycle this was measured on, so a cool-off that leaked would leak six
+    times faster, and a schedule that dropped the retailer would drop it just as
+    silently.
+
+    STEPPED AT THE LOOP'S OWN TICK, on a pacer with roster and tick present —
+    `tests/test_pacing.py`'s copy of this property steps a DEFAULTED pacer at the
+    standing cadence, which is neither the wake rate nor the construction the
+    daemon runs.
+
+    NOT DRIVEN THROUGH `watch_loop`, and that is a measured cost rather than a
+    preference. Climbing to the thirtieth consecutive refusal takes about 700 000
+    simulated seconds, and one further cool-off window is 259 200 more — roughly
+    20 000 wakes, which through the loop is 20 000 `status.json` writes and a
+    full check pass each. Measured at 6000 wakes: 3.9 s, and it had reached only
+    19 refusals. `test_each_retailer_is_asked_the_same_number_of_times_a_day_as_
+    before` above is the loop-driven evidence; this is the schedule's.
+    """
+    p = _shipping_pacer(configured_fleet_cfg)
+    tick = p.tick
+    assert tick == _FLEET_TICK_SECONDS, tick
+    refusing = "walmart"
+
+    now = 0.0
+    dispatches = 0
+    # Climb to the cool-off, asking only when the schedule says to — which is
+    # what makes the wall-clock arithmetic below the schedule's and not a
+    # simulation of it.
+    while p._for(refusing).refusals < _COOLOFF_THRESHOLD_REFUSALS:
+        if p.due(refusing, now):
+            p.record(refusing, refused=True, now=now)
+            dispatches += 1
+        now += tick
+        assert now < 2_000_000, "never reached the cool-off threshold"
+
+    assert dispatches == _COOLOFF_THRESHOLD_REFUSALS
+    assert p.current_interval(refusing) == _COOLOFF_SECONDS_LITERAL
+
+    # One window and a bit: longer than 259 200 s so the probe must happen,
+    # shorter than two so a second probe is a failure rather than the next
+    # window's first.
+    began, probes = now, 0
+    while now - began < _COOLOFF_SECONDS_LITERAL * 1.15:
+        if p.due(refusing, now):
+            p.record(refusing, refused=True, now=now)
+            probes += 1
+        now += tick
+
+    assert probes == 1, (
+        f"across {(now - began) / 3600:.1f} simulated hours after the thirtieth "
+        f"consecutive refusal the schedule dispatched {refusing} {probes} "
+        f"time(s). Phase 8 fixed that at exactly one — not dropped, and not "
+        f"probed twice"
+    )
