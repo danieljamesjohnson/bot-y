@@ -12,9 +12,10 @@ wave grouping is real rather than declared.
 | Plan ID | Objective | Wave | Depends On | Requirements |
 |---|---|---|---|---|
 | `09-01` | **The number before, and eight collisions decided in writing.** Simulate a day of cycles over the six configured retailers against the **unmodified** scheduler and record the maximum number of retailers requested inside any 60-second window as a stated literal — criterion 3's *before* half, which is unobtainable once any scheduling code moves. Write `09-DECISIONS.md` resolving all eight collisions with reasoning, and assert `COVERAGE.md`'s single declaration line. **Changes no production code, deliberately.** | 1 | — | REQ-23 |
-| `09-02` | **The mechanism — criteria 1, 2 and 3-after.** A deterministic per-retailer **phase** (a position on the schedule, never a duration) plus a loop **tick** shorter than the shortest standing cadence, wired end-to-end by a tracer before anything is generalised. `record` advances on the retailer's own grid instead of re-anchoring to the cycle's `now`. Rewrites collisions A and B with the dated-reversal treatment. | 2 | `09-01` | REQ-23 |
-| `09-03` | **What a shorter tick costs, paid rather than discovered.** A tick that asked nothing must not publish a vacuously green `healthy`. The two failure counters are counts of cycles and the cycle just got shorter. `config.py`'s *"the loop sleeps interval_seconds per CYCLE"* went false. Criterion 4's first half: per-retailer cadence and backoff still hold, and the aggregate request rate did **not** rise. | 3 | `09-02` | REQ-23 |
-| `09-04` | **The budget, the gate and the verdict.** Criterion 4's second half — `boty check`'s two-minute budget, established offline and honestly, stated as **bounded** if it cannot be measured. Criterion 5 — **M43** registered and observed CAUGHT, anchored on behaviour. `make verify-offline` run and its **verdict line** read, not the exit code alone. The five-criterion verdict table. | 4 | `09-03` | REQ-23 |
+| `09-02` | **The mechanism lands and the tree comes back green — criterion 3-after.** A deterministic per-retailer **phase** (a position on the schedule, never a duration) plus a loop **tick** shorter than the shortest standing cadence, wired end-to-end by a tracer before anything is generalised. `record` advances on the retailer's own grid instead of re-anchoring to the cycle's `now` — **unconditionally**, which reddens ten existing tests that this plan enumerates by name and closes itself. | 2 | `09-01` | REQ-23 |
+| `09-03` | **Criteria 1 and 2 — the shape of the schedule, asserted.** The separation as a stated literal read off the schedule and never off a clock; independence in both directions with the negative half compared field by field; both under the construction `cli.watch_loop` actually ships. Plus the loop's tick proved to reach the sleep, both clock terms observed defended, and the daemon's new wake and write rates written down for 09-04 to price. | 3 | `09-02` | REQ-23 |
+| `09-04` | **What a shorter tick costs, paid rather than discovered.** A tick that asked nothing must not publish a vacuously green `healthy`. The two failure counters are counts of cycles and the cycle just got shorter. `config.py`'s *"the loop sleeps interval_seconds per CYCLE"* went false. Criterion 4's first half: per-retailer cadence and backoff still hold, and the aggregate request rate did **not** rise. | 4 | `09-03` | REQ-23 |
+| `09-05` | **The budget, the gate and the verdict.** Criterion 4's second half — `boty check`'s two-minute budget, established offline and honestly, stated as **bounded** if it cannot be measured. Criterion 5 — **M43** registered and observed CAUGHT, anchored on behaviour. `make verify-offline` run and its **verdict line** read, not the exit code alone. The five-criterion verdict table. | 5 | `09-04` | REQ-23 |
 
 ---
 
@@ -74,7 +75,7 @@ phase introduces answers a different question:
 | the phase | **where** on the schedule the attempts land | `_RetailerState.due_at`'s starting value | nothing — it is not a cadence |
 
 A retailer at a 300 s cadence with a phase of 150 s is still asked every 300 s. Its long-run count
-is unchanged, which is exactly what `09-03` gates.
+is unchanged, which is exactly what `09-02` asserts and `09-04` re-states as criterion 4's evidence.
 
 ### Two terms are required, and the second one is the non-obvious half
 
@@ -98,6 +99,62 @@ is a *shape*, and the shape is the thing the plan writers must not rediscover:
 
 Both terms are `09-02`'s and neither is optional. `09-02`'s tracer is what proves they compose
 before the tables are extended.
+
+### The advance is UNCONDITIONAL, and that is what sets the wave boundaries
+
+**Measured against the tree, not predicted.** The roster and tick defaults protect two of the three
+moving parts — the tolerance in `due` and the birth phase in `_for` — so a `Pacer` built without them
+keeps today's behaviour in both. **`record`'s advance is protected by nothing.** It changes for every
+construction site in the tree, and it reddens ten existing tests:
+
+| # | Test | Reddened by |
+|---|---|---|
+| 1 | `test_pacing::test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring` | the advance, both readings |
+| 2 | `test_pacing::test_the_backoff_schedule_is_exactly_the_schedule_it_was[300.0]` | the advance, both readings |
+| 3 | `test_pacing::test_the_backoff_schedule_is_exactly_the_schedule_it_was[1800.0]` | the advance, both readings |
+| 4 | `test_pacing::test_one_good_read_clears_the_backoff_completely` | the advance, both readings |
+| 5 | `test_pacing::test_a_retailer_that_answers_during_its_probe_is_back_on_its_standing_interval_at_once` | the advance, both readings |
+| 6 | `test_cli_watch::test_a_retailer_in_cooloff_publishes_the_days_scale_cadence_it_is_actually_on` | the advance, both readings |
+| 7 | `test_pacing::test_a_retailer_in_cooloff_says_so_rather_than_reporting_a_minute_count` | reading A only |
+| 8 | `test_cli_watch::test_a_refusal_the_backoff_is_handling_is_recorded_not_pushed_across_a_restart` | reading A only |
+| 9 | `test_pacing::test_a_retailer_at_the_default_cadence_is_due_every_cycle` | reading B only — collision A |
+| 10 | `test_pacing::test_the_restored_pacer_starts_its_schedule_from_zero` | the birth phase — collision B |
+
+**Three consequences the plan writers must not soften.**
+
+1. **`09-02` repairs all ten itself.** No plan after it owns `tests/test_pacing.py`, so a deferred
+   repair is not a bad habit here — it is impossible. Phase 8 recorded repairing another plan's red
+   in a later wave as the thing not to do; the file ownership makes the rule structural.
+2. **The advance rule has two readings and they redden different tests.** *Reading A* steps the
+   previous due time forward in whole waits; *reading B* steps once and floors at the cycle clock.
+   `09-02` names both, chooses one deliberately, and records the choice with its collateral. The
+   table above covers both so whichever is taken the list is already written.
+3. **Gating the advance behind a non-empty roster is REFUSED.** It would keep every old test green
+   with no edits, and it would make every defaulted site — most of the suite — exercise a code path
+   the daemon never takes, since `cli.watch_loop` always passes a roster. That buys a small diff by
+   making the evidence describe something that does not ship. `09-02` carries it as a prohibition.
+
+**`skipped_reason` is the collateral path behind items 6 and 7**, and it is named here so nobody
+"fixes" it. That method renders `due_at - now`; an advance that changes where the next attempt lands
+changes the prose it prints. Its cool-off arm's condition — `current_interval` and the refusal count
+— does not move. If a repair looks like it needs `skipped_reason`'s logic to change, that is the
+signal the mechanism moved a cadence rather than a position.
+
+### Two comments inside `boty/pacing.py` go false, and both get a note beside them
+
+Neither is edited over; `docs/retailer-evidence.md` § 6 is the convention. Both land in `09-02`,
+which is already editing that region to add the two fields.
+
+- **`_RetailerState` leg 2** argues no probe flag is owed, partly because *across a restart the next
+  attempt resets to 0.0 by design, priced at one immediate request*. After this phase it resets to
+  the retailer's **phase**, and the price is one request within one standing interval. **Leg 2's
+  conclusion survives whole** — the probe cannot repeat inside a process because `record` re-schedules
+  unconditionally on every outcome — so only the number beside it moved.
+- **The `state_path` paragraph's count**: *"There are nine in `tests/test_pacing.py` alone and not one
+  names a path."* **Exactly true when written** — `46a0768`, 2026-08-10, eleven sites minus two that
+  name a path. Now: **24 of 26** in `tests/test_pacing.py`, and **31 tree-wide** (26 + 3 in
+  `tests/test_cli_watch.py` + 2 in `boty/cli.py`) across **9 distinct call shapes**. The argument the
+  sentence serves is strengthened, not weakened: the number of sites the default protects went up.
 
 ### The tick is CHOSEN BY MEASUREMENT, not by this outline
 
@@ -146,7 +203,7 @@ that this is a change to *where* the next attempt lands and **not** to *how long
 somebody, so an empty pass is only reachable when every retailer is backed off. **After this phase
 roughly half of all ticks ask nobody**, so a pass that checked nothing publishing `healthy: true` is
 routine — *a green dashboard over a question nobody asked*, which is this project's own defect one
-level up, rebuilt inside the fix for a different one. `09-03` owns it. The shape to prefer is the
+level up, rebuilt inside the fix for a different one. `09-04` owns it. The shape to prefer is the
 one `boty/status.py` already argues for its per-retailer rows twelve lines up from the defect —
 *"the retailer is not healthy (nothing was verified) and not unhealthy (nothing failed) — it simply
 was not asked"* — so the aggregate gets the same third state rather than a new invention. Measured
@@ -157,7 +214,7 @@ radius is `tests/test_status.py:217` (the key-set assertion, which is unaffected
 **Collision 5 — the two failure counters are counts of cycles.** `FAILURES_BEFORE_WARNING = 3` and
 `FAILURES_BEFORE_GIVING_UP = 10` were chosen against a 300 s cycle: ~15 minutes to a warning, ~50
 minutes to giving up. At a shorter tick both fire proportionally sooner in wall time, and the
-warning one **sends a notification**. `09-03` must either re-derive them as durations or accept the
+warning one **sends a notification**. `09-04` must either re-derive them as durations or accept the
 change **in writing** — an accidental 6× increase in how fast this monitor pages a human is the
 `notify-dan` bar failing in the direction this repository cares about most.
 
@@ -175,7 +232,7 @@ phase protects, on the day it ships. **This phase must not reopen it, and does n
 phase offset is DERIVED from the retailer's name and the configured roster, and is therefore stable
 across processes without being stored.** That is the same argument `STATE_MAX_AGE_SECONDS` and
 `Result.degraded` make one level up — derive rather than store, because two copies only have to
-disagree once. `09-02` must state this at the definition site and `09-03` must **confirm by
+disagree once. `09-02` must state this at the definition site and `09-04` must **confirm by
 inspection of `save`/`load` that the document's shape is unchanged**, rather than predict it.
 A consequence worth naming in the same breath: **`hash()` is not available for this** — CPython
 randomises `str.__hash__` per process under `PYTHONHASHSEED`, so a phase derived from it would be a
@@ -200,7 +257,7 @@ calls the failure it guards *"the regression that would make this change quietly
 is due once per **cadence**, not once per **tick**, and being due every tick would now be the
 defect. Rewrite with the dated-reversal treatment: quote the withdrawn assertion, record what
 overruled it, and **keep the coverage half alive** — the retailer must still be asked the same
-number of times per day, which is `09-03`'s gate. Do not delete the test and do not rename it away
+number of times per day, which is `09-02`'s gate. Do not delete the test and do not rename it away
 from `git log -S`'s reach.
 
 **B — `test_the_restored_pacer_starts_its_schedule_from_zero` (`tests/test_pacing.py:997`).**
@@ -218,13 +275,24 @@ carries the *after* number. That is the test's second job, not a casualty. The d
 per-retailer tallies and the window all stay put, so the two numbers are comparable rather than two
 answers to two questions.
 
-**And one that will look like a collision and is not.** Nine existing construction sites build a
-`Pacer` with no roster and no tick. **A `Pacer` with an empty roster gives every retailer a phase of
-0.0 and a tolerance off `default_interval`, which is today's behaviour exactly** — the same
-defaulting argument `Result.rung`, `Result.extraction` and `Pacer.state_path` already make in this
-tree. That is what keeps `09-03`'s regression sweep meaningful: the phase-8 cool-off tests, the
-literal-seconds tables and the restart tests are single-retailer and must come through **unchanged**,
-not merely passing.
+**And one that is half a collision, which is the half that matters.** **31 construction sites** build
+a `Pacer` with no roster and no tick — 26 in `tests/test_pacing.py` (24 of them naming no path), 3 in
+`tests/test_cli_watch.py`, 2 in `boty/cli.py`, across 9 distinct call shapes. An empty roster gives
+every retailer a phase of 0.0 and a tolerance off `default_interval`, which is today's behaviour — the
+same defaulting argument `Result.rung`, `Result.extraction` and `Pacer.state_path` already make in
+this tree.
+
+**What the default does NOT cover is `record`'s advance**, and the honest consequence has to be said
+in the direction it actually points. It is tempting to write that the defaults keep the phase-8 tests
+untouched and that their passing therefore proves the schedule is safe. **That is backwards.** If a
+defaulted `Pacer` were today's behaviour in every respect, phase-8 gates passing would prove nothing
+about the schedule the daemon runs, because `cli.watch_loop` **always** passes a roster and a tick.
+Two obligations follow, and `09-04` carries both:
+
+1. the advance is unconditional, so those tests do NOT come through untouched — ten of them redden
+   and `09-02` repairs them, which is why predicting otherwise would have been a false claim; and
+2. the regression sweep must additionally assert under the **shipping** construction — roster and
+   tick present — or it is a sweep over a shape nobody runs.
 
 ### Prohibitions (author descriptor-less into `must_haves.prohibitions`)
 
@@ -239,9 +307,9 @@ not merely passing.
 - `09-02` — *a phase is a position, never a duration.* Nothing outside `current_interval` may compute
   a wait. A second scheduling expression would undo Phase 7's one-cadence property and Phase 8's
   widen-only rule in the same edit.
-- `09-03` — *a pass that asked nothing never publishes a fresh verdict about anything.* A shorter
+- `09-04` — *a pass that asked nothing never publishes a fresh verdict about anything.* A shorter
   tick must not turn `all([]) is True` into a routine green light.
-- `09-04` — *a criterion is never reworded so that it passes.* MET IN PART and "not measured" are
+- `09-05` — *a criterion is never reworded so that it passes.* MET IN PART and "not measured" are
   shippable outcomes here; a rounded-up claim is not.
 
 ### Threat model rows (ASVS L1, block on `high`) — honest, unpadded
@@ -251,9 +319,9 @@ no request. Three genuine rows, plus the reason there is no fourth.
 
 | Threat ID | Category | Component | Severity | Disposition | Mitigation |
 |---|---|---|---|---|---|
-| `T-09-01` | Denial of Service | the shortened loop tick in `cli.watch_loop` | medium | mitigate | more wake-ups must not become more requests. The per-retailer daily request count is asserted unchanged over a simulated day (`09-03`), and the tick is floored so a single pass cannot outrun it — bounded by the last published `duration_seconds`, not assumed |
+| `T-09-01` | Denial of Service | the shortened loop tick in `cli.watch_loop` | medium | mitigate | more wake-ups must not become more requests. The per-retailer daily request count is asserted unchanged over a simulated day (`09-04`), and the tick is floored so a single pass cannot outrun it — bounded by the last published `duration_seconds`, not assumed |
 | `T-09-02` | Information Disclosure | the per-retailer phase derivation | low | mitigate | the phase is derived from the **retailer name and the configured roster only** — never from a hostname, a store id, a MAC, a wall clock or a process id. A phase derived from host identity would encode a stable host fingerprint in the request *timing*, and `scripts/identity_check.py` scans files, not timings, so nothing in this repository could ever see it |
-| `T-09-03` | Tampering | `Pacer.load` over `pacer-state.json` | medium | mitigate | carried unchanged from Phase 8's `T-08-01`. This phase adds **no persisted field**, so no new `_HOSTILE` row is owed — and `09-03` must **confirm** that against `save`/`load` rather than assert it |
+| `T-09-03` | Tampering | `Pacer.load` over `pacer-state.json` | medium | mitigate | carried unchanged from Phase 8's `T-08-01`. This phase adds **no persisted field**, so no new `_HOSTILE` row is owed — and `09-04` must **confirm** that against `save`/`load` rather than assert it |
 
 **There is no `T-09-SC` row, and that is stated rather than omitted.** The supply-chain row exists to
 carry the package-legitimacy gate; this phase installs no package from npm, pip or cargo, so there is
@@ -311,7 +379,8 @@ plan writer's to fix; the shape is not.
 - `tick_for(default_interval, retailers)` *(candidate)* — **one expression**, read by both
   `cli.watch_loop`'s sleep and `Pacer`'s tolerance, on `_standing_interval`'s precedent
 - `Pacer.roster` *(candidate)* — the configured retailer names; **declared last, defaulted empty**,
-  so all nine existing construction sites keep today's behaviour
+  so all 31 existing construction sites keep today's tolerance and today's birth phase (they do NOT
+  keep today's advance — that change is unconditional)
 - `Pacer.tick` *(candidate)* — same treatment, same reason
 - `Pacer._phase_for(retailer)` *(candidate)* — deterministic from the name and the roster, never from
   `hash()`, never persisted
@@ -320,6 +389,14 @@ plan writer's to fix; the shape is not.
   re-anchored to `now`
 - `Pacer.due` — the tolerance re-anchored from `default_interval * 0.5` to the **tick**, with the
   original docstring's argument kept and its unit corrected
+- **two dated notes, beside and never over** — one at `_RetailerState`'s leg 2 (a restart resets the
+  schedule to 0.0; now it resets to the phase, at a price of one request within one standing interval
+  rather than one immediate request) and one at the `state_path` paragraph's construction-site count
+  (nine, exactly true at `46a0768` on 2026-08-10; now 24 of 26 in `tests/test_pacing.py` and 31
+  tree-wide)
+- **`Pacer.skipped_reason` — NOT edited.** It is collateral, not a site: it renders `due_at - now`, so
+  its output moves with the advance while its logic must not. A repair that needs this method to
+  change is the signal that the mechanism moved a cadence rather than a position
 - **deliberately absent:** no new `_RetailerState` field, no `STATE_VERSION` bump, **no change to
   `current_interval`** — all three argued rather than merely not done
 
@@ -327,20 +404,21 @@ plan writer's to fix; the shape is not.
 - `watch_loop` — one tick computed once through `tick_for`, passed to the pacer and slept; `delay +
   cycle_duration` untouched in shape
 - `FAILURES_BEFORE_WARNING` / `FAILURES_BEFORE_GIVING_UP` — re-derived as durations or accepted in
-  writing (`09-03`)
+  writing (`09-04`)
 
 **`boty/status.py`**
-- `"healthy"` — a pass that checked nothing must not publish `True` (`09-03`)
+- `"healthy"` — a pass that checked nothing must not publish `True` (`09-04`)
 
 **`boty/config.py`**
 - the `retailer_intervals >= interval_seconds` comment — dated reversal only; **the validator is
   untouched**
 
 **`tests/`**
-- `test_pacing.py` — the day-long six-retailer simulation (`09-01` before, `09-02` after), the
-  independence pair for criterion 2, the stated-seconds separation for criterion 1, the unchanged
-  per-retailer daily counts for criterion 4, and collisions A and B rewritten
-- `test_cli_watch.py` — the tick reaches the loop; both clock terms still defended
+- `test_pacing.py` — the day-long six-retailer simulation (`09-01` before, `09-02` after), the ten
+  enumerated tests closed in `09-02`, and in `09-03` the stated-seconds separation for criterion 1
+  and the independence pair for criterion 2, both under the shipping construction
+- `test_cli_watch.py` — two of the ten enumerated tests (`09-02`); the tick reaching the loop and
+  both clock terms observed defended (`09-03`)
 - `test_status.py` — a pass that asked nothing
 
 **`scripts/mutation_check.py`**
