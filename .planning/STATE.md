@@ -94,27 +94,32 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: — Don't Get Locked Out
-status: Milestone v0.4 — Don't Get Locked Out — SCOPED 2026-08-27, phases 8-11, REQ-22...REQ-25, nothing executed yet. **The measurement that opened it:** 3 of 6 retailers return a challenge page (amazon, target, walmart) and **1 of 4** GO Plus + watches still reads (nintendo); gamestop's listing is HTTP 410 and best buy's control SKU stopped resolving. **A spike on 2026-08-27 removed the obvious plan**: this project's own rung-3 browser transport was driven at walmart's control and returned `rendered challenge page matched 'robot or human'` in 3.8s, so rung 1 and rung 3 are both refused and escalating a rung is not an available fix. The defect being attacked is that all six watches share one egress, one client fingerprint family and one request pattern, so one reputational event blinds all six. Phase 8 shrinks the footprint (a refused retailer is left alone for days, not knocked twice a day forever), phase 9 removes the lockstep signature, phase 10 stops a dead control being read as a broken detector, phase 11 establishes each blocked retailer's true position up to and including rung 4. **A lost-coverage alarm was proposed and declined by Dan the same day** — *"we don't want to inform the user it's broken, really. we want to prevent a broken state"* — so every requirement here is preventive and the residual undetected-blindness window stays open by decision rather than oversight. PREVIOUS MILESTONE: v0.3 archived 2026-08-19, DEPLOYED 2026-08-20, TAGGED v0.3.0 2026-08-25 with a GitHub release; still NOT published to PyPI, deliberately.
-stopped_at: "Phase 8 PLANNED 2026-08-28, not executed. Four plans in four waves — 08-01 (the before-number, changes no production code), 08-02 (the cool-off; criteria 1-4), 08-03 (criterion 5, the restart), 08-04 (criterion 6, M42 and the verdict table) — all serialized because every one touches boty/pacing.py or tests/test_pacing.py. Literals fixed: REFUSALS_BEFORE_COOLOFF = 30, COOLOFF_SECONDS = 3*24*60*60 (259200), MAX_BACKOFF_SECONDS UNCHANGED at 6 h, STATE_MAX_AGE_SECONDS re-derived to 259200 in 08-03. The plan-checker ran three iterations: 2 blockers + 4 warnings, then 1 blocker + 1 warning, then 0 blockers and APPROVED; both blockers were the same shape — 08-02 breaking a test no task in it repaired. NEXT ACTION is executing phase 8. Phases 9-11 are not planned. The daemon is running v0.3 code (MainPID 667833, restarted 2026-08-27 07:23:34 with the walmart store pin live) and nothing in v0.4 is on the wire"
-last_updated: "2026-08-28T00:00:00.000Z"
-last_activity: 2026-08-28
+status: Milestone v0.4 — Don't Get Locked Out — SCOPED 2026-08-27, phases 8-11, REQ-22...REQ-25. PHASE 8 COMPLETE 2026-08-31 (in the tree, not on the wire; REQ-22 satisfied in simulation over the scheduler); phases 9, 10 and 11 not started. (The clause this replaced read "nothing executed yet" — true when written on 2026-08-27.) **The measurement that opened it:** 3 of 6 retailers return a challenge page (amazon, target, walmart) and **1 of 4** GO Plus + watches still reads (nintendo); gamestop's listing is HTTP 410 and best buy's control SKU stopped resolving. **A spike on 2026-08-27 removed the obvious plan**: this project's own rung-3 browser transport was driven at walmart's control and returned `rendered challenge page matched 'robot or human'` in 3.8s, so rung 1 and rung 3 are both refused and escalating a rung is not an available fix. The defect being attacked is that all six watches share one egress, one client fingerprint family and one request pattern, so one reputational event blinds all six. Phase 8 shrinks the footprint (a refused retailer is left alone for days, not knocked twice a day forever), phase 9 removes the lockstep signature, phase 10 stops a dead control being read as a broken detector, phase 11 establishes each blocked retailer's true position up to and including rung 4. **A lost-coverage alarm was proposed and declined by Dan the same day** — *"we don't want to inform the user it's broken, really. we want to prevent a broken state"* — so every requirement here is preventive and the residual undetected-blindness window stays open by decision rather than oversight. PREVIOUS MILESTONE: v0.3 archived 2026-08-19, DEPLOYED 2026-08-20, TAGGED v0.3.0 2026-08-25 with a GitHub release; still NOT published to PyPI, deliberately.
+stopped_at: "Phase 8 COMPLETE 2026-08-31 IN THE TREE and NOT on the wire (was: EXECUTION STARTED 2026-08-28; was: PLANNED, not executed). 4 of 4 plans, 6 of 6 criteria — 4 MET AS WRITTEN, 2 MET IN PART (criteria 2 and 5), nothing reworded. Gate at close: make verify-offline EXIT 0, identity PASS over 242 files, 920 passed / 0 skipped, mypy clean over 18 sources, 38/38 mutations, survivors 0. A CODE REVIEW RAN AFTER THE PLANS CLOSED and found 1 Critical + 4 Warnings, ALL FIXED (08-REVIEW.md + its Resolution section): CR-01 was that cli.watch_loop's pacer clock lagged wall clock by each check pass's cost, so a cool-off record aged out 6.84% of every window before its probe and a restart in that gap reset the retailer to 0 refusals — measured at the live duration_seconds 20.43, binding on target at 46 refusals. Fixed at the cause (9ea42fe), residual re-measured 0.06% mean / 0.13% worst; LONGEST_WAIT_SECONDS deliberately UNCHANGED. CRITERION 5 WAS AMENDED DOWN from MET AS WRITTEN to MET IN PART beside its original, because the phase asserted that guarantee while it had a hole. VERIFICATION IS human_needed: 2 items in 08-UAT.md, both deployment observations needing `sudo systemctl restart boty` — DAN'S CALL, deferred by his decision 2026-08-31, and Phase 8's own cross-cutting constraint forbade that restart inside the phase anyway. NOTE THE RESTART NOW CARRIES MORE THAN PHASE 8: 9ea42fe also returns the loop to its configured cadence rather than ~6.8% slower, so the request rate goes UP slightly — a named trade, not an accident. NEXT ACTION is phase 9 (Out of Lockstep), then phase 10; Dan chose 2026-08-31 to continue through 9 and 10 and to be ASKED BEFORE PHASE 11, which spends a live probe budget at the three refusing retailers. Phases 9-11 are not planned. The daemon is running v0.3 code (MainPID 667833, restarted 2026-08-27 07:23:34 with the walmart store pin live) and nothing in v0.4 is on the wire. ORIGINAL PHASE-8 PLANNING NOTE, kept because it is still the authority on the plan shapes: Four plans in four waves — 08-01 (the before-number, changes no production code), 08-02 (the cool-off; criteria 1-4), 08-03 (criterion 5, the restart), 08-04 (criterion 6, M42 and the verdict table) — all serialized because every one touches boty/pacing.py or tests/test_pacing.py. Literals fixed: REFUSALS_BEFORE_COOLOFF = 30, COOLOFF_SECONDS = 3*24*60*60 (259200), MAX_BACKOFF_SECONDS UNCHANGED at 6 h, STATE_MAX_AGE_SECONDS re-derived to 259200 in 08-03. The plan-checker ran three iterations: 2 blockers + 4 warnings, then 1 blocker + 1 warning, then 0 blockers and APPROVED; both blockers were the same shape — 08-02 breaking a test no task in it repaired. NEXT ACTION is executing phase 8. Phases 9-11 are not planned. The daemon is running v0.3 code (MainPID 667833, restarted 2026-08-27 07:23:34 with the walmart store pin live) and nothing in v0.4 is on the wire"
+last_updated: "2026-08-31T00:00:00.000Z"
+last_activity: 2026-08-31
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   # total_plans becomes real as each phase is planned, per the note below. Phase 8 was planned
   # 2026-08-28 at 4 plans; phases 9, 10 and 11 are not planned, so 4 is a COUNT OF WHAT EXISTS and
   # not an estimate of the milestone.
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 4
   # percent is PHASE-based, not plan-based, and that convention is v0.2's, carried through v0.3.
   # RESET FOR v0.4 ON 2026-08-27: 0 of the 4 phases (8, 9, 10, 11) are complete. `total_plans` is
   # 0 rather than a guess because no phase has been planned yet and this project does not record
   # an estimate in a field that reads as a measurement. It becomes real as each phase is planned.
   #
+  # UPDATED 2026-08-31: 1 of the 4 phases is complete (phase 8), so percent is 25. The RESET note
+  # above is left unedited — it was true on 2026-08-27 and it is the statement of the convention,
+  # which has not changed. `completed_plans` is 4 of the 4 that exist; phases 9-11 add to
+  # `total_plans` as each is planned, so the denominator is still a count and not an estimate.
+  #
   # v0.3's final block read total_phases 1 / completed 1 / total_plans 7 / completed 7 / percent
   # 100. It was NOT edited away at that milestone's close, on v0.2's precedent, and is reset here
   # by whoever scopes the next one — which is this commit.
-  percent: 0
+  percent: 25
 ---
 
 # State: bot-y
@@ -184,6 +189,33 @@ running `boty watch` is PID 547119, started Wed Aug 12 17:28:29 — before 07-01
 pre-phase code in memory and the file it writes every cycle carries none of the four new keys.** The
 page handles that old file correctly (every row renders `age ?`, every store tag survives), which is
 the `=== false`-not-`!` decision paying off, but the restart is what makes the page say anything new.
+
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 8 | verification_deferred_human | `/gsd-verify-work 8` |
+
+**Deferred by Dan's decision on 2026-08-31, not by oversight, and it could not have been discharged
+inside the phase.** Both of `08-VERIFICATION.md`'s human items need `sudo systemctl restart boty` —
+which is Dan's call under `CLAUDE.md`, and which **Phase 8's own cross-cutting constraint in
+`ROADMAP.md` forbids anywhere in the phase**. The items are in `08-UAT.md`: confirm `target` (46
+refusals, past the threshold of 30) publishes `current_interval_seconds: 259200` with a days-scale
+`skipped_reason`, and look at the rendered dashboard row once a retailer is genuinely in cool-off.
+
+**Phase 8 is complete in the tree and is not on the wire.** Those are two different claims and this
+project has kept them apart across three milestones.
+
+**The restart now carries more than Phase 8.** `9ea42fe` fixed the pacer clock, which also returns the
+watch loop to its configured cadence instead of running ~6.8% slower than it — so a restart raises the
+request rate slightly. In a milestone whose point is to shrink the footprint that is worth saying out
+loud; the trade was named and taken on 2026-08-31 rather than stumbled into, because the slowness was
+an accident of the clock and not a politeness measure anyone chose.
+
+**This did NOT stop the autonomous run.** Dan chose on 2026-08-31 to continue through phases 9 and 10
+— neither makes a live retailer request — and to be **asked before phase 11**, which spends a real
+probe budget at the three retailers already refusing us.
+
 
 ## Status
 

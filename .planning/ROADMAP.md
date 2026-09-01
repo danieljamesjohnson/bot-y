@@ -85,7 +85,7 @@ want to inform the user it's broken, really. we want to prevent a broken state"*
 change, and rung-2 API credentials. All three are argued in `REQUIREMENTS.md` § *What is
 deliberately NOT in this milestone*.
 
-- [ ] **Phase 8: Stop Knocking** — a persistently refused retailer is left alone for days, not knocked on twice a day forever
+- [x] **Phase 8: Stop Knocking** *(COMPLETE 2026-08-31 — in the tree, NOT on the wire)* — a persistently refused retailer is left alone for days, not knocked on twice a day forever
 - [ ] **Phase 9: Out of Lockstep** — six retailers stop being requested inside one short window from one origin
 - [ ] **Phase 10: A Control That Cannot Die** — a dead control is a fact about our config, never mistaken for a fact about the retailer
 - [ ] **Phase 11: The Honest Ladder Position** — what is actually true of Amazon, Target and Walmart, written down and gated
@@ -113,19 +113,19 @@ Plans:
 
 **Wave 1**
 
-- [ ] 08-01: The number before — 30 days of cycles against the **unmodified** rule, recorded as a stated literal, plus `08-DECISIONS.md` and `COVERAGE.md`. Changes no production code, deliberately. *(PLAN written 2026-08-28, not executed)*
+- [x] 08-01: The number before — 30 days of cycles against the **unmodified** rule, recorded as a stated literal, plus `08-DECISIONS.md` and `COVERAGE.md`. Changes no production code, deliberately. *(EXECUTED 2026-08-28)*
 
 **Wave 2** *(blocked on wave 1 — criterion 3's "before" number is unobtainable once the rule moves)*
 
-- [ ] 08-02: The cool-off itself — criteria 1, 2, 3-after and 4. Leads with the end-to-end tracer. Fixes `REFUSALS_BEFORE_COOLOFF = 30` and `COOLOFF_SECONDS = 3 * 24 * 60 * 60`. *(PLAN written 2026-08-28, not executed)*
+- [x] 08-02: The cool-off itself — criteria 1, 2, 3-after and 4. Leads with the end-to-end tracer. Fixes `REFUSALS_BEFORE_COOLOFF = 30` and `COOLOFF_SECONDS = 3 * 24 * 60 * 60`. *(EXECUTED 2026-08-28)*
 
 **Wave 3** *(blocked on wave 2)*
 
-- [ ] 08-03: Criterion 5 — it survives a restart, and the rule that discards it is the one already there. Re-derives `STATE_MAX_AGE_SECONDS` to 259200. *(PLAN written 2026-08-28, not executed)*
+- [x] 08-03: Criterion 5 — it survives a restart, and the rule that discards it is the one already there. Re-derives `STATE_MAX_AGE_SECONDS` to 259200. *(EXECUTED 2026-08-28)*
 
 **Wave 4** *(blocked on wave 3)*
 
-- [ ] 08-04: Criterion 6 — M42 registered and observed CAUGHT; the consumer surfaces checked rather than assumed; the six-criterion verdict table. *(PLAN written 2026-08-28, not executed)*
+- [x] 08-04: Criterion 6 — M42 registered and observed CAUGHT; the consumer surfaces checked rather than assumed; the six-criterion verdict table. *(EXECUTED 2026-08-28)*
 
 **Cross-cutting constraints** — each holds across two or more plans, and each is asserted rather than
 assumed:
@@ -141,6 +141,52 @@ assumed:
 - **A recorded one-wave gap:** between waves 2 and 3 the tree holds a three-day cool-off that a
   restart discards after six hours. `08-02` states it before it exists; `08-03` closes it. Nothing is
   deployed mid-phase, so it is a recorded gap rather than a shipped defect.
+
+**CLOSING RECORD — Phase 8 COMPLETE 2026-08-31, and not one criterion was reworded.**
+
+**6 of 6 criteria met; 4 AS WRITTEN, 2 MET IN PART.** Full verdict table with every citation:
+`08-04-SUMMARY.md`. Verification: `08-VERIFICATION.md` (`human_needed`, 2 items, both deployment
+observations — `08-UAT.md`).
+
+| # | Verdict | The half that is not met, where there is one |
+|---|---|---|
+| 1 | **MET AS WRITTEN** | — |
+| 2 | **MET IN PART** | *"exactly once"* is scoped to a **running process**; `due_at` is unpersisted, so a restart costs **one** extra probe. Measured at exactly 1 over 864 simulated cycles, and priced in `08-DECISIONS.md` collision 2 before it was accepted |
+| 3 | **MET AS WRITTEN**, in simulation | Both numbers stated: **125 before, 37 after**, over 30 simulated days. Floors on real requests, not predictions of them |
+| 4 | **MET AS WRITTEN** | — |
+| 5 | **MET IN PART — amended DOWN on 2026-08-31, beside the original** | *"discarded by the existing rule rather than a second one"* was never in doubt (`grep -c` still **2**). *"Survives a restart"* was true only **outside a 6.84% window** when this phase asserted it, because `cli.watch_loop`'s clock lagged wall clock by each check pass's cost. Fixed at the cause (`9ea42fe`); residual re-measured **0.06% mean / 0.13% worst** |
+| 6 | **MET AS WRITTEN** | **M42** registered and observed CAUGHT, registry **38/38**, survivors 0 — with the measured finding recorded beside it that M42's kill set is a **proper subset of M33's**, so it buys localisation and not detection |
+
+**Criterion 5 is the one to read.** The phase's own closing record called it MET, and a code review
+five days later established by measurement that the guarantee had a systematic hole in production at
+the moment that word was written — 6.84% of every cool-off window, on `target`, which sat at **46
+refusals**. The verdict was amended down rather than the finding folded away. *The assertion was not
+wrong about the test; it was wrong about production* — 08-03's restart test was valid and still
+passes, and what nothing covered was the clock its `now` argument stands in for.
+
+**The five cross-cutting constraints were checked by command, not by summary.** `MAX_BACKOFF_SECONDS`
+still 6 h; the staleness grep still exactly **2**; M42 the only new ident with M21–M24 empty and
+`INTENTIONAL GAP` at **8**; no live request (`control check: SKIPPED (--offline)`) and no write to any
+of the three live documents. One honest qualification the verifier raised: the plans' stricter
+*"neither read nor written"* no longer holds phase-wide — the CR-01 investigation **read**
+`served/boty/status.json` to obtain `duration_seconds: 20.43`. The ROADMAP constraint above is about
+**writes** and is intact.
+
+**Gate at close:** `make verify-offline` **EXIT 0** — identity PASS over **242 files**, **920 passed /
+0 skipped** (up from 916 at phase start, +4 gates from the review), mypy clean over 18 source files,
+**38/38 mutations caught, survivors 0**. The verdict line is the **OFFLINE** pass: nothing in it says
+the retailers still work.
+
+**A code review ran after the four plans closed and found 1 Critical + 4 Warnings; all five are
+fixed** (`08-REVIEW.md` and its Resolution section). The review's own CR-01 prescription was
+**measured wrong and not applied** — it would have broken five existing tests — and the correct fix
+is recorded beside it.
+
+**NOT ON THE WIRE.** `boty` is an editable install, so Phase 8 reaches the daemon at the next
+`sudo systemctl restart boty` — **Dan's action, deferred by his decision on 2026-08-31**, neither
+performed nor recommended here. That restart now carries more than this phase: `9ea42fe` also returns
+the loop to its configured cadence rather than ~6.8% slower, so the request rate goes **up** slightly.
+That trade was named and taken, not stumbled into.
 
 ### Phase 9: Out of Lockstep
 
