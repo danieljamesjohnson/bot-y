@@ -45,6 +45,7 @@ from pathlib import Path
 
 import pytest
 
+from boty.config import Config
 from boty.fetch import Blocked, FetchError, is_refusal
 from boty.models import Availability, Health, Result, Watch
 from boty.monitor import CAUSE_UNKNOWN, State, assess_health, run_once
@@ -1922,4 +1923,224 @@ def test_a_cooloff_near_its_probe_does_not_render_as_zero_days() -> None:
     assert "0.0 days" not in reason, (
         "a live wait of one hour rendered as '~0.0 days' — the exact failure the "
         f"decimal place is documented to prevent, one band down: {reason!r}"
+    )
+
+
+# --------------------------------------------------------------------------
+# Criterion 3's BEFORE-number: a simulated day over the fleet that exists
+# --------------------------------------------------------------------------
+
+#: One simulated day, in seconds. The denominator the before-number is a count
+#: over, and the thing that makes it a rate rather than an anecdote.
+_ONE_DAY_OF_SECONDS = 86400
+
+#: 86 400 / 300 = 288, at the fleet's global cadence below. WRITTEN OUT RATHER THAN COMPUTED, on
+#: `_THIRTY_DAYS_OF_CYCLES`'s precedent: the arithmetic is stated in this comment
+#: so a reader checks it once, and a future edit to the cycle length has to
+#: change this number BY HAND — which is the moment somebody notices that the
+#: window a published number is attributed to has moved.
+_ONE_DAY_OF_CYCLES = 288
+
+#: The window criterion 3 names, in seconds. Not derived from anything: it is
+#: the criterion's own number, quoted.
+_WINDOW_SECONDS = 60.0
+
+#: The global `interval_seconds` the fleet table below sits on, and the length
+#: of one simulated cycle. ONE name, read by the cycle step, by the pacer's
+#: default and by the override derivation — so the simulation cannot be running
+#: a different cadence from the one the table claims.
+_FLEET_DEFAULT_INTERVAL = 300
+
+#: THE FLEET, WRITTEN OUT RATHER THAN READ. `config/products.yaml` configures
+#: six retailers; four sit on the 300 s global `interval_seconds` and two carry
+#: `retailer_intervals` overrides. This table is a literal for the same reason
+#: `_CADENCE_AFTER_N_REFUSALS` is one: a number published about a fleet must not
+#: silently re-point itself at a different fleet. A config change has to edit
+#: this table by hand, and the assertion below reddens until it does.
+#:
+#: IT IS ALSO WHAT THE SIMULATION IS BUILT FROM, deliberately: the `Pacer` below
+#: takes its standing intervals from this table rather than from a second literal
+#: beside it. A second copy of the fleet inside one test would only have to
+#: disagree with this one once — the same argument `current_interval` and
+#: `STATE_MAX_AGE_SECONDS` make one module over.
+_FLEET_INTERVALS = {
+    "amazon": 1800,
+    "bestbuy": 300,
+    "gamestop": 900,
+    "nintendo": 300,
+    "target": 300,
+    "walmart": 300,
+}
+
+#: `config/products.yaml`, located from this file rather than from the working
+#: directory — inside `scripts/mutation_check.py`'s sandbox this resolves to the
+#: SANDBOX's copy, which is what makes the fleet assertion a gate there too
+#: (`config` is in `SANDBOX_CONTENTS`).
+_CONFIG = Path(__file__).resolve().parent.parent / "config" / "products.yaml"
+
+
+def _max_in_any_window(times: list[float], span: float) -> int:
+    """The most events falling inside any window of `span` seconds.
+
+    A SLIDING window over the event times, never fixed bins. Bucketing into
+    fixed 60 s bins from t=0 would split a burst that straddles a boundary and
+    report a smaller maximum than actually occurred — a reduction achieved by
+    where the ruler was laid down, which is exactly the failure mode this
+    plan's prohibition names. `times` must be non-decreasing; the caller
+    asserts that separately rather than sorting here, because a simulation that
+    produced out-of-order events has a defect the sort would hide.
+    """
+    largest = 0
+    start = 0
+    for end, t in enumerate(times):
+        while t - times[start] >= span:
+            start += 1
+        largest = max(largest, end - start + 1)
+    return largest
+
+
+def test_the_max_retailers_in_any_sixty_seconds_over_a_day_is_a_stated_number() -> None:
+    """Criterion 3's BEFORE half: what the current rule puts in one window.
+
+    THIS TEST MEASURES; IT DOES NOT GATE ON ITS LITERAL, and this repository's
+    standing rule — every gate is watched red before it is trusted — has a
+    stated exception here rather than a skipped formality. A watched-red gate
+    works by pointing a new assertion at code that is currently wrong, so the
+    failure count is evidence that the assertion has a subject. THIS LITERAL'S
+    SUBJECT IS THE CODE AS IT STANDS. The lockstep is not a defect being fixed
+    in this plan — it is the thing being measured. Writing a deliberately wrong
+    literal and watching `assert ==` reject it would prove that `assert ==`
+    works, and nothing else. THAT IS THE FINDING.
+
+    What carries the weight instead is four things that do have subjects, three
+    of which were watched red on 2026-09-01 with their failure counts recorded
+    in `.planning/phases/09-out-of-lockstep/09-DECISIONS.md`: the DENOMINATOR
+    assertion (a loop that exited early would present a smaller maximum as a
+    shorter day), the FLEET assertion (a config change would re-point the number
+    at a different fleet), the TWO INDEPENDENT TALLIES (a request the simulation
+    made but did not count), and the fact that the literal was TRANSCRIBED from
+    a run rather than reasoned and then written down.
+
+    THE WINDOW MODEL, STATED RATHER THAN LEFT IMPLICIT. `monitor.run_once` asks
+    its due retailers BACK TO BACK inside one pass — `results = [checker(w) for
+    w in watches]`, with no sleep between them — so every request one pass makes
+    is modelled here as falling inside one 60-second window, whatever their
+    order inside it. That is a modelling claim and it carries its measurement:
+    the last published WHOLE-pass figure is `duration_seconds: 20.43` for 13
+    watches across all six retailers, read from `served/boty/status.json` on
+    2026-08-31 by the phase-8 code review and QUOTED here rather than re-read
+    (nothing in this phase reads or writes that file). A tick's due set is a
+    subset of that pass, so a pass is comfortably inside 60 s on that one
+    reading.
+
+    THE RESIDUAL'S DIRECTION, because one reading is a bound and not a
+    guarantee: if a pass ever exceeded 60 s, this model would OVER-count — some
+    of that pass's requests would in truth fall into the next window. So the
+    number below is an UPPER BOUND on the before-number, which is the safe
+    direction for a number this phase must come in under. It cannot flatter the
+    change.
+
+    THE COUNT IS A COUNT OF RETAILERS, NOT OF REQUESTS. `run_once` dispatches
+    one `Result` per WATCH and `record`s once per retailer; criterion 3 asks for
+    "the maximum number of retailers requested", so the unit here is the
+    retailer. The fleet carries 13 watches, so a window holding six retailers
+    holds more than six HTTP requests. Stated because a later reader comparing
+    this against a request count would be comparing two different things.
+
+    THE RESTART ASSUMPTION. Zero restarts across the day. `due_at` is never
+    persisted, so every process starts with all six retailers due at once —
+    which is the t=0 burst this simulation counts. A restart mid-day would add
+    another such burst, not remove one, so restarts cannot make this number
+    smaller.
+    """
+    p = Pacer(
+        default_interval=_FLEET_DEFAULT_INTERVAL,
+        overrides=dict(_FLEET_INTERVALS),
+    )
+    now = 0.0
+    events: list[tuple[float, str]] = []
+    per_retailer: dict[str, int] = dict.fromkeys(_FLEET_INTERVALS, 0)
+
+    for _ in range(_ONE_DAY_OF_CYCLES):
+        for retailer in sorted(_FLEET_INTERVALS):
+            if p.due(retailer, now):
+                events.append((now, retailer))
+                per_retailer[retailer] += 1
+                p.record(retailer, refused=False, now=now)
+        now += float(_FLEET_DEFAULT_INTERVAL)
+
+    times = [t for t, _ in events]
+    max_in_any_60s = _max_in_any_window(times, _WINDOW_SECONDS)
+
+    # 1. THE STATED LITERAL. Transcribed from a run, not reasoned.
+    assert max_in_any_60s == 6, (
+        f"the current rule put {max_in_any_60s} of the six configured retailers "
+        f"({', '.join(sorted(_FLEET_INTERVALS))}) inside a single 60-second "
+        f"window at least once over a simulated day; the recorded before-number "
+        f"for criterion 3 is the literal in this assertion"
+    )
+
+    # 2. THE DENOMINATOR.
+    assert now == float(_ONE_DAY_OF_SECONDS), (
+        f"the simulated clock finished at {now} s, not the {_ONE_DAY_OF_SECONDS} s "
+        f"that are one day — so the maximum above is a maximum over some other "
+        f"window. A run that exited early presents a smaller maximum as a shorter "
+        f"day, which is a reduction achieved by not asking rather than by spreading"
+    )
+
+    # 3. THE FLEET. The literal table must still describe what is configured.
+    cfg = Config.load(_CONFIG)
+    assert {w.retailer for w in cfg.watches} == set(_FLEET_INTERVALS), (
+        f"{_CONFIG} configures watches on {sorted({w.retailer for w in cfg.watches})}, "
+        f"but the number above is about {sorted(_FLEET_INTERVALS)}. A stated number "
+        f"must not outlive the fleet it describes"
+    )
+    assert cfg.retailer_intervals == {
+        r: i for r, i in _FLEET_INTERVALS.items() if i != cfg.interval_seconds
+    }, (
+        f"{_CONFIG} overrides {cfg.retailer_intervals}, but this table's non-default "
+        f"cadences are {({r: i for r, i in _FLEET_INTERVALS.items() if i != cfg.interval_seconds})} "
+        f"against a global interval_seconds of {cfg.interval_seconds}"
+    )
+    assert cfg.interval_seconds == _FLEET_DEFAULT_INTERVAL, (
+        f"{_CONFIG} sets interval_seconds to {cfg.interval_seconds}, but this "
+        f"simulation cycles every {_FLEET_DEFAULT_INTERVAL} s and calls that the "
+        f"global cadence — the number above would be a number about some other loop"
+    )
+    assert all(
+        i == cfg.interval_seconds
+        for r, i in _FLEET_INTERVALS.items()
+        if r not in cfg.retailer_intervals
+    ), (
+        f"a retailer with no override must sit on interval_seconds "
+        f"({cfg.interval_seconds}); this table says {_FLEET_INTERVALS}"
+    )
+
+    # 4. TWO INDEPENDENT TALLIES. The recorded events, and each retailer's own
+    #    count — cross-checked BOTH ways, and then against the cadence
+    #    arithmetic the fleet table implies, which is derived from the config
+    #    rather than from the loop and so is the genuinely independent one: a
+    #    cycle the loop skipped shows up as a shortfall against it.
+    assert len(events) == sum(per_retailer.values()), (
+        f"{len(events)} recorded events against {sum(per_retailer.values())} "
+        f"counted requests — a request was made and not counted, or counted and "
+        f"not made"
+    )
+    for retailer, count in sorted(per_retailer.items()):
+        observed = sum(1 for _, r in events if r == retailer)
+        expected = _ONE_DAY_OF_SECONDS // _FLEET_INTERVALS[retailer]
+        assert observed == count == expected, (
+            f"{retailer} appears {observed} times in the event list, was counted "
+            f"{count} times, and a {_FLEET_INTERVALS[retailer]}-second cadence over "
+            f"{_ONE_DAY_OF_SECONDS} s implies {expected}. All three must agree or "
+            f"the maximum above is a maximum over requests that were not all counted"
+        )
+
+    # 5. EVERY EVENT INSIDE THE WINDOW IT IS ATTRIBUTED TO.
+    assert all(a <= b for a, b in pairwise(times)) and all(
+        0.0 <= t < float(_ONE_DAY_OF_SECONDS) for t in times
+    ), (
+        f"the event times are not non-decreasing inside [0, {_ONE_DAY_OF_SECONDS}); "
+        f"first {times[:3]}, last {times[-3:]} — a maximum is not a measurement if "
+        f"the things counted could fall outside the window they are attributed to"
     )
