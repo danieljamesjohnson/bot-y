@@ -3153,6 +3153,78 @@ live controls in that window. The measurement stands; so does the 403.
 what forgetting that costs** — the fix is not to re-run until the number is
 clean, it is to stack fewer passes.
 
+#### Amended 2026-09-01 (09-05) — BOUNDED, not re-measured: what Phase 9 can and cannot say about this budget
+
+**Read the first word of the heading before the numbers.** Phase 9 (REQ-23, "Out of
+Lockstep") changed the daemon's schedule, and its criterion 4 asks that `boty check`
+*"still completes inside REQ-08's 2-minute budget, re-measured rather than assumed"*.
+**This phase did not re-measure it.** `boty check` was not run, no live retailer request
+was made anywhere in the phase, and `served/boty/status.json` was not written. What is
+recorded below is a **bound built from evidence that already existed**, and the two
+measurements above are not replaced, amended or reinterpreted by it.
+
+**Why the pass was not run, stated rather than left as an omission.** A `boty check` costs
+six live retailer requests and a write to the document the running daemon owns — the two
+things this phase's own constraints forbid, and the two things
+`docs/retailer-evidence.md`'s politeness argument (§ *Phase 3 closing record*, the 403 at
+the foot of the 03.1-04 amendment) says are not spent to make a record look tidier.
+REQ-23's Definition of Done is explicit that the scheduler is proved by offline tests and
+that *the daemon is evidence, never the gate*.
+
+**Instrument (a) — structural, already gated, and narrow.** `boty check` builds a
+**load-only** `Pacer` and **never passes it to `run_once`**; `boty/cli.py`'s `check`
+branch argues all four clauses at the site, clause 3 being *"IT IS NEVER PASSED TO
+`run_once`. `boty check` re-reads every watch by design"*. That is not re-argued here — it
+is gated by named tests in `tests/test_cli_watch.py`:
+
+| Test | What it holds |
+|---|---|
+| `test_both_surfaces_publish_one_cadence_from_one_document` | the pacer document is **byte-unchanged** after a check, and **no watch was dropped** — a pacer that reached `run_once` would have skipped the backed-off one |
+| `test_a_check_publishes_every_watch_and_calls_none_of_them_remembered` | every row publishes `checked: true` against a pacer three refusals deep, which is only possible if no schedule filtered the pass |
+| `test_boty_check_writes_no_pacer_state_at_all` | the check persists no pacer state |
+| `test_a_check_with_no_pacer_state_publishes_the_standing_interval` | a missing document is the standing interval, not an error |
+
+**The claim that instrument follows is narrow and is written narrowly: Phase 9 cannot have
+made `boty check` slower THROUGH THE SCHEDULE, because the schedule is not on that path.**
+It says nothing about any other way a pass could get slower — a retailer answering more
+slowly, a render costing more, a transport changing. Those are not bounded here at all.
+
+**Instrument (b) — observational, quoted rather than re-read.** The last **published**
+whole-pass duration is **`duration_seconds: 20.43`**, at **13 watches across all six
+retailers**, read off `served/boty/status.json` on **2026-08-31** by the phase-8 code
+review and recorded in `.planning/phases/08-stop-knocking/08-VERIFICATION.md` (and
+`08-03-SUMMARY.md`, which uses it to give CR-01 a real magnitude). **It is quoted from
+that record here and was not re-read**, which is why this amendment reads no live file.
+
+Three things that figure is **not**, each stated so a later reader does not promote it:
+
+- **It is one reading of one live pass, not a distribution.** The 03.1-04 amendment above
+  is the same caution measured: the same configuration published 45.98, 44.81, 45.09 and
+  42.84 s within twenty minutes, and 61.4 s on a day a single watch timed out. A single
+  reading of this quantity has been observed to move by a factor of three.
+- **It is a reading of a tree that is not this one.** It predates Phase 8's cool-off work
+  and every Phase 9 commit. A number taken from a different code path on a different tree
+  is evidence about *that* reading.
+- **It is not a guarantee about any future pass**, which is exactly how `09-01` used it
+  when it depended on the same figure for its window model, and how the tick's floor
+  argument in `09-02` used it.
+
+Against REQ-08's **120 s** budget, 20.43 s sits at roughly **17 %** — consistent with the
+35–61 s and the 44.81 s figures above, all of them well inside the budget, and none of
+them taken after this phase.
+
+**Verdict: MET IN PART**, and the two halves stated in one sentence: *the half that holds
+is that no path Phase 9 touched reaches `boty check`, gated by the four named tests above;
+the half that is missing is a fresh timed pass on this tree, which this phase declines to
+spend.* The criterion asked for a re-measurement; a bound is not one, and calling this MET
+would be recording a check nobody ran.
+
+**What would close it, left for whoever takes it.** One `boty check` after the deferred
+daemon restart — the restart is the maintainer's call, deferred by his decision on
+2026-08-31 and neither performed nor recommended here — whose `duration_seconds` **the
+pass publishes itself**, so closing this needs no hand-timing and no new instrument. Until
+then this cell reads MET IN PART and the missing half is named rather than rounded away.
+
 ## Phase 3.1 closing record (2026-08-03) — two conclusions revised, no observation retracted
 
 The Phase 3 closing record above is left exactly as it was written. This one sits
