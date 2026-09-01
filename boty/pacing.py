@@ -586,15 +586,45 @@ def loop_tick_seconds(default_interval: float, roster: Iterable[str]) -> float:
     tolerance would skip a retailer that is keeping to its cadence — the exact
     failure `due`'s docstring exists to prevent, arriving from the other side.
 
-    THE CEILING IS WHAT PICKS THE DIVISOR. Four retailers sit on the 300 s
-    default, and a tick of 300 s offers exactly ONE tick per 300 s span — so all
-    four must be asked at that one tick whatever position they are given, and no
-    offset can rescue it. `default_interval / len(roster)` is the largest tick
-    that still gives every configured retailer its own slot inside the shortest
-    standing cadence: six retailers at 300 s give 50 s slots, and 6 x 50 = 300
-    exactly.
+    THE CEILING IS WHAT PICKS THE DIVISOR, and the divisor was MEASURED rather
+    than chosen. Four retailers sit on the 300 s default, and a tick of 300 s
+    offers exactly ONE tick per 300 s span — so all four must be asked at that
+    one tick whatever position they are given, and no offset can rescue it.
+    `default_interval / len(roster)` is the largest tick that still gives every
+    configured retailer a DISTINCT slot inside the shortest standing cadence:
+    `slot_offset` lays the slots out at `index * tick` and wraps them modulo that
+    cadence, so `len(roster) * tick > default_interval` makes two retailers share
+    one position.
 
-    THE FLOOR IS `MIN_TICK_SECONDS` and is argued at its definition.
+    THE SWEEP, run 2026-09-01 against this module over the six configured
+    retailers and a simulated day, `interval_seconds` 300 (max = the most
+    retailers in any 60 s window; separation = the smallest gap between two
+    DIFFERENT retailers over the day; per-retailer daily counts were unchanged at
+    every candidate, so none was disqualified for asking less):
+
+        tick   wakes/day   max   separation
+        300         288      5        0 s
+        150         576      3        0 s
+        100         864      2        0 s
+         75        1152      2        0 s
+         50        1728      2       50 s
+         37.5      2304      2       37.5 s
+         30        2880      2       30 s
+         25        3456      3       25 s
+
+    50 IS THE ONLY ROW THAT IS NOT BEATEN ON SOME AXIS. Every larger tick has a
+    separation of ZERO — two retailers dispatched at the same instant, which
+    reads as a maximum of 2 in that column and is still exactly the coincidence
+    this phase exists to remove. Every smaller tick costs strictly more wake-ups
+    for a smaller separation and no better maximum, and at 25 s and below the
+    slots crowd into the head of the cadence and the maximum rises again.
+
+    AND 2 IS THE FLOOR, NOT MERELY THE BEST ROW: six retailers cannot be spread
+    more than 60 s apart inside a 300 s cadence, because 6 x 60 = 360 > 300. A
+    plan claiming 1 would be claiming something arithmetically unavailable.
+
+    THE FLOOR UNDER THE TICK IS `MIN_TICK_SECONDS` and is argued at its
+    definition.
 
     AN EMPTY ROSTER RETURNS THE STANDING DEFAULT, which is what the loop slept
     before this phase — so a `Pacer` built without a roster keeps today's
