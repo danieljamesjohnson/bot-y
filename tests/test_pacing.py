@@ -2761,3 +2761,228 @@ def test_two_retailers_at_one_cadence_are_separated_by_the_stated_number_of_seco
         f"started doing something the {len(_FLEET_INTERVALS)} defaulted "
         f"construction sites in this file were not told about"
     )
+
+
+# --------------------------------------------------------------------------
+# Criterion 2: independence, asserted in BOTH directions
+# --------------------------------------------------------------------------
+#
+# Criterion 2, verbatim: "Each retailer's next-attempt time is INDEPENDENT:
+# changing one retailer's interval or backoff moves that retailer's schedule and
+# no other's, asserted in both directions."
+#
+# TWO TESTS AND NOT ONE. The interval direction and the backoff direction fail
+# for different reasons — one is `_standing_interval` and `slot_offset`, the
+# other is `current_interval` and the refusal arm — and a combined test would
+# name the wrong one in its failure message. The cost of the second test is a
+# duplicated fixture; the cost of combining them is a red that points at the
+# wrong half of the mechanism.
+#
+# EACH ASSERTS THE NEGATIVE HALF EXPLICITLY, FIELD BY FIELD. "Changing X moved
+# X" is compatible with a change that moved everything, so every untouched
+# retailer's whole recorded state is captured before the change and compared
+# after it. Inferring independence from the positive half alone is the failure
+# mode this criterion names in its own words.
+#
+# WHY INDEPENDENCE IS AVAILABLE TO ASSERT AT ALL, in one sentence: `record`
+# steps each retailer from its OWN previous due time rather than from the
+# cycle's clock, so nothing one retailer does can re-anchor another.
+#
+# WHY THESE ARE NOT `test_an_override_does_not_affect_other_retailers` AGAIN.
+# That test (above, unchanged) builds a DEFAULTED pacer, overrides `amazon`, and
+# asserts that `walmart` is still due every cycle. Three things it does not do,
+# and each is why a second test earns its place rather than raising the count:
+# it asserts DUENESS at a moment rather than the recorded NEXT-ATTEMPT TIME; it
+# never runs the same scenario WITHOUT the override, so it cannot tell "walmart
+# was unaffected" from "walmart would have looked like that either way"; and it
+# builds the construction the daemon does not run. It is kept as it is — it
+# guards the coverage half, which these do not.
+
+#: The wake sequence both directions are stepped by. Long enough that every
+#: retailer in the fleet has been dispatched several times (the 1800 s one needs
+#: 36 wakes at a 50 s tick), short enough to stay a unit test.
+_INDEPENDENCE_WAKES = 400
+_INDEPENDENCE_SEED = 20260904
+
+
+def _shipping_pacer(overrides: dict[str, int]) -> tuple[Pacer, tuple[str, ...]]:
+    """A `Pacer` built the way `cli.watch_loop` builds one, over the real fleet.
+
+    The ROSTER is the configured retailers and the TICK is derived from it, so
+    changing an override cannot change either — which is what makes the
+    comparison below a comparison of one variable.
+    """
+    roster = tuple(sorted(_FLEET_INTERVALS))
+    return (
+        Pacer(
+            default_interval=_FLEET_DEFAULT_INTERVAL,
+            overrides=dict(overrides),
+            roster=roster,
+            tick=loop_tick_seconds(_FLEET_DEFAULT_INTERVAL, roster),
+        ),
+        roster,
+    )
+
+
+def _trajectory(
+    p: Pacer, roster: tuple[str, ...], *, refusing: frozenset[str]
+) -> dict[str, list[tuple[float, float, int, float]]]:
+    """Every retailer's recorded state after every wake — the WHOLE run, not its end.
+
+    ALL FOUR FIELDS of `_RetailerState` and not just `due_at`: criterion 2 is
+    about the next-attempt time, but a change that left `due_at` alone while
+    moving another retailer's `interval` or `refusals` would move its next
+    attempt one cycle later. Comparing the whole record catches it now rather
+    than then.
+
+    AND EVERY WAKE, NOT THE LAST ONE, WHICH WAS A MEASURED CORRECTION RATHER
+    THAN A PRECAUTION. This helper first captured the state once, at the end of
+    the run. Perturbing `record`'s refusal arm to increment EVERY retailer's
+    count — a fleet-wide refusal counter, which is precisely the leak the
+    negative half below exists to catch — left both tests GREEN: the untouched
+    retailers are dispatched often enough that their own next `record(refused=
+    False)` resets the count to 0 before the run ends, so the defect was live
+    for most of the day and invisible at the moment it was read. An end-state
+    comparison is blind to anything that heals. The trajectory is not.
+
+    The wake sequence is SEEDED IDENTICALLY for every call, so two runs differ
+    only by the argument that was changed. The jitter is the loop's own band;
+    the assertions read the schedule, never these wake times.
+    """
+    rng = random.Random(_INDEPENDENCE_SEED)
+    tick = loop_tick_seconds(_FLEET_DEFAULT_INTERVAL, roster)
+    now = 0.0
+    seen: dict[str, list[tuple[float, float, int, float]]] = {r: [] for r in roster}
+    for _ in range(_INDEPENDENCE_WAKES):
+        for retailer in roster:
+            if p.due(retailer, now):
+                p.record(retailer, refused=retailer in refusing, now=now)
+        for retailer in roster:
+            st = p._for(retailer)
+            seen[retailer].append((st.due_at, st.interval, st.refusals, st.refused_at))
+        now += tick * rng.uniform(0.85, 1.15)
+    return seen
+
+
+def _first_divergence(
+    left: list[tuple[float, float, int, float]], right: list[tuple[float, float, int, float]]
+) -> int | None:
+    """The wake index where two trajectories first differ, or `None` if they never do.
+
+    Reported rather than the whole list, because a 400-wake diff in a failure
+    message is a wall of numbers and the useful fact is WHEN a retailer moved:
+    the first wake is the one the cause is at.
+    """
+    for i, (a, b) in enumerate(zip(left, right, strict=True)):
+        if a != b:
+            return i
+    return None
+
+
+def test_changing_one_retailers_interval_moves_that_retailers_schedule_and_no_other() -> None:
+    """Criterion 2, the interval direction — positive half AND negative half.
+
+    `gamestop` carries a 900 s override in `config/products.yaml`; the second run
+    below moves it to 600 s and changes nothing else. Its own next-attempt time
+    must move, and the other five retailers' recorded state must be EQUAL to
+    what it was, field by field.
+
+    600 rather than an arbitrary number, and the reason is worth stating:
+    `slot_offset` lays gamestop's position at `index * tick` modulo its standing
+    cadence, and 100 s is inside both 900 and 600, so its BIRTH POSITION is
+    identical under both intervals. The only thing this test changes is the
+    advance — which is the thing criterion 2 is about.
+
+    THE NEGATIVE HALF IS THE POINT. See this section's header for why it is not
+    inferred from the positive one, and for why this is not a second copy of
+    `test_an_override_does_not_affect_other_retailers`.
+    """
+    changed_retailer = "gamestop"
+    assert _FLEET_INTERVALS[changed_retailer] == 900, (
+        f"this test moves {changed_retailer} from 900 s to 600 s and the fleet "
+        f"table now says {_FLEET_INTERVALS[changed_retailer]} s — the comparison "
+        f"below would be between two intervals neither of which is configured"
+    )
+
+    base, roster = _shipping_pacer(_FLEET_INTERVALS)
+    before = _trajectory(base, roster, refusing=frozenset())
+
+    moved, _ = _shipping_pacer({**_FLEET_INTERVALS, changed_retailer: 600})
+    after = _trajectory(moved, roster, refusing=frozenset())
+
+    # THE POSITIVE HALF: the retailer whose interval changed moved.
+    assert _first_divergence(before[changed_retailer], after[changed_retailer]) is not None, (
+        f"{changed_retailer}'s interval was changed from "
+        f"{_FLEET_INTERVALS[changed_retailer]} s to 600 s and its schedule did "
+        f"not move at any of the {_INDEPENDENCE_WAKES} wakes — its next attempt "
+        f"is still recorded at {after[changed_retailer][-1][0]} s. The configured "
+        f"cadence is not reaching the schedule at all"
+    )
+
+    # THE NEGATIVE HALF, FIELD BY FIELD, AT EVERY WAKE, FOR EVERY RETAILER THAT
+    # WAS NOT TOUCHED.
+    for retailer in roster:
+        if retailer == changed_retailer:
+            continue
+        at = _first_divergence(before[retailer], after[retailer])
+        assert at is None, (
+            f"changing {changed_retailer}'s interval moved {retailer} as well: at "
+            f"wake {at} its (due_at, interval, refusals, refused_at) went "
+            f"{before[retailer][at]} -> {after[retailer][at]} over the same wake "
+            f"sequence. Each retailer's next attempt is stepped from its OWN "
+            f"previous due time, so a change to one may not re-anchor another"
+        )
+
+
+def test_driving_one_retailer_into_backoff_moves_that_retailers_schedule_and_no_other() -> None:
+    """Criterion 2, the backoff direction — positive half AND negative half.
+
+    The same fleet, the same wake sequence, and one retailer refusing every time
+    it is asked. Its next attempt must be pushed out; nobody else's recorded
+    state may move by so much as a field.
+
+    A SEPARATE TEST FROM THE INTERVAL DIRECTION, deliberately. This one fails
+    when `record`'s refusal arm or `current_interval` is wrong; the other fails
+    when `_standing_interval` or `slot_offset` is wrong. One test carrying both
+    would report whichever assertion happened to be written first, which is the
+    least useful thing a failure message can do.
+
+    THIS IS ALSO THE DIRECTION WITH A LIVE STAKE. A refusal is the one event that
+    lengthens a wait, so a mechanism that let a backoff leak into the fleet would
+    quietly stop asking retailers that had never refused us — coverage lost to a
+    penalty they did not earn, which is the failure this project exists to
+    notice rather than commit.
+    """
+    refused_retailer = "gamestop"
+
+    base, roster = _shipping_pacer(_FLEET_INTERVALS)
+    calm = _trajectory(base, roster, refusing=frozenset())
+
+    backed_off, _ = _shipping_pacer(_FLEET_INTERVALS)
+    penalised = _trajectory(backed_off, roster, refusing=frozenset({refused_retailer}))
+
+    # THE POSITIVE HALF: the refusing retailer's next attempt was pushed OUT.
+    assert penalised[refused_retailer][-1][0] > calm[refused_retailer][-1][0], (
+        f"{refused_retailer} refused us at every dispatch and its next attempt is "
+        f"recorded at {penalised[refused_retailer][-1][0]} s against the "
+        f"{calm[refused_retailer][-1][0]} s of the run where it answered — a "
+        f"backoff that does not push the next attempt out is not a backoff"
+    )
+    assert penalised[refused_retailer][-1][2] > 0, (
+        f"{refused_retailer} refused at every dispatch and its recorded refusal "
+        f"count is {penalised[refused_retailer][-1][2]} — the run did not "
+        f"exercise the arm this test is about"
+    )
+
+    # THE NEGATIVE HALF, FIELD BY FIELD, AT EVERY WAKE, FOR EVERY RETAILER THAT
+    # ANSWERED.
+    for retailer in roster:
+        if retailer == refused_retailer:
+            continue
+        at = _first_divergence(calm[retailer], penalised[retailer])
+        assert at is None, (
+            f"{refused_retailer}'s backoff moved {retailer} as well: at wake {at} "
+            f"its (due_at, interval, refusals, refused_at) went {calm[retailer][at]} "
+            f"-> {penalised[retailer][at]} over the same wake sequence. A penalty "
+            f"one retailer earned may not be served to a retailer that answered"
+        )
