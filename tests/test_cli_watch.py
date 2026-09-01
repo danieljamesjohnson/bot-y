@@ -825,19 +825,32 @@ def test_a_retailer_in_cooloff_publishes_the_days_scale_cadence_it_is_actually_o
     259200.0 and never `COOLOFF_SECONDS`, so the assertion is not a re-derivation
     of the constant it is checking.
     """
-    from boty.pacing import REFUSALS_BEFORE_COOLOFF, Pacer
+    from boty.pacing import REFUSALS_BEFORE_COOLOFF, Pacer, loop_tick_seconds
 
     config = _check_config(tmp_path)
     cfg = Config.load(config)
 
-    # Built exactly as `watch_loop` builds one.
+    # Built exactly as `watch_loop` builds one — INCLUDING the roster and the
+    # tick REQ-23 added on 2026-09-01. A pacer missing them is a valid
+    # construction and not the SHIPPING one, and a cross-surface test that
+    # asserted the published cadence against a schedule the daemon does not run
+    # would be the "green defaulted site" `09-DECISIONS.md` names.
+    roster = tuple(sorted({w.retailer for w in cfg.watches}))
     pacer = Pacer(
         default_interval=cfg.interval_seconds,
         overrides=dict(cfg.retailer_intervals),
         state_path=cfg.pacer_state_path,
+        roster=roster,
+        tick=loop_tick_seconds(cfg.interval_seconds, roster),
     )
-    for _ in range(REFUSALS_BEFORE_COOLOFF):
+    for _ in range(REFUSALS_BEFORE_COOLOFF - 1):
         pacer.record("gamestop", refused=True, now=0.0)
+    # Read between the second-to-last refusal and the last one, because it is the
+    # LAST refusal — the one that crosses `REFUSALS_BEFORE_COOLOFF` — whose wait
+    # the assertion at the foot of this test is about. The cycle below asks
+    # nobody, which is the point of it, so nothing moves the schedule in between.
+    before_the_crossing = pacer._for("gamestop").due_at
+    pacer.record("gamestop", refused=True, now=0.0)
 
     cli.watch_cycle(
         cfg,
@@ -866,7 +879,16 @@ def test_a_retailer_in_cooloff_publishes_the_days_scale_cadence_it_is_actually_o
 
     # The schedule and the published number pinned to EACH OTHER rather than
     # separately, so neither can move without the other.
-    assert pacer._for("gamestop").due_at == 259200.0
+    #
+    # THE ANCHOR MOVED ON 2026-09-01 AND THE PINNING DID NOT — REQ-23. This read
+    # `== 259200.0` against a `now` frozen at 0.0; `record` now steps from the
+    # retailer's own previous due time, so at a frozen clock the thirty refusals
+    # accumulate and the reading was 793800.0. The claim is unchanged and is
+    # re-pointed at the increment: the cool-off's DURATION is what reaches the
+    # schedule, and it is the same days-scale number the dashboard was told.
+    # `skipped_reason` and `current_interval` are untouched by this repair, which
+    # is the signal `09-DECISIONS.md` § *Collision 3* says to watch for.
+    assert pacer._for("gamestop").due_at - before_the_crossing == 259200.0
 
 
 # --------------------------------------------------------------------------

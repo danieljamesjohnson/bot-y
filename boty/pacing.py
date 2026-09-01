@@ -630,7 +630,7 @@ def loop_tick_seconds(default_interval: float, roster: Iterable[str]) -> float:
     before this phase — so a `Pacer` built without a roster keeps today's
     tolerance rather than acquiring a schedule nobody configured.
     """
-    names = {r for r in roster}
+    names = set(roster)
     if not names:
         return default_interval
     return max(MIN_TICK_SECONDS, default_interval / len(names))

@@ -222,12 +222,23 @@ def test_the_backoff_is_capped_so_a_monitor_does_not_quietly_stop_monitoring() -
 
     The name is kept deliberately, because it is still true and because
     `git log -S` reaches this test's history through it.
+
+    THE ANCHOR MOVED ON 2026-09-01 AND THE CLAIM DID NOT — REQ-23. The subtraction
+    below read `p._for("amazon").due_at - now`. `record` no longer schedules from
+    the cycle's clock; it steps from the retailer's own previous due time, so
+    `due_at - now` at a frozen `now` is the SUM of every wait this loop produced
+    rather than the last one (measured here: 534600.0 against the 21600 this line
+    expected). The wait itself is untouched — `current_interval` is byte-unchanged
+    in that phase — so this is a re-pointed assertion and not a withdrawn claim:
+    the same number, read from the anchor the schedule now uses.
     """
     p = Pacer(default_interval=300)
     now = 0.0
-    for _ in range(REFUSALS_BEFORE_COOLOFF - 1):
+    for _ in range(REFUSALS_BEFORE_COOLOFF - 2):
         p.record("amazon", refused=True, now=now)
-    assert p._for("amazon").due_at - now == MAX_BACKOFF_SECONDS
+    previous = p._for("amazon").due_at
+    p.record("amazon", refused=True, now=now)
+    assert p._for("amazon").due_at - previous == MAX_BACKOFF_SECONDS
     assert MAX_BACKOFF_SECONDS <= 6 * 60 * 60, "a cap beyond a few hours is not a monitor"
 
 
@@ -404,13 +415,22 @@ def test_a_refusal_never_shortens_the_wait_however_long_the_standing_interval() 
 def test_one_good_read_clears_the_backoff_completely() -> None:
     """Not a decay — a reset. The retailer is answering; there is nothing left
     to back off from, and creeping back over hours would keep a working
-    retailer under-polled for no reason."""
+    retailer under-polled for no reason.
+
+    THE ANCHOR MOVED ON 2026-09-01 AND THE RESET DID NOT — REQ-23. The second
+    assertion read `due_at == 300`; at a frozen `now` the grid advance had it at
+    18900.0, which is the five refusals' waits accumulated and then one standing
+    interval added. Re-pointed at the increment, the claim is the one this test
+    was always making: after a good read the next attempt is ONE standing interval
+    on, not a fraction of the backoff still being paid off.
+    """
     p = Pacer(default_interval=300)
     for _ in range(5):
         p.record("amazon", refused=True, now=0.0)
+    previous = p._for("amazon").due_at
     p.record("amazon", refused=False, now=0.0)
     assert p._for("amazon").refusals == 0
-    assert p._for("amazon").due_at == 300
+    assert p._for("amazon").due_at - previous == 300
 
 
 def test_a_parse_failure_does_not_trigger_backoff() -> None:
@@ -434,17 +454,67 @@ def test_a_parse_failure_does_not_trigger_backoff() -> None:
 def test_a_retailer_at_the_default_cadence_is_due_every_cycle() -> None:
     """The regression that would make this change quietly halve coverage.
 
-    The loop sleeps `interval` WITH jitter, so a strict `now >= due_at` skips a
-    default-cadence retailer roughly half the time — for no reason, since this
-    class exists to stretch intervals beyond the loop's, never to drop cycles
-    from a retailer keeping to it.
+    THE UNIT WENT WRONG ON 2026-09-01 AND THE FEAR DID NOT — REQ-23, and this is
+    the reversal `09-DECISIONS.md` § *Test collision A* fixed the shape of before
+    any code moved. The withdrawn assertion, in full:
+
+        for cycle in range(20):
+            assert p.due("walmart", now), f"walmart not due at cycle {cycle} (t={now})"
+            p.record("walmart", refused=False, now=now)
+            now += 300 * 0.86  # a short-jitter cycle, the adversarial case
+
+    and the docstring called what it guards *"the regression that would make this
+    change quietly halve coverage"*.
+
+    WHAT OVERRULED IT. `cli.watch_loop` no longer sleeps the standing interval; it
+    sleeps a tick a sixth of it, so a retailer at the default cadence is due once
+    per CADENCE and not once per WAKE. Measured against the mechanism the same
+    day: walmart was not due at cycle 4 (t=1032.0), because its grid points are
+    300 s apart while these cycles are 258 s apart. BEING DUE EVERY WAKE IS NOW
+    THE DEFECT the withdrawn form would have asserted into place — at a 50 s tick
+    it would mean asking a 300 s retailer six times per cadence.
+
+    WHAT SURVIVES IS THE FEAR, AND IT IS THE HALF THAT WAS EVER LOAD-BEARING: a
+    default-cadence retailer must not be quietly asked less often than it is
+    configured for. That is now asserted as a COUNT over a fixed window rather
+    than as a predicate per cycle — the same guarantee in the unit the loop
+    actually runs in. `due`'s grace still exists and is still half the loop's
+    sleep; only which sleep that is has changed.
+
+    THE NAME IS KEPT so `git log -S` still reaches this test's history.
     """
-    p = Pacer(default_interval=300)
+    tick = loop_tick_seconds(300, ("bestbuy", "nintendo", "target", "walmart"))
+    p = Pacer(
+        default_interval=300,
+        roster=("bestbuy", "nintendo", "target", "walmart"),
+        tick=tick,
+    )
     now = 0.0
-    for cycle in range(20):
-        assert p.due("walmart", now), f"walmart not due at cycle {cycle} (t={now})"
-        p.record("walmart", refused=False, now=now)
-        now += 300 * 0.86  # a short-jitter cycle, the adversarial case
+    asked = 0
+    # A SHORT-JITTER WAKE EVERY TIME — the adversarial case the withdrawn form
+    # named, kept verbatim in its new unit: every sleep comes up 14% short, which
+    # is the direction that could make a retailer LOOK never-due if the grace
+    # were sized against the wrong sleep.
+    while now < float(_ONE_DAY_OF_SECONDS):
+        if p.due("walmart", now):
+            # Counted at the grid point being served rather than at the wake that
+            # serves it, for the reason the tracer states at length: `due`'s grace
+            # can dispatch the first grid point of day two inside the last half
+            # tick of day one, so a count by wake is 288 or 289 depending on where
+            # the final wake lands and a count by grid point is exactly 288.
+            if p._for("walmart").due_at < float(_ONE_DAY_OF_SECONDS):
+                asked += 1
+            p.record("walmart", refused=False, now=now)
+        now += tick * 0.86
+
+    expected = _ONE_DAY_OF_SECONDS // 300
+    assert asked == expected, (
+        f"walmart was asked {asked} times over a day of short-jitter wakes, "
+        f"against the {expected} a 300 s cadence implies. Fewer is the regression "
+        f"this test has always guarded — a retailer quietly dropped from cycles it "
+        f"was keeping to — and more would be the new one: a tick shorter than the "
+        f"cadence asking a retailer several times per cadence"
+    )
 
 
 def test_an_overridden_retailer_is_asked_less_often() -> None:
@@ -708,20 +778,35 @@ def test_the_backoff_schedule_is_exactly_the_schedule_it_was(
     `current_interval`'s return value. A test that asked the accessor what the
     schedule should be would pass for an accessor and a schedule that had drifted
     apart together, which is the one failure this section exists to detect.
+
+    THE ANCHOR MOVED ON 2026-09-01 AND THE SCHEDULE DID NOT — REQ-23, and this
+    test is the one that has to say so most carefully, because its own name is the
+    claim. Both assertions read `== now + seconds` against a frozen `now`. REQ-23
+    makes `record` step from the retailer's own previous due time rather than from
+    the cycle's clock, so at a frozen clock the second refusal landed at 1800.0
+    where this line expected 1200.0 — not a longer wait, but the same 1200 s wait
+    measured from a different place. The waits themselves are the literals in
+    `_CADENCE_AFTER_N_REFUSALS` and they are unchanged, which is exactly what the
+    re-pointed form below still asserts: each refusal's INCREMENT is the schedule
+    it always was. Nothing about the backoff's depth, its multiplier or its cap is
+    weakened here; only where the tape measure is held.
     """
     p = Pacer(default_interval=interval)
     now = 0.0
 
     for refusals, seconds in enumerate(expected[1:], start=1):
+        previous = p._for("amazon").due_at
         p.record("amazon", refused=True, now=now)
-        assert p._for("amazon").due_at == now + seconds, (
-            f"refusal {refusals} scheduled the next attempt at "
-            f"{p._for('amazon').due_at - now}s, not {seconds}s — the fetch "
-            f"schedule moved, and nothing in REQ-21 is allowed to move it"
+        assert p._for("amazon").due_at == previous + seconds, (
+            f"refusal {refusals} scheduled the next attempt "
+            f"{p._for('amazon').due_at - previous}s past the previous one, not "
+            f"{seconds}s — the fetch schedule moved, and nothing in REQ-21 or "
+            f"REQ-23 is allowed to move it"
         )
 
+    previous = p._for("amazon").due_at
     p.record("amazon", refused=False, now=now)
-    assert p._for("amazon").due_at == now + interval, (
+    assert p._for("amazon").due_at == previous + interval, (
         "a retailer that answered is asked again at its standing interval"
     )
 
@@ -886,6 +971,15 @@ def test_a_retailer_that_answers_during_its_probe_is_back_on_its_standing_interv
     its three days — the count saying "recovered" and the schedule saying
     "cooling off", which is the two-surfaces-disagreeing defect this module keeps
     to one expression to prevent.
+
+    THE THIRD ONE'S ANCHOR MOVED ON 2026-09-01 AND ITS CLAIM DID NOT — REQ-23. It
+    read `due_at == 1800.0`; at a frozen `now` the grid advance had it at
+    847800.0, which is thirty refusals' waits accumulated and then one standing
+    interval added. The distinction this assertion exists to hold is that the
+    retailer is asked again ONE STANDING INTERVAL after its last scheduled
+    attempt rather than after the rest of its cool-off, and the re-pointed form
+    says exactly that. The cool-off's DURATION is asserted two lines above,
+    against the hand-written 259200.0, and is untouched.
     """
     p = Pacer(default_interval=300, overrides={"amazon": 1800})
     for _ in range(REFUSALS_BEFORE_COOLOFF):
@@ -895,11 +989,12 @@ def test_a_retailer_that_answers_during_its_probe_is_back_on_its_standing_interv
         "recovery from the cap and not from a cool-off"
     )
 
+    previous = p._for("amazon").due_at
     p.record("amazon", refused=False, now=0.0)
 
     assert p._for("amazon").refusals == 0
     assert p.current_interval("amazon") == 1800.0
-    assert p._for("amazon").due_at == 1800.0
+    assert p._for("amazon").due_at - previous == 1800.0
 
 
 # --------------------------------------------------------------------------
@@ -1004,24 +1099,79 @@ def test_the_restored_pacer_starts_its_schedule_from_zero(tmp_path: Path) -> Non
     `cli.watch_loop` drives this class with a synthetic clock starting at 0.0 in
     every process, so a persisted `due_at` is a number with no referent: it
     either fires immediately or blocks the retailer for the age of the previous
-    process. Leaving it at 0.0 also KEEPS the withdrawn docstring's concession —
-    a restart still tries once at full rate.
+    process.
+
+    THAT SENTENCE IS UNTOUCHED BY REQ-23 AND IS IN FACT WHY THE REPAIR BELOW IS
+    AVAILABLE AT ALL. Nothing in that phase persists a next-attempt time; the
+    starting position is DERIVED from the retailer's name and the configured
+    roster, in this process, from config. The docstring's argument gets stronger:
+    "a number with no referent" is the case for deriving the starting position,
+    not merely for leaving it at zero.
+
+    TWO SENTENCES ARE WITHDRAWN, 2026-09-01, quoted in full before they go. From
+    this docstring:
+
+        Leaving it at 0.0 also KEEPS the withdrawn docstring's concession — a
+        restart still tries once at full rate.
+
+    and from the assertion below:
+
+        assert second.due("amazon", 0.0), "a restart must still try once, immediately"
+
+    WHAT OVERRULED THEM: `09-DECISIONS.md` § *Collision 2*. A restart now resets
+    the schedule to the retailer's own OFFSET rather than to 0.0, so each retailer
+    is re-tested once within one standing interval instead of immediately — at
+    most 300 s for the default group, at most 1800 s for amazon. Nothing is
+    re-tested less often. The compensating fact recorded beside it: a flapping
+    unit under `Restart=` used to re-probe every retailer at full rate on every
+    restart, and now does not.
+
+    RE-POINTED AT THE OFFSET, AND ONLY THE OFFSET, which is a STRICTLY STRONGER
+    claim than `== 0.0` — 0.0 is also what a truncated or hostile document
+    produces, so the old form could not tell a derived schedule from a lost one.
+    The pacer here is built with a roster so the offset is non-zero: under the
+    defaulted construction the assertion would read 0.0 == 0.0 and pass without a
+    subject, which is the shape of a test that cannot fail.
     """
     path = tmp_path / "pacer-state.json"
-    first = _pacer(path)
+    roster = ("amazon", "bestbuy", "gamestop", "nintendo", "target", "walmart")
+    tick = loop_tick_seconds(300, roster)
+
+    def restored() -> Pacer:
+        return Pacer(default_interval=300, state_path=path, roster=roster, tick=tick)
+
+    first = restored()
     for _ in range(5):
-        first.record("amazon", refused=True, now=0.0)
-    assert first._for("amazon").due_at > 0, "the writing pacer really did have a schedule"
+        first.record("walmart", refused=True, now=0.0)
+    assert first._for("walmart").due_at > 0, "the writing pacer really did have a schedule"
     first.save(set())
 
-    second = _pacer(path)
+    second = restored()
     second.load()
 
-    assert second._for("amazon").due_at == 0.0, (
+    # walmart AND NOT amazon, because amazon sorts first in this roster and its
+    # offset is 0.0 — against which `== 0.0` and `== slot_offset(...)` are the
+    # same assertion and neither has a subject.
+    offset = slot_offset("walmart", roster, tick, 300)
+    assert offset > 0.0, "the fixture has to have an offset before it can assert one"
+    assert second._for("walmart").due_at == offset, (
         "a due_at came back from disk. It was measured against a clock that no "
         "longer exists, so it is not a schedule — it is an accident"
     )
-    assert second.due("amazon", 0.0), "a restart must still try once, immediately"
+    assert second._for("walmart").due_at != first._for("walmart").due_at, (
+        "the restored schedule is the writing process's schedule — the number "
+        "this process computed and the number the last one left behind must not "
+        "be the same number by accident"
+    )
+    assert not second.due("walmart", 0.0), (
+        "a restart asked immediately. That was the concession withdrawn on "
+        "2026-09-01: a restart re-tests each retailer within one standing "
+        "interval, at its own position, not at t=0 alongside every other retailer"
+    )
+    assert second.due("walmart", 300.0), (
+        "a restart must still try once WITHIN ONE STANDING INTERVAL — later is "
+        "the price collision 2 named, and never is not on the table"
+    )
 
 
 def test_the_restored_count_is_load_bearing_on_the_next_wait(tmp_path: Path) -> None:
@@ -1930,23 +2080,60 @@ def test_a_cooloff_near_its_probe_does_not_render_as_zero_days() -> None:
 
 
 # --------------------------------------------------------------------------
-# Criterion 3's BEFORE-number: a simulated day over the fleet that exists
+# Criterion 3: a simulated day over the fleet that exists — before, and after
 # --------------------------------------------------------------------------
 
-#: One simulated day, in seconds. The denominator the before-number is a count
-#: over, and the thing that makes it a rate rather than an anecdote.
+#: One simulated day, in seconds. The denominator both numbers are counts over,
+#: and the thing that makes them rates rather than anecdotes. UNCHANGED by
+#: REQ-23: the day is the same day, which is what makes the two comparable.
 _ONE_DAY_OF_SECONDS = 86400
 
-#: 86 400 / 300 = 288, at the fleet's global cadence below. WRITTEN OUT RATHER THAN COMPUTED, on
-#: `_THIRTY_DAYS_OF_CYCLES`'s precedent: the arithmetic is stated in this comment
-#: so a reader checks it once, and a future edit to the cycle length has to
-#: change this number BY HAND — which is the moment somebody notices that the
-#: window a published number is attributed to has moved.
-_ONE_DAY_OF_CYCLES = 288
+#: 86 400 / 50 = 1728, at the loop tick the six-retailer fleet below produces.
+#: WRITTEN OUT RATHER THAN COMPUTED, on `_THIRTY_DAYS_OF_CYCLES`'s precedent: the
+#: arithmetic is stated in this comment so a reader checks it once, and a future
+#: edit to the cycle length has to change this number BY HAND — which is the
+#: moment somebody notices that the window a published number is attributed to
+#: has moved.
+#:
+#: IT READ 288 UNTIL 2026-09-01 — 86 400 / 300, one cycle per standing cadence —
+#: and that is recorded here rather than edited away, because the two numbers are
+#: the whole difference between the before-count and the after-count. The DAY did
+#: not change and the number of times each retailer is asked did not change; what
+#: changed is how often the loop WAKES to ask somebody. The denominator assertion
+#: below is what holds those two facts apart: 1728 x 50 s must still be 86 400 s.
+_ONE_DAY_OF_CYCLES = 1728
 
 #: The window criterion 3 names, in seconds. Not derived from anything: it is
 #: the criterion's own number, quoted.
 _WINDOW_SECONDS = 60.0
+
+#: CRITERION 3's BEFORE-NUMBER, AS A DATED RECORD AND NOT AS A RE-RUNNABLE
+#: MEASUREMENT. Six of the six configured retailers, measured by `09-01` on
+#: 2026-09-01 at `87871b4` against unmodified production code, transcribed from
+#: the failure message of the assertion that now reads `_AFTER_MAX_IN_ANY_60S`.
+#:
+#: IT CANNOT BE RE-MEASURED HERE AND THAT IS STATED RATHER THAN PAPERED OVER. The
+#: rule it describes no longer exists in this tree. Freezing a hand-written
+#: reproduction of the old arithmetic to keep 6 re-runnable was considered and is
+#: rejected on `08-02`'s precedent: it would be a second copy of a number, the
+#: copy would be of a rule nothing runs, and a re-runnable assertion over dead
+#: arithmetic looks like evidence and is not. Criterion 3 asks for both numbers
+#: RECORDED, not both re-runnable.
+_BEFORE_MAX_IN_ANY_60S = 6
+
+#: CRITERION 3's AFTER-NUMBER. Transcribed from this test's own failure message
+#: the moment the mechanism landed, not reasoned and then written down:
+#:
+#:     E  AssertionError: the current rule put 2 of the six configured retailers
+#:        (amazon, bestbuy, gamestop, nintendo, target, walmart) inside a single
+#:        60-second window at least once over a simulated day
+#:     E  assert 2 == 6
+#:
+#: 2 IS THE ARITHMETIC FLOOR AND NOT MERELY THE BEST RESULT MEASURED. Six
+#: retailers cannot be spread more than 60 s apart inside a 300 s cadence,
+#: because 6 x 60 = 360 > 300, so some 60-second window must hold two of them.
+#: A phase claiming 1 would be claiming something unavailable.
+_AFTER_MAX_IN_ANY_60S = 2
 
 #: The global `interval_seconds` the fleet table below sits on, and the length
 #: of one simulated cycle. ONE name, read by the cycle step, by the pacer's
@@ -1973,6 +2160,26 @@ _FLEET_INTERVALS = {
     "nintendo": 300,
     "target": 300,
     "walmart": 300,
+}
+
+#: WHAT EACH RETAILER WAS ASKED OVER THE SIMULATED DAY UNDER THE OLD RULE,
+#: transcribed from `09-01`'s recorded tallies (`09-01-SUMMARY.md`, measured at
+#: `87871b4` on 2026-09-01: "Total requests counted | 1296 = 48 + 96 + 4 x 288").
+#:
+#: A SECOND, INDEPENDENT STATEMENT OF THE SAME EXPECTATION, and deliberately so.
+#: The tally below already checks each count against `86400 // interval` derived
+#: from the fleet table; this table is the number a DIFFERENT RULE actually
+#: produced, on a different day, recorded before the rule moved. If REQ-23 had
+#: bought its smaller maximum by asking anybody less often, the derived check and
+#: this one would both catch it — and this one would catch it even if the fleet
+#: table and the arithmetic drifted together.
+_BEFORE_PER_RETAILER = {
+    "amazon": 48,
+    "bestbuy": 288,
+    "gamestop": 96,
+    "nintendo": 288,
+    "target": 288,
+    "walmart": 288,
 }
 
 #: `config/products.yaml`, located from this file rather than from the working
@@ -2012,7 +2219,47 @@ def _max_in_any_window(times: list[float], span: float) -> int:
 
 
 def test_the_max_retailers_in_any_sixty_seconds_over_a_day_is_a_stated_number() -> None:
-    """Criterion 3's BEFORE half: what the current rule puts in one window.
+    """Criterion 3, both halves: what the rule puts in one 60-second window.
+
+    THE SAME SIMULATION IT ALWAYS WAS, WITH ONE RULE CHANGED — rewritten in place
+    on 2026-09-01 rather than copied, so the two numbers are two answers to ONE
+    question. The fleet table, the denominator, the sliding window, the two
+    tallies and the window model are untouched; the pacer is now built and
+    stepped the way `cli.watch_loop` builds and steps one, which is the whole of
+    the difference.
+
+    THE BEFORE-LITERAL IS WITHDRAWN AS AN ASSERTION AND KEPT AS A RECORD. It
+    read, in full:
+
+        assert max_in_any_60s == 6, (
+            f"the current rule put {max_in_any_60s} of the six configured retailers "
+            ...
+            f"for criterion 3 is the literal in this assertion"
+        )
+
+    measured by `09-01` with `.venv/bin/python -m pytest tests/test_pacing.py -q`
+    at `87871b4` on 2026-09-01, against `boty/pacing.py` unmodified and
+    `git status --porcelain boty/` empty.
+
+    WHAT OVERRULED IT is this phase's own mechanism, and that is the point rather
+    than a casualty: `09-DECISIONS.md` § *Test collision C* recorded before any
+    code moved that turning this test red WAS this plan's watched-red evidence
+    for criterion 3, because the literal had no other subject available (see the
+    stated exception below). The after-number was transcribed from the failure
+    message that red produced.
+
+    AND IT WENT RED FOR A REASON WORTH RECORDING, because it did not go red on
+    its own. Against the new mechanism this test still read 6 until its pacer was
+    given a roster and a tick: a `Pacer` built with neither keeps a zero offset
+    and the standing tolerance by design, and stepping it once per cadence
+    reproduces the old schedule exactly. A simulation over a defaulted pacer would
+    have gone on publishing 6 about code that no longer runs — which is
+    `09-DECISIONS.md`'s "a green defaulted site proves nothing about the schedule
+    the daemon runs", arriving as a number rather than as an argument.
+
+    THE BEFORE-NUMBER IS NOW A DATED RECORD RATHER THAN A RE-RUNNABLE ASSERTION,
+    stated plainly rather than papered over — see `_BEFORE_MAX_IN_ANY_60S` for
+    why freezing a reproduction of the old arithmetic was rejected.
 
     THIS TEST MEASURES; IT DOES NOT GATE ON ITS LITERAL, and this repository's
     standing rule — every gate is watched red before it is trusted — has a
@@ -2065,9 +2312,18 @@ def test_the_max_retailers_in_any_sixty_seconds_over_a_day_is_a_stated_number() 
     another such burst, not remove one, so restarts cannot make this number
     smaller.
     """
+    roster = tuple(sorted(_FLEET_INTERVALS))
+    tick = loop_tick_seconds(_FLEET_DEFAULT_INTERVAL, roster)
+    # BUILT AND STEPPED THE WAY `cli.watch_loop` BUILDS AND STEPS ONE. A pacer
+    # constructed with neither field keeps today's tolerance and a zero offset by
+    # design, so a simulation over a defaulted pacer would measure a schedule
+    # nobody runs — and it would still read 6, which is how a green number can be
+    # about the wrong code.
     p = Pacer(
         default_interval=_FLEET_DEFAULT_INTERVAL,
         overrides=dict(_FLEET_INTERVALS),
+        roster=roster,
+        tick=tick,
     )
     now = 0.0
     events: list[tuple[float, str]] = []
@@ -2079,17 +2335,28 @@ def test_the_max_retailers_in_any_sixty_seconds_over_a_day_is_a_stated_number() 
                 events.append((now, retailer))
                 per_retailer[retailer] += 1
                 p.record(retailer, refused=False, now=now)
-        now += float(_FLEET_DEFAULT_INTERVAL)
+        now += tick
 
     times = [t for t, _ in events]
     max_in_any_60s = _max_in_any_window(times, _WINDOW_SECONDS)
 
     # 1. THE STATED LITERAL. Transcribed from a run, not reasoned.
-    assert max_in_any_60s == 6, (
-        f"the current rule put {max_in_any_60s} of the six configured retailers "
+    assert max_in_any_60s == _AFTER_MAX_IN_ANY_60S, (
+        f"the schedule put {max_in_any_60s} of the six configured retailers "
         f"({', '.join(sorted(_FLEET_INTERVALS))}) inside a single 60-second "
-        f"window at least once over a simulated day; the recorded before-number "
+        f"window at least once over a simulated day; the recorded after-number "
         f"for criterion 3 is the literal in this assertion"
+    )
+
+    # 1b. AND THE WORD IN CRITERION 3 IS *SMALLER*, WRITTEN OUT AS A COMPARISON.
+    #     The left side is measured by the run above and the right side is a
+    #     dated record, so this is a live gate on the new rule rather than a
+    #     tautology over two literals: a change that pushed the maximum back up
+    #     fails here even if somebody edited the after-literal to match it.
+    assert max_in_any_60s < _BEFORE_MAX_IN_ANY_60S, (
+        f"criterion 3 asks for a number SMALLER than the six the old rule "
+        f"produced; this run put {max_in_any_60s} retailers in one 60-second "
+        f"window against the recorded before-number of {_BEFORE_MAX_IN_ANY_60S}"
     )
 
     # 2. THE DENOMINATOR.
@@ -2137,6 +2404,13 @@ def test_the_max_retailers_in_any_sixty_seconds_over_a_day_is_a_stated_number() 
         f"{len(events)} recorded events against {sum(per_retailer.values())} "
         f"counted requests — a request was made and not counted, or counted and "
         f"not made"
+    )
+    assert per_retailer == _BEFORE_PER_RETAILER, (
+        f"over the same simulated day each retailer was asked {per_retailer}, "
+        f"against the {_BEFORE_PER_RETAILER} the OLD rule produced. A smaller "
+        f"maximum bought with a smaller count is coverage sold for a number: the "
+        f"reduction this phase claims is in coincidence, never in how often "
+        f"anybody is asked"
     )
     for retailer, count in sorted(per_retailer.items()):
         observed = sum(1 for _, r in events if r == retailer)
