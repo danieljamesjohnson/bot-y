@@ -41,7 +41,7 @@ from __future__ import annotations
 import json
 import random
 import time
-from itertools import pairwise
+from itertools import combinations, pairwise
 from pathlib import Path
 
 import pytest
@@ -2590,3 +2590,174 @@ def test_the_tracer_pair_publishes_the_cadence_it_published_before() -> None:
             f"refusals, against the 2400 s the backoff has always produced at a "
             f"300 s standing interval"
         )
+
+
+# --------------------------------------------------------------------------
+# Criterion 1: a STATED separation in seconds, asserted on the schedule
+# --------------------------------------------------------------------------
+#
+# Criterion 1, verbatim: "Two retailers whose intervals coincide are NOT
+# dispatched inside the same short window; the bound is a stated number of
+# seconds and is asserted on the schedule, never on a wall clock."
+#
+# NOTHING IN THIS SECTION READS A CLOCK. No `time.time()`, no
+# `time.monotonic()`, no elapsed subtraction — the assertions read `due_at`,
+# which is the schedule's own record of when each retailer may next be asked.
+# The criterion says so in its own words and the reason is measurable: the wake
+# times below wander by +/-15% per cycle while the schedule does not move at
+# all, so a bound read off elapsed time would be a bound on the sleep's
+# randomness. It would also pass on an idle host and flake on a loaded one,
+# which is the least attributable failure this suite could produce.
+
+#: CRITERION 1's BOUND, IN SECONDS, WRITTEN OUT BY HAND AND NOT COMPUTED.
+#:
+#: Fifty. At the six retailers `config/products.yaml` configures on a 300 s
+#: global `interval_seconds`, `loop_tick_seconds` gives a 50 s tick and
+#: `slot_offset` lays the slots at `index * tick` modulo each retailer's own
+#: standing cadence, so the four retailers that share the 300 s cadence are born
+#: at 50, 150, 200 and 250 s and the closest pair of them is 50 s apart.
+#:
+#: WRITTEN OUT FOR `_CADENCE_AFTER_N_REFUSALS`'s REASON, WHICH IS THE WHOLE
+#: POINT OF THE LITERAL. Computing this from `loop_tick_seconds` at test time
+#: would make the assertion a re-derivation of the code it checks — the code
+#: agreeing with itself, which is a test that cannot fail. Written out, an edit
+#: to the tick expression or to the slot arithmetic has to change this number BY
+#: HAND, and that is the moment somebody notices that the separation two
+#: retailers are guaranteed has moved.
+#:
+#: "AT LEAST", BECAUSE THAT IS WHAT THE CRITERION ASKS FOR. The schedule
+#: measured on 2026-09-01 holds this separation exactly, at birth and at every
+#: cycle of a simulated day; the gate below is `>=` because criterion 1 states a
+#: bound and a future fleet with more room in it may exceed the bound without
+#: being a regression. A schedule that fell BELOW it is the lockstep coming back.
+_MIN_SEPARATION_SECONDS = 50.0
+
+#: The jitter sequence these tests step by, seeded for the tracer's reason: a
+#: failure is reproducible and a passing run is not one lucky draw. It is one
+#: sequence and not a proof over all of them, which is why the assertions read
+#: the schedule — where the numbers are exact — rather than the wake times.
+_SEPARATION_SEED = 20260903
+
+
+def _coinciding_pairs() -> list[tuple[str, str]]:
+    """Every pair in `_FLEET_INTERVALS` whose STANDING intervals are equal.
+
+    Criterion 1 is about retailers "whose intervals coincide" and nobody else:
+    `amazon` at 1800 s and `gamestop` at 900 s share their cadence with no one,
+    so a separation between them is not what the criterion bounds. Derived from
+    the fleet table rather than written out a second time, so a config change
+    that moved a retailer onto or off the default cadence cannot leave this
+    test bounding a pair that no longer coincides.
+    """
+    return [
+        (a, b)
+        for a, b in combinations(sorted(_FLEET_INTERVALS), 2)
+        if _FLEET_INTERVALS[a] == _FLEET_INTERVALS[b]
+    ]
+
+
+def _closest_coinciding(p: Pacer) -> tuple[float, str, str]:
+    """The smallest gap between two coinciding retailers' NEXT-ATTEMPT TIMES.
+
+    `p._for(r).due_at` and nothing else — the schedule's own record. Reaching
+    through `_for` rather than `due` is deliberate: `due` answers a question
+    about a moment, and criterion 1 is about the schedule at every moment.
+    """
+    gaps = [(abs(p._for(a).due_at - p._for(b).due_at), a, b) for a, b in _coinciding_pairs()]
+    return min(gaps)
+
+
+def test_two_retailers_at_one_cadence_are_separated_by_the_stated_number_of_seconds() -> None:
+    """Criterion 1, on the fleet that is configured and under the pacer that ships.
+
+    THE BOUND IS `_MIN_SEPARATION_SECONDS` — fifty seconds, written out by hand
+    at its definition — and it is read off `due_at`, the recorded next-attempt
+    time. Nothing here reads a wall clock; see this section's header for why the
+    criterion forbids it in its own words.
+
+    BUILT THE WAY `cli.watch_loop` BUILDS ONE, roster and tick present. That is
+    the construction the daemon runs, and `09-02` measured what happens when a
+    test asserts under the defaulted one instead: criterion 3's simulation went
+    on reading 6 against code that no longer produced 6, because a `Pacer` with
+    no roster keeps a zero offset by design. A separation asserted under the
+    defaulted construction would be an assertion about a schedule nobody runs.
+
+    THE CONTRAST CASE AT THE FOOT OF THIS TEST IS NOT A SECOND GATE, and its
+    docstring says what it does and does not prove — see the comment there.
+
+    AT BIRTH AND AFTER EACH HAS BEEN ASKED SEVERAL TIMES, because those are two
+    different claims: the first is about `slot_offset`, the second is about
+    `record`'s advance holding the position `slot_offset` set. A mechanism that
+    started the retailers apart and let them drift together would satisfy the
+    first alone, and that is exactly what `09-02` measured a birth offset doing
+    without the grid advance (142.5 s against 150 on the tracer pair).
+    """
+    pairs = _coinciding_pairs()
+    assert pairs, (
+        f"no two of {sorted(_FLEET_INTERVALS)} share a standing interval, so this "
+        f"test has no subject: criterion 1 bounds retailers WHOSE INTERVALS "
+        f"COINCIDE, and there are none in {_FLEET_INTERVALS}"
+    )
+
+    roster = tuple(sorted(_FLEET_INTERVALS))
+    tick = loop_tick_seconds(_FLEET_DEFAULT_INTERVAL, roster)
+    p = Pacer(
+        default_interval=_FLEET_DEFAULT_INTERVAL,
+        overrides=dict(_FLEET_INTERVALS),
+        roster=roster,
+        tick=tick,
+    )
+
+    # 1. AT BIRTH. Nothing has been recorded, so this is `slot_offset` alone.
+    born, a, b = _closest_coinciding(p)
+    assert born >= _MIN_SEPARATION_SECONDS, (
+        f"{a} and {b} both stand on a {_FLEET_INTERVALS[a]} s cadence and were "
+        f"born {born} s apart on the schedule, against the "
+        f"{_MIN_SEPARATION_SECONDS} s criterion 1 states. Two retailers at one "
+        f"position are the lockstep, whatever the advance does afterwards"
+    )
+
+    # 2. AND AT EVERY CYCLE OF A SIMULATED DAY. Stepped by the jittered tick
+    #    `cli.watch_loop` sleeps, because the convergence this rules out was a
+    #    convergence UNDER jitter — a fixed step cannot exhibit it. The WAKE
+    #    times are jittered; the assertion is on the schedule regardless.
+    rng = random.Random(_SEPARATION_SEED)
+    now = 0.0
+    worst, worst_a, worst_b = born, a, b
+    while now < float(_ONE_DAY_OF_SECONDS):
+        for retailer in roster:
+            if p.due(retailer, now):
+                p.record(retailer, refused=False, now=now)
+        gap, ga, gb = _closest_coinciding(p)
+        if gap < worst:
+            worst, worst_a, worst_b = gap, ga, gb
+        now += tick * rng.uniform(0.85, 1.15)
+
+    assert worst >= _MIN_SEPARATION_SECONDS, (
+        f"over a simulated day the closest two coinciding retailers came was "
+        f"{worst} s ({worst_a} and {worst_b}), against the "
+        f"{_MIN_SEPARATION_SECONDS} s criterion 1 states. An offset eroded one "
+        f"cycle at a time is what a schedule re-anchored to the cycle's clock "
+        f"does, and the merge is absorbing: once they are together they stay"
+    )
+
+    # 3. THE CONTRAST, AND WHAT IT IS FOR. A `Pacer` built with neither field
+    #    gives every retailer a 0.0 offset by design (`slot_offset`'s last
+    #    paragraph), so this case is the ABSENCE of the mechanism rather than a
+    #    second gate on it. It is here to show which behaviour comes from which
+    #    field — the separation above is bought by `roster` and `tick`, and a
+    #    reader who assumed it came from `record` alone would be wrong. It
+    #    proves nothing about the schedule the daemon runs, and it is not
+    #    evidence for criterion 1; the assertion above is.
+    defaulted = Pacer(
+        default_interval=_FLEET_DEFAULT_INTERVAL,
+        overrides=dict(_FLEET_INTERVALS),
+    )
+    absent, da, db = _closest_coinciding(defaulted)
+    assert absent == 0.0, (
+        f"a pacer built with no roster and no tick put {da} and {db} {absent} s "
+        f"apart; with no roster every offset is 0.0, so this construction is the "
+        f"lockstep by design and a non-zero answer here means the defaults have "
+        f"started doing something the {len(_FLEET_INTERVALS)} defaulted "
+        f"construction sites in this file were not told about"
+    )
