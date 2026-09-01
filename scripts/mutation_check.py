@@ -1739,6 +1739,148 @@ MUTATIONS = (
         replace="            if False\n",
         breaks="a retailer that has refused thirty times running is asked again every six hours forever, which is the behaviour REQ-22 exists to end — 125 requests over thirty days where the rule in force schedules 37. The backoff still climbs, the cap still binds, the clamp still holds and the accessor still refuses to shorten a wait, so nothing that guards the OTHER rules in this method can see it. And the monitor does not stop saying it has stopped: the cool-off arm one method along is guarded by its own comparison, which this leaves standing, so the status page and the daemon log go on describing that retailer as left alone for days while the schedule has quietly gone back to four requests a day at the one retailer most likely to be counting them. The request footprint that earns and sustains a block returns in full, and a surface that disagrees with the schedule is this project's core defect stated one level up. In production the regression is invisible in any single cycle — one cycle asks once either way — and shows up only as a count over weeks, which is the shape of defect a person is least likely to notice and a simulated month is most likely to",
     ),
+    # ------------------------------------------------------------------
+    # M43 — THE SIX RETAILERS GO BACK INTO LOCKSTEP, AND EVERY WORD
+    # AROUND THE MECHANISM STILL SAYS THEY DO NOT. REQ-23 criterion 5,
+    # 09-05, 2026-09-01.
+    # ------------------------------------------------------------------
+    #
+    # A PHASE IDENT, registered by 09-05 because criterion 5 asks for one. It
+    # takes the registry to 39. M21-M24 REMAIN THE INTENTIONAL GAP and are
+    # still not filled, for the reason that has not changed: `apply_mutation`
+    # cannot ADD a file, so the defect they would have covered is outside this
+    # harness by construction. `boty/pacing.py` has been in SANDBOX_CONTENTS
+    # since before this registry existed, so NOTHING WAS ADDED ANYWHERE to make
+    # M43 reachable — checked before this block was written, exactly as M41 and
+    # M42 checked it, and that is the test M21-M24 failed.
+    #
+    # WHAT IT REBUILDS is the lockstep itself, which is the whole subject of
+    # REQ-23. Every retailer is born at `due_at = 0.0` again instead of at its
+    # own slot, so a fresh process has all six due at the same instant — 09-01's
+    # measured before-number, **6 of six retailers inside one 60-second window**,
+    # against the 2 that 09-02 transcribed from the fixed run. And it does not
+    # heal: `record`'s grid advance is left standing and does exactly what it is
+    # for, PRESERVING the position it was handed, so four retailers born
+    # together on the 300 s cadence stay together at every multiple of it for
+    # the life of the process. One line puts the phase back to a monitor that
+    # asks thirteen watches at six retailers in one burst, and does it at every
+    # restart.
+    #
+    # WHY THIS LINE AND NOT THE OTHER ONE — BOTH CANDIDATES WERE BROKEN AND BOTH
+    # KILL SETS ARE RECORDED, because the loser is evidence about what the suite
+    # covers rather than a discarded draft. Measured 2026-09-01, each applied in
+    # its own sandbox and the failures read off the run:
+    #
+    #   CANDIDATE A (registered below) — the birth phase:
+    #       `due_at=slot_offset(...)` -> `due_at=0.0`
+    #       5 test(s) failed, 912 passed, 29 skipped.
+    #         tests/test_pacing.py::test_two_retailers_at_one_cadence_are_
+    #             separated_by_the_stated_number_of_seconds   (criterion 1)
+    #         tests/test_pacing.py::test_two_retailers_at_one_cadence_are_born_
+    #             apart_and_stay_apart                        (criterion 1)
+    #         tests/test_pacing.py::test_the_max_retailers_in_any_sixty_seconds_
+    #             over_a_day_is_a_stated_number               (criterion 3)
+    #         tests/test_pacing.py::test_the_restored_pacer_starts_its_schedule_
+    #             from_zero                                   (the restart)
+    #         tests/test_cli_watch.py::test_the_idle_wake_is_structural_on_the_
+    #             configured_fleet_and_incidental_on_a_uniform_one
+    #
+    #   CANDIDATE B (measured, deliberately NOT registered) — the grid advance:
+    #       `st.due_at = _next_on_the_grid(st.due_at, wait, now)`
+    #                                            -> `st.due_at = now + wait`
+    #       11 test(s) failed, 906 passed, 29 skipped. It kills the same two
+    #       criterion-1 tests and NINE others, of which six are also killed by
+    #       M33 and three by M42 — the exact backoff-schedule rows
+    #       (`test_the_backoff_schedule_is_exactly_the_schedule_it_was` at both
+    #       standing intervals, the cap, the clamp, the recovery tests).
+    #
+    # A IS THE MORE INFORMATIVE ANCHOR, on two measured grounds and not on
+    # taste. FIRST, ITS SIGNATURE IS UNAMBIGUOUS: all five of A's killers are
+    # tests about WHEN a request is made ACROSS retailers, so an M43 that
+    # survives means one thing only — the de-lockstep's evidence has stopped
+    # working. Six of B's eleven are single-retailer cadence arithmetic already
+    # carrying two idents, so B's failure signature says *the schedule moved*
+    # and leaves a reader to work out which schedule, which is precisely the
+    # accessor-versus-rule confusion M42's block was registered to resolve one
+    # method along. SECOND, AND DECISIVELY: **B does not kill criterion 3's
+    # window maximum at all.** That simulation steps a fixed tick, so at every
+    # dispatch `now` IS the grid point and `now + wait` lands where
+    # `_next_on_the_grid` would have — the after-number 2 comes out of a
+    # B-mutated tree unchanged. An ident on B would leave this phase's headline
+    # number with no mutation under it.
+    #
+    # NEITHER CANDIDATE IS A SUBSET OF THE OTHER (A: 5, B: 11, shared: the two
+    # criterion-1 tests), so registering A does not cover B. That is recorded as
+    # a limit rather than left to be inferred: **the grid advance is defended by
+    # the suite — 11 tests fail when it goes — but it carries no ident.** A
+    # second ident for it was considered and refused on this registry's own
+    # rule: its break is already caught by eleven assertions, six of them under
+    # M33 and two now under M43, so a B ident would raise the denominator
+    # without defending anything new. THE NEXT FREE IDENT IS THEREFORE M44, and
+    # B is measured, written down and unregistered on purpose.
+    #
+    # THE KILL-SET COMPARISON AGAINST THE WHOLE REGISTRY, WHICH IS THE
+    # MEASUREMENT 08-04 PAID FOR AND WHICH COMES BACK THE OTHER WAY THIS TIME.
+    # All 38 existing idents were re-run on 2026-09-01, one sandbox each, and
+    # their kill sets read off the runs. M43's five killers are **DISJOINT FROM
+    # THE UNION OF ALL THIRTY-EIGHT**: not one of the five is killed by any
+    # existing mutation, and no existing mutation's kill set contains M43's.
+    #
+    #     A n=5   supersets among the registry: []
+    #     largest overlap with any existing ident: 0 tests
+    #     killers no existing ident reaches: all 5
+    #
+    # SO M43 BUYS DETECTION AND NOT MERELY LOCALISATION, and that is the
+    # opposite of what the same measurement said about M42 — whose 16 killers
+    # are a proper subset of M33's 28, recorded in its own block above as a
+    # finding rather than rounded up. Stated plainly because the contrast is the
+    # useful part: before this ident the registry had NO mutation that any of
+    # criterion 1's separation tests, criterion 3's window maximum, the restart
+    # test or the idle-wake test could kill. Those four things were gated by
+    # tests and ungated by the mutation harness, which is a hole and is what
+    # M43 closes. If a later reader judges otherwise the honest remedy is to
+    # delete the ident, not to reword this paragraph — the numbers above are
+    # what decide it and they are written down so the question can be re-asked
+    # rather than re-argued.
+    #
+    # THE ANCHOR IS BEHAVIOURAL AND PRE-COUNTED, 2026-09-01, against the file
+    # text: this one indented line occurs ONCE as a fixed substring, and it is
+    # neither a substring of nor a superstring of any of the seven other
+    # `boty/pacing.py` searches in this registry — checked against all 38, zero
+    # overlaps, so unlike M42 this entry adds no drift to an existing anchor.
+    # No message text, no rendered tag, no docstring fragment, no comment: the
+    # comment three lines above it explains the behaviour and is deliberately
+    # NOT part of the anchor, so a refactor that rewrites every word around this
+    # call and preserves the call leaves M43 still caught.
+    #
+    # WHY `due_at=0.0` AND NOT DELETING THE KEYWORD: `_RetailerState.due_at`
+    # defaults to 0.0, so removing the line entirely produces the same schedule
+    # — but it also removes the only reference to `slot_offset` in the class,
+    # and a linter or a later reader would meet an unused import rather than a
+    # silent schedule change. `0.0` is the more faithful reconstruction of the
+    # pre-REQ-23 code, which is what this mutation is for.
+    #
+    # IF IT EVER SURVIVES: check three things before anything else. First,
+    # whether `_MIN_SEPARATION_SECONDS` in tests/test_pacing.py was re-derived
+    # from `loop_tick_seconds` or `slot_offset` at test time instead of being
+    # the written-out 50.0 literal 09-03 chose — a recomputed expectation goes
+    # to 0.0 under this mutation and `>= 0.0` passes, which is exactly the
+    # failure that literal's comment argues against. Second, whether either
+    # separation test was re-pointed at a one-retailer or otherwise degenerate
+    # roster: `slot_offset` returns 0.0 for index 0 anyway, so a single-retailer
+    # fixture makes this mutation invisible — 09-02 recorded that same blindness
+    # for its own tracer. Third, whether
+    # `test_the_restored_pacer_starts_its_schedule_from_zero` was reverted to
+    # its withdrawn `== 0.0` assertion (Test collision B in 09-DECISIONS.md);
+    # that assertion passes under this mutation and under the unmutated code
+    # alike, which is why it was re-pointed at the phase in the first place.
+    Mutation(
+        ident="M43",
+        target="boty/pacing.py",
+        search="                due_at=slot_offset(retailer, self.roster, self._tolerance_interval(), standing),\n",
+        replace="                due_at=0.0,\n",
+        breaks="every retailer is born due at the same instant again, so a fresh process asks all six retailers — thirteen watches — inside one burst, which is the request footprint REQ-23 exists to end and the shape a WAF reads as one crawler rather than as six polite clients. The regression does not decay: `record`'s grid advance is untouched and does exactly what it was written to do, PRESERVING the position it is handed, so the four retailers sharing the 300-second cadence are re-anchored together at every multiple of it for the life of the process. 09-01 measured that world at 6 of six retailers inside a single 60-second window over a simulated day; 09-02 transcribed 2 from the fixed one. Every word describing the mechanism survives this edit — the comment above the line still says BORN AT ITS OWN POSITION, `slot_offset` is still defined and still documented, `_next_on_the_grid` still runs, `current_interval` is untouched and every cadence, backoff, cap and cool-off rule still holds — so the schedule is back in lockstep while the module, the tests around it and the dashboard all read as though it is not. And it is worst at exactly the moment it is most visible, because `due_at` is deliberately never persisted: the burst is rebuilt at every restart, which under a flapping unit is the one condition this phase was measured to improve",
+    ),
 )
 
 
