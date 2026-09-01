@@ -1288,3 +1288,183 @@ def test_status_json_carries_everything_a_consumer_needs_to_judge_staleness(
             "keeps saying `false` for exactly the interval during which it "
             "becomes true"
         )
+
+
+# --------------------------------------------------------------------------
+# REQ-23: a pass that asked NOBODY publishes no verdict about anybody
+# --------------------------------------------------------------------------
+#
+# `healthy` was `all(h.ok for h in health)` and **`all([]) is True`**. Before
+# REQ-23 every 300 s cycle asked somebody, so an empty pass was only reachable
+# when every retailer was simultaneously backed off. After 09-02 the loop wakes
+# once per 50 s tick and `09-03` measured the consequence: **432 of 1728 wakes a
+# day ask nobody at all**. A quarter of all published documents would have said
+# `healthy: true` on the strength of a pass that ran no check.
+#
+# That is this project's own defect one level up — a green dashboard over a
+# question nobody asked — rebuilt inside the fix for a different one, which is
+# `09-04-PLAN.md`'s first prohibition and the reason `T-09-04` is rated high.
+#
+# THE THIRD STATE IS NOT A NEW INVENTION. `status.write`'s own docstring, twelve
+# lines above the defect, already argues it for the per-retailer rows:
+#
+#   "the retailer is not healthy (nothing was verified) and not unhealthy
+#    (nothing failed) — it simply was not asked"
+#
+# and the comment ON the flag already said it is "Only over retailers actually
+# CHECKED" — which is exactly why an empty checked-set has no verdict to give.
+# `null` is the same three-valued honesty `Availability`, `duration_seconds` and
+# `current_interval_seconds` are already built on, applied to a boolean.
+#
+# THE OPPOSITE FIX IS ASSERTED AGAINST TOO, immediately below, because it is the
+# one a reader in a hurry reaches for: making the flag read `false` on an empty
+# pass reports the fleet unhealthy every time the schedule simply had nothing
+# due, and a flag that cries wolf on 432 wakes a day is a flag nobody reads.
+#
+# THE KEY SET DOES NOT MOVE. What the existing key can SAY changed; how many
+# keys there are did not — `test_publishing_a_duration_does_not_disturb_any_
+# existing_key` above pins that set and is untouched by this change.
+
+
+def test_a_pass_that_asked_nobody_publishes_no_green_verdict(tmp_path: Path) -> None:
+    """`all([]) is True`, and after REQ-23 an empty pass is a quarter of all wakes.
+
+    The whole of `T-09-04`. A document asserting the fleet is healthy on the
+    strength of a pass that asked nobody is a record of a check that never
+    happened.
+    """
+    path = tmp_path / "status.json"
+    write(path, [], [], duration_seconds=0.01)
+
+    payload = json.loads(path.read_text())
+
+    assert payload["healthy"] is not True, (
+        "a pass that produced no health entries published the ordinary GREEN "
+        "verdict. `all([]) is True`, and 09-03 measured 432 of 1728 wakes a day "
+        "asking nobody — so this is a green dashboard over a question nobody "
+        "asked, published 432 times a day"
+    )
+    assert payload["healthy"] is None, (
+        "the third state is `null`, matching `duration_seconds` and "
+        "`current_interval_seconds` in this same payload and the per-retailer "
+        "rows' own argument: not healthy (nothing was verified), not unhealthy "
+        "(nothing failed) — simply not asked"
+    )
+
+
+def test_a_pass_that_asked_nobody_does_not_publish_an_unhealthy_verdict_either(
+    tmp_path: Path,
+) -> None:
+    """The same lie pointed the other way, and it is the fix a reader reaches for.
+
+    `any(...)`, or `bool(health) and all(...)`, both make an idle tick read
+    `false`. That reports the fleet broken every time the schedule simply had
+    nothing due — 432 times a day on this fleet — and a flag that cries wolf on
+    an idle tick is a flag nobody reads. `09-04-PLAN.md`'s second prohibition.
+    """
+    path = tmp_path / "status.json"
+    write(path, [], [], duration_seconds=0.01)
+
+    assert json.loads(path.read_text())["healthy"] is not False, (
+        "an empty pass published the ordinary UNHEALTHY verdict. Nothing "
+        "failed, because nothing was asked"
+    )
+
+
+def test_a_pass_that_checked_one_retailer_and_found_it_fine_is_still_green(
+    tmp_path: Path,
+) -> None:
+    """The over-reach guard on the healthy side.
+
+    A fix that returned `None` whenever anything was paced, or that read the
+    `paced` argument at all, would swallow the ordinary case — and the ordinary
+    case is the one the flag exists for.
+    """
+    path = tmp_path / "status.json"
+    write(
+        path,
+        [],
+        [Health("bestbuy", ok=True)],
+        paced={"walmart": "backing off after 7 refusal(s)"},
+    )
+
+    assert json.loads(path.read_text())["healthy"] is True, (
+        "a pass that checked bestbuy and found it fine stopped publishing the "
+        "ordinary green verdict — the empty-pass fix over-reached into the "
+        "normal case. The subject is an EMPTY health list and nothing else"
+    )
+
+
+def test_a_pass_that_checked_one_retailer_and_found_it_broken_is_still_red(
+    tmp_path: Path,
+) -> None:
+    """The over-reach guard on the unhealthy side.
+
+    The one alert path this flag feeds. A fix that collapsed every non-green
+    outcome into `null` would take a real detector failure off the dashboard.
+    """
+    path = tmp_path / "status.json"
+    write(path, [], [Health("bestbuy", ok=False, reason="control did not verify")])
+
+    assert json.loads(path.read_text())["healthy"] is False, (
+        "a pass that checked bestbuy and found it BROKEN stopped publishing the "
+        "ordinary red verdict — the empty-pass fix reached into the case that "
+        "actually matters"
+    )
+
+
+def test_an_empty_pass_still_publishes_every_configured_watch_and_every_paced_row(
+    tmp_path: Path,
+) -> None:
+    """The page must not go blank on an idle tick — only the VERDICT is withheld.
+
+    `07-04`'s rule stands unchanged: every configured watch gets a row with its
+    remembered reading, and every unasked retailer gets a `checked: false` row
+    with its reason. Withholding the aggregate verdict is not withholding the
+    facts under it, and a reader has to be able to tell those apart.
+    """
+    path = tmp_path / "status.json"
+    stamp = time.time() - 3600
+    write(
+        path,
+        [],
+        [],
+        duration_seconds=0.01,
+        paced={"walmart": "next attempt in ~4 min", "gamestop": "next attempt in ~9 min"},
+        intervals={"walmart": 300.0, "gamestop": 900.0},
+        watches=_THREE,
+        remembered={"walmart:memory": ("out_of_stock", stamp)},
+    )
+    payload = json.loads(path.read_text())
+
+    assert payload["healthy"] is None
+    assert {r["retailer"] for r in payload["retailers"]} == {"walmart", "gamestop"}
+    assert all(r["checked"] is False for r in payload["retailers"])
+    assert [r["current_interval_seconds"] for r in payload["retailers"]] == [900.0, 300.0]
+    assert len(payload["watches"]) == len(_THREE), (
+        "an idle tick published fewer watch rows than the operator configured — "
+        "the page goes blank on the tick that withholds the verdict"
+    )
+    assert _rows(payload)["walmart:memory"]["read_at"] == pytest.approx(stamp)
+
+
+def test_the_key_set_is_unchanged_by_the_empty_pass_verdict(tmp_path: Path) -> None:
+    """A consumer that has to learn a new key is a bigger change than this needs.
+
+    The third state is carried by what `healthy` can SAY, not by a fourth key
+    beside it. This is the same enumerated set
+    `test_publishing_a_duration_does_not_disturb_any_existing_key` pins for the
+    ordinary pass, asserted on the empty one — the case that would have been the
+    tempting place to add `checked_any` or `asked` and quietly change the
+    contract on 432 documents a day.
+    """
+    path = tmp_path / "status.json"
+    write(path, [], [], duration_seconds=0.01)
+
+    assert set(json.loads(path.read_text())) == {
+        "updated",
+        "healthy",
+        "retailers",
+        "watches",
+        "duration_seconds",
+    }

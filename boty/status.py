@@ -151,7 +151,40 @@ def write(
         # failed anything; letting it flip this false would put the dashboard
         # permanently red and make the flag useless — the same "a gate that
         # fires on the honest outcome" defect the roadmap names.
-        "healthy": all(h.ok for h in health),
+        #
+        # AND `null` WHEN NOTHING WAS CHECKED AT ALL, REQ-23, 2026-09-01. This
+        # read `all(h.ok for h in health)`, and **`all([]) is True`**. The
+        # sentence above is why that was survivable until now and why it stopped
+        # being: the flag is "only over retailers actually CHECKED", so an empty
+        # checked-set has no verdict to give — it was returning the verdict for
+        # the empty conjunction instead, which is `true`.
+        #
+        # WHAT CHANGED IS THE REACHABILITY, NOT THE ARITHMETIC. Before REQ-23
+        # `cli.watch_loop` woke once per 300 s standing cadence and every wake
+        # asked somebody, so an empty pass needed every retailer backed off at
+        # once. `09-02` put the loop on a 50 s tick and `09-03` measured the
+        # consequence on this fleet: **432 of 1728 wakes a day dispatch nobody**.
+        # A quarter of every day's published documents would have asserted the
+        # fleet healthy on the strength of a pass that ran no check — a green
+        # dashboard over a question nobody asked, which is the defect this whole
+        # project exists one level up to prevent, rebuilt inside the fix for a
+        # different one. `09-04-PLAN.md`'s `T-09-04`, rated high for that reason.
+        #
+        # THE THIRD STATE IS THIS MODULE'S OWN, NOT A NEW INVENTION. The
+        # docstring above already argues it for the per-retailer rows — *"the
+        # retailer is not healthy (nothing was verified) and not unhealthy
+        # (nothing failed) — it simply was not asked"* — and `duration_seconds`
+        # and `current_interval_seconds` below already publish `null` for "this
+        # was never established". The aggregate gets the same treatment, in the
+        # same key, so no consumer has to learn a new one.
+        #
+        # `null` AND NOT `false`, and that is the half a reader in a hurry gets
+        # wrong. `false` on an idle tick reports the fleet broken every time the
+        # schedule simply had nothing due — 432 times a day here — and a flag
+        # that cries wolf on an idle tick is a flag nobody reads, which is the
+        # sentence four lines up pointed the other way. Both directions are
+        # asserted in `tests/test_status.py`'s REQ-23 section.
+        "healthy": all(h.ok for h in health) if health else None,
         # How long the pass that produced this file took, in seconds. Published
         # so REQ-08's two-minute budget can be READ rather than re-measured by
         # hand — the only figure this project had before it existed was a

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 import time
 from dataclasses import replace
@@ -2022,4 +2023,228 @@ def test_the_loops_tick_and_its_pacers_tolerance_are_one_number(
             f"wake {i} slept {d:.3f}s, which is not the jitter band around the "
             f"{handed}s tick the pacer was built with — the loop's wake rate and "
             f"the schedule's tolerance have become two numbers"
+        )
+
+
+# --------------------------------------------------------------------------
+# REQ-23: the empty tick is REACHABLE, and what it publishes
+# --------------------------------------------------------------------------
+#
+# `tests/test_status.py`'s REQ-23 section proves the empty pass is HANDLED, by
+# calling `status.write` with an empty health list directly. That is a guard,
+# and a guard nobody can reach is a guard with no subject. This section supplies
+# the subject: the loop, at the tick it ships, driving itself onto a wake where
+# `Pacer.due` says no to every one of the six configured retailers.
+#
+# WHERE THE IDLE WAKES COME FROM — MEASURED 2026-09-01, AND THE FIRST TWO
+# ANSWERS THIS SECTION GAVE WERE BOTH WRONG. Recorded in order, because the
+# corrections are the finding.
+#
+# The first form used `fleet_cfg` — six retailers, all on the 300 s global
+# cadence — for 24 wakes, and every wake asked exactly one:
+#
+#     retailers asked per wake was [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+#                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+#
+# so the reachability assertion failed. Six retailers at 300 s laid on a 50 s
+# grid fill 6 x 50 = 300 s exactly: the grid is SATURATED and every slot is
+# claimed every cadence. The idle wakes come from the retailers on LONGER
+# cadences — `amazon` at 1800 s and `gamestop` at 900 s hold a slot each and use
+# it once every 36 and 18 wakes, leaving it empty the rest of the time. The idle
+# tick is therefore a consequence of the fleet's SHAPE and not of the tick
+# alone, exactly as `09-02` recorded that single-retailer fixtures cannot reach
+# the tick at all.
+#
+# THE SECOND ANSWER — "under a uniform fleet the idle wake does not exist" — was
+# written down, and it is FALSE. It survived one unseeded run and died on the
+# next: a later run of the same 24 wakes produced
+#
+#     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1]
+#
+# The loop jitters every wake by +/-15%, so a wake can drift past a slot's
+# tolerance (half a tick, 25 s), skip it, and the next wake collects two. Idle
+# wakes exist on a uniform fleet too; they are just rare and accidental rather
+# than structural. An `== [1] * 24` assertion would have been a flake shipped as
+# a gate — which is what an unseeded jitter measurement read once always is.
+#
+# THE MEASUREMENT THAT REPLACED BOTH, over 20 seeds x 200 wakes each:
+#
+#     fleet        idle-rate min   max     mean    first idle wake
+#     uniform          0.015   0.075   0.035    7 to 122, varies by seed
+#     configured       0.250   0.285   0.269    6 in 19 seeds of 20, else 7
+#
+# So: structural on the configured fleet, accidental on the uniform one, by an
+# order of magnitude, and the configured fleet reaches its first idle wake at 6
+# under every seed tried. `09-03` derived 432 of 1728 (25.0%) analytically over
+# an unjittered day; the 26.9% here is a jittered simulation of the same fleet.
+# Two instruments, agreeing — not one number quoted twice.
+#
+# THE SEED IS LICENSED BY THAT SWEEP RATHER THAN HIDING BEHIND IT. Both tests
+# below seed the loop's jitter so a red is reproducible, and the sweep above is
+# the evidence that the seeded sequence is typical rather than the one that
+# happened to work.
+#
+# `fleet_cfg` IS LEFT EXACTLY AS 09-03 BUILT IT. Its two tests are about the
+# loop's sleep and the pacer's construction, where the overrides are irrelevant,
+# and re-pointing a fixture underneath somebody else's evidence is how a green
+# suite stops describing what it described.
+
+#: `config/products.yaml`'s two non-default cadences, written out here for the
+#: reason `_FLEET` and `_FLEET_TICK_SECONDS` are: these tests are about the LOOP,
+#: and a config read would make a failure ambiguous between the two. The same
+#: pair is bound to the real file by `tests/test_pacing.py`'s `_FLEET_INTERVALS`
+#: assertion, so the copy cannot drift unnoticed.
+_FLEET_OVERRIDES = {"amazon": 1800, "gamestop": 900}
+
+#: One stated seed for the loop's `random.uniform` jitter, so a red here is
+#: reproducible. NOT a proof over all sequences, and the section comment above
+#: carries the 20-seed sweep that says so.
+_IDLE_SEED = 20260901
+
+#: How many wakes the sweep above measured each fleet over. Kept at 200 in the
+#: comparison test so the rates below are read off the same denominator the
+#: sweep used.
+_IDLE_WAKES = 200
+
+
+@pytest.fixture
+def configured_fleet_cfg(fleet_cfg: Config) -> Config:
+    """`fleet_cfg` plus the cadences `config/products.yaml` actually configures.
+
+    This is the shape the daemon runs, and it is the shape in which the idle
+    wake is STRUCTURAL rather than a jitter accident — see the section comment
+    above for the two measurements that forced this fixture into being.
+    """
+    return replace(fleet_cfg, retailer_intervals=dict(_FLEET_OVERRIDES))
+
+
+def _asked_per_wake(cfg: Config, cycles: int, seed: int) -> list[int]:
+    """Drive `watch_loop` and record how many retailers each wake actually asked.
+
+    Read through the loop's own `sleep`, which `watch_loop` calls immediately
+    after `watch_cycle` has published — so each reading is one wake's document,
+    in order, exactly as the daemon would have written it.
+    """
+    counts: list[int] = []
+
+    def _count(_delay: float) -> None:
+        payload = json.loads(cfg.status_path.read_text())
+        counts.append(sum(1 for r in payload["retailers"] if r["checked"]))
+
+    random.seed(seed)
+    cli.watch_loop(
+        cfg, _checker(Availability.OUT_OF_STOCK), State.load(cfg.state_path), cycles=cycles, sleep=_count
+    )
+    return counts
+
+
+def test_the_idle_wake_is_structural_on_the_configured_fleet_and_incidental_on_a_uniform_one(
+    fleet_cfg: Config, configured_fleet_cfg: Config, sent: dict[str, list]
+) -> None:
+    """Why the reachability test needs its own fixture — asserted, not asserted about.
+
+    Both fleets are six retailers on the same 50 s tick and the same seed. The
+    only difference is that one of them carries `config/products.yaml`'s two
+    longer cadences. That difference is worth an order of magnitude in how often
+    the monitor wakes and asks nobody, and it is the whole reason the empty-pass
+    verdict had to be fixed in this phase rather than left as the rarity it was.
+
+    A reader who "simplified" the test below back onto `fleet_cfg` would get a
+    run that passes without reaching the case it exists for. This is the
+    assertion that stops that.
+    """
+    uniform = _asked_per_wake(fleet_cfg, _IDLE_WAKES, _IDLE_SEED)
+    configured = _asked_per_wake(configured_fleet_cfg, _IDLE_WAKES, _IDLE_SEED)
+
+    uniform_rate = uniform.count(0) / _IDLE_WAKES
+    configured_rate = configured.count(0) / _IDLE_WAKES
+
+    assert configured_rate >= 0.20, (
+        f"the configured fleet idled on {configured_rate:.1%} of {_IDLE_WAKES} "
+        f"wakes, under the 20% floor. Measured 2026-09-01 over 20 seeds: 25.0% "
+        f"to 28.5%, mean 26.9%, against 09-03's analytic 25.0% — so a rate this "
+        f"low means the tick, the roster, the overrides or the schedule moved"
+    )
+    assert uniform_rate <= 0.10, (
+        f"the uniform fleet idled on {uniform_rate:.1%} of {_IDLE_WAKES} wakes, "
+        f"over the 10% ceiling. Six retailers at the {fleet_cfg.interval_seconds}s "
+        f"global cadence claim all six slots of the {_FLEET_TICK_SECONDS}s grid, "
+        f"so its idle wakes are jitter accidents — measured 1.5% to 7.5%, mean "
+        f"3.5%. A uniform fleet idling this often is a saturated grid that "
+        f"stopped being saturated"
+    )
+    assert configured_rate > uniform_rate * 2, (
+        f"configured {configured_rate:.1%} against uniform {uniform_rate:.1%} — "
+        f"the two fleets no longer differ in the way that makes "
+        f"`configured_fleet_cfg` the only fixture this section can be run on"
+    )
+
+
+def test_a_wake_that_asks_nobody_is_reachable_at_the_shipping_tick(
+    configured_fleet_cfg: Config, sent: dict[str, list]
+) -> None:
+    """The empty pass, reached rather than constructed — and what it publishes.
+
+    THREE ASSERTIONS AND THEY ARE NOT THE SAME ONE. That an empty wake HAPPENS
+    is what makes `T-09-04` live rather than theoretical. That every empty wake
+    publishes `null` is the mitigation. That every NON-empty wake still publishes
+    a real boolean is the over-reach guard, asserted here at the loop as well as
+    at `status.write`, because a fix that withheld the verdict from every wake
+    would satisfy the first two while taking the flag off the dashboard entirely.
+    """
+    published: list[dict] = []
+
+    def _snapshot(_delay: float) -> None:
+        published.append(json.loads(configured_fleet_cfg.status_path.read_text()))
+
+    random.seed(_IDLE_SEED)
+    cli.watch_loop(
+        configured_fleet_cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        State.load(configured_fleet_cfg.state_path),
+        cycles=48,
+        sleep=_snapshot,
+    )
+
+    assert len(published) == 48, published
+    asked = [sum(1 for r in p["retailers"] if r["checked"]) for p in published]
+    empty = [i for i, n in enumerate(asked) if n == 0]
+
+    assert empty, (
+        f"no wake in 48 asked nobody, so this test cannot be evidence that the "
+        f"empty pass is reachable at the shipping tick — retailers asked per "
+        f"wake was {asked}. Measured over 20 seeds on this fixture: the first "
+        f"idle wake lands at 6 under 19 of them and at 7 under the twentieth"
+    )
+    for i in empty:
+        assert published[i]["healthy"] is None, (
+            f"wake {i} asked none of the six configured retailers and published "
+            f"healthy={published[i]['healthy']!r}. That document is a record of "
+            f"a check that never happened — T-09-04, and after 09-02 it is a "
+            f"quarter of every day's documents rather than a rarity"
+        )
+    for i, n in enumerate(asked):
+        if n:
+            assert published[i]["healthy"] in (True, False), (
+                f"wake {i} asked {n} retailer(s) and still withheld the verdict "
+                f"({published[i]['healthy']!r}) — the empty-pass fix reached "
+                f"into the wakes that DID check something, which takes the flag "
+                f"off the dashboard rather than making it honest"
+            )
+
+    # AND THE FACTS UNDER THE WITHHELD VERDICT ARE STILL THERE. An idle tick
+    # publishes no verdict; it does not publish an empty page. `07-04`'s rule —
+    # one row per configured retailer, one per configured watch — is unchanged,
+    # and this asserts it on the tick that would be the tempting place to skip
+    # the write altogether.
+    for i in empty:
+        assert len(published[i]["retailers"]) == len(_FLEET), (
+            f"wake {i} published {len(published[i]['retailers'])} retailer rows "
+            f"of {len(_FLEET)}; withholding the verdict must not withhold the "
+            f"rows under it"
+        )
+        assert len(published[i]["watches"]) == len(configured_fleet_cfg.watches)
+        assert published[i]["duration_seconds"] is not None, (
+            "an idle wake still TIMED its pass — the document says nothing was "
+            "asked, not that nothing ran"
         )
