@@ -607,6 +607,59 @@ reader comparing the two phases to trip over.
 
 ---
 
+## A trap that bit this wave: a stale `.pyc` can keep a reverted perturbation live
+
+**Found 2026-09-01 while running this plan's own red-watches. Recorded here because every remaining
+wave in this phase red-watches `tests/test_pacing.py`, and the trap defeats the protocol silently.**
+
+The red-watch protocol in this repository is: perturb the source, run, observe the red, revert,
+confirm `diff` is back to the intended edit. **That protocol has a hole, and it is `diff`.**
+
+RED 2's perturbation changed `_FLEET_INTERVALS["gamestop"]` from `900` to `600`. **Those two source
+files are byte-identical in LENGTH**, and the revert (`cp`) landed within the same wall-clock second
+as the perturbed run. CPython and pytest's assertion-rewriting cache both validate a cached `.pyc`
+against the source's **mtime (one-second resolution) and size**. Both matched, so the cache was
+considered valid and **the reverted source was never recompiled**. The interpreter kept executing the
+perturbed bytecode.
+
+**The observable symptoms, in the order they appeared and each one misleading:**
+
+1. `diff` said the source was IDENTICAL. It was.
+2. `git status --porcelain` was empty. It was.
+3. `grep` showed `"gamestop": 900` in the working tree *and* in `HEAD`. It did.
+4. `make verify-offline` nonetheless failed with `this table's non-default cadences are
+   {'amazon': 1800, 'gamestop': 600}` — a value present in no file on disk.
+5. Bisecting by test file reported **every** file as the trigger, which is the shape of a
+   session-level cause being mistaken for a test interaction.
+
+Measured directly: `tests/__pycache__/test_pacing.cpython-312-pytest-9.1.1.pyc` at
+`08:13:36.389` against a source at `08:13:36.575` — 186 ms apart, the same second.
+
+**The fix is one line and it belongs in the protocol, not in a test:**
+
+```bash
+find . -name "__pycache__" -not -path "./.venv/*" -exec rm -rf {} + ; rm -rf .pytest_cache
+```
+
+**All three of this plan's red-watches were re-run from a cleared cache after this was found**, and
+all three reproduced with the same assertion firing and the same count — `1 failed, 97 passed` each,
+with `98 passed` restored. **The recorded counts in § *Rule 1's stated exception* are the re-run
+ones**, not the originals; the originals agreed, but they were taken under a cache that had just been
+shown to be untrustworthy and are therefore not what is cited.
+
+**Waves 2-5 must clear the cache between a perturbation and its revert.** A same-length edit — one
+digit for another, `True` for `Fals`, `<=` for `>=` — reverted quickly is exactly the shape this hole
+swallows, and it is also exactly the shape of most red-watch perturbations. **The failure mode is the
+worst available: the gate goes red for a reason that is not in any file, and the natural response is
+to distrust the new test.**
+
+*(This belongs in `CLAUDE.md` § *Traps that have actually bitten*. `09-01` cannot put it there:
+this plan's acceptance criteria assert its changed-file list by equality, and editing `CLAUDE.md`
+would poison the scope fence the before-number depends on. **Handed to a later wave in this phase**,
+and recorded here so it is not lost if none of them takes it.)*
+
+---
+
 ## What `09-01` does not claim
 
 - **Criterion 5 is NOT discharged here.** No mutation was registered and none was observed CAUGHT;
