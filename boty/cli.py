@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import random
 import sys
 import time
@@ -382,6 +383,88 @@ FAILURES_BEFORE_WARNING = 3
 #: supervisor can act on.
 FAILURES_BEFORE_GIVING_UP = 10
 
+#: THE CYCLE THOSE TWO COUNTS WERE SIZED AGAINST, and it stopped being the
+#: cycle on 2026-09-01. Until REQ-23, `watch_loop` slept `cfg.interval_seconds`
+#: per cycle and the configured default is 300 s — so "3 failures" MEANT fifteen
+#: minutes of a monitor that is running and not monitoring, and "10" meant fifty.
+#:
+#: Recorded as a named number rather than left in the two literals above because
+#: the wall-clock meaning is the thing being preserved, and a duration nobody
+#: wrote down is a duration that changes silently the next time the tick moves.
+_REFERENCE_CYCLE_SECONDS = 300.0
+
+#: What the two counts MEAN, in seconds. DERIVED from the literals above rather
+#: than written out beside them: two numbers that have to agree are two numbers
+#: that only have to disagree once, which is the argument `loop_tick_seconds`
+#: makes about the tick and `Pacer` makes about the tolerance. Editing either
+#: count above moves its duration here, and nothing has to be kept in step.
+#:
+#:     WARN_AFTER_SECONDS     = 3 x 300 =  900 s = 15 minutes
+#:     GIVE_UP_AFTER_SECONDS  = 10 x 300 = 3000 s = 50 minutes
+WARN_AFTER_SECONDS = FAILURES_BEFORE_WARNING * _REFERENCE_CYCLE_SECONDS
+GIVE_UP_AFTER_SECONDS = FAILURES_BEFORE_GIVING_UP * _REFERENCE_CYCLE_SECONDS
+
+
+def failures_before(seconds: float, tick: float) -> int:
+    """How many consecutive failed cycles `seconds` of wall clock now costs.
+
+    REQ-23, 2026-09-01. `FAILURES_BEFORE_WARNING` and `FAILURES_BEFORE_GIVING_UP`
+    are counts of CYCLES, and 09-02 shortened the cycle: six retailers on a 300 s
+    global cadence now put `watch_loop` on a 50 s tick. Inherited as counts, the
+    two thresholds would have fired SIX TIMES SOONER in wall time — a warning
+    after 2.5 minutes instead of 15, and a give-up after 8.3 instead of 50.
+
+    NEITHER OF THOSE IS AN ACCEPTABLE THING TO INHERIT BY ACCIDENT, and they are
+    unacceptable for two different reasons.
+
+    THE WARNING ONE PUSHES TO A PHONE. `_warn_monitor_is_stuck` is the one send
+    in this file that survives the 2026-08-12 rule, and its docstring earns that
+    by arguing it is "RARE BY CONSTRUCTION". Rare was doing real work in that
+    sentence: three consecutive raising cycles at 300 s is a quarter of an hour
+    of total blindness, which is a fact about the service. Three at 50 s is two
+    and a half minutes, which a transient DNS failure or a retailer timing out
+    can produce without anything being wrong — and a monitor that pages Dan for
+    150 seconds of nothing is the noise he has twice asked this project to stop
+    making. Multiplying the paging rate by six as a side effect of a scheduling
+    change is exactly the silent inheritance `09-DECISIONS.md` § *Collision 5*
+    forbids.
+
+    THE GIVE-UP ONE COSTS MORE THAN IT USED TO, WHICH IS THE HALF A READER WILL
+    MISS. Giving up exits non-zero so the supervisor can restart — and since
+    09-02 a restart RE-PHASES every retailer, so some first checks are delayed by
+    up to one standing interval (300 s for the default group, 1800 s for amazon;
+    `09-DECISIONS.md` § *Collision 2* prices it). A restart is therefore a more
+    expensive event after this phase than before it, at exactly the moment the
+    threshold would have started firing six times sooner. The two changes push
+    the same way, and inheriting the count would have compounded them.
+
+    SO THE DURATION IS THE INVARIANT AND THE COUNT IS DERIVED FROM THE TICK. At
+    the 300 s reference cycle this returns 3 and 10 — the identity, so every
+    single-retailer test in `tests/test_cli_watch.py` still exercises the exact
+    thresholds it was written against. At the six-retailer fleet's 50 s tick it
+    returns 18 and 60, which is 900 s and 3000 s: the same fifteen and fifty
+    minutes, to within the loop's own +/-15% jitter.
+
+    `ceil`, NOT `round`. A threshold that rounded down would fire EARLIER than
+    the stated duration, which is the direction this function exists to prevent.
+    Measured: with `round`, `failures_before(900, 400)` gives 2 rather than 3 —
+    fifteen minutes promised and thirteen and a third delivered.
+
+    THIS WAS WRITTEN WITH A `max(1, ...)` FLOOR BESIDE THE `ceil` AND THE FLOOR
+    WAS MEASURED UNREACHABLE, so it is deleted rather than left as a comment that
+    will be believed. The reasoning for it was sound — a tick longer than the
+    duration must still cost at least one failed cycle, because a threshold of 0
+    would push on a loop that has not failed at all — and `ceil` already
+    delivers it for every positive duration: `ceil(900 / 100000) == 1`. Removing
+    the floor was watched against the suite on 2026-09-01 and **56 passed, 0
+    failed**: it defended nothing that `ceil` was not already defending, which is
+    `scripts/mutation_check.py`'s own rule about a break already caught by a
+    second independent test. The `== 1` assertions in
+    `test_a_threshold_never_rounds_down_and_never_reaches_zero` are kept and now
+    bind `ceil`'s floor directly, where they do fire.
+    """
+    return math.ceil(seconds / tick)
+
 
 def _warn_monitor_is_stuck(cfg: Config, failures: int) -> None:
     """Announce that the loop itself is failing, best-effort.
@@ -406,6 +489,17 @@ def _warn_monitor_is_stuck(cfg: Config, failures: int) -> None:
     IT IS RARE BY CONSTRUCTION, which is why it is not the noise Dan is
     describing: three consecutive raising cycles, once per episode
     (`test_the_stuck_warning_is_sent_once_not_every_cycle`), not once per poll.
+
+    THE UNIT IN THAT SENTENCE MOVED ON 2026-09-01 AND ITS MEANING DID NOT, which
+    is the whole of REQ-23's effect here. "Three consecutive raising cycles" was
+    written when a cycle was 300 s, so what it really promised was FIFTEEN
+    MINUTES of a monitor that is running and not monitoring. 09-02 put the loop
+    on a 50 s tick and three cycles became two and a half minutes — a transient
+    DNS failure, and a push to a phone about it. `failures_before` re-derives the
+    threshold from `WARN_AFTER_SECONDS` and this loop's tick so the fifteen
+    minutes survive the tick change: 3 cycles at the 300 s reference, 18 at the
+    six-retailer fleet's 50 s. Rare is still doing the work it does in the
+    paragraph above, and it is now doing it in seconds rather than by inheritance.
     """
     try:
         send_health_warning(
@@ -654,6 +748,14 @@ def watch_loop(
         roster=roster,
         tick=tick,
     )
+    # THE TWO FAILURE THRESHOLDS, IN CYCLES, DERIVED FROM THIS LOOP'S OWN TICK.
+    # A THIRD READER OF THE SAME NUMBER, and for the same reason the other two
+    # exist: the thresholds are durations, `tick` is how much wall clock one
+    # failed cycle costs, and a threshold sized against some other tick is a
+    # promise about a service that is not this one. See `failures_before` for
+    # what is being preserved and what it would have cost to inherit the counts.
+    warn_after = failures_before(WARN_AFTER_SECONDS, tick)
+    give_up_after = failures_before(GIVE_UP_AFTER_SECONDS, tick)
     # `warned` is restored rather than started empty, and it has to be assigned
     # HERE rather than above, because the pacer it reads through does not exist
     # until the line above. An empty `warned` on a fresh process is precisely how
@@ -715,9 +817,9 @@ def watch_loop(
             # pretending.
             consecutive_failures += 1
             log.exception("check cycle failed (%d in a row); continuing", consecutive_failures)
-            if consecutive_failures == FAILURES_BEFORE_WARNING:
+            if consecutive_failures == warn_after:
                 _warn_monitor_is_stuck(cfg, consecutive_failures)
-            if consecutive_failures >= FAILURES_BEFORE_GIVING_UP:
+            if consecutive_failures >= give_up_after:
                 log.error(
                     "giving up after %d consecutive failed cycles — exiting non-zero so "
                     "the supervisor can restart this or mark it failed",

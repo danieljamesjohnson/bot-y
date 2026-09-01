@@ -2248,3 +2248,146 @@ def test_a_wake_that_asks_nobody_is_reachable_at_the_shipping_tick(
             "an idle wake still TIMED its pass — the document says nothing was "
             "asked, not that nothing ran"
         )
+
+
+# --------------------------------------------------------------------------
+# REQ-23: the two failure thresholds are DURATIONS, and the tick changed
+# --------------------------------------------------------------------------
+#
+# `09-DECISIONS.md` § *Collision 5*. `FAILURES_BEFORE_WARNING = 3` and
+# `FAILURES_BEFORE_GIVING_UP = 10` are counts of CYCLES sized against a 300 s
+# cycle — fifteen minutes to a warning, fifty to a give-up. 09-02 put the loop on
+# a 50 s tick. Inherited as counts they would have fired SIX TIMES SOONER: 2.5
+# minutes to a push, 8.3 to an exit.
+#
+# THE RESOLUTION TAKEN IS RE-DERIVATION, not acceptance, and the reasoning is at
+# `cli.failures_before` rather than in a planning document. Both halves are worth
+# a sentence here because they push the same way:
+#
+#   - The warning PUSHES TO A PHONE, and its own docstring earns that send by
+#     arguing it is "RARE BY CONSTRUCTION". At 150 seconds it is not rare.
+#   - The give-up exits non-zero so the supervisor restarts — and since 09-02 a
+#     restart RE-PHASES every retailer, delaying some first checks by up to one
+#     standing interval. So a restart costs MORE after this phase, at exactly the
+#     moment the threshold would have started firing six times sooner.
+#
+# A DERIVED CONSTANT NOTHING CHECKS IS A CONSTANT THAT DRIFTS, so the derivation
+# is asserted at both ticks and in both units — the count, and the wall clock it
+# buys — rather than only at the one the daemon happens to run today.
+
+
+def test_the_failure_thresholds_are_the_old_counts_at_the_old_cycle(cfg: Config) -> None:
+    """The identity, and it is what keeps every other test in this file honest.
+
+    At the 300 s reference cycle the derivation returns exactly the literals it
+    was derived from. That is not a coincidence to be smiled at — it is why the
+    single-retailer tests above still exercise the thresholds they were written
+    against, and why this change has no behavioural effect on any fleet whose
+    tick is still the standing cadence.
+    """
+    assert cli.failures_before(cli.WARN_AFTER_SECONDS, 300.0) == cli.FAILURES_BEFORE_WARNING
+    assert cli.failures_before(cli.GIVE_UP_AFTER_SECONDS, 300.0) == cli.FAILURES_BEFORE_GIVING_UP
+    assert (cli.WARN_AFTER_SECONDS, cli.GIVE_UP_AFTER_SECONDS) == (900.0, 3000.0), (
+        "the two durations being preserved are 15 and 50 minutes; if these moved "
+        "the preservation claim moved with them"
+    )
+
+
+def test_the_failure_thresholds_keep_their_wall_clock_at_the_new_tick() -> None:
+    """The whole point, asserted in MINUTES and not only in cycles.
+
+    A count is not a promise a reader can check. 18 failed cycles at 50 s is the
+    same fifteen minutes 3 at 300 s was, and 60 is the same fifty — and stating
+    it in the unit the promise is made in is what stops the next tick change
+    being inherited silently the way this one nearly was.
+    """
+    tick = _FLEET_TICK_SECONDS
+
+    warn = cli.failures_before(cli.WARN_AFTER_SECONDS, tick)
+    give_up = cli.failures_before(cli.GIVE_UP_AFTER_SECONDS, tick)
+
+    assert (warn, give_up) == (18, 60), (
+        f"at the six-retailer fleet's {tick}s tick the thresholds derive to "
+        f"{warn} and {give_up} cycles, not 18 and 60"
+    )
+    assert warn * tick / 60 == 15.0, (
+        f"the monitor would now push to a phone after {warn * tick / 60:.1f} "
+        f"minutes of total blindness rather than 15 — `_warn_monitor_is_stuck` "
+        f"earns its send by being RARE, and that word is measured in time"
+    )
+    assert give_up * tick / 60 == 50.0, (
+        f"the monitor would now exit non-zero after {give_up * tick / 60:.1f} "
+        f"minutes rather than 50 — and since 09-02 a restart re-phases every "
+        f"retailer, so restarting sooner costs more than it used to"
+    )
+
+
+def test_a_threshold_never_rounds_down_and_never_reaches_zero() -> None:
+    """Two boundary properties, both of which fire in the unsafe direction.
+
+    `ceil` rather than `round`: rounding down fires EARLIER than the stated
+    duration, which is the thing being prevented. `max(1, ...)` because a tick
+    longer than the duration must still cost at least one failed cycle — a
+    threshold of 0 would push on a loop that has not failed at all.
+    """
+    assert cli.failures_before(900.0, 400.0) == 3, "2.25 cycles must round UP to 3"
+    assert cli.failures_before(900.0, 901.0) == 1, "a tick past the duration still costs a cycle"
+    assert cli.failures_before(900.0, 100000.0) == 1
+
+
+def test_the_stuck_warning_waits_the_derived_count_on_the_shipping_fleet(
+    configured_fleet_cfg: Config, sent: dict[str, list]
+) -> None:
+    """The derivation observed through the loop, not only at the function.
+
+    Seventeen consecutive raising cycles on the fleet the daemon runs say
+    nothing; the eighteenth pushes. Under the inherited count the third would
+    have — which at a 50 s tick is 150 seconds of a transient fault reaching
+    Dan's phone.
+    """
+    state = State.load(configured_fleet_cfg.state_path)
+
+    cli.watch_loop(
+        configured_fleet_cfg, _explodes(RuntimeError("boom")), state, cycles=17, sleep=lambda s: None
+    )
+    assert sent["health"] == [], (
+        "the monitor pushed before 15 minutes of blindness had passed — 17 "
+        "cycles at a 50s tick is 14 minutes"
+    )
+
+    cli.watch_loop(
+        configured_fleet_cfg, _explodes(RuntimeError("boom")), State.load(configured_fleet_cfg.state_path), cycles=18, sleep=lambda s: None
+    )
+    assert sent["health"] == [["(all)"]], (
+        "eighteen consecutive raising cycles at a 50s tick is fifteen minutes of "
+        "a monitor that is running and not monitoring, and nothing was said"
+    )
+
+
+def test_the_loop_gives_up_on_the_derived_count_on_the_shipping_fleet(
+    configured_fleet_cfg: Config, sent: dict[str, list]
+) -> None:
+    """Bounded on both sides, at the tick the daemon ships.
+
+    59 failed cycles is still "keep trying"; 60 is fifty minutes and the exit
+    code systemd can act on. Asserted on both sides because a threshold checked
+    only from above passes for a loop that gives up immediately.
+    """
+    state = State.load(configured_fleet_cfg.state_path)
+    assert (
+        cli.watch_loop(
+            configured_fleet_cfg, _explodes(RuntimeError("boom")), state, cycles=59, sleep=lambda s: None
+        )
+        == 0
+    ), "the loop gave up before fifty minutes had passed"
+
+    assert (
+        cli.watch_loop(
+            configured_fleet_cfg,
+            _explodes(RuntimeError("boom")),
+            State.load(configured_fleet_cfg.state_path),
+            cycles=60,
+            sleep=lambda s: None,
+        )
+        == 1
+    ), "sixty failed cycles at a 50s tick is fifty minutes and the loop kept going"

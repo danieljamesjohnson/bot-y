@@ -255,6 +255,45 @@ def _retailer_intervals(settings: dict[str, object], global_interval: int) -> di
     global interval whatever its override says. Measured before this guard, at
     `interval_seconds: 3600` with `gamestop: 900`:
 
+    WITHDRAWN 2026-09-01, REQ-23 — and quoted in full above rather than edited
+    away, because it is the argument this rule was granted on and a rule whose
+    stated reason has quietly gone false is a rule nobody can audit. The
+    withdrawn sentence is:
+
+        "`cli.watch_loop` sleeps `interval_seconds * uniform(0.85, 1.15)` per
+         CYCLE, not per retailer, so no watch can be polled more often than
+         roughly the global interval whatever its override says."
+
+    WHAT OVERRULED IT. `09-DECISIONS.md` § *Collision 1*: four retailers sit on
+    the 300 s default, a 300 s tick gives exactly one tick per 300 s span, so all
+    four had to be dispatched at that one tick whatever position the schedule
+    gave them — criterion 1 was unsatisfiable while the tick equalled the
+    cadence. `cli.watch_loop` now sleeps `loop_tick_seconds(...) * uniform(0.85,
+    1.15)`, a tick DERIVED from `interval_seconds` rather than `interval_seconds`
+    itself: 50 s on this fleet. So the loop wakes six times per default cadence,
+    and the sentence's "no watch can be polled more often than roughly the global
+    interval" is no longer true OF THE LOOP.
+
+    WHAT SURVIVES, AND IT IS THE WHOLE RULE. `interval_seconds` stopped being the
+    loop's sleep and became THE SHORTEST STANDING CADENCE — which is still the
+    floor a per-retailer override must not go under. Which retailers a wake
+    dispatches is `Pacer.due`'s answer and their cadences did not move: an
+    override below `interval_seconds` would still publish a cadence no retailer
+    is scheduled at, which is still REQ-21's defect (a reading presented as
+    something it is not) and still the 3.4x drift measured below. **The
+    validator is unchanged, and so is the `EQUAL IS ACCEPTED` boundary.** Only
+    the mechanism that enforces the floor moved, from the loop's sleep to the
+    schedule's cadence.
+
+    ONE THING THIS PLAN COULD NOT REACH, RECORDED RATHER THAN LEFT TO BE FOUND.
+    The same withdrawn sentence appears a SECOND time, in the `ValueError` this
+    function raises — *"The loop sleeps interval_seconds per cycle, so a shorter
+    override cannot be kept"* — and that copy is user-facing rather than a
+    comment. `09-04`'s scope is a dated reversal in this docstring with the
+    validator proved untouched by diff, so touching the message was not
+    available here. It is handed forward, and until it is fixed an operator who
+    trips this rule reads a true verdict argued from a false sentence.
+
         published cadence for gamestop: 900
         real gap between polls: >= ~3060 s
 
@@ -277,6 +316,26 @@ def _retailer_intervals(settings: dict[str, object], global_interval: int) -> di
     actually asked roughly every 750 s while 900 is published. That direction
     UNDER-reports staleness, by at most half the default interval, and it lives
     in `pacing.due` rather than in the loader — a comment here, not a change.
+
+    THE NUMBER IN THAT PARAGRAPH MOVED ON 2026-09-01, REQ-23, and the paragraph
+    is kept above rather than edited because its DIRECTION is unchanged and only
+    its magnitude fell. `Pacer.due`'s tolerance is now half the loop's TICK
+    (`_tolerance_interval`, re-anchored by 09-02 with its own dated reversal at
+    `pacing.due`), not half `default_interval`. On this fleet the tick is 50 s,
+    so the grace is 25 s rather than 150 s and the 900-second-override retailer
+    is asked roughly every **875 s** while 900 is published — not every 750 s.
+
+    So the under-report survives and shrinks by a factor of six: at most half a
+    TICK rather than at most half the default interval. Still a comment here and
+    not a change, for the same reason as before — it lives in `pacing.due`.
+
+    `09-DECISIONS.md` § *Collision 6* assigned BOTH of this docstring's notes to
+    09-02. **09-02 landed neither**; `git log -- boty/config.py` shows this file
+    was last touched by `1092940 fix(07)`, before this phase began. 09-04 landed
+    both, which is why they carry this wave's number and not that one's. The
+    pacing-side half of the same collision WAS landed by 09-02, at `pacing.due`
+    — so the two halves of one decision sat one commit apart and disagreed with
+    each other for the length of the phase.
     """
     raw = settings.get("retailer_intervals") or {}
     if not isinstance(raw, dict):
