@@ -1338,8 +1338,88 @@ therefore **not performed**, and the reserve candidate recorded above
 **`config/products.yaml`'s Best Buy control target is byte-unchanged.** No control is shipped that
 has not been confirmed by a live reading; the one configured here now has one, taken today.
 
+#### Criterion 3's verdict, and the budget accounted for to the request
 
+**Criterion 3, quoted rather than paraphrased:** *"Best Buy's control is repaired — measured against
+a real reading, not a fixture — or replaced with one that reads, with the replacement's durability
+argued."*
 
+> ### **MET IN PART.**
+>
+> **The half that holds:** the control was measured against a **real reading, not a fixture** —
+> read 3, 2026-09-02T14:24:13Z–14:24:47Z, `IN_STOCK`, `$59.99`, one offer, `seller: "Best Buy"`,
+> `blocks 3 / unparseable 0`, 1,157,107 B — and the reading disproves the premise the criterion was
+> built on. **There was no dead control to repair.** What was defective was a *record*, and the
+> record is corrected: `10-DECISIONS.md` § Collision 10 established offline that the evidence was
+> absent-then-stale rather than contrary, and these reads confirm it on the wire.
+>
+> **The half that is missing, named in the same breath:** through the **configured** path — the
+> SKU search `bestbuy_product_url` builds, which is the path the running daemon uses — the control
+> **does not resolve**, and the monitor reports it as a **dead control**. Twice, at two settles,
+> for a SKU that reads IN_STOCK when its product page is fetched directly. That defect is
+> **named and unrepaired here**: the remedy lives in `boty/browser.py` or `boty/retailers.py`, the
+> three authorised reads were spent establishing the fault, and **a transport fix that no live
+> reading has confirmed is a recommendation rather than a repair.**
+>
+> **Neither half is allowed to stand in for the other.** A reading of the product page is not a
+> working control; a durability argument is not a reading. Both are stated, and the criterion is
+> not reworded so that it passes.
+
+**What is now known that was not known this morning**, and it is more than the criterion asked for:
+Best Buy's SKU-search resolution changed from a server-side redirect to a client-side one, and
+`10-01`'s clause A — adopted on the reasoning that a search-endpoint canonical is *"Best Buy's own
+statement about what page you are on"* — now fires on **every** Best Buy SKU, alive or dead. The
+mechanism this phase built to stop a dead control being misreported was, within four weeks of being
+designed, reporting a **live** control as dead. Nothing offline could have found that: the fixtures
+are the August pages, and this is the first live reading of this SKU since 2026-08-04.
+
+### The budget, accounted for
+
+| | |
+|---|---|
+| **Authorised** | **3** (`QUESTIONS.md` § 0g) |
+| **Navigations that left this host** | **3** — read 1, read 2, read 3 |
+| **Unspent** | **0** |
+| **Pre-navigation failures** | **0** — the exemption was available and was **not taken** |
+| **Retailers contacted** | **Best Buy only.** Not Amazon, Target, Walmart, GameStop or Nintendo |
+
+| read | UTC start → end | spacing from previous | URL shape | outcome |
+|---|---|---|---|---|
+| 1 | 14:13:01Z → 14:13:13Z | — | `/site/searchpage.jsp?st=<sku>` | `unresolved=True` off a 21,823 B document with **no `<body>`**. Not trusted, and said so |
+| 2 | 14:18:26Z → 14:19:02Z | **313 s** | `/site/searchpage.jsp?st=<sku>` | `unresolved=True` again, off 150,974 B — carrying Best Buy's own `308` to the product page. **False dead, established** |
+| 3 | 14:24:13Z → 14:24:47Z | **311 s** | `/product/<slug>/<id>/sku/<sku>` | **`IN_STOCK`, `$59.99`, first-party**, 1,157,107 B |
+
+Every spacing is above the 300 s standing cadence Best Buy is configured with. **No fourth request
+was made under any branch**, and none was contemplated after read 3 — the cap is the cap.
+
+**What was not run, and what was not written.** `boty check` was **not** run; it requests every
+retailer and writes the daemon's live payload. `scripts/control_check.py` was **not** run; it checks
+every configured control at every retailer, which is five retailers more than this budget allows —
+it was read for reference only. `state.json`, `pacer-state.json` and `served/boty/status.json` were
+**not written by this plan**: the reads went through the adapter directly, and neither
+`boty.status.write` nor `monitor.run_once` was imported or called. Those three files continue to
+advance on the running daemon's own cadence, which is what a monitor that was left alone looks like.
+`sudo systemctl restart boty` was **not** run.
+
+**A browser was started before read 1 and it cost nothing**, because it was pointed at
+`about:blank` — a render that never leaves this host. That is why the one-shot pre-navigation
+exemption is still unspent: chromium's ability to start was established without asking Best Buy
+whether it could.
+
+### What this record does NOT claim
+
+- **Not that anything is on the wire.** `boty` is an editable install and the deployed daemon is
+  running code from before this phase. Nothing here reaches it until `sudo systemctl restart boty`,
+  which is Dan's call and is still deferred — it now carries Phases 8, 9 and 10 together.
+- **Not that a control confirmed reading once is a control that reads.** Read 3 is one reading at
+  one moment. It is a reading, not a distribution.
+- **Not that Best Buy's robots.txt or terms have been read.** They have not, they remain `unread` in
+  the support matrix, and reading them would have cost a navigation the cap did not have.
+- **Not that the incumbent is a good control.** It fails `D2`, `D3`, `D4` and now `D5`. It is
+  **alive**, which is a different claim, and the two were confused by the requirement this phase
+  inherited.
+- **Not that the false dead is fixed.** It is measured, named, and left in place with its remedy
+  written down.
 
 ---
 
