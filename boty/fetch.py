@@ -142,6 +142,53 @@ def is_refusal(exc: BaseException) -> bool:
     return isinstance(exc, FetchError) and exc.status in REFUSAL_STATUSES
 
 
+#: Statuses that mean "the target is not there" — a fact about OUR config, not
+#: about the retailer. Declared BESIDE `REFUSAL_STATUSES` above, and deliberately
+#: disjoint from it: a refusal and a deletion are different facts with different
+#: remedies, and `tests/test_fetch.py` asserts the disjointness rather than
+#: trusting this comment.
+#:
+#: THE BOUNDARY, ARGUED HERE RATHER THAN IN A COMMIT MESSAGE:
+#:
+#: - **404 and 410 are in.** Both say the requested thing does not exist; 410
+#:   says so permanently. The request arrived, the retailer answered, and the
+#:   answer was about the target rather than about us.
+#: - **401/403/429 are out** — they are the mirror predicate's, and they mean no
+#:   page came back at all, so nothing about resolution was established.
+#: - **5xx is out.** That is the server failing, not the target being absent.
+#:   Reading it as a dead control would send somebody to edit
+#:   `config/products.yaml` about a product that is fine, in the middle of the
+#:   retailer's outage.
+#: - **A transport failure is out** by construction: it carries no status, so it
+#:   establishes nothing in either direction.
+#:
+#: WHY IT EXISTS (REQ-24, `10-DECISIONS.md` § Collision 3). Best Buy is addressed
+#: by SKU, so a dead control there is a RESOLUTION failure that
+#: `retailers._verdict_from_html` reads off the page. Every other retailer here
+#: is addressed by URL, where the same death arrives as an HTTP 404 — which
+#: `is_refusal` correctly declines to call a refusal, so until 2026-09-02 it
+#: reached `monitor.assess_health`'s breakage arm and was reported as a probably
+#: broken detector at five retailers.
+#:
+#: THE GAP THIS CANNOT COVER, NAMED AT ITS OWN CONSTANT: `boty/browser.py`
+#: returns `Page(status=200)` unconditionally because the simple API surfaces no
+#: main-frame status, so a rung-3 reading has no status to read. Best Buy is
+#: covered by the resolution producer instead; **Target is covered by neither**.
+#: Inventing a status in `browser.py` is refused — the honest route is the
+#: response object, for a future phase.
+UNRESOLVED_STATUSES = frozenset({404, 410})
+
+
+def is_unresolved(exc: BaseException) -> bool:
+    """True when this exception is a retailer saying the target does not exist.
+
+    The exact mirror of `is_refusal` above, and never true at the same time as
+    it: a `Blocked` wall is a refusal and establishes nothing about resolution,
+    so it is not special-cased here — it is simply not a `FetchError`.
+    """
+    return isinstance(exc, FetchError) and exc.status in UNRESOLVED_STATUSES
+
+
 @dataclass(frozen=True)
 class Page:
     url: str

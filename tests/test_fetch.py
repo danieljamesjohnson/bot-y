@@ -388,6 +388,120 @@ def test_every_block_phrase_is_lowercase() -> None:
 
 
 # --------------------------------------------------------------------------
+# A deleted target is not a refusal, and neither one is the other
+# --------------------------------------------------------------------------
+#
+# `is_unresolved` is the exact mirror of `is_refusal`: same argument type, same
+# shape, its status set declared beside the other one. It exists because Best
+# Buy is addressed by SKU and every other retailer here is addressed by URL — so
+# a control whose product is gone dies as a *resolution* failure at one retailer
+# and as an HTTP **404** at the other five, and until 2026-09-02 the second was
+# reported as a probably-broken detector (REQ-24, `10-DECISIONS.md` § Collision
+# 3).
+#
+# WHY THESE TESTS ARE HERE AND THE MIRROR'S ARE NOT. The `is_refusal` status
+# tests live in `tests/test_pacing.py:141-162`, which is not where a reader of
+# either predicate would look for them — the same misfiling this phase already
+# had to chase for `assess_health`, whose six tests are in that file too. They
+# are left where they are (moving them is a diff about nothing, in a file this
+# plan may otherwise not touch), and this comment is the pointer. The
+# disjointness test below is the one place both predicates are exercised
+# together, so it is the one that binds them.
+
+
+@pytest.mark.parametrize("status", sorted(fetch.UNRESOLVED_STATUSES))
+def test_a_deleted_target_is_a_resolution_failure(status: int) -> None:
+    """404 and 410 mean the target is not there. That is a fact about OUR config.
+
+    It is the second producer of REQ-24's dead-control state and it is not a
+    claim about the retailer: the request arrived, the retailer answered, and the
+    answer was that the thing this watch names does not exist. The remedy is one
+    line in `config/products.yaml`.
+    """
+    assert fetch.is_unresolved(fetch.FetchError(f"HTTP {status}", status=status))
+
+
+@pytest.mark.parametrize("status", sorted(fetch.REFUSAL_STATUSES))
+def test_a_refusal_is_not_a_resolution_failure(status: int) -> None:
+    """A refusal produced NO PAGE, so nothing about resolution was established.
+
+    Both directions are asserted, because the interesting failure is not "401 is
+    wrongly unresolved" — it is a future edit that moves a status from one set to
+    the other and leaves the reader with a status that is neither.
+    """
+    exc = fetch.FetchError(f"HTTP {status}", status=status)
+    assert not fetch.is_unresolved(exc)
+    assert fetch.is_refusal(exc), "a status that stopped being a refusal is a separate change"
+
+
+@pytest.mark.parametrize("status", [500, 502, 503])
+def test_a_server_fault_is_not_a_resolution_failure(status: int) -> None:
+    """A 5xx is the retailer failing, not the target being absent.
+
+    Reading it as a dead control would send somebody to edit
+    `config/products.yaml` about a product that is fine, during the retailer's
+    outage — a named cause for an unmeasured one, which is the defect this
+    module's neighbours were repaired for.
+    """
+    exc = fetch.FetchError(f"HTTP {status}", status=status)
+    assert not fetch.is_unresolved(exc)
+    assert not fetch.is_refusal(exc)
+
+
+def test_a_transport_failure_carries_no_status_and_establishes_nothing() -> None:
+    """A timeout, a DNS failure or a TLS reset never reached a retailer's answer."""
+    exc = fetch.FetchError("Timeout: read timed out")
+    assert exc.status is None
+    assert not fetch.is_unresolved(exc)
+
+
+def test_a_challenge_page_is_not_a_resolution_failure() -> None:
+    """`Blocked` is a refusal by the mirror predicate and nothing at all by this one.
+
+    A wall is served at HTTP 200 with no product markup, so it establishes
+    neither that the target exists nor that it does not.
+    """
+    exc = Blocked("challenge page matched 'are you a human'")
+    assert fetch.is_refusal(exc)
+    assert not fetch.is_unresolved(exc)
+
+
+def test_the_two_status_sets_are_disjoint() -> None:
+    """ASSERTED, not commented — because a comment cannot go red.
+
+    The two sets are declared beside each other so a reader can see that a
+    refusal and a deletion are different facts. The failure this guards is the
+    quiet one: somebody adds a status to one set, forgets the other, and ships a
+    status that is BOTH a refusal and a resolution failure — at which point the
+    arm precedence in `monitor.assess_health` silently decides which of two
+    measured causes an operator is told about.
+    """
+    assert not (fetch.REFUSAL_STATUSES & fetch.UNRESOLVED_STATUSES), (
+        "a status is now both a refusal and a resolution failure. Those are "
+        "different facts with different remedies; decide which one it is"
+    )
+    # Non-vacuous in both directions: an empty set is disjoint from everything,
+    # and a predicate over an empty set is a gate that cannot bind.
+    assert fetch.REFUSAL_STATUSES and fetch.UNRESOLVED_STATUSES
+
+
+def test_no_status_answers_true_to_both_predicates() -> None:
+    """The same claim as above, made through the FUNCTIONS rather than the sets.
+
+    The set-level assertion is about two constants; this one is about what the
+    two callers actually ask, so it survives an implementation that stops
+    consulting a frozenset. `Blocked` is included because it is the one refusal
+    with no status at all.
+    """
+    exceptions: list[BaseException] = [Blocked("wall")] + [
+        fetch.FetchError(f"HTTP {s}", status=s)
+        for s in sorted(fetch.REFUSAL_STATUSES | fetch.UNRESOLVED_STATUSES | {200, 404, 418, 500})
+    ]
+    both = [e for e in exceptions if fetch.is_refusal(e) and fetch.is_unresolved(e)]
+    assert not both, f"these are read as a refusal AND a resolution failure: {both}"
+
+
+# --------------------------------------------------------------------------
 # Fixtures must not carry the capturing host's identity
 # --------------------------------------------------------------------------
 
