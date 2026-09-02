@@ -162,6 +162,19 @@ find . -name "__pycache__" -not -path "./.venv/*" -exec rm -rf {} + ; rm -rf .py
 **The failure mode is the worst available** — the gate goes red for a reason not in any file,
 and the natural response is to distrust the new test.
 
+**And do NOT revert a perturbation with `git checkout <file>` while the surrounding work is
+uncommitted.** Found 2026-09-02 by 10-02, which lost a finished `assess_health` arm that way.
+`git checkout` restores `HEAD`; it cannot tell your three-character perturbation from the two hundred
+lines you wrote before it, so it discards both. The tell is subtle in exactly the wrong direction:
+the *next* perturbation's run still reports failures — because the real work is gone, not because
+the perturbation landed — so the output looks like a successful red watch. `git status` showing the
+file **unmodified** is what gives it away.
+
+**Commit the work first, or revert from a copy:** `cp boty/x.py /tmp/x.keep` before the first
+perturbation, `cp /tmp/x.keep boty/x.py` to revert, and `diff` the two afterwards to prove the
+restore was byte-identical. Counts taken against a tree in this state are measuring something else
+and have to be re-taken — say so beside them rather than keeping the first number.
+
 ### The dashboard has two non-obvious gates
 
 `served/boty/index.html` is a real page served over the tailnet.
