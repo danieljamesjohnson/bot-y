@@ -312,6 +312,25 @@ measurement rather than by argument. `bestbuy`/`D5` was downgraded **PARTIAL →
 reading: a *live* target reading as a dead control means an `unresolved` from Best Buy carries no
 information in either direction.
 
+**CORRECTION TO THE PARAGRAPH ABOVE, 2026-09-02 — it understated the scope, and the understatement
+was this orchestrator's.** "Twice" is the count of *observations*, and reads as a defect in one
+product. The tree's own records are broader and are the ones to believe: `10-04-SUMMARY.md` § *THE
+FINDING* and `docs/retailer-evidence.md:1250` — **"clause A now fires on every Best Buy SKU, alive or
+dead."** The mechanism is why, and it is SKU-independent: Best Buy's SKU search now answers with a
+**client-side** redirect (`NEXT_REDIRECT;replace;/product/…/sku/6216393;308;`), so `fetch_rendered`
+snapshots the announcing shell — no ld+json, canonical still on the search endpoint — which is clause
+A's exact predicate. Every Best Buy watch is configured through SKU search, so every one of them takes
+that path. Read ③ went **direct to the product URL** and got `IN_STOCK $59.99` off 1,157,107 B with
+blocks 3/0, which is what isolates the defect to the *transport*, not the product.
+
+**Nothing offline could have caught this** — the fixtures are the August pages, captured before the
+redirect became client-side. That is the honest reason a live read was worth spending, and it is a
+better argument for criterion 3's read budget than the one the phase was planned on.
+
+**The generality rests on the executor's two measurements plus the mechanism, not on a third read.**
+The budget is exhausted, so it was not independently re-verified, and that limit is stated rather
+than papered over.
+
 **THE FIX IS NOT SHIPPED, DELIBERATELY.** The reads that would confirm it are spent, and an
 unconfirmed fix is a recommendation rather than a repair. The control was **not swapped** and
 `config/products.yaml`'s Best Buy target is byte-unchanged.
