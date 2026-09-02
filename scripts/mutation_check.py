@@ -1927,6 +1927,205 @@ MUTATIONS = (
         replace="                due_at=0.0,\n",
         breaks="every retailer is born due at the same instant again, so a fresh process asks all six retailers — thirteen watches — inside one burst, which is the request footprint REQ-23 exists to end and the shape a WAF reads as one crawler rather than as six polite clients. The regression does not decay: `record`'s grid advance is untouched and does exactly what it was written to do, PRESERVING the position it is handed, so the four retailers sharing the 300-second cadence are re-anchored together at every multiple of it for the life of the process. 09-01 measured that world at 6 of six retailers inside a single 60-second window over a simulated day; 09-02 transcribed 2 from the fixed one. Every word describing the mechanism survives this edit — the comment above the line still says BORN AT ITS OWN POSITION, `slot_offset` is still defined and still documented, `_next_on_the_grid` still runs, `current_interval` is untouched and every cadence, backoff, cap and cool-off rule still holds — so the schedule is back in lockstep while the module, the tests around it and the dashboard all read as though it is not. And it is worst at exactly the moment it is most visible, because `due_at` is deliberately never persisted: the burst is rebuilt at every restart, which under a flapping unit is the one condition this phase was measured to improve",
     ),
+    # ------------------------------------------------------------------
+    # M44 — A DEAD CONTROL GOES BACK TO BEING SOMEBODY ELSE'S FAULT, AND
+    # EVERY SENTENCE AROUND THE ARM STILL SAYS IT IS NOT. REQ-24
+    # criterion 5, 10-05, 2026-09-02.
+    # ------------------------------------------------------------------
+    #
+    # A PHASE IDENT, registered by 10-05 because criterion 5 asks for one. It
+    # takes the registry to 40. M21-M24 REMAIN THE INTENTIONAL GAP and are
+    # still not filled, for the reason that has not changed: `apply_mutation`
+    # cannot ADD a file, so the defect they would have covered is outside this
+    # harness by construction. `boty/monitor.py` has been in SANDBOX_CONTENTS
+    # since before this registry existed and already carries four idents (M5,
+    # M15, M30, M32), so NOTHING WAS ADDED ANYWHERE to make M44 reachable —
+    # checked before this block was written, exactly as M41, M42 and M43
+    # checked it, and that is the test M21-M24 failed.
+    #
+    # WHAT IT REBUILDS is REQ-24's defect itself. The dead-control arm never
+    # fires, so a group whose control's target no longer resolves falls past it
+    # to the breakage arm and is described as a probably-broken detector — the
+    # ROADMAP's own words for the state of this code before this phase, "today
+    # the first is reported as the third". Not argued: RUN, in a sandbox on
+    # 2026-09-02, one dead bestbuy control through `assess_health`:
+    #
+    #   UNMUTATED  dead_control : True
+    #              action  : the target this control names no longer resolves
+    #                        to a product - pick a replacement and set it in
+    #                        config/products.yaml
+    #              reason  : a control's target no longer resolves to a product
+    #                        - the page was read and named no product matching
+    #                        what this watch asks for, which is a fact about
+    #                        config/products.yaml rather than about the
+    #                        retailer or the extractor
+    #
+    #   MUTATED    dead_control : False
+    #              action  : ''
+    #              reason  : a control product did not read IN_STOCK and was
+    #                        not refused, so readings from this retailer are
+    #                        unverified and a real restock could be missed
+    #                        silently; the cause is not established
+    #
+    # THE MUTATED SENTENCE IS THE ONE 10-01 TRANSCRIBED OFF PRE-PHASE CODE,
+    # WORD FOR WORD, and the action is empty again — the one thing a person
+    # could actually do stops being said at the moment it is true. That is this
+    # project's core defect, a confident sentence about the wrong subject,
+    # rebuilt by deleting eight words. And nothing else moves: `Result
+    # .unresolved` is still set by the predicate, `DEAD_CONTROL_ACTION` is
+    # still defined and still exported, the arm below still carries its forty
+    # lines of comment explaining a state that can no longer be reached, and
+    # the alert text, the status payload and the dashboard all read as though
+    # the phase shipped.
+    #
+    # WHY THIS LINE AND NOT THE OTHER ONE — BOTH CANDIDATES WERE BROKEN AND
+    # BOTH KILL SETS ARE RECORDED, because the loser is evidence about what the
+    # suite covers rather than a discarded draft. They are named THE ARM and
+    # THE PRODUCER rather than A and B, because the predicate one file over
+    # already has a clause A and a clause B. Measured 2026-09-02, each in its
+    # own sandbox, the failures read off the run, and both re-measured a second
+    # time with identical counts:
+    #
+    #   THE ARM (registered below) — in `monitor.assess_health`:
+    #       `dead_control = not refused and any(c.unresolved for c in broken)`
+    #                                             -> `dead_control = False`
+    #       11 test(s) failed, 996 passed, 29 skipped.
+    #         tests/test_monitor.py::test_state_one_a_dead_control_is_a_fact_
+    #             about_our_configuration                      (criterion 1)
+    #         tests/test_monitor.py::test_the_three_states_produce_three_
+    #             different_reasons                            (criterion 1)
+    #         tests/test_monitor.py::test_criterion_2_half_one_a_dead_control_
+    #             never_says_the_retailer_refused_us           (criterion 2)
+    #         tests/test_monitor.py::test_criterion_2_half_two_a_dead_control_
+    #             does_not_silence_a_refusal                   (criterion 2)
+    #         tests/test_monitor.py::test_a_captured_page_that_does_not_carry_
+    #             our_sku_becomes_a_dead_control               (10-01's tracer)
+    #         tests/test_monitor.py::test_a_404_at_a_url_addressed_control_is_
+    #             a_dead_control[check_html-gamestop]          (10-02)
+    #         tests/test_monitor.py::test_a_404_at_a_url_addressed_control_is_
+    #             a_dead_control[check_amazon-amazon]          (10-02)
+    #         tests/test_monitor.py::test_a_dead_walmart_control_with_no_pin_
+    #             is_dead_and_not_a_store_gap                  (arm precedence)
+    #         tests/test_alert_text.py::test_the_partitions_cover_every_arm_
+    #             this_module_can_produce
+    #         tests/test_alert_text.py::test_exactly_the_two_unknown_causes_
+    #             say_so
+    #         tests/test_alert_text.py::test_only_the_arms_with_a_measured_
+    #             remedy_name_something_a_person_can_do
+    #
+    #   THE PRODUCER (measured, deliberately NOT registered) — in
+    #   `retailers._verdict_from_html`:
+    #       `unresolved=canonical_is_the_search_endpoint or markup_was_read,`
+    #                                             -> `unresolved=False,`
+    #       4 test(s) failed, 1003 passed, 29 skipped:
+    #         tests/test_retailers.py::test_clause_a_the_retailer_says_you_are_
+    #             on_a_search_page
+    #         tests/test_retailers.py::test_clause_b_a_real_product_page_read_
+    #             for_a_foreign_sku
+    #         tests/test_retailers.py::test_refused_and_unresolved_are_never_
+    #             both_true_on_one_result
+    #         tests/test_monitor.py::test_a_captured_page_that_does_not_carry_
+    #             our_sku_becomes_a_dead_control               (the same tracer)
+    #
+    # THE ARM IS THE MORE INFORMATIVE ANCHOR, on two measured grounds and not
+    # on taste. FIRST, IT IS THE ONE WHOSE REMOVAL CHANGES WHICH HEALTH ARM A
+    # DEAD CONTROL REACHES — the transcript above is the arm's, and it is the
+    # whole subject of REQ-24. Breaking the producer stops the FACT being
+    # established one layer earlier, which reads in the failure list as "the
+    # predicate stopped matching" and leaves a reader to work out whether the
+    # state still exists. SECOND, AND DECISIVELY: the producer mutation kills
+    # NEITHER criterion-1 state test and NEITHER half of criterion 2. Those
+    # four tests build `Result(..., unresolved=True)` directly, so they never
+    # reach `_verdict_from_html` and pass unharmed under it. An ident on the
+    # producer would leave this phase's two closed criteria with no mutation
+    # under them at all.
+    #
+    # NEITHER CANDIDATE IS A SUBSET OF THE OTHER (arm: 11, producer: 4, shared:
+    # the tracer alone), so registering the arm does NOT cover the producer.
+    # That is recorded as an OPEN HOLE and not as a refusal, because the
+    # measurement says so: three of the producer's four killers are reached by
+    # NO ident in this registry, so an M45 on the predicate WOULD defend
+    # something new. It is not taken here only because criterion 5 asks for one
+    # ident and the arm is the more informative of the two. THAT IS THE
+    # OPPOSITE OF M43's REJECTED CANDIDATE, which was refused because eleven
+    # assertions and two idents already carried it — the two cases are written
+    # out separately so the rule is not read as "always refuse the loser".
+    # THE NEXT FREE IDENT IS THEREFORE M45, and the producer clause is
+    # measured, written down, gated by four tests and unregistered on purpose.
+    #
+    # THE KILL-SET COMPARISON AGAINST THE WHOLE REGISTRY, which is the
+    # measurement 08-04 paid for and which is now taken BEFORE an ident is
+    # priced. All 39 existing idents were re-run on 2026-09-02, one sandbox
+    # each, and their kill sets read off the runs:
+    #
+    #     M44 n=11  supersets among the registry: []
+    #               largest overlap with any existing ident: 1 test — M30,
+    #                 test_only_the_arms_with_a_measured_remedy_name_
+    #                 something_a_person_can_do, which both mutations redden
+    #                 because both leave an arm carrying no action
+    #               killers no existing ident reaches: 10 of 11
+    #
+    # SO M44 BUYS DETECTION AND NOT MERELY LOCALISATION, and no existing
+    # ident's kill set contains it — unlike M42, which is kept on localisation
+    # alone, recorded in its own block above as a finding rather than rounded
+    # up. (That subset relation was RE-MEASURED here rather than repeated on
+    # trust, and it still holds, but its numbers have moved: 08-04 recorded 16
+    # killers inside M33's 28, and on 2026-09-02 the same two mutations kill 18
+    # and 32, with M42's set still wholly inside M33's and nothing outside it.
+    # The suite grew; the relation did not change. Written beside 08-04's
+    # figures rather than over them.) Stated plainly
+    # because the contrast is the useful part: before this ident the registry
+    # had NO mutation that criterion 1's three-state separation, either half of
+    # criterion 2, 10-02's 404 producer or the dead-before-store-gap precedence
+    # could kill. Ten assertions were gated by tests and ungated by this
+    # harness, and that is the hole M44 closes. If a later reader judges
+    # otherwise the honest remedy is to delete the ident, not to reword this
+    # paragraph — the numbers above are what decide it, and they are written
+    # down so the question can be re-asked rather than re-argued.
+    #
+    # THE ANCHOR IS BEHAVIOURAL AND PRE-COUNTED, 2026-09-02, against the file
+    # text: this one indented line occurs ONCE as a fixed substring in
+    # boty/monitor.py, and it is neither a substring of nor a superstring of
+    # any of the 39 other searches in this registry — checked against all of
+    # them, zero overlaps, so this entry adds no drift to an existing anchor.
+    # The mutated source was confirmed to `ast.parse` cleanly before the block
+    # was written. No message text, no rendered tag, no docstring fragment, no
+    # comment: the arm's own sentence, `DEAD_CONTROL_ACTION`'s wording and the
+    # forty lines of comment above the arm are all deliberately OUTSIDE the
+    # anchor, so a refactor that rewrites every word around this assignment and
+    # preserves the assignment leaves M44 still caught.
+    #
+    # WHY `= False` AND NOT DELETING THE LINE: `dead_control` is read on the
+    # very next line by `store_gap` and again where `Health` is built, so
+    # deleting the assignment raises NameError in every test that reaches
+    # `assess_health`. The harness would score that caught while nothing had
+    # measured a behaviour — a crash is not a wrong answer. `False` is the
+    # faithful reconstruction of the pre-REQ-24 code, in which the flag did not
+    # exist and every non-refused, non-store-gap breakage fell to one arm.
+    #
+    # IF IT EVER SURVIVES: check three things before anything else. First,
+    # whether `_every_arm()` in tests/test_alert_text.py stopped constructing
+    # the dead arm — those partitions assert over the arms they are HANDED, so
+    # an arm dropped from that constructor takes three of these killers with it
+    # and both partitions go green about a smaller world, which is exactly the
+    # failure 10-01 measured them committing once already. Second, whether the
+    # criterion-2 tests were re-pointed at a group that is ALSO refused: the
+    # mixed arm is computed independently of this line and its enumeration
+    # still names the dead cause, so a mixed group's REASON is byte-identical
+    # under this mutation — measured 2026-09-02 — and only the flag assertion
+    # catches it. A half-two test rewritten to check the prose alone would pass
+    # here while proving nothing. Third, whether
+    # `test_the_three_states_produce_three_different_reasons` was weakened from
+    # three DIFFERENT reasons to three non-empty ones; two arms sharing a
+    # sentence is the limit the coverage gate's own docstring already records
+    # about itself.
+    Mutation(
+        ident="M44",
+        target="boty/monitor.py",
+        search="            dead_control = not refused and any(c.unresolved for c in broken)\n",
+        replace="            dead_control = False\n",
+        breaks="a control whose target no longer resolves is reported as a probably-broken detector again, which is the misattribution REQ-24 exists to end and the state this repository spent four phases mistaking for a reskin. The fact is still established — `Result.unresolved` is set by the predicate exactly as before — and the arm that consumes it can no longer be reached, so the group falls past it to the breakage sentence: `a control product did not read IN_STOCK and was not refused, so readings from this retailer are unverified`, which asserts something about the RETAILER from something about `config/products.yaml`, and `Health.action` goes back to the empty string, so the one repair a person could make is never named. Every word around the mechanism still says otherwise: `DEAD_CONTROL_ACTION` is defined, the dead arm's comment still explains a state nothing can produce, the mixed arm still enumerates the dead cause in its prose so a group with a refusal beside it reads correctly, and `Health.dead_control` is still published, still False, and still believed. It is worst where it is least visible — a monitor that says the detector is probably broken sends its reader to debug an extractor that is working, which is the failure mode this project's evidence standard exists to make impossible",
+    ),
 )
 
 

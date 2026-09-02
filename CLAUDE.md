@@ -206,23 +206,37 @@ and have to be re-taken — say so beside them rather than keeping the first num
 ## Registries and invariants
 
 **`scripts/mutation_check.py`** deliberately breaks source in a sandbox and asserts the
-suite notices. Currently **M1–M20 and M25–M43** — 39 idents, all 39 caught, survivors 0.
+suite notices. Currently **M1–M20 and M25–M44** — 40 idents, all 40 caught, survivors 0.
 
 > **M21–M24 are an intentional, documented gap. Never fill them.** Phase 6 recorded why:
 > `apply_mutation` cannot add a file, so the defect it would have covered is outside the
-> harness by construction. The script says so in nine places (`grep -c "INTENTIONAL GAP"`)
-> — seven until M42 added the eighth on 2026-08-28 and eight until M43 added the ninth on
-> 2026-09-01. Each restates the rule rather than weakening it: `.github/` was *already* in
-> `SANDBOX_CONTENTS` for M41, and `boty/pacing.py` already was for M43, so neither needed
-> anything added to reach its target. That is the test M21–M24 failed.
+> harness by construction. The script says so in ten places (`grep -c "INTENTIONAL GAP"`)
+> — seven until M42 added the eighth on 2026-08-28, eight until M43 added the ninth on
+> 2026-09-01, and nine until M44 added the tenth on 2026-09-02. Each restates the rule rather
+> than weakening it: `.github/` was *already* in `SANDBOX_CONTENTS` for M41, `boty/pacing.py`
+> already was for M43, and `boty/monitor.py` already was for M44 — which already carried four
+> idents — so none of them needed anything added to reach its target. That is the test
+> M21–M24 failed.
 
-Next free ident is **M44**. Register one only when it defends something new — if every
+Next free ident is **M45**. Register one only when it defends something new — if every
 break is already caught by a second independent test, an ident raises the denominator
 without defending anything, and the registry records that reasoning too.
 
+**M44 defends the sentence a dead control gets.** It empties the one assignment that decides
+whether a control whose target no longer resolves reaches its own health arm; under it the
+monitor goes back to calling that a probably-broken detector and stops naming the one repair
+a person could make, while `Result.unresolved`, `DEAD_CONTROL_ACTION` and every comment around
+the arm still read as though the state exists. Ten of its eleven killers are reached by no
+other ident. Its block also records the anchor it did **not** take — the resolution predicate
+at the producer, four killers, three of them reached by nothing — as an **open hole rather
+than a refusal**, so an `M45` there would defend something new.
+
 **M42 is kept on LOCALISATION alone, and its own comment block says so.** Its kill set is a
 proper subset of M33's, so it closes no hole in the suite — 08-04 recorded that as a measured
-finding rather than rounding it up into coverage it does not provide. If a future reader judges
+finding rather than rounding it up into coverage it does not provide. Re-measured 2026-09-02 by
+10-05: the relation still holds and the counts have grown with the suite — 18 killers inside
+M33's 32, where 08-04 measured 16 inside 28. Both figures are kept; the newer one does not
+replace the older. If a future reader judges
 that insufficient, the honest remedy is to delete the ident, not to reword it.
 
 **M43 is the other answer to the same question, and it is why the measurement is worth taking
@@ -240,7 +254,8 @@ stale for three days once — M42 landed 2026-08-28 and this section still read 
 "next free is M42" until 2026-08-31, when the phase-8 code review caught it as WR-04, and "next
 free ident is M42" would have handed the next agent a collision. They were correct as
 M25–M42 / eight / M43 up to 2026-09-01; 09-05 ADVANCED them in the same commit that registered
-M43, which is the only discipline available here.)*
+M43, and 10-05 did the same for M44 on 2026-09-02 — one commit, `test(10-05)`, carrying both the
+ident and the counts that describe it. That is the only discipline available here.)*
 
 A mutation must anchor on **behaviour**, not on message text or a prose comment.
 
