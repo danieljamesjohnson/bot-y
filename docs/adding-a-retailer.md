@@ -160,14 +160,19 @@ GameStop's control is a PS5 console. The applied table below records that plainl
 argument for the gate rather than an accusation, because an unapplied, ungated rule is a rule that
 is already being broken.
 
-The clause the sentence is missing is named by `.planning/ROADMAP.md`'s Phase 10 criterion 4, not
+The clause the sentence is missing is named by the roadmap's own Phase 10 criterion 4, not
 invented here:
 
 > Best Buy's died because it was a specific game SKU; a control that can be discontinued eventually
 > will be.
 
+*(Neither planning document is cited here as a path, and that is a constraint rather than
+sloppiness: the mutation harness rebuilds this tree without the planning directory, so a backticked
+citation of a file under it fails the contributor-docs path rule inside the sandbox and passes
+outside it. Measured 2026-09-02, at the cost of one red baseline.)*
+
 *Its premise is corrected and its rule survives.* That Best Buy's control **died** is not
-established — `.planning/phases/10-a-control-that-cannot-die/10-DECISIONS.md` § Collision 10 shows
+established — Phase 10's decision record, § Collision 10, shows
 the evidence is absent-then-stale rather than contrary, and nothing in this document asserts the
 control is dead. What survives the correction is the second half, which is a rule about a product
 class and needs no death to be true. "Evergreen" gestures at it; a gesture is not something you can
@@ -346,6 +351,19 @@ file is read once at process start and the restart is deferred. Any process that
 a test, a developer shell — sees no pin at all and the reading is UNKNOWN by design. Its presence is
 only ever measured as a count; the value is never read, derived, inferred or printed, here or
 anywhere else in this tree.
+
+#### What this section is gated by
+
+`tests/test_control_durability.py`, in both directions: a control the loader yields with no verdict
+reddens, a table row for a watch nobody watches reddens, a clause this document stops declaring
+reddens, and the two records are compared cell for cell so that softening one of them is not a way
+to soften the rule. The clause identifiers are **read out of this document** rather than copied into
+the test — there is one copy of the rule and this is it, which is also why re-cutting the clauses
+stays legal.
+
+It also asserts that the table condemns *something*, because every other rule in it is satisfied by
+thirty cells reading SATISFIED, and that is exactly the table a rule fitted to its subjects would
+produce.
 
 ### Controls are not pass/fail, and you need to know that before you run them
 
