@@ -1,5 +1,43 @@
 # Blocked on Dan
 
+## 0g. Live Best Buy control reads for Phase 10 — ANSWERED 2026-09-02: **up to 3, Best Buy only**
+
+**The question, and why it had to be asked.** Phase 10's criterion 3 requires Best Buy's control to
+be repaired *"measured against a real reading, not a fixture"*, and REQ-24's Definition of Done item
+3 repeats it. `STATE.md` had recorded phases 8, 9 and 10 as the milestone's *"safe autonomous
+ground"* needing **no live requests at all** — that was **wrong for phase 10**, and the error was the
+agent's, stated to Dan and corrected before it cost anything. Criteria 1, 2, 4 and 5 are fully
+offline; only criterion 3 touches the wire.
+
+**Dan's answer, 2026-09-02, verbatim from the option he selected:** *"Authorize up to 3 Best Buy
+reads"* — "A hard cap of 3 live requests to Best Buy only, spaced, browser-rung. Enough to confirm a
+repaired or replacement control actually reads, so criterion 3 can close MET AS WRITTEN. Nothing
+touches Amazon, Target or Walmart — the three already refusing us — and nothing touches the daemon's
+live state files. If Best Buy refuses at the connection layer (as README records), that refusal is
+itself the measurement and gets written down as one."
+
+**The terms, which are binding on every plan in phase 10:**
+
+- **At most THREE live requests, and only to Best Buy.** Not Amazon, not Target, not Walmart — the
+  three already refusing us — and not GameStop or Nintendo either. Spaced, not burst.
+- **A refusal IS the measurement.** `README.md` records Best Buy as *"unread — refused at the
+  connection layer"*. If that is what happens, it is written down as a measured result, not retried
+  around and not reported as an inconclusive attempt.
+- **No `boty check`** — it makes live requests to *every* retailer and writes the daemon's live
+  `served/boty/status.json`. The reads must be made directly and narrowly.
+- **No write to `state.json`, `pacer-state.json` or `served/boty/status.json`.**
+- **No `systemctl restart boty`.** Still deferred with phases 8 and 9.
+
+**A capability note that this decision corrects.** v0.3's records say `make verify` cannot run Best
+Buy's control here *"no Chrome/Chromium"*. **That is stale.** Measured 2026-09-02: Playwright
+chromium is present at `~/.cache/ms-playwright` (three builds, incl. headless shell). Best Buy is
+rung 3, so it needs one. `CLAUDE.md` already warns that a "no browser found" report may be the shell
+rather than the service; here it is the reverse — the tooling reported absence where the binary
+exists. So criterion 3 was never blocked on capability, only on permission, and now it is not
+blocked at all.
+
+---
+
 Two credentials I cannot obtain myself. The one open decision (0d, Target/RedSky)
 was answered 2026-08-03 and is kept below as the record. **§ 0f was answered `defer` on
 2026-08-10 and again on 2026-08-17 and is no longer blocking anything — the pin and the restart
