@@ -1264,6 +1264,55 @@ served us a 150 KB document containing a working answer.
 
 **Running total after read 2: navigations that left this host = 2 of 3. Exemptions taken: 0 of 1.**
 
+#### What read 3 is spent on, decided BEFORE it is spent
+
+Read 2 established that the SKU **resolves** and left exactly one thing criterion 3 asks for
+unmeasured: whether the control **reads IN_STOCK, first-party**. Best Buy has now told us, in a
+308, precisely where that answer lives. So read 3 is spent on **the redirect target itself** —
+`/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393` — through
+`fetch_rendered` and then through `retailers._verdict_from_html` with `sku="6216393"` bound, which
+is the adapter's own verdict path with the resolved URL substituted for the search URL. The SKU
+stays bound, so an unrelated product cannot be read confidently; that guarantee is not relaxed to
+get an answer.
+
+**This is the last read under the cap. There is no fourth request whatever read 3 returns** —
+including if it refuses, in which case the refusal is the measurement and criterion 3 closes on
+what was measured.
+
+#### READ 3 — SPENT. 2026-09-02, the redirect target. **IN_STOCK, $59.99, first-party.**
+
+**Asked:** one rendered page load of the URL read 2's 308 named, then
+`retailers._verdict_from_html` with `sku="6216393"` bound — the adapter's own verdict path with the
+resolved URL substituted for the search URL. `settle_seconds=25.0`.
+
+| | |
+|---|---|
+| UTC before the call | **2026-09-02T14:24:13Z** |
+| UTC after the call | **2026-09-02T14:24:47Z** |
+| spacing from read 2 | **311 s** (read 2 ended 14:19:02Z) |
+| URL shape | `https://www.bestbuy.com/product/<slug>/<opaque-id>/sku/6216393` |
+| verdict returned | **`Availability.IN_STOCK`**, `unresolved=False`, `refused=False`, `degraded=True`, `alertable=True` |
+| `Result.detail` | `ld+json: InStock from Best Buy` |
+| price | **59.99** |
+| offer read | exactly one — `Offer(available=True, price=59.99, seller='Best Buy', raw_availability='InStock', shipping=None)` |
+| bytes returned | **1,157,107 B** |
+| `ldjson_read` | `blocks 3`, `unparseable 0`, `repaired 0` |
+| `rel="canonical"` | `…/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393` — a **product** path |
+| `<title>` | `Pokémon: Let's Go, Pikachu! Nintendo Switch HACPADW2A - Best Buy` |
+
+**Every field matches what this document recorded on 2026-08-02 and 2026-08-04**, four weeks and one
+day earlier: the same single offer, the same `59.99`, the same `seller: "Best Buy"` — which is
+already in `FIRST_PARTY["bestbuy"]`, so the reading is first-party through `_pick`'s `named` branch
+and not a marketplace listing. Byte counts: 1,109,548 B (2026-08-02 live), 1,138,265 B (the
+committed fixture), **1,157,107 B (today)**. `blocks 3, unparseable 0` is the healthy shape, not the
+2026-08-04 `blocks 3, unparseable 3`.
+
+**Criterion 3's reading half is met by this read, against the live site, not a fixture.** The
+incumbent control reads IN_STOCK, first-party, on 2026-09-02.
+
+**Budget: 3 of 3 spent. There is no fourth request, and none was made.**
+
+
 
 ---
 
