@@ -672,3 +672,38 @@ and recorded here so it is not lost if none of them takes it.)*
   (`09-02`)** are untouched.
 - **No production code moved.** No live retailer request was made, `boty check` was not run, and
   `state.json`, `pacer-state.json` and `served/boty/status.json` were neither read nor written.
+
+
+---
+
+## The `current_interval` digest IS reproducible — the recipe, recorded 2026-09-02
+
+`09-03-SUMMARY.md` records that `Pacer.current_interval`'s SHA-256 is *"not reproducible — 09-02
+recorded no extraction recipe; four plausible ones miss"*, and falls back on the stronger fact that
+`git diff 653bc80..HEAD -- boty/` is empty. **That summary is left unedited: its complaint was fair
+and its fallback was the right move.** But the conclusion is one step too strong, and the missing
+piece was never the digest — it was the recipe, which no plan wrote down.
+
+**The recipe, stated so the gate is checkable by anyone rather than only by whoever wrote it:**
+
+```python
+import hashlib, re
+s = open('boty/pacing.py', encoding='utf-8').read()
+m = re.search(r'\n    def current_interval\(.*?(?=\n    def )', s, re.S)
+hashlib.sha256(m.group(0).encode()).hexdigest()
+```
+
+Span is **7994 bytes** — from the newline before `    def current_interval(` up to but excluding the
+newline before the next `    def `, i.e. the decorator-free method block including its trailing blank
+line, hashed as UTF-8 with no normalisation.
+
+**Re-verified 2026-09-02 against the tree at the phase-9 close:
+`6da39ac5d77ecd98cae80651c3b4d539253e88a1704fb4b1e814e6bf93449108`** — identical to the literal
+09-02 recorded, and identical on every check made during waves 2, 3, 4 and 5. The gate was also
+watched red independently before wave 2 ran: a one-character body edit moves the digest and the
+check exits 1.
+
+**Why this is worth a note rather than a shrug.** A digest with no stated extraction is a gate only
+its author can run, and this repository's whole standard is that a claim is tied to a measurement
+someone else can repeat. `09-03` was right to distrust it. The fix is to publish the recipe, not to
+drop the gate — and not to leave the record saying "not reproducible" about something that is.

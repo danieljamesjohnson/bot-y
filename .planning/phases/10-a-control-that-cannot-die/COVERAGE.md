@@ -1,0 +1,1 @@
+External API integration: this phase makes up to THREE live requests, to Best Buy only, browser-rung and spaced, under the hard cap Dan authorised in QUESTIONS.md § 0g — every other criterion is closed offline, and an unspent read is recorded as unspent.

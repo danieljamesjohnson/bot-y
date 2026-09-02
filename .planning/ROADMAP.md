@@ -231,8 +231,8 @@ body is **byte-unchanged** (SHA-256 gate); `cli.watch_loop` keeps **both** clock
 count is still exactly **2**; `STATE_VERSION` is still **2** with no new persisted field — `roster`
 and `tick` live on `Pacer`, defaulted and never written to disk.
 
-**The finding this phase produced that nobody asked for.** Shortening the tick made roughly half of
-all wakes ask *nobody* — and `status.py` published `healthy` as `all(...)` over an empty list, which
+**The finding this phase produced that nobody asked for.** Shortening the tick made **26.4% of wakes** (457 a day of 1728) ask
+*nobody* — and `status.py` published `healthy` as `all(...)` over an empty list, which
 is `True`. This phase would have made **a green verdict over a question nobody asked** routine: this
 project's core defect, rebuilt inside the fix for a different one. A wake that asked nobody now
 publishes `healthy: null`. **No new key** — the published key set is unchanged; what the existing key
@@ -251,6 +251,21 @@ count is the same class of error as a rounded-up verdict.
 
 **NOT ON THE WIRE.** Phase 9 reaches the daemon only at `sudo systemctl restart boty` — Dan's action,
 still deferred with Phase 8's.
+
+**A CORRECTION TO THIS RECORD, 2026-09-02, and it was mine.** The paragraph above first read *"roughly
+half of all wakes ask nobody"*. That figure was never measured — it was carried over from the
+planning-time estimate in `09-PLAN-OUTLINE.md` and written into this record without being checked
+against the phase's own result. **Measured, in `09-04-SUMMARY.md`: 457 wakes a day of 1728 — 26.4%**,
+with a 20-seed sweep putting the configured fleet at **26.9%** and a uniform fleet at **3.5%**. So the
+claim overstated the effect by nearly 2x, in the direction that made the finding sound more dramatic
+than it is. The sentence is corrected in place rather than annotated, because it is not a superseded
+*measurement* — it was never a measurement at all, and leaving a wrong number standing beside a right
+one would imply the wrong one had once been established. What is recorded beside is this note.
+
+**Two figures 09-03 derived were also wrong and 09-04 corrected them**, both recorded beside rather
+than over: empty wakes are **457 (26.4%)**, not 432 (25.0%), and the maximum retailers per wake is
+**2**, not 1 — 09-03 derived over the *unjittered* schedule. Its before-column was confirmed exactly
+right against the real pre-phase code, so only the after-column moved.
 
 ### Phase 10: A Control That Cannot Die
 
