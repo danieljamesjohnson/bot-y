@@ -1050,6 +1050,107 @@ the daemon would, and the daemon is running, so these reads are additive to its 
 **Every branch owes the README a sentence, not only the refusal branch** — see the correction
 recorded beneath read 1, which is about *which* README cell a product-page read can speak to.
 
+#### READ 1 — SPENT. 2026-09-02, the incumbent control, SKU `6216393`
+
+**Asked:** one rendered page load through `retailers.check_bestbuy_browser`, the same adapter the
+running monitor uses, called directly — not through `boty check` and not through
+`scripts/control_check.py`, either of which would have contacted five more retailers. URL shape
+`https://www.bestbuy.com/site/searchpage.jsp?st=<sku>`, built by `bestbuy_product_url`.
+
+| | |
+|---|---|
+| UTC before the call | **2026-09-02T14:13:01Z** |
+| UTC after the call | **2026-09-02T14:13:13Z** |
+| spacing from previous read | n/a — first read |
+| transport | rung 3, Chrome for Testing via `BOTY_BROWSER_PATH`, `settle_seconds=3.0` (the shipped default) |
+| verdict returned | `Availability.UNKNOWN`, `unresolved=True`, `refused=False`, `degraded=True` |
+| `Result.detail` | `sku 6216393 did not resolve to a product page — no schema.org Product on it carries that sku` |
+| bytes returned | **21,823 B** |
+| `ldjson_read` | `blocks 0`, `unparseable 0`, `repaired 0` |
+| `rel="canonical"` | `…/site/searchpage.jsp?id=pcat17071&st=6216393` — the **search** endpoint |
+| `<title>` | `6216393 - Best Buy` |
+
+**Branch: `unresolved`** — as the adapter reports it. Clause A of `10-01`'s predicate fired: the
+page's own canonical points at the search endpoint rather than at a product path.
+
+**AND THE READING IS NOT TRUSTWORTHY, WHICH IS THE FINDING.** Recorded here rather than in a later
+correction, because the number that gives it away was in the same measurement:
+
+- **The document has no `<body>` element at all.** Not an empty body — no `<body>` tag in
+  21,823 bytes. What came back is the streamed `<head>` of a Next.js application
+  (`/~assets/bby/_com/shop/plp/_next/…`, ~90 chunk `<script src>` preloads, ten stylesheets) that
+  had not flushed its body when `tab.get_content()` was called three seconds after navigation.
+- **Every prior recorded reading of this SKU is ~1.1 MB.** L860 records 1,109,548 B for this exact
+  URL shape; the committed fixture is 1,138,265 B. 21,823 B is **2 %** of that. A page 50× smaller
+  than every previous capture is not the same page.
+- **Zero `ld+json` blocks, zero unparseable.** The 2026-08-04 false dead had `blocks 3,
+  unparseable 3`; the healthy fixture has `blocks 3, unparseable 0`. Zero-and-zero is neither — it
+  is a document that had not got as far as its structured data.
+- **Best Buy's own head says the query was still a query.** `<meta name="opt-targeting">` carries
+  `{"query":"6216393","queryType":"search"}` and a `listCount` of `null` — the result count was
+  undetermined at the moment the head was flushed, so the server had not yet decided whether this
+  search resolves to one product and redirects.
+
+**What that costs clause A, stated plainly because it is worse than a stale record.** The canonical
+in the head of an unrendered Best Buy search shell points at the search endpoint **by
+construction** — it is emitted before the application decides whether to redirect to a product
+page. So on this page shape clause A fires on *every* SKU, alive or dead, whenever the render is
+slower than the settle. A slow render then reads out as a **dead control**: the exact
+misattribution this phase exists to prevent, arriving through the one door `10-DECISIONS.md`
+§ Collision 2 left open when it treated the canonical as *"Best Buy's own statement about what page
+you are on"*. It is that — but only once the page exists.
+
+**So read 1 establishes less than the branch table hoped, and that is recorded rather than rounded
+up.** What it establishes: Best Buy answered this host on 2026-09-02 — no refusal, no challenge
+page, no reset, an HTTP response and a partial document. What it does **not** establish: whether
+SKU `6216393` resolves. Between *"the product is gone"* and *"the page had not rendered"* this read
+does not discriminate, and the four-outcome table did not anticipate a fifth shape: **a document
+that left this host's browser before the retailer's application had produced one.**
+
+**No challenge page.** `BLOCK_PHRASES` matched nothing, `Blocked` was not raised and `refused` is
+`False`. The single occurrence of the string `captcha` is a `<link rel="preload">` for Google's
+reCAPTCHA Enterprise script — part of Best Buy's ordinary page skeleton, not a challenge served to
+us. It is named here so a future reader who greps for it is not misled by their own grep.
+
+**Nothing was notified.** There is nothing here Dan can act on and his terms are already locked in
+`QUESTIONS.md` § 0g, so this is recorded and not pushed.
+
+**Pre-navigation exemption: NOT taken, and NOT needed.** Chromium's startup was proved separately
+against `about:blank` — a render that never leaves this host and therefore spends nothing — before
+read 1 was attempted. `BOTY_BROWSER_NO_SANDBOX=1` was set from the outset, on the workaround this
+document already records for this host's `apparmor_restrict_unprivileged_userns=1`, precisely so
+that a sandbox failure could not consume the one-shot exemption.
+
+**Running total after read 1: navigations that left this host = 1 of 3. Exemptions taken: 0 of 1.**
+
+#### The README cell read 1 was supposed to move — and the correction that it is not the cell anybody meant
+
+`10-04`'s plan, and the phase outline before it, both say Best Buy's README cell reads *"unread —
+refused at the connection layer"*, that this claim is **inherited** rather than measured, and that a
+successful read or an unresolved result makes it **false** so it must move. The first two halves are
+right. **The third is wrong, and it is wrong in a way that would have put a falsehood into the
+support matrix**, so it is recorded here rather than quietly worked around.
+
+There are two Best Buy cells carrying that sentence, and both are **policy-document** columns:
+`robots.txt` and `Terms`. They record `https://www.bestbuy.com/robots.txt` and Best Buy's terms page
+each returning **no HTTP status and 0 B** with `curl: (92) HTTP/2 stream 1 was not closed cleanly:
+INTERNAL_ERROR (err 2)` on 2026-08-03, at **rung 1**, as § *Where robots.txt and the terms disagree*
+records above. `tests/test_support_matrix.py` pins them by position — `("Best Buy", ROBOTS)` and
+`("Best Buy", TERMS)` in `UNREAD_POSITIONS` — and its own comment says why the pin is enumerated
+rather than a rule.
+
+**A rung-3 browser read of a product page says nothing whatever about either document.** Different
+URL, different transport, different question. This document already anticipated exactly that
+distinction, one paragraph after recording the refusal: *"Best Buy is read here at rung 3, through a
+real browser, and the two policy documents are the one thing nobody has pointed a browser at."* That
+sentence remains true on 2026-09-02. Read 1 did not read `robots.txt`; reading it would have cost a
+fourth navigation, which the cap forbids.
+
+So **the two `unread` cells do not move, and moving them would have been the error.** What read 1
+can speak to is the Best Buy row's **Status** cell, which is a claim about whether the monitor reads
+this retailer — and that cell *is* now carrying more confidence than the measurement supports. That
+is where the correction lands.
+
 ---
 
 ## Nintendo (store.nintendo.com / nintendo.com/us/store)
