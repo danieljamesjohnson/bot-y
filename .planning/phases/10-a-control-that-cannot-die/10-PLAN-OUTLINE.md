@@ -97,6 +97,31 @@ correction plus a replacement chosen on durability grounds. Criteria 1, 2, 4 and
 in that branch exactly as they do in every other, because none of them depends on the premise —
 which is why they are all closed offline before the first request.
 
+### The premise correction is PROVABLE TODAY, offline, and it is this phase's best artifact
+
+**It does not need read 1 and must not be conditioned on it.** The evidence log already settles what
+"Best Buy's dead control" refers to, and `10-01` records it in writing in wave 1 — four weeks before
+any request, and independent of what any request returns.
+
+| what the record says | where |
+|---|---|
+| SKU `6216393`, the control, read `in_stock $59.99 · ld+json: InStock from Best Buy` in **four** separate `make verify` transcripts | `docs/retailer-evidence.md` L1642, L1884, L2286, L2413 |
+| the same SKU's search redirect transcribed in full — 1,109,548 B, correct title, one first-party offer | L860 |
+| the **only** "did not resolve" for that SKU is the documented **2026-08-04 FALSE dead**, from unparseable markup on a SKU that was alive | L960 |
+| the two most recent attempts are `no Chrome/Chromium binary found` — a **host** failure, at the Phase 5 close (2026-08-10) and the Phase 7 close (2026-08-17) | L3482, L4397 |
+| SKU `6577129` — the one that genuinely resolves to nothing — was a **product watch, already removed from config**, recorded as *unconfirmed and probably wrong* | L822, L868, L901 |
+
+**The honest statement, and it is neither of the two comfortable ones:**
+
+> **Best Buy's control has never been shown dead. It was last shown ALIVE in early August, and it
+> has been unmeasured for roughly four weeks.** The evidence is **absent-then-stale**, not contrary.
+
+Do not round that to *the control is dead* — nothing establishes it. Do not round it to *the control
+is fine* either — a four-week-old reading is a reading about early August. **`10-05`'s criterion 3
+row carries this finding whatever read 1 returns**, because it was established offline and a live
+result cannot unestablish it: a refusal would leave it standing, a successful read would confirm it,
+and an unresolved result would date the death to somewhere in a four-week window this record bounds.
+
 ### Today's defect, located exactly
 
 `monitor.assess_health` has three arms for a failing control, in this order:
@@ -246,10 +271,16 @@ still asserted directly, because "it cannot happen by construction" is exactly t
 being true after a refactor.
 
 **Half two — a dead control must not silence a real refusal when both are true at once.** This is
-the one that needs work. Today a group of one dead control and one refused control satisfies neither
-`all(refused)` nor `all(_is_store_gap)`, so it falls to the breakage arm — whose sentence says
-**"and was not refused"**, which is *false* about that group. That is a real refusal, silenced by a
-dead control, in the shipped code today. `10-02` owns it.
+the one that needs work. A group of one dead control and one refused control satisfies neither
+`all(refused)` nor `all(_is_store_gap)`, so it falls to the breakage arm — whose sentence asserts
+that nothing was refused, which is *false* about that group.
+
+**State its reachability precisely, because today's config falsifies the loose version.**
+`assess_health` groups by retailer and every retailer here has **exactly one** control, so a mixed
+group is **not reachable in the shipped configuration**. It is reachable the moment any retailer
+gains a second control — which `10-03`'s D4 clause makes more likely, not less, since it asks every
+control for a recorded reserve. So this is a defect **in the code**, latent rather than live, and the
+plans say that rather than claiming a wrong alert is being produced today. `10-02` owns it.
 
 **At the `Result` level the two are mutually exclusive and that is asserted as an invariant:** a
 refusal means no page came back, so nothing about resolution was established — the same first line
@@ -330,6 +361,13 @@ ships; it may not drop one to make a control pass):
 - **D5 — its death is legible.** When the target stops resolving, the monitor reports a *dead
   control* — criteria 1 and 2. **Nothing in this repository satisfied D5 before this phase**, which
   is why it is a clause and not an assumption.
+
+**How many controls there are, and why the obvious command answers wrong.**
+`grep -c 'control: true' config/products.yaml` returns **7**. There are **6** controls: the seventh
+match is a **comment** on the transition watches, which reads that they are deliberately *not*
+`control: true`. Every gate and every count in `10-03` therefore goes through the config **loader**,
+never through a grep — the loader is what `control_check.py` and `assess_health` both filter on, and
+a gate that counts a comment is a gate measuring the file rather than the configuration.
 
 **What `10-03` is expected to name, stated in advance so a softer finding is visibly a softer
 finding.** These are predictions, not verdicts; `10-03` measures each control against the shipped
@@ -553,10 +591,13 @@ closed by this phase and neither is described as closed.
 
 ---
 
-## The nine collisions `10-01` settles in writing
+## The ten collisions `10-01` settles in writing
 
 These land in `10-DECISIONS.md` (`10-01`, Task 1) with the reasoning, before any production code
 moves. Each is stated above; this is the index the decisions file must answer, one section per row.
+Collision 10 is not a conflict between two courses of action — it is a **finding**, and it is in this
+list because it has to be settled in writing before anything else in the phase can be described
+honestly.
 
 | # | Collision | Where the outline argues it |
 |---|---|---|
@@ -569,6 +610,7 @@ moves. Each is stated above; this is the index the decisions file must answer, o
 | 7 | The dead arm carries a `Health.action` and therefore pages | *`Health.action`* |
 | 8 | Nothing new is published to `status.json` | *Nothing new is published* |
 | 9 | The read budget: allocation, spacing, counting unit, **what counts as spent and the single one-shot exemption**, and the refusal branch | *The read budget* / *What counts as a spent read* / *If Best Buy refuses everything* |
+| 10 | **What "Best Buy's dead control" actually refers to** — settled offline from the record, with line citations, and carried by `10-05` whatever read 1 returns | *The premise correction is provable today* |
 
 ---
 
@@ -651,8 +693,10 @@ plan writer's to fix; the shape is not.
   form, and NOT confirmed by seeing green
 - `tests/test_pacing.py` *(`10-02`)* — the `assess_health` tests that live there, including the
   mixed-group one whose expected sentence moves while its point survives
-- `tests/test_control_durability.py` *(new)* — every `control: true` entry carries a verdict against
-  every clause the doc declares; a control with no verdict, and a clause the doc drops, both redden
+- `tests/test_control_durability.py` *(new)* — every control **loaded through the config loader**
+  (never grepped: a grep counts the comment that says the transition watches are deliberately not
+  controls) carries a verdict against every clause the doc declares; a control with no verdict, and a
+  clause the doc drops, both redden
 
 **New files**
 - `.planning/phases/10-a-control-that-cannot-die/10-DECISIONS.md` — the nine collisions
