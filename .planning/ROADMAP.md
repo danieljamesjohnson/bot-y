@@ -87,7 +87,7 @@ deliberately NOT in this milestone*.
 
 - [x] **Phase 8: Stop Knocking** *(COMPLETE 2026-08-31 — in the tree, NOT on the wire)* — a persistently refused retailer is left alone for days, not knocked on twice a day forever
 - [x] **Phase 9: Out of Lockstep** *(COMPLETE 2026-09-01 — in the tree, NOT on the wire)* — six retailers stop being requested inside one short window from one origin
-- [ ] **Phase 10: A Control That Cannot Die** — a dead control is a fact about our config, never mistaken for a fact about the retailer
+- [x] **Phase 10: A Control That Cannot Die** *(COMPLETE 2026-09-02 — in the tree, NOT on the wire)* — a dead control is a fact about our config, never mistaken for a fact about the retailer
 - [ ] **Phase 11: The Honest Ladder Position** — what is actually true of Amazon, Target and Walmart, written down and gated
 
 ### Phase 8: Stop Knocking
@@ -281,6 +281,65 @@ retailer.
   3. Best Buy's control is repaired — measured against a real reading, not a fixture — or replaced with one that reads, with the replacement's durability argued
   4. **The rule for what makes a control durable is written down and applied to every existing control**, with any control failing it named. Best Buy's died because it was a specific game SKU; a control that can be discontinued eventually will be
   5. `make verify-offline` exits 0, with at least one new mutation registered and observed CAUGHT
+
+**CLOSING RECORD — Phase 10 COMPLETE 2026-09-02. Three MET AS WRITTEN, two MET IN PART; nothing reworded.**
+
+Five plans, five waves. Waves 1-3 offline; wave 4 was the only network contact in the milestone.
+Verdict table with citations: `10-05-SUMMARY.md`. Ten collisions: `10-DECISIONS.md`.
+
+**THE PREMISE WAS WRONG, AND THAT IS THE PHASE'S MAIN RESULT.** REQ-24 says *"Best Buy's current dead
+control is repaired."* Proved **offline** from the evidence log (Collision 10, recorded unconditionally
+so it survives even the branch where every read fails): SKU **6216393 — the control — has never been
+shown dead.** It read `in_stock $59.99 · ld+json: InStock from Best Buy` in **four** `make verify`
+transcripts (L1642, L1884, L2286, L2413) plus the transcribed search redirect (L860); its only
+non-resolution is L960, the **documented 2026-08-04 FALSE dead** from unparseable markup on a live
+SKU; and the two most recent attempts (L3482, L4397) are `no Chrome/Chromium binary found` — a **host**
+failure, on a box where chromium is in fact installed. The SKU that genuinely resolves to nothing is
+**6577129**, a **product** watch for the GO Plus + already removed from config and documented
+"unconfirmed and probably wrong" (L822, L868, L901). **It was never the control.** The milestone
+framing merged a dead product SKU, a live control and a missing browser into one story. The honest
+statement, and both roundings are refused in writing: **never shown dead, last shown alive in early
+August, unmeasured for ~4 weeks — absent-then-stale evidence, not contrary.**
+
+**THE WIRE FOUND THE INVERSE DEFECT, AND IT IS WORSE THAN THE ONE REQ-24 PREDICTED.** Three
+navigations, Best Buy only, spaced **313 s and 311 s** — 3 of 3 authorised, zero unspent, zero
+pre-navigation failures, no fourth request under any branch, and no other retailer contacted. The
+incumbent control is **ALIVE** and reads `IN_STOCK $59.99` first-party. **And the monitor, through the
+path it is actually configured to use, calls that same live SKU a dead control. Twice.** So a phase
+that set out to repair a dead control instead found a **false dead**: this project's core defect —
+saying something false, confidently — rebuilt inside phase 10's own new code, and caught by
+measurement rather than by argument. `bestbuy`/`D5` was downgraded **PARTIAL → NOT SATISFIED** on that
+reading: a *live* target reading as a dead control means an `unresolved` from Best Buy carries no
+information in either direction.
+
+**THE FIX IS NOT SHIPPED, DELIBERATELY.** The reads that would confirm it are spent, and an
+unconfirmed fix is a recommendation rather than a repair. The control was **not swapped** and
+`config/products.yaml`'s Best Buy target is byte-unchanged.
+
+| # | Verdict | The half that is not met |
+|---|---|---|
+| 1 | **MET IN PART** | The three states are distinct and asserted apart — but one route INTO the dead-control state was measured **over-inclusive on the wire**, which is the false dead above |
+| 2 | **MET AS WRITTEN** | Both halves of the conjunction asserted separately. Note the mixed group is **unreachable in today's config** (one control per retailer, grouped by retailer) — a latent defect in the code, reachable the moment any retailer gains a second control |
+| 3 | **MET IN PART** | The control was measured against a **real reading**, not a fixture — and there was nothing to repair. What is not met is a *repair*, because the premise was false; and the transport defect the read exposed is recommended, not fixed |
+| 4 | **MET AS WRITTEN** | Rule numbered D1–D5, applied to all **six** controls (the loader's count; `grep -c` says 7 and the seventh is a comment). **D4 is failed by all six**, is **not** circular — it bounds the reserve at D1–D3, the stronger reading being an infinite regress — and duplicates D3 wherever a reserve exists. Target's D5 **NOT SATISFIED**: rung 3 surfaces no HTTP status and inventing one was refused |
+| 5 | **MET AS WRITTEN** | **M44** registered and observed CAUGHT (11-test kill set) on `boty/monitor.py`; registry 39 → **40**, survivors 0, `M21`–`M24` still empty, `INTENTIONAL GAP` 9 → 10 |
+
+**Gate at close:** `make verify-offline` **EXIT 0** — **1036 passed / 0 skipped** (from 967 at wave 1),
+**40/40 mutations caught**, `Pacer.current_interval` byte-unchanged, both clock terms intact,
+staleness-rule count 2, `STATE_VERSION` 2. Verdict line is the **OFFLINE** pass.
+
+**Two corrections to this orchestrator's own instructions, both recorded rather than absorbed.** A
+warning was relayed requiring README's Best Buy `unread` cells to move on a successful read; the
+executor **refused it with a measurement** — those two cells are the **robots.txt** and **Terms**
+policy-document columns measured at rung 1, and a rung-3 *product page* read measures neither.
+Moving them would have put a falsehood into a gated support matrix, and reading `robots.txt` to
+justify it would have cost a **fourth navigation**. The **Status** cell moved instead, which is what
+read ① can speak to. Separately, a span recorded as "7994 bytes" in phase 9's digest recipe is 7994
+**characters** / 8018 bytes — corrected beside, because that number is the cross-check a future
+verifier reaches for when the digest does *not* match.
+
+**NOT ON THE WIRE.** Phase 10 reaches the daemon only at `sudo systemctl restart boty` — Dan's action,
+still deferred, and now carrying Phases 8, 9 **and 10** together.
 
 ### Phase 11: The Honest Ladder Position
 
