@@ -1189,6 +1189,82 @@ on re-asking a retailer that said no until it says something else; this re-asks 
 first answer came back on a document the retailer had not finished producing, and it changes the
 variable that measurement implicated rather than repeating the same call hoping for a better mood.
 
+#### READ 2 — SPENT. 2026-09-02, the same SKU at `settle_seconds=25`. **THE CONTROL IS ALIVE.**
+
+**Asked:** identical to read 1 in every respect — same adapter, same URL shape, same predicate, same
+verdict path — with exactly one variable changed: `fetch_rendered` was called with
+`settle_seconds=25.0` and `timeout=90.0` in place of the shipped `3.0` / `45.0`.
+
+| | |
+|---|---|
+| UTC before the call | **2026-09-02T14:18:26Z** |
+| UTC after the call | **2026-09-02T14:19:02Z** |
+| spacing from read 1 | **313 s** (read 1 ended 14:13:13Z) — above the 300 s standing cadence |
+| verdict returned | `Availability.UNKNOWN`, `unresolved=True`, `refused=False`, `degraded=True` — **byte-identical `detail` to read 1** |
+| bytes returned | **150,974 B** — 6.9× read 1, and this time the document has a `<body>` |
+| `ldjson_read` | `blocks 0`, `unparseable 0`, `repaired 0` |
+| `rel="canonical"` | `…/site/searchpage.jsp?id=pcat17071&st=6216393` — still the search endpoint |
+| `<title>` | `6216393 - Best Buy` |
+
+**And the rendered body contains Best Buy's own answer, which is that the SKU resolves:**
+
+    <meta id="__next-page-redirect" http-equiv="refresh"
+          content="0;url=/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393">
+
+with the same instruction twice more in the streamed React payload beside it, as a status code:
+
+    NEXT_REDIRECT;replace;/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393;308;
+
+**That target is character-for-character the canonical this document recorded for this SKU on
+2026-08-02** (L860, and `bestbuy_product_url`'s own docstring quotes it). A **308** is *moved
+permanently* — Best Buy is not saying it has no such product; it is saying the product lives over
+there.
+
+### THE FINDING: `unresolved=True` was returned TWICE for a SKU that resolves
+
+**The incumbent control is not dead. Both of this plan's readings of it are FALSE DEADS**, and the
+second one was taken on a fully rendered page, so slow rendering is not the whole explanation and
+the first read's `<body>`-less document was a symptom rather than the cause.
+
+**What changed at Best Buy, and it is a mechanism change rather than a catalogue change.** The SKU
+search used to answer with a **server-side** redirect: the browser landed on the product page, and
+what `fetch_rendered` snapshotted was the product document, carrying product JSON-LD and a product
+canonical. Best Buy's search is now a client-rendered Next.js application that answers with a
+**client-side** redirect — a `NEXT_REDIRECT` in the streamed payload and a `<meta http-equiv=
+"refresh">` in the DOM. `fetch_rendered` snapshots the DOM after a fixed settle and returns it, so
+what it now hands `_verdict_from_html` is the **search shell that is on its way somewhere**, not the
+page it is on its way to. Twenty-five seconds did not change that: the redirect had been announced
+and the snapshot was still of the announcing document.
+
+**Where that lands in this repository's own code, precisely:**
+
+- The search shell carries **no `ld+json` at all** (`blocks 0`), so `_verdict_from_html`'s
+  no-offers branch is entered — the branch whose message is *"did not resolve to a product page"*.
+- The shell's `rel="canonical"` is the **search endpoint**, because that is the URL the shell is
+  served at. So **clause A** of `10-01`'s predicate — *the page's own canonical points at the search
+  endpoint rather than a product path* — is satisfied, and `unresolved=True` is set.
+- Clause A was adopted on the reasoning that a search-endpoint canonical is *"Best Buy's own
+  statement about what page you are on"*. **It is exactly that, and that is the problem**: this page
+  genuinely *is* the search page, and the SKU resolving is stated somewhere clause A does not look.
+
+**So clause A now fires on every Best Buy SKU, alive or dead.** Not only on slow renders — on the
+current search-page mechanism, always, because the snapshot is always taken before the redirect is
+followed. `10-01` shipped a predicate that would have been correct against the page shape this
+document captured in August, and Best Buy replaced that page shape. Nothing in the tree could have
+noticed: the fixtures are the August pages, and this is the first time anybody asked the live site
+since 2026-08-04.
+
+**What this does NOT establish, stated before anything is built on it.** That the product is
+IN_STOCK, its price, or its seller. No product page was read — only Best Buy's instruction to go
+and read one. Criterion 3's *"reads IN_STOCK, first-party"* is **not measured by read 2** and is
+what read 3 is for.
+
+**Not a refusal, again.** `refused=False`, no `BLOCK_PHRASES` match, no `Blocked` raised. Best Buy
+served us a 150 KB document containing a working answer.
+
+**Running total after read 2: navigations that left this host = 2 of 3. Exemptions taken: 0 of 1.**
+
+
 ---
 
 ## Nintendo (store.nintendo.com / nintendo.com/us/store)
