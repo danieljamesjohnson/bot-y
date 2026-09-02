@@ -1151,6 +1151,44 @@ can speak to is the Best Buy row's **Status** cell, which is a claim about wheth
 this retailer — and that cell *is* now carrying more confidence than the measurement supports. That
 is where the correction lands.
 
+#### What read 2 is spent on, and the allocation this reverses — decided BEFORE read 2
+
+`10-DECISIONS.md` § Collision 9 allocated the budget in wave 1, and its allocation is withdrawn in
+part. Quoted in full so the reversal is visible rather than implied:
+
+> | 2 | `10-04` | the **candidate class search** — a durable-class term rather than a SKU — to obtain a candidate SKU that passes D1–D3 without guessing one |
+> | 3 | `10-04` | the **chosen candidate's SKU**, confirming it resolves and reads IN_STOCK, first-party |
+
+**The measured facts that overrule it.** That allocation is downstream of read 1 establishing which
+of four states the incumbent is in. Read 1 did not establish one: it returned `unresolved` off a
+21,823-byte document with **no `<body>`**, zero `ld+json` blocks and a `listCount` of `null`, where
+every prior capture of this URL shape is ~1.1 MB. Spending both remaining reads on a **replacement**
+would ship a control chosen because the incumbent was declared dead **on a page that had not
+rendered** — and it would ship it against the same clause A, on the same page shape, so the
+replacement's own confirming read would be exposed to the identical failure. A replacement confirmed
+by a mechanism whose trustworthiness is unmeasured is not confirmed.
+
+**So read 2 is spent discriminating, on the same SKU, with a longer settle**: `settle_seconds=25`
+in place of the shipped `3.0`, everything else — adapter, URL shape, predicate, verdict path —
+unchanged, so the two readings differ in exactly one variable. Two outcomes, and both are worth more
+than a third read on a candidate:
+
+| read 2 returns | what it establishes |
+|---|---|
+| resolves, reads IN_STOCK first-party | the incumbent is **alive**, read 1 was a **false dead**, and the shipped 3 s settle produces false dead controls on Best Buy's current search page — a defect in this repository, found on the wire |
+| unresolved again, on a fully-rendered page | read 1's verdict is **corroborated** at a settle that produced a real document, and the incumbent is genuinely a dead control |
+
+**What survives Collision 9 unchanged:** the cap of three, Best Buy only, the 300 s spacing, the
+counting rule, and *a refusal is the measurement*. This reverses **which question** a read asks, not
+**how many** may be asked. Read 3 remains unallocated until read 2 returns, and if read 2 answers
+the question read 3 is recorded UNSPENT.
+
+**Why this is not "retrying around a refusal", which the terms forbid.** Read 1 was not refused —
+`refused=False`, no `BLOCK_PHRASES` match, no `Blocked` raised. Best Buy answered. The prohibition is
+on re-asking a retailer that said no until it says something else; this re-asks a question whose
+first answer came back on a document the retailer had not finished producing, and it changes the
+variable that measurement implicated rather than repeating the same call hoping for a better mood.
+
 ---
 
 ## Nintendo (store.nintendo.com / nintendo.com/us/store)
