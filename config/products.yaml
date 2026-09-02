@@ -166,6 +166,34 @@ watches:
   # If one of these stops reading in-stock, the detector is broken and you
   # get told. Without them, a stale parser reports "out of stock" forever
   # and you never hear anything again — which looks exactly like a drought.
+  #
+  # EVERY CONTROL BELOW CARRIES A DURABILITY VERDICT, and the rule it is judged
+  # against is docs/adding-a-retailer.md § The rule a control has to satisfy —
+  # five clauses, D1 to D5, written down and applied on 2026-09-02. The verdict
+  # lives here as well as there because this file is where the decision is
+  # actually made, and a reader choosing a replacement should not have to open
+  # a document to find out that the thing they are replacing failed three
+  # clauses.
+  #
+  #   D1  first-party by construction
+  #   D2  replenished, not released
+  #   D3  not generation-bound
+  #   D4  a recorded reserve candidate that itself passes D1 to D3
+  #   D5  its death is legible — a dead target reads as a dead control
+  #
+  # ALL SIX FAIL AT LEAST ONE CLAUSE, and every failure below is NAMED AND
+  # UNREPAIRED: nothing in this phase changed a control. A rule applied to six
+  # controls chosen before it existed, condemning none of them, would be a rule
+  # that had been fitted to them. tests/test_control_durability.py binds these
+  # lines to that document in both directions, so a control added without a
+  # verdict reddens the suite.
+  # DURABILITY — CONTROL — PS5 console: D1 SATISFIED · D2 NOT SATISFIED · D3 NOT SATISFIED · D4 NOT SATISFIED · D5 SATISFIED
+  # NAMED AND UNREPAIRED — D2: a console has a launch date and an end of life,
+  # not a replenishment schedule. D3: a console is the archetype of a
+  # generation-bound product, and the rule's own original sentence said "not a
+  # console" before this entry existed — see the Walmart block below, which
+  # argues it in prose against a different retailer while gating nothing. D4:
+  # no reserve candidate is recorded for this retailer.
   - name: CONTROL — PS5 console
     retailer: gamestop
     target: https://www.gamestop.com/consoles-hardware/playstation-5/consoles/products/playstation-5-console/11108140.html
@@ -180,6 +208,18 @@ watches:
   # reason — see that block for the whole argument. A control read from a
   # different store than the product it is supposed to vouch for proves nothing
   # about the product's reading.
+  # DURABILITY — CONTROL — Great Value whole milk: D1 SATISFIED · D2 SATISFIED · D3 SATISFIED · D4 NOT SATISFIED · D5 SATISFIED
+  # NAMED AND UNREPAIRED — D4: no reserve candidate is recorded. It is the only
+  # clause this control fails, which is what makes D4 worth having rather than
+  # a restatement of D3.
+  #
+  # THE PIN IS NOT A DURABILITY FACT and is recorded here so nobody reads it as
+  # one. WALMART_STORE_ID is SET ON DISK since 2026-08-25, in the daemon's
+  # owner-readable environment file outside this repo, and NOT YET IN EFFECT —
+  # that file is read once at process start and the restart is deferred. Any
+  # process that does not load it (a test, a dev shell) sees no pin and the
+  # reading is UNKNOWN by design. Its presence is only ever measured as a
+  # count; the value is never read, derived, inferred or printed.
   - name: CONTROL — Great Value whole milk
     retailer: walmart
     target: https://www.walmart.com/ip/Great-Value-Whole-Vitamin-D-Milk-Gallon-Plastic-Jug-128-Fl-Oz/10450114
@@ -205,6 +245,21 @@ watches:
   # An evergreen first-party catalogue title, restocked routinely and never a
   # buy-box fight. Not the house-brand cable the rule would suggest: that page
   # is one of the ones Best Buy reproducibly refuses to render.
+  # DURABILITY — CONTROL — Pokémon Let's Go, Pikachu! (Switch): D1 SATISFIED · D2 NOT SATISFIED · D3 NOT SATISFIED · D4 NOT SATISFIED · D5 PARTIAL
+  # NAMED AND UNREPAIRED — D2: a game title is released, not replenished; it
+  # has a print run and a discontinuation. D3: it is a title for one console
+  # generation, which is the clause the ROADMAP's own sentence is about. D4:
+  # the reserve recorded in docs/retailer-evidence.md § Best Buy is another
+  # title for the same generation, so it fails D2 and D3 exactly as this one
+  # does — a fallback off the same shelf inherits the same end of life. D5
+  # PARTIAL: the resolution predicate covers the search redirect and the
+  # foreign-product page; a page with neither a canonical link nor parseable
+  # structure is not distinguishable from a reskin and keeps today's verdict,
+  # pinned by test_the_residual_no_canonical_and_no_structure_is_not_a_dead_control.
+  #
+  # THIS ENTRY IS NOT ASSERTED DEAD. The evidence is absent-then-stale: last
+  # read in stock in early August, unmeasured since. See 10-DECISIONS.md
+  # § Collision 10.
   - name: CONTROL — Pokémon Let's Go, Pikachu! (Switch)
     retailer: bestbuy
     target: "6216393"
@@ -223,6 +278,13 @@ watches:
   # A replacement cable: first-party by construction, restocked routinely, not a
   # console and not a limited drop. Reserve candidate if it is ever discontinued
   # is the AC adapter (`ac-adapter-104900`).
+  # DURABILITY — CONTROL — Nintendo HDMI cable: D1 SATISFIED · D2 SATISFIED · D3 NOT SATISFIED · D4 NOT SATISFIED · D5 SATISFIED
+  # NAMED AND UNREPAIRED — D3: the product is named for the console generation
+  # it serves, and an accessory scoped to one console goes when that console
+  # goes — slower than a console, in the same direction. D4: the AC adapter
+  # named above IS recorded, which is the half this file already asked for, and
+  # it is another accessory of the same generation, so it fails D3 in precisely
+  # the way the cable does. Recording a reserve is necessary and not sufficient.
   - name: CONTROL — Nintendo HDMI cable
     retailer: nintendo
     target: https://www.nintendo.com/us/store/products/hdmi-cable-104947/
@@ -256,6 +318,13 @@ watches:
   # restocked routinely, ships rather than being store-only — a store-only
   # grocery line reads unavailable online while the detector is working
   # perfectly — and never a Target Plus buy-box fight.
+  # DURABILITY — CONTROL — up&up microfiber dust cloths: D1 SATISFIED · D2 SATISFIED · D3 SATISFIED · D4 NOT SATISFIED · D5 NOT SATISFIED
+  # NAMED AND UNREPAIRED — D4: no reserve candidate is recorded. D5: Target is
+  # read at rung 3 and boty/browser.py surfaces no HTTP status, so a delisted
+  # Target control renders Target's own not-found page, reads no offers, and is
+  # indistinguishable from a reskin. NEITHER producer can fire here. The remedy
+  # is NOT to invent a status — the honest route is the response object, and it
+  # belongs to a phase that argues for it.
   - name: CONTROL — up&up microfiber dust cloths
     retailer: target
     target: https://www.target.com/p/microfiber-dust-cloths-6pk-up-38-up-8482/-/A-90377926
@@ -283,6 +352,10 @@ watches:
   # candidate was an Amazon Basics HDMI cable and it was rejected on sight of
   # its own page: `Only 2 left in stock - order soon.` A control that can
   # plausibly sell out reddens `make verify` for a reason that is not a defect.
+  # DURABILITY — CONTROL — Amazon Basics AA batteries (20-pack): D1 SATISFIED · D2 SATISFIED · D3 SATISFIED · D4 NOT SATISFIED · D5 SATISFIED
+  # NAMED AND UNREPAIRED — D4: no reserve candidate is recorded. The HDMI cable
+  # above is a REJECTED first candidate, which is a different thing: it is why
+  # this control was chosen, not what would replace it.
   - name: CONTROL — Amazon Basics AA batteries (20-pack)
     retailer: amazon
     target: https://www.amazon.com/dp/B00NTCH52W

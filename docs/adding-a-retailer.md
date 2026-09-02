@@ -243,6 +243,110 @@ cable does. A fallback chosen from the same shelf inherits the same end of life.
 necessary and it is not sufficient, and the applied table below says so in Nintendo's own row rather
 than in the abstract.
 
+### The rule applied to every control this project ships
+
+**Six controls, and the number comes from the loader.** `grep -c 'control: true' config/products.yaml`
+returns **7**; there are **6**. The seventh match is the transition-watch comment saying those
+watches are *deliberately* not controls. The count above was taken the way
+`scripts/control_check.py` and `boty.monitor` take it — load the config, keep the watches whose
+`control` attribute is true — because a count taken off the file measures the file, and the
+configuration is what vouches for every reading this project publishes.
+
+| Control | Retailer | D1 | D2 | D3 | D4 | D5 |
+|---|---|---|---|---|---|---|
+| CONTROL — PS5 console | gamestop | SATISFIED | NOT SATISFIED | NOT SATISFIED | NOT SATISFIED | SATISFIED |
+| CONTROL — Great Value whole milk | walmart | SATISFIED | SATISFIED | SATISFIED | NOT SATISFIED | SATISFIED |
+| CONTROL — Pokémon Let's Go, Pikachu! (Switch) | bestbuy | SATISFIED | NOT SATISFIED | NOT SATISFIED | NOT SATISFIED | PARTIAL |
+| CONTROL — Nintendo HDMI cable | nintendo | SATISFIED | SATISFIED | NOT SATISFIED | NOT SATISFIED | SATISFIED |
+| CONTROL — up&up microfiber dust cloths | target | SATISFIED | SATISFIED | SATISFIED | NOT SATISFIED | NOT SATISFIED |
+| CONTROL — Amazon Basics AA batteries (20-pack) | amazon | SATISFIED | SATISFIED | SATISFIED | NOT SATISFIED | SATISFIED |
+
+**Twelve of the thirty cells are not SATISFIED, and every one of the six controls fails at least one
+clause.** That is the deliverable, not the failure: a rule applied to six controls that were all
+chosen before it existed, and which condemned none of them, would be a rule that had been fitted to
+them. Every failure below is **named and unrepaired** — this document changes no control. Only Best
+Buy's is in scope for repair in this phase, and only against a live reading.
+
+#### Every failing cell, with its reason
+
+- **gamestop, `D2`** — a PS5 is a unit with a launch date and an end of life, not a replenished
+  staple. Its supply is a manufacturing schedule.
+- **gamestop, `D3`** — a console is the archetype of a generation-bound product. **This is the
+  finding this section exists to record: the rule's own last clause forbade a console before this
+  phase started, this control is a console, and nothing in the suite noticed for the life of the
+  project.** The argument against it was even written down — `config/products.yaml`'s Walmart block
+  says *"Do not use a console here"* two hundred lines above the GameStop entry — in prose, about a
+  different retailer, gating nothing. That is what an unapplied rule is worth, and it is the whole
+  argument for the gate.
+- **bestbuy, `D2`** — a game title is released, not replenished. It has a print run and a
+  discontinuation.
+- **bestbuy, `D3`** — it is a title for one console generation. This is the clause criterion 4's own
+  sentence is about.
+- **nintendo, `D3`** — the product is named for the generation it serves; an accessory scoped to one
+  console goes when that console goes. Slower than a console, and in the same direction.
+- **target, `D5` — NOT SATISFIED.** Target is read at rung 3, and `boty/browser.py` returns a status
+  of 200 unconditionally because the transport does not surface the main frame's response status. So
+  a delisted Target control renders Target's own not-found page, reads no offers, and is
+  indistinguishable from a reskin at this layer: neither producer can fire. **The remedy is not to
+  invent a status** — that would put a fabricated fact into the reading, and the browser module's own
+  comment argues why. The honest route is the response object, and it belongs to a phase that argues
+  for it.
+- **bestbuy, `D5` — PARTIAL.** Clauses A and B of the resolution predicate cover the two shapes that
+  can be established: the search redirect that resolves to nothing, and a page about somebody else's
+  product. A page carrying **neither** a canonical link **nor** parseable structure is not
+  distinguishable from a reskin, so it keeps today's verdict — pinned by
+  `test_the_residual_no_canonical_and_no_structure_is_not_a_dead_control` in `tests/test_retailers.py`,
+  so this cell rests on a gate rather than on this sentence. That residual claims less than the truth
+  in one case (broken markup on a product that is genuinely gone reads as a detector failure) and
+  claiming less is the direction to be wrong in.
+- **all six, `D4`** — see below. It is the clause with the most to say.
+
+#### `D4` was failed by every control, and two of the reserves fail the clause they would rescue
+
+Two controls have a recorded reserve and four have none.
+
+| Control | recorded reserve | verdict on the reserve |
+|---|---|---|
+| bestbuy | `Pokémon: Let's Go, Eevee! - Nintendo Switch`, in `docs/retailer-evidence.md` § Best Buy | fails `D2` and `D3` — another title for the same console generation, which is **the same pair the incumbent fails** |
+| nintendo | the AC adapter, named in `config/products.yaml` beside the control | fails `D3` — another accessory of the same console generation |
+| gamestop, walmart, target, amazon | none recorded | not satisfied for absence — and the paragraph above asked for one before this clause existed |
+
+**A reserve drawn from the same shelf inherits the same end of life.** Both recorded reserves were
+checked rather than counted, and both fail the clause that condemns the thing they would replace.
+That is the second half of `D4` earning its place — under the paragraph this document already
+carried, Nintendo's row would have been a pass.
+
+**Is `D4` circular? No, and the reason is worth stating because the other reading of it is.** As
+written, a reserve must pass `D1` to `D3` — *not* `D4` — so the check terminates at one level. The
+natural stronger reading (*the reserve must pass every clause, including having a reserve of its
+own*) is an infinite regress and is deliberately not the rule.
+
+**What is true, and it is not flattering to the clause:** at the two retailers where a reserve
+exists, `D4` condemns nothing `D3` had not already condemned — it is `D3` restated one level down.
+It carries independent information only at the three retailers whose controls pass `D1` to `D3` and
+have no reserve recorded at all — walmart, target and amazon — where it is the only clause that
+fails. So `D4` earns its place at those three, and duplicates `D3` at the other two. **No control in
+this tree satisfies it.** A clause nothing satisfies is either a bar the tree has to grow into or a
+bar nobody can clear; this one is the first, because clearing it costs one recorded line per control
+and nothing else. It is left as written rather than softened to produce a pass, which is the one move
+this section is not allowed to make.
+
+**And `D4` is satisfied by a RECORD, not by a second watch.** Writing a reserve down does not add a
+`control: true` entry. That distinction is load-bearing: every retailer here has exactly one control,
+which is the only reason the mixed-cause health arm is latent rather than live, and a clause that
+quietly asked for a second control per retailer would make it reachable.
+
+#### The Walmart pin, recorded beside the verdict because it is not part of it
+
+The milk control passes every product clause. `WALMART_STORE_ID` is an **availability** fact about
+the reading, not a durability fact about the product, and it is recorded here so that nobody reads
+its absence in a test run as a `D1` to `D5` failure. The key is **set on disk since 2026-08-25**, in
+the daemon's owner-readable environment file outside this repository, and **not yet in effect** — the
+file is read once at process start and the restart is deferred. Any process that does not load it —
+a test, a developer shell — sees no pin at all and the reading is UNKNOWN by design. Its presence is
+only ever measured as a count; the value is never read, derived, inferred or printed, here or
+anywhere else in this tree.
+
 ### Controls are not pass/fail, and you need to know that before you run them
 
 `scripts/control_check.py` has three green-ish exits and they mean different
