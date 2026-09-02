@@ -146,6 +146,75 @@ of milk is the archetype. A console is the anti-archetype — on a marketplace
 those are frequently held by resellers, so an out-of-stock reading would be
 *correct* and you would spend a day chasing a bug that is not there.
 
+#### The five clauses — an extension dated 2026-09-02, not a replacement
+
+The sentence above is the rule as this repository first wrote it, and it is quoted here whole
+because it is **kept**:
+
+> first-party, evergreen, restocked routinely, never the subject of a buy-box fight, and not a
+> console.
+
+Nothing in it is wrong. It is **incomplete**, it had never been applied to anything in writing, and
+nothing gated it — which is not a hypothetical cost. Its own last clause forbids a console, and
+GameStop's control is a PS5 console. The applied table below records that plainly; it is the
+argument for the gate rather than an accusation, because an unapplied, ungated rule is a rule that
+is already being broken.
+
+The clause the sentence is missing is named by `.planning/ROADMAP.md`'s Phase 10 criterion 4, not
+invented here:
+
+> Best Buy's died because it was a specific game SKU; a control that can be discontinued eventually
+> will be.
+
+*Its premise is corrected and its rule survives.* That Best Buy's control **died** is not
+established — `.planning/phases/10-a-control-that-cannot-die/10-DECISIONS.md` § Collision 10 shows
+the evidence is absent-then-stale rather than contrary, and nothing in this document asserts the
+control is dead. What survives the correction is the second half, which is a rule about a product
+class and needs no death to be true. "Evergreen" gestures at it; a gesture is not something you can
+apply to a candidate, which is what the clauses below are for.
+
+**Five clauses, identified `D1` to `D5`.** The identifiers are the stable part: the applied table
+cites them, `config/products.yaml` cites them beside every control, and the gate reads them out of
+this document rather than carrying its own copy of the rule. Rename one here and it is renamed in
+all three.
+
+- **`D1` — first-party by construction.** Sold by the retailer's own legal entity or its house
+  brand, so no buy-box rotation can take the listing away. This absorbs the original's *first-party*
+  and *never the subject of a buy-box fight*, because they were one idea stated twice: an offer that
+  cannot rotate cannot be lost to a reseller. Amazon's control is an Amazon Basics line and Target's
+  is an Up&up line for exactly this reason — an own-brand item is first-party by construction rather
+  than by observation, and construction is the part that survives next quarter.
+- **`D2` — replenished, not released.** A consumable or an evergreen catalogue staple that is
+  restocked routinely — never a unit with a launch date and an end of life. A gallon of milk is the
+  archetype. **This is the clause the rejected Amazon candidate below failed:** an HDMI cable
+  reading *"Only 2 left in stock - order soon."* is replenished on somebody's schedule but not
+  reliably, and a control that can plausibly sell out reddens the gate for a reason that is not a
+  defect.
+- **`D3` — not generation-bound.** Its existence must not depend on a hardware or software
+  generation that the manufacturer will end. **This clause is new**, and it is the generalisation of
+  the original's *not a console*: a console is the archetype of a generation-bound product, not the
+  whole of it. A game title for one console, and an accessory named after one console, are bound to
+  that generation just as surely as the console is — they simply take longer to go. This is the
+  clause the ROADMAP's sentence justifies, and the one most of this project's controls fail.
+- **`D4` — a recorded reserve candidate that itself passes `D1` to `D3`.** The paragraph below
+  already asks for a fallback and Nintendo already names one. This makes it a clause and adds the
+  half that was missing: the fallback is **checked against the rule**, not merely counted. A
+  reserve that fails the same clause as the control it would replace is not a reserve, and the
+  check is bounded at `D1` to `D3` on purpose — requiring the reserve to have a reserve of its own
+  is an infinite regress, not a stricter rule.
+- **`D5` — its death is legible.** When the target stops resolving, the monitor reports a **dead
+  control** — a fact about `config/products.yaml` — rather than a refusal or a broken detector.
+  **Nothing in this repository satisfied this clause before Phase 10**, which is why it is a clause
+  and not an assumption. It is also what makes the rest survivable: no identifier is immortal, so
+  after every product clause the last question is what happens when one dies anyway. The two
+  producers are `boty/fetch.py`'s unresolved statuses for a URL-addressed control and the
+  resolution predicate in `boty/retailers.py` for a SKU-addressed one.
+
+`D1` to `D4` are properties of the **product**; `D5` is a property of the **monitor**, and it is the
+only one a contributor can fix without changing the control. Each cell in the table below reads
+**SATISFIED**, **PARTIAL** or **NOT SATISFIED**, and every cell that is not SATISFIED names its
+reason.
+
 ### The rule biting, on a real candidate that was rejected
 
 Amazon's control is `B00NTCH52W`, a 20-pack of AA batteries. It is the second
@@ -158,10 +227,21 @@ A control that can plausibly sell out is a control that reddens `make verify`
 for a reason that is not a defect, and a gate that cries wolf gets ignored
 inside a week. The batteries read a flat *"In Stock"*.
 
+**That is `D2` biting, before `D2` had a name.** The cable is first-party and not
+generation-bound — it would have passed `D1` and `D3` — and it was still the wrong control, because
+*restocked routinely* is a claim about replenishment and that page disproved it in one line.
+
 Choosing a control is a recorded decision with a fallback, not a guess. Nintendo
 names its reserve candidate in the config file in the same breath as its control
 — if the cable is ever discontinued, the AC adapter takes over. Write yours
 down the same way.
+
+**That is `D4`, and Nintendo's own reserve is what shows why the clause needed a second half.** The
+AC adapter is recorded, which is the part this paragraph asked for — and it is another accessory of
+the same console generation as the cable it would replace, so it fails `D3` in precisely the way the
+cable does. A fallback chosen from the same shelf inherits the same end of life. Recording one is
+necessary and it is not sufficient, and the applied table below says so in Nintendo's own row rather
+than in the abstract.
 
 ### Controls are not pass/fail, and you need to know that before you run them
 
