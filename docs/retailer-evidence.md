@@ -1000,6 +1000,56 @@ repair handles it and says so.
 **Note for whoever sees this again:** the escaping is intermittent, so a probe
 that comes back clean does not disprove it. Compare against the fixture.
 
+### 2026-09-02 — the three authorised reads: the counting rule and the branch table, written BEFORE the first request
+
+Phase 10 criterion 3 requires Best Buy's control to be judged *against a real reading, not a
+fixture*. Dan authorised **at most three live requests, to Best Buy only, spaced not burst**
+(`QUESTIONS.md` § 0g, answered 2026-09-02). This subsection is written and committed **before the
+first request leaves this host**, so that no outcome can be reinterpreted in the light of what it
+turned out to be. What each read returned is recorded beneath it, never over it.
+
+**What is NOT established going in, and is the whole reason read 1 exists.** SKU `6216393` — the
+configured control — read `in_stock … $59.99 … ld+json: InStock from Best Buy` in four separate
+`make verify` transcripts in early August. Its only non-resolution is the 2026-08-04 episode
+recorded above, which this document itself proves was a **false** dead caused by unparseable
+markup on a live SKU. The two most recent attempts are `fetch failed: no Chrome/Chromium binary
+found`, which is a fact about **this host** and not about Best Buy. So the evidence is
+**absent-then-stale**, not contrary: nobody has asked Best Buy about this SKU in roughly four
+weeks. Read 1 asks.
+
+#### The counting rule, stated before the first request
+
+1. **Any navigation attempt that leaves this host counts as SPENT, whatever it returns** — a
+   timeout, a TLS reset, a partial render, a challenge page, a 4xx, a 5xx, an empty body. Best Buy
+   received a request; what came back does not refund it.
+2. **Only a PRE-NAVIGATION failure is exempt**, and only because no packet reached Best Buy:
+   chromium could not start, or no browser binary was found. That is a host fact and is recorded
+   as one.
+3. **The exemption may be taken AT MOST ONCE.** A second pre-navigation failure **ends the
+   sequence** and criterion 3 closes on what was measured to that point — because *"fix the host
+   and try again"* is how a cap of three becomes a cap of whatever an executor's patience allows.
+4. **Worst case, checkable by counting: one exempt pre-navigation failure, then reads 1, 2 and 3 —
+   three navigations, never more, under every branch.**
+
+The counting unit is **one rendered page load through the Best Buy adapter**. A rung-3 navigation
+fans out into dozens of subresource requests; that fan-out is inherent to the rung Dan authorised,
+and counting subresources would make the cap unspendable rather than strict. Spacing is **at least
+300 s**, which is Best Buy's own configured standing cadence — never ask a retailer faster than
+the daemon would, and the daemon is running, so these reads are additive to its traffic.
+
+#### The branch table for read 1, written before read 1
+
+| outcome | what it establishes | spent? | what follows |
+|---|---|---|---|
+| reads IN_STOCK, first-party | the control was never dead — it was **unread**, and the capability record was stale | **spent** | criterion 3's reading half is met by this read; the replacement becomes a durability question only |
+| unresolved | the incumbent is genuinely a dead control, on the wire | **spent** | the mechanism `10-01` built is confirmed against reality; a replacement is needed and reads 2–3 pursue it |
+| refused — a challenge page or a 403 | Best Buy is refusing us at the connection layer | **spent** | **this is the measurement.** No retry. The refusal is confirmed on a date rather than inherited |
+| anything else that left this host — timeout, TLS reset, partial render, 4xx, 5xx, empty body | that Best Buy received a request and this is what came back | **spent** | recorded as the outcome it is. Best Buy does not refund a request because the answer was unhelpful |
+| **pre-navigation failure only** — chromium could not start, no browser binary | a **host** fact, not a Best Buy fact: no packet reached the retailer | **NOT spent — ONCE** | recorded as a host failure. If it can be fixed without a request, fix it and take the read. **A second one ENDS THE SEQUENCE** |
+
+**Every branch owes the README a sentence, not only the refusal branch** — see the correction
+recorded beneath read 1, which is about *which* README cell a product-page read can speak to.
+
 ---
 
 ## Nintendo (store.nintendo.com / nintendo.com/us/store)
