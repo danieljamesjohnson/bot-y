@@ -11,8 +11,8 @@ plan's frontmatter is the accurate list, so the wave grouping is real rather tha
 
 | Plan ID | Objective | Wave | Depends On | Requirements |
 |---|---|---|---|---|
-| `10-01` | **The collisions decided in writing, and the dead-control state reachable without a wire.** Write `10-DECISIONS.md` settling all nine collisions before any production code moves, then a tracer: the existing `tests/fixtures/bestbuy/unresolved-sku` capture driven end-to-end — adapter → `Result` → `assess_health` — until a Best Buy control whose SKU does not resolve is reported as a **dead control** and not as a broken detector. Definition of Done item 3's second half, closed offline. | 1 | — | REQ-24 |
-| `10-02` | **The three states, distinct, and criterion 2's conjunction asserted in both halves.** Generalise the producer: an HTTP 404/410 is a dead control at every rung-1 retailer, and the 2026-08-04 false-dead precedent — Best Buy served unparseable JSON-LD and the SKU branch fired on a SKU that was perfectly alive — is gated so unreadable markup stays *detector broken*. Then arm precedence, and the mixed group where a dead control and a real refusal are both true at once. | 2 | `10-01` | REQ-24 |
+| `10-01` | **The collisions decided in writing, and the dead-control state reachable without a wire.** Write `10-DECISIONS.md` settling all nine collisions before any production code moves, then a tracer: a captured Best Buy product page driven end-to-end — adapter → `Result` → `assess_health` — until a control whose SKU the page does not carry is reported as a **dead control** and not as a broken detector, on a predicate measured against both fixtures rather than assumed. Definition of Done item 3's second half, closed offline. Also **re-anchors M30** and **extends two four-arm partitions to five**, both in this wave, because both go wrong the moment the fifth arm exists. | 1 | — | REQ-24 |
+| `10-02` | **The three states, distinct, and criterion 2's conjunction asserted in both halves.** Generalise the producer: an HTTP 404/410 is a dead control at every rung-1 retailer, and the 2026-08-04 false-dead precedent — Best Buy served unparseable JSON-LD and the SKU branch fired on a SKU that was perfectly alive — is gated so unreadable markup stays *detector broken*. Then arm precedence, and the mixed group where a dead control and a real refusal are both true at once — which is where the `assess_health` tests that live in `tests/test_pacing.py` collide. | 2 | `10-01` | REQ-24 |
 | `10-03` | **Criterion 4 — the durability rule written down, numbered, and applied to every existing control with the failures named.** The rule already exists in `docs/adding-a-retailer.md` as one unnumbered sentence and has never been applied to anything. Number it, extend it where this phase's evidence forces an extension, apply it to all six controls, name every failure, and gate the naming so it cannot be dropped. Expect it to condemn more than one control; naming them is the deliverable. | 3 | `10-02` | REQ-24 |
 | `10-04` | **Criterion 3 — the wire. At most three reads, Best Buy only, spaced.** Read 1 establishes what state the incumbent control is actually in, which has not been measured since the browser-capability correction. Reads 2 and 3 are the replacement's, spent under a branch table written before the first request. A refusal is the measurement. No control is shipped that has not been confirmed by a live reading. | 4 | `10-03` | REQ-24 |
 | `10-05` | **Criterion 5 — M44, the gate and the verdict.** A mutation anchored on the dead-control **behaviour**, observed CAUGHT, its kill set measured against the registry before it is priced. `CLAUDE.md`'s registry counts advanced in the same commit. `make verify-offline` run and its **verdict line** read, not the exit code alone. The five-criterion verdict table. | 5 | `10-04` | REQ-24 |
@@ -61,21 +61,41 @@ unspent rather than spent because it was available.
 
 ## Notes the plan writers must not rediscover
 
-### The premise "Best Buy's control is dead" has not been measured since the capability correction
+### THE PREMISE — and it may be false. No plan asserts it; `10-04` measures it
 
-REQ-24 says *"Best Buy's current dead control is repaired"*. The last recorded live reading of that
-control (`docs/retailer-evidence.md`, the `make verify` transcripts around lines 3482 and 4397) is:
+REQ-24's last sentence is *"Best Buy's current dead control is repaired"*, and criterion 3 is built
+on it. **Every piece of evidence in this tree points the other way**, and the plan writers have to
+meet that before they meet the criterion, because a phase that repairs something never shown broken
+is the exact failure this repository's standard exists to catch.
 
-> `unknown  bestbuy  CONTROL — Pokémon Let's Go, Pikach   —  fetch failed: no Chrome/Chromium binary found — set BOTY_BROWSER_PATH`
+**Three facts, checked against the tree on 2026-09-02:**
 
-**That is a local capability failure, not a dead control and not a refusal.** `10-CONTEXT.md` records
-the capability claim as stale, measured 2026-09-02: Playwright chromium is present at
-`~/.cache/ms-playwright`, three builds including a headless shell.
+1. **`6577129` was never the control.** It is the SKU this repo once carried for the **GO Plus +
+   itself**, it resolves to nothing, it was removed from `config/products.yaml` with the finding
+   recorded in prose, and `docs/retailer-evidence.md` describes the identification as unconfirmed
+   and probably wrong. It is the subject of the `unresolved-sku` fixture. **A dead product SKU is
+   not a dead control.**
+2. **`6216393` is the control, and there is a SUCCESSFUL read of it on the record.**
+   `docs/retailer-evidence.md` § Best Buy: the bare SKU *"Redirected to the product page,"*
+   1,109,548 B, title `Pokémon: Let's Go, Pikachu! Nintendo Switch HACPADW2A - Best Buy`, canonical
+   `.../product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393`, exactly one offer:
+   `available=True, price=59.99, seller='Best Buy'`.
+3. **The only failing reading of it is a HOST failure, and it is stale.** The `make verify`
+   transcripts read `fetch failed: no Chrome/Chromium binary found — set BOTY_BROWSER_PATH`. That is
+   not a dead control, not a refusal and not a reading — and `10-CONTEXT.md` records the capability
+   claim as stale, measured 2026-09-02: Playwright chromium is present at `~/.cache/ms-playwright`,
+   three builds including a headless shell.
 
-So the incumbent control may be alive, dead, refused, or unreadable-here, and **which one is not
-established**. `10-04`'s read 1 exists to establish it. No plan may assert the incumbent is dead
-before that read returns, and `10-01`/`10-02`/`10-03` are written so that none of them needs to: the
-mechanism, the states and the rule are all provable offline against fixtures and config.
+**So the incumbent may be alive, dead, refused, or unreadable on this host, and which one is NOT
+ESTABLISHED.** `10-04`'s read 1 exists to establish it, under a branch table written before the
+request. **No plan may assert the control is dead** — not in prose, not in a test name, not in a
+commit message.
+
+**If read 1 shows the control alive**, criterion 3's honest verdict is that **there was nothing to
+repair**: the defect was in a record, not in a config, and the phase's deliverable there is the
+correction plus a replacement chosen on durability grounds. Criteria 1, 2, 4 and 5 carry the phase
+in that branch exactly as they do in every other, because none of them depends on the premise —
+which is why they are all closed offline before the first request.
 
 ### Today's defect, located exactly
 
@@ -123,17 +143,62 @@ the *first* state's message. If `unresolved` were set on `not offers and sku is 
 phase would ship a mechanism that calls a live control dead every time a retailer deploys bad markup
 — **the same misattribution it exists to fix, pointed the other way.**
 
-The discriminator is already measured and already published: `parse.ldjson_read` returns
-`LdJsonRead(blocks, unparseable, repaired)`, and `_verdict_from_html` already holds it as `ld`. The
-rule `10-01` implements and `10-02` gates:
+### The predicate, stated exactly — and MEASURED against both captures rather than reasoned about
 
-> **A control is dead only when the page was READ SUCCESSFULLY and named no product matching the
-> target.** Markup that was present and could not be parsed (`ld.unparseable > 0`) is a detector or
-> markup failure, never a dead control.
+**Two obvious readings were tried at planning time and BOTH FAIL.** Measured 2026-09-02 with
+`.venv/bin/python` over `boty.parse.ldjson_read` and the raw fixture text:
 
-Both fixtures exist for this. `unresolved-sku.html` is the true dead — a search page, no Product
-markup, nothing unparseable. The 08-04 episode is the false dead, and `tests/test_parse.py` already
-carries the broken-escape material.
+| page, read for | `blocks` | `unparseable` | our sku in offers | `rel="canonical"` points at |
+|---|---|---|---|---|
+| `unresolved-sku.html`, sku 6577129 | **0** | 0 | no | `/site/searchpage.jsp?id=…&st=6577129` |
+| `pikachu-control.html`, sku 6216393 | 3 | 0 | **yes** | `/product/…/sku/6216393` |
+| `pikachu-control.html`, sku 6577129 | 3 | 0 | **no** | `/product/…/sku/6216393` |
+| the 2026-08-04 live page (from the record) | 3 | **3** | no | a product page |
+
+- **`unparseable == 0` alone is wrong**: it marks a page carrying *no* JSON-LD at all — a reskin,
+  a partial render — as a dead control. That is `T-10-01` (rated high) happening on the day it
+  ships.
+- **`blocks > 0 and unparseable == 0` is also wrong**: the true-dead capture has `blocks == 0`, so
+  that predicate makes the dead state **unreachable from the fixture the phase is built on**.
+
+**There is a third discriminator, and it is measured, positive, and retailer-maintained.** Best Buy
+publishes a `rel="canonical"` link on both page shapes and they differ in exactly the way the
+question asks: a SKU that resolves gets a canonical pointing at a **product** path; a SKU that
+resolves to nothing gets one pointing at the **search endpoint**. That is Best Buy's own statement
+about what page you are on — the same class of commercially load-bearing markup `README.md` already
+argues the schema.org feed is, and the opposite of the presentation matching this repository
+distrusts.
+
+**So the predicate `10-01` ships, and `10-02` gates, is a disjunction of two measured facts:**
+
+> A SKU-addressed reading is **unresolved** when
+> **(A)** the page's canonical link points at the search endpoint rather than a product path — the
+> retailer saying no product was resolved; **or**
+> **(B)** structured markup was present and parsed (`blocks > 0` and `unparseable == 0`) and no
+> Product on it carries the requested sku — a page about somebody else's product.
+> It is **never** unresolved when markup was present and could not be parsed, which is the
+> 2026-08-04 case.
+
+Compare canonical URLs on **path**, never on the whole string: the request is
+`…/site/searchpage.jsp?st=<sku>` and the canonical adds a category parameter, so a whole-string
+comparison would be false on the day it was written.
+
+**THE RESIDUAL, NAMED RATHER THAN CLOSED.** A page with **no canonical and no parseable structure**
+— `blocks == 0`, no canonical link — is not distinguishable at this layer from a reskin or a broken
+render, and it does not become a dead control. `10-01` pins that with a test, states it beside the
+predicate in the code, and `10-03` carries it into Best Buy's D5 column as **PARTIAL**, not as a
+pass. This is the honest version of the thing the two rejected readings were each trying to get for
+free.
+
+**Which fixture proves which half.** `pikachu-control.html` read for a sku it does not carry is
+**(B)**, and it is what `10-01`'s tracer drives — a real capture of a real Best Buy product page,
+reaching the dead state with no live read, which is Definition of Done item 3's second half.
+`unresolved-sku.html` is **(A)** by its canonical, and it also pins the residual: with the canonical
+check removed it must fall back to the ambiguous case rather than to a dead control. The 08-04
+episode is the false dead, and `tests/test_parse.py` already carries the broken-escape material.
+
+Reading the canonical needs a small reader in `boty/parse.py`, tested there, beside the other
+readers. It is not written inline in `_verdict_from_html`.
 
 ### The second producer is the HTTP status, and it generalises the state past Best Buy
 
@@ -198,11 +263,14 @@ refusal means no page came back, so nothing about resolution was established —
   established.
 - **dead goes ahead of `store_gap`, and this is a decision rather than a detail.** `_is_store_gap`
   returns `True` whenever `watch.store_id is None` — *"read off the config and therefore true
-  whatever the page did"* — and `WALMART_STORE_ID` is deliberately unset today (`QUESTIONS.md`
-  § 0f). So a dead Walmart control would today be reported as a store gap. A target that does not
-  resolve makes the store question moot: **a page about no product cannot be a page about the wrong
-  store.** Both facts are about our config; deadness is the more specific one and it is also the one
-  whose remedy is different.
+  whatever the page did"* — and the pin is absent in **any process that does not load
+  `~/.config/boty/env`**, which is every test and every dev shell. (`QUESTIONS.md` § 0f: the value
+  was supplied on 2026-08-25 and written to that file, mode 600; it reaches the daemon at the next
+  restart, which is still deferred. It is **set on disk and not yet in effect** — never "unset",
+  and never printed, derived or named.) So a dead Walmart control would today be reported as a
+  store gap. A target that does not resolve makes the store question moot: **a page about no
+  product cannot be a page about the wrong store.** Both facts are about our config; deadness is
+  the more specific one and it is also the one whose remedy is different.
 - **breakage stays last**, claiming least, unchanged.
 
 ### `Health.action` — the dead arm pages, on `STORE_PIN_ACTION`'s precedent
@@ -272,7 +340,7 @@ rule and records what it actually finds:
 | gamestop — PS5 console | **FAILS D2, D3** — a console: released, generation-bound. The rule's own words already forbade it |
 | bestbuy — Pokémon Let's Go, Pikachu! (Switch) | **FAILS D2, D3** — a specific game SKU on an ended generation, and **FAILS D4**: its recorded reserve (`Let's Go, Eevee!`, `docs/retailer-evidence.md`) is the same class of product and fails the same clauses |
 | nintendo — HDMI cable | **FAILS D3** — a generation-bound accessory, and **FAILS D4** for the same reason: the reserve it names (the AC adapter) is generation-bound too |
-| walmart — Great Value whole milk | passes D1–D3; **D4 not recorded**. Separate finding, recorded beside and not as a durability failure: it is pinned to `${WALMART_STORE_ID}`, which is deliberately unset, so it is currently **unreadable here** — an availability fact, not a durability one |
+| walmart — Great Value whole milk | passes D1–D3; **D4 not recorded**. Separate finding, recorded beside and not as a durability failure: it is store-pinned, and the pin is **set on disk since 2026-08-25 and not yet in effect** — it reaches the daemon at the next restart, and any process that does not load that env file sees no pin at all. An availability fact about a deferred restart, not a durability one, and the value is only ever measured as a count |
 | target — up&up microfiber dust cloths | passes D1–D3; **D4 not recorded**; **D5 NOT SATISFIED** — rung 3 surfaces no HTTP status, so a delisted Target control is indistinguishable from a reskin. The named gap above |
 | amazon — Amazon Basics AA batteries | passes D1–D3; **D4 not recorded** — its rejected first candidate is recorded as a rejection, which is not the same thing as a reserve |
 
@@ -292,6 +360,26 @@ not replace is recorded as *named and unrepaired*, never quietly repaired withou
 **Spacing:** at least **300 seconds** between reads — the retailer's own configured standing cadence.
 Never ask Best Buy faster than the daemon would. And note the daemon is running: these reads are
 *additional* to its traffic, which is one more reason not to burst them.
+
+### What counts as a spent read — the cap is Dan's, and it has exactly one exemption
+
+A budget with an open-ended exemption is not a budget. So the counting rule is stated here, restated
+in `10-DECISIONS.md` § *Collision 9*, and restated again in `10-04`'s branch table, and it is the
+same three sentences in all three places:
+
+1. **Any navigation attempt that leaves this host counts as SPENT, whatever it returns.** A timeout,
+   a TLS reset, a partial render, a challenge page, a 4xx, a 5xx, an empty body — all spent. Best Buy
+   received a request; what came back does not refund it.
+2. **Only a PRE-NAVIGATION failure is exempt**, and only because no packet reached Best Buy: chromium
+   could not start, or no browser binary was found. That is a host fact and it is recorded as one.
+3. **The exemption may be taken AT MOST ONCE.** A second pre-navigation failure **ends the
+   sequence**, and criterion 3 closes on what was measured up to that point. There is no
+   fix-and-retry loop, because "fix the host and try again" is how a cap of three becomes a cap of
+   whatever the executor's patience allows.
+
+**Worst case, stated so it can be checked by counting:** one exempt pre-navigation failure, then
+reads 1, 2 and 3 — **three navigations, and never more, under every branch.** If the exemption is
+taken twice, the total is **one navigation or zero** and the phase closes on that.
 
 **Why the incumbent is read first even though the phase expects to replace it.** Criterion 3 says
 *repaired … or replaced with one that reads*. If read 1 shows the incumbent reads, criterion 3 is
@@ -335,6 +423,54 @@ and a subset result is written down as a subset result.
 (M1–M20 and M25–M43, 39 idents, next free M44, nine gap markers) because 09-05 advanced them; nothing
 in the suite gates them, and they were stale for three days once.
 
+### Two tests and one mutation that already exist, and collide — all three in WAVE 1 or 2
+
+**A — `scripts/mutation_check.py`'s M30 anchors on a line Collision 7 changes, and it breaks
+criterion 5's own gate from wave 1.** M30's `search=` is the exact literal
+`action=STORE_PIN_ACTION if store_gap else ""`. Adding a second arm that carries an action rewrites
+that line. `apply_mutation` **raises** on a missing anchor and the harness runs inside
+`make verify-offline`, so between wave 1 and wave 5 the gate criterion 5 is judged by would be
+broken — and it would look like this phase's own regression rather than like an anchor that moved.
+
+**`scripts/mutation_check.py` is therefore in `10-01`'s `files_modified`, and `10-01` re-anchors M30
+in its own wave.** The precedent is in that file already: M2 and M4 were re-pointed when the lines
+they anchored on moved, and the re-point was recorded rather than silently applied. Two obligations
+come with it: **M30's `breaks=` sentence must still describe the behaviour it destroys** (the one
+health state a person can close stops saying so), and its comment block cites
+`test_exactly_one_arm_names_something_a_person_can_do` — a test whose own claim this phase changes,
+which is collision C.
+
+**B — `tests/test_pacing.py` holds `assess_health` tests, and one of them is exactly `10-02` Task 3's
+subject.** `test_one_non_refusal_among_refusals_is_treated_as_breakage` asserts on the reason of a
+group **containing a refusal** — that it is treated as breakage and carries the unestablished-cause
+marker. `10-02` rewrites what such a group says. Six `assess_health` tests live in that file, which
+is not where a reader would look for them; **`tests/test_pacing.py` is in `10-02`'s
+`files_modified`**, and the rewrite keeps that test's *point* (a non-refusal among refusals is never
+swallowed) while its expected sentence moves.
+
+**C — `tests/test_alert_text.py` holds two partitions over FOUR arms, and a fifth arm makes them
+FALSE WITHOUT MAKING THEM RED.** This is the worst outcome available under this repository's
+standard and it is the reason this section exists.
+
+- `test_exactly_the_two_unknown_causes_say_so` — *"the partition, across all four arms of
+  `assess_health`"* — builds a dict of four named arms and asserts which carry the
+  unestablished-cause marker.
+- `test_exactly_one_arm_names_something_a_person_can_do` — the 2026-08-12 partition over the same
+  four arms, whose docstring says *"the answer has to stay ONE"*, and whose own body explains that
+  a single test asserting one flag would go on passing while the other rule quietly inverted.
+
+Both enumerate their arms **by name**. `10-01` adds a fifth arm that carries an action and does not
+carry the unestablished-cause marker. Neither test constructs it, so **both keep passing while both
+docstrings have become false** — "all four arms" is now four of five, and "the answer has to stay
+ONE" is now two.
+
+**`tests/test_alert_text.py` is in `10-01`'s `files_modified`, and `10-01` extends both partitions to
+five arms in its own wave.** The plan says explicitly: **do not confirm these by running them and
+seeing green.** Green is the symptom. The check is whether the arm count in each partition equals the
+arm count in `assess_health`, and the docstrings must be corrected in the dated form — the withdrawn
+sentence quoted, what overruled it, and what survives, which for the action partition is the *rule*
+(a push costs somebody writing down what to DO) rather than the *number*.
+
 ### Prohibitions (author descriptor-less into `must_haves.prohibitions`)
 
 - `10-01` — *a control is never called dead because a message said so.* The dead-control state is
@@ -375,9 +511,12 @@ footnote.
 **There is no `T-10-SC` row, and that is stated rather than omitted.** This phase installs nothing
 from npm, pip or cargo, so the package-legitimacy gate has nothing to audit.
 
-**Residual carried, not fixed:** rung 3 surfaces no HTTP status, so a dead URL-addressed control at
-Target cannot be distinguished from a reskin. Named in `10-03`'s D5 column as NOT SATISFIED, with
-the fabricate-a-status remedy explicitly refused.
+**Residuals carried, not fixed — two, both named in `10-03`'s D5 column rather than papered over:**
+rung 3 surfaces no HTTP status, so a dead URL-addressed control at **Target** cannot be
+distinguished from a reskin (**NOT SATISFIED**, with the fabricate-a-status remedy explicitly
+refused); and at **Best Buy** a page carrying neither a canonical link nor parseable structure is
+not distinguishable from a reskin either (**PARTIAL**, pinned by a test in `10-01`). Neither is
+closed by this phase and neither is described as closed.
 
 ### Standing constraints every plan inherits
 
@@ -422,14 +561,14 @@ moves. Each is stated above; this is the index the decisions file must answer, o
 | # | Collision | Where the outline argues it |
 |---|---|---|
 | 1 | The dead fact must be a FIELD, not `detail` prose | *The fact exists already* |
-| 2 | Unparseable markup is not a dead control — the 2026-08-04 false dead | *The false dead* |
+| 2 | The predicate, stated EXACTLY: canonical-path OR parsed-markup-without-our-sku, never unparseable markup — plus the no-canonical residual, named | *The false dead* / *The predicate, stated exactly* |
 | 3 | The second producer is the HTTP status, and rung 3 has none | *The second producer* |
 | 4 | `Health.dead_control` is `any`, `Health.refused` stays `all` | *`Health` needs a field too* |
 | 5 | Arm precedence: dead ahead of `store_gap`, behind `refused` | *Arm precedence* |
 | 6 | Criterion 2's mixed group — a refusal the breakage arm calls "not refused" | *Criterion 2's conjunction* |
 | 7 | The dead arm carries a `Health.action` and therefore pages | *`Health.action`* |
 | 8 | Nothing new is published to `status.json` | *Nothing new is published* |
-| 9 | The read budget, its spacing, its counting unit and its refusal branch | *The read budget* / *If Best Buy refuses everything* |
+| 9 | The read budget: allocation, spacing, counting unit, **what counts as spent and the single one-shot exemption**, and the refusal branch | *The read budget* / *What counts as a spent read* / *If Best Buy refuses everything* |
 
 ---
 
@@ -437,6 +576,11 @@ moves. Each is stated above; this is the index the decisions file must answer, o
 
 Every symbol, so the executor creates these and not near-misses. Names marked *(candidate)* are the
 plan writer's to fix; the shape is not.
+
+**`boty/parse.py`**
+- `canonical_url(html)` *(candidate)* — the retailer's own `rel="canonical"` link, read beside the
+  other readers and tested there. Returns nothing when the page carries none, which is the residual
+  case and not an error
 
 **`boty/models.py`**
 - `Result.unresolved` *(candidate)* — **declared last, after `read_at`, defaulted `False`**, on the
@@ -483,6 +627,9 @@ plan writer's to fix; the shape is not.
   bites, the prose changes
 
 **`scripts/mutation_check.py`**
+- **M30 re-anchored in `10-01`**, on the M2/M4 precedent, with the re-point recorded and its
+  `breaks=` sentence still describing the behaviour it destroys — otherwise `apply_mutation` raises
+  on a missing anchor and `make verify-offline` is broken from wave 1 to wave 5
 - `Mutation(ident="M44", ...)` on the dead-control behaviour, with the prose block carrying what it
   rebuilds, why it earned an ident, the recorded kill-set comparison, the rejected anchor, and an
   `IF IT EVER SURVIVES:` paragraph
@@ -497,7 +644,13 @@ plan writer's to fix; the shape is not.
   markup, and the `Blocked` arm proving a refusal sets nothing
 - `tests/test_fetch.py` — `is_unresolved` against 404/410/403/429/500 and a transport error
 - `tests/test_monitor.py` — criterion 1's three states asserted **separately**, criterion 2's two
-  halves asserted separately, and the precedence pair against a store-pin-absent Walmart control
+  halves asserted separately, and the precedence pair against a Walmart control whose pin is not in
+  effect in a test process
+- `tests/test_parse.py` — the canonical reader, including a page that carries none
+- `tests/test_alert_text.py` *(`10-01`)* — both four-arm partitions extended to five, in the dated
+  form, and NOT confirmed by seeing green
+- `tests/test_pacing.py` *(`10-02`)* — the `assess_health` tests that live there, including the
+  mixed-group one whose expected sentence moves while its point survives
 - `tests/test_control_durability.py` *(new)* — every `control: true` entry carries a verdict against
   every clause the doc declares; a control with no verdict, and a clause the doc drops, both redden
 

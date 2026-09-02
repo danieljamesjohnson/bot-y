@@ -178,7 +178,13 @@ and the natural response is to distrust the new test.
 
 - `WALMART_STORE_ID` lives in `/home/dan/.config/boty/env` (mode 600, outside the repo).
   **Never read, derive, infer or print it.** Its presence may only ever be measured as a
-  count. It is currently unset, deliberately — see `QUESTIONS.md` § 0f.
+  count. **It is SET ON DISK and NOT YET IN EFFECT** — Dan supplied it on 2026-08-25 after two
+  deferrals and it was written to that file; the running daemon picks it up at the next restart,
+  which is still deferred. Any process that does not load that env file — a test, a dev shell —
+  still sees no pin, so a Walmart reading there is store-gapped for a reason that is not a config
+  defect. *(This bullet read "it is currently unset, deliberately" until 2026-09-02. That was true
+  from 2026-08-10 to 2026-08-25 and stale for eight days after; it is corrected rather than deleted
+  because § 0f records the supply as the thing that changed it.)* See `QUESTIONS.md` § 0f.
 - `.env*` reads are blocked by policy. Get env var *names* from docs, never values.
 - `datastore/secret.txt` belongs to a vendored changedetection.io datastore. Leave it be.
 
