@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlsplit
 
 from . import parse
 from .browser import BROWSER_PATH_ENV, fetch_rendered
@@ -382,6 +382,72 @@ def _verdict_from_html(
             # shape changed?" sends the reader to debug an extractor that is
             # working perfectly — the same misattribution this phase already
             # fixed twice, for the Imperva and Akamai walls, one layer up.
+            #
+            # AND SINCE 2026-09-02 (REQ-24) THE DIAGNOSIS IS ALSO A FACT, not
+            # only a sentence. `monitor.assess_health` may not read `detail`, so
+            # for four phases this branch knew the target was gone and the health
+            # arm blamed the retailer's detector for it. `Result.unresolved`
+            # carries it; the predicate below is what decides whether it is set.
+            #
+            # THE PREDICATE, and it is a DISJUNCTION of two measured facts
+            # because both one-clause readings were measured WRONG
+            # (`.planning/phases/10-a-control-that-cannot-die/10-DECISIONS.md`
+            # § Collision 2). Do not simplify it:
+            #
+            #   (A) the page's own canonical link points at the SEARCH ENDPOINT
+            #       rather than a product path — the retailer saying no product
+            #       resolved; OR
+            #   (B) structured markup was PRESENT and PARSED and no Product on
+            #       it carries the requested sku — a page about somebody else's
+            #       product.
+            #
+            # NEVER when markup was present and could not be PARSED. THAT IS THE
+            # 2026-08-04 EPISODE, and it is in this repository's own evidence
+            # log: Best Buy served three `ld+json` blocks of which ZERO parsed —
+            # 8 x `\'` inside strings, 34 x a literal `\n` outside them — and
+            # this exact branch reported a PERFECTLY ALIVE SKU as unresolved. A
+            # page that could not be READ establishes nothing about what EXISTS.
+            # Setting the field on `not offers and sku is not None` alone would
+            # ship a mechanism that calls a live control dead every time a
+            # retailer deploys bad markup: the same misattribution REQ-24 exists
+            # to fix, pointed the other way (T-10-01, rated high).
+            #
+            # WHICH CAPTURE PROVES WHICH CLAUSE, measured 2026-09-02 over the two
+            # shipped Best Buy fixtures rather than reasoned about:
+            #
+            #   page, read for            blocks unparseable canonical path
+            #   unresolved-sku,  6577129    0        0       /site/searchpage.jsp
+            #   pikachu-control, 6577129    3        0       /product/.../sku/6216393
+            #   pikachu-control, 6216393    3        0       /product/.../sku/6216393
+            #   the 08-04 live page         3        3       a product page
+            #
+            # So `unparseable == 0` ALONE marks the reskin case dead (the
+            # true-dead capture and a blank page are indistinguishable by it),
+            # and `blocks > 0 and unparseable == 0` alone makes the dead state
+            # UNREACHABLE from the true-dead capture — `blocks` there is 0.
+            # Clause A is what reaches it; clause B is what reaches a real
+            # product page read for a foreign sku.
+            #
+            # COMPARED ON PATH, NEVER ON THE WHOLE URL. `url` is the search
+            # endpoint this adapter requested, and the canonical Best Buy returns
+            # for a miss adds a category parameter the request does not carry
+            # (`?id=pcat17071&st=<sku>`), so a whole-string comparison would have
+            # been false on the day it was written. Compared against `url` rather
+            # than a hard-coded path so the request and the test of the answer
+            # cannot drift apart.
+            #
+            # THE RESIDUAL, and it is deliberate: a page with NO canonical AND no
+            # parseable structure sets nothing here and keeps today's verdict. It
+            # is not distinguishable at this layer from a reskin or a broken
+            # render. That costs the case where markup is broken AND the product
+            # is genuinely gone — which reads as a detector failure — and that is
+            # the right direction because it CLAIMS LESS. `10-03` carries it into
+            # Best Buy's D5 column as PARTIAL, not as a pass.
+            canonical = parse.canonical_url(html)
+            canonical_is_the_search_endpoint = (
+                canonical is not None and urlsplit(canonical).path == urlsplit(url).path
+            )
+            markup_was_read = ld.blocks > 0 and ld.unparseable == 0
             return Result(
                 watch,
                 Availability.UNKNOWN,
@@ -396,6 +462,7 @@ def _verdict_from_html(
                 store=store,
                 shipping=None,
                 read_at=read_at,
+                unresolved=canonical_is_the_search_endpoint or markup_was_read,
             )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way

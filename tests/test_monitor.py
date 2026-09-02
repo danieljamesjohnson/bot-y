@@ -25,8 +25,16 @@ from pathlib import Path
 
 import pytest
 
-from boty.models import Availability, Result, Watch
-from boty.monitor import CAUSE_UNKNOWN, STORE_PIN_ACTION, State, assess_health, run_once
+from boty import retailers
+from boty.models import Availability, Result, Rung, Watch
+from boty.monitor import (
+    CAUSE_UNKNOWN,
+    DEAD_CONTROL_ACTION,
+    STORE_PIN_ACTION,
+    State,
+    assess_health,
+    run_once,
+)
 
 
 def _result(
@@ -397,6 +405,100 @@ def test_a_healthy_store_scoped_control_is_untouched_by_the_new_arm() -> None:
 
     assert health.ok is True
     assert health.reason == ""
+
+
+# --------------------------------------------------------------------------
+# REQ-24 — a control whose target no longer resolves is a DEAD CONTROL
+#
+# Criterion 1's first state, and the ROADMAP says plainly that today it is
+# reported as the third: a control whose SKU no longer resolves lands in the
+# breakage arm and is described as "readings from this retailer are unverified"
+# — a fact about the RETAILER, asserted from a fact about OUR CONFIG.
+#
+# THE MODULE DOCSTRING SAYS "No fixtures needed — these are hand-built Results",
+# AND THE TEST BELOW IS THE EXCEPTION, deliberately. Definition of Done item 3's
+# second half is *"the dead-control state is reachable in a test without one"* —
+# without a live read — and a hand-built `Result(unresolved=True)` would prove
+# only that the arm reads the field somebody set two lines above it. What has to
+# be shown is the whole path: real captured Best Buy markup -> the real producer
+# -> `assess_health`. So this one test starts at bytes a retailer actually sent.
+# --------------------------------------------------------------------------
+
+
+def _bestbuy_control_reading(html: str, sku: str) -> Result:
+    """Drive a captured Best Buy page through the real producer, as the adapter does.
+
+    `check_bestbuy_browser` binds the watch's target as the SKU and hands the
+    rendered markup to `_verdict_from_html` with `rung=BROWSER`. This reproduces
+    that binding exactly rather than approximating it — the SKU binding IS the
+    mechanism under test, and a call that forgot to pass it would exercise the
+    "neither structured source present" arm instead and look like a pass.
+    """
+    return retailers._verdict_from_html(
+        Watch(name="ctl", retailer="bestbuy", target=sku, control=True),
+        html,
+        url=retailers.bestbuy_product_url(sku),
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        sku=sku,
+    )
+
+
+def test_a_captured_page_that_does_not_carry_our_sku_becomes_a_dead_control(
+    bestbuy_pikachu: str,
+) -> None:
+    """The tracer: captured bytes to a Health that names our own config file.
+
+    A real Best Buy PRODUCT page — 1,138,265 bytes of markup they actually
+    served, carrying three parsed `ld+json` blocks — read for a SKU it does not
+    carry. Best Buy answered a question about somebody else's product, which is
+    clause B of the predicate `10-DECISIONS.md` § Collision 2 settles.
+
+    Every assertion is about the HEALTH, not about the Result, because the defect
+    is at that join: the fact has existed in `Result.detail` since Phase 2 and
+    `assess_health` has never been allowed to read it.
+    """
+    reading = _bestbuy_control_reading(bestbuy_pikachu, "6577129")
+
+    (health,) = assess_health([reading])
+
+    assert health.ok is False
+    assert health.dead_control is True, (
+        "a control whose target does not resolve was not reported as a dead control"
+    )
+    assert health.refused is False, "nothing here was refused; no challenge page came back"
+    # The remedy, and the whole of what makes this state worth a push: the
+    # target named in our own file no longer names a product.
+    assert health.action == DEAD_CONTROL_ACTION
+    assert "config/products.yaml" in health.action
+    # And what it must STOP saying. This is today's defect quoted from the arm
+    # it currently reaches.
+    assert "readings from this retailer are unverified" not in health.reason, (
+        "a fact about our configuration is still being reported as a fact about "
+        "the retailer's detector"
+    )
+    assert CAUSE_UNKNOWN not in health.reason, (
+        "the cause IS established — the target does not resolve — and claiming "
+        "otherwise is the store-gap arm's dishonesty pointed the other way"
+    )
+
+
+def test_the_same_page_read_for_its_own_sku_is_healthy(bestbuy_pikachu: str) -> None:
+    """Same bytes, different question — so the test above cannot pass by being broken.
+
+    A predicate that marked every Best Buy page dead would satisfy the tracer
+    perfectly. This is the half that has something to lose: read for the SKU it
+    actually carries, this capture is a green control at $59.99.
+    """
+    reading = _bestbuy_control_reading(bestbuy_pikachu, "6216393")
+
+    (health,) = assess_health([reading])
+
+    assert reading.availability is Availability.IN_STOCK
+    assert reading.price == 59.99
+    assert reading.unresolved is False
+    assert health.ok is True
+    assert health.dead_control is False
 
 
 # --------------------------------------------------------------------------

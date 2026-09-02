@@ -25,6 +25,7 @@ import json
 import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from html import unescape
 from html.parser import HTMLParser
 from typing import Any
 
@@ -338,6 +339,62 @@ def ldjson_read(html: str, *, sku: str | None = None) -> LdJsonRead:
         unparseable=unparseable,
         repaired=repaired,
     )
+
+
+#: The retailer's own `<link rel="canonical">`. Attribute order is not fixed —
+#: `rel` before `href` and `href` before `rel` both occur in the wild — so both
+#: orders are matched rather than assuming the one the shipped captures happen
+#: to use. Single or double quotes; `rel` may carry extra tokens.
+_CANONICAL_RE = re.compile(
+    r"""<link[^>]*?\srel=["']\s*canonical\s*["'][^>]*?\shref=["']([^"']+)["']"""
+    r"""|<link[^>]*?\shref=["']([^"']+)["'][^>]*?\srel=["']\s*canonical\s*["']""",
+    re.I,
+)
+
+
+def canonical_url(html: str) -> str | None:
+    """The page's own `rel="canonical"` link, or `None` when it carries none.
+
+    THE RETAILER'S STATEMENT ABOUT WHICH PAGE YOU ARE ON, and the third
+    discriminator REQ-24's predicate needed. Best Buy publishes one on both page
+    shapes and they differ in exactly the way the question asks: a SKU that
+    resolves gets a canonical pointing at a PRODUCT path; a SKU that resolves to
+    nothing gets one pointing at the SEARCH endpoint. Measured 2026-09-02 across
+    both shipped captures:
+
+        unresolved-sku.html  -> /site/searchpage.jsp?id=pcat17071&st=6577129
+        pikachu-control.html -> /product/pokemon-lets-go-pikachu-nintendo-switch/
+                                J7GSL4G7GQ/sku/6216393
+
+    IT IS STRUCTURED MARKUP, NOT PRESENTATION, which is why reading it does not
+    make a reading `degraded`. A canonical link is commercially load-bearing —
+    it is what stops a retailer's own duplicate URLs competing in search — so it
+    is maintained for the same reason the module docstring gives for the
+    schema.org feed, and it is the opposite of the CSS-class matching
+    `add_to_cart_offers` is quarantined for.
+
+    `None` IS THE RESIDUAL CASE AND NOT AN ERROR. A page carrying no canonical
+    at all is a page this reader has nothing to say about — a reskin, a partial
+    render, a soft block — and the caller must not read the absence as an
+    answer. `retailers._verdict_from_html` treats it exactly that way: no
+    canonical AND no parseable structure keeps today's verdict rather than
+    becoming a dead control (`10-DECISIONS.md` § Collision 2, THE RESIDUAL).
+
+    HTML ENTITIES ARE UNESCAPED, because the href arrives as the page wrote it:
+    the measured Best Buy search canonical reads `…?id=pcat17071&amp;st=6577129`
+    in the raw markup. It changes no path comparison, and it is done anyway so a
+    future reader of the query string is not handed `&amp;` and a bug.
+
+    NOT PARSED, and never resolved against a base URL. This returns the string
+    the page published. Comparing it is the caller's job, and the caller compares
+    on PATH — see `_verdict_from_html`, where a whole-string comparison would
+    have been false on the day it was written.
+    """
+    m = _CANONICAL_RE.search(html)
+    if not m:
+        return None
+    href = (m.group(1) or m.group(2) or "").strip()
+    return unescape(href) if href else None
 
 
 #: Walmart's primary product node. Addressed explicitly rather than by

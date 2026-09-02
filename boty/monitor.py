@@ -88,6 +88,38 @@ STORE_PIN_ACTION = (
     "${WALMART_STORE_ID}, so the value goes in the daemon's EnvironmentFile"
 )
 
+#: The SECOND thing in this module a person can actually DO, spelled once — the
+#: `Health.action` the dead-control arm carries. REQ-24, 2026-09-02.
+#:
+#: IT NAMES A CONFIG VALUE AND NOTHING ELSE, which is what makes it an action
+#: rather than a diagnosis, exactly as `STORE_PIN_ACTION` above: the target this
+#: watch names no longer resolves to a product, that target is a line in a
+#: tracked file, and choosing another is a step only the operator can take.
+#:
+#: WHY A SECOND PAGEABLE STATE WAS ALLOWED, with the counter-argument recorded
+#: rather than omitted (`10-DECISIONS.md` § Collision 7). More traffic to a phone
+#: is a real cost and Dan's bar is *"never hit the user unless its something they
+#: can buy or actually do"*. This clears it: the remedy is a one-line edit in a
+#: tracked file, the cause IS established (unlike a refusal, unlike breakage),
+#: and the state fires AT MOST ONCE PER FAILURE EPISODE through the existing
+#: `warned` memory in `cli.watch_cycle`. No new sender exists or is needed —
+#: `pageable = [h for h in unhealthy if h.action]` picks it up, and the existing
+#: failed-delivery branch already rolls that memory back.
+#:
+#: NO SKU, NO URL, NO WATCH NAME. This string is joined into a push body that
+#: leaves the machine, so it is composed once, statically, and carries nothing
+#: read off a retailer's page. The per-watch specifics are already in
+#: `failing_controls`, which interpolates each control's `detail` — the same
+#: division of labour `STORE_PIN_ACTION` uses.
+#:
+#: One constant, one spelling, for `CAUSE_UNKNOWN`'s reason: a property stated
+#: two ways cannot be checked mechanically, and `scripts/mutation_check.py`
+#: anchors on the NAME rather than on this prose.
+DEAD_CONTROL_ACTION = (
+    "the target this control names no longer resolves to a product — pick a "
+    "replacement and set it in config/products.yaml"
+)
+
 #: The oldest wall clock a reading time read back off disk may carry: midnight
 #: 2000-01-01 UTC. A measured number, not a round one, and argued from both
 #: directions in `MAX_PERSISTED_REFUSALS`'s shape.
@@ -495,8 +527,41 @@ def assess_health(results: list[Result]) -> list[Health]:
             # nobody measured. The store arm follows on the same `all` reasoning.
             # Everything else falls to the breakage arm, which is the reading
             # that claims least about a mixed group.
+            #
+            # THE DEAD-CONTROL ARM SITS BETWEEN `refused` AND `store_gap`, and
+            # BOTH placements are decisions rather than details (REQ-24,
+            # `10-DECISIONS.md` § Collision 5).
+            #
+            # BEHIND `refused`, for the reason that arm goes first at all: a
+            # refusal produced NO PAGE, so nothing about resolution could have
+            # been established either. `Result.unresolved` is never True on a
+            # refused reading — the producer only sets it on a page it read — so
+            # this ordering and that invariant say the same thing twice, which is
+            # deliberate: the invariant can be broken by a future edit and the
+            # ordering cannot.
+            #
+            # AHEAD OF `store_gap`, and this is the non-obvious half.
+            # `_is_store_gap` returns True whenever `watch.store_id is None` —
+            # "read off the config and therefore true whatever the page did" —
+            # and the pin is absent in ANY process that does not load the
+            # daemon's EnvironmentFile, which is every test and every dev shell.
+            # (`QUESTIONS.md` § 0f: the value was supplied 2026-08-25 and written
+            # to that file; it reaches the daemon at the next restart, which is
+            # still deferred. Set on disk, not yet in effect — never "unset".) So
+            # without this ordering a dead Walmart control reports as a store
+            # gap: the wrong remedy, in the right file. A PAGE ABOUT NO PRODUCT
+            # CANNOT BE A PAGE ABOUT THE WRONG STORE. Both facts are about our
+            # config; deadness is the more specific one, and the one whose remedy
+            # differs.
+            #
+            # `any`, NOT `all`, AND THE ASYMMETRY WITH `refused` IS ARGUED AT
+            # `Health.dead_control` rather than here: a refusal excludes
+            # knowledge of everything else and is only reportable as the whole
+            # story; deadness excludes nothing and is established per-watch off
+            # our own config.
             refused = bool(broken) and all(c.refused for c in broken)
-            store_gap = not refused and all(_is_store_gap(c) for c in broken)
+            dead_control = not refused and any(c.unresolved for c in broken)
+            store_gap = not refused and not dead_control and all(_is_store_gap(c) for c in broken)
             if refused:
                 # What is established: a challenge page or a 403 came back
                 # instead of a product page. Withdrawn 2026-08-10 (REQ-15), each
@@ -523,6 +588,37 @@ def assess_health(results: list[Result]) -> list[Health]:
                     f"the retailer is refusing us — a challenge page or a 403 came back "
                     f"instead of a product page, so the extractor was never reached and "
                     f"nothing here says whether it works; {CAUSE_UNKNOWN}"
+                )
+            elif dead_control:
+                # REQ-24's first state, and until 2026-09-02 it was reported as
+                # the third. What is established: a page came back, it was read
+                # successfully, and it named no product carrying the target this
+                # watch is about. THAT IS A FACT ABOUT `config/products.yaml`,
+                # not about the retailer and not about our extractor — the
+                # ROADMAP's own words are that today the first is reported as the
+                # third, and the sentence it used to get said "readings from this
+                # retailer are unverified", which asserts something about the
+                # retailer from something about our config.
+                #
+                # IT STATES WHAT WAS MEASURED AND NOTHING MORE. It does not say
+                # the product was discontinued, delisted or renamed — none of
+                # those was established, and only one of them is even a retailer
+                # decision. It says the target did not resolve, which is exactly
+                # what the page showed.
+                #
+                # NO CAUSE_UNKNOWN, on the store-gap arm's precedent immediately
+                # below: saying "the cause is not established" about a cause we
+                # CAN name is the same dishonesty pointed the other way.
+                #
+                # THE PER-WATCH SPECIFICS ARE NOT REPEATED HERE. `failing_controls`
+                # interpolates each control's `detail`, where `_verdict_from_html`
+                # already named the SKU and said what the page did.
+                reason = (
+                    "a control's target no longer resolves to a product — the page was "
+                    "read and named no product matching what this watch asks for, which "
+                    "is a fact about config/products.yaml rather than about the retailer "
+                    "or the extractor. Each control below names its target and what the "
+                    "page said"
                 )
             elif store_gap:
                 # The one failure in this function whose cause the code MEASURED,
@@ -579,14 +675,34 @@ def assess_health(results: list[Result]) -> list[Health]:
                     refused=refused,
                     reason=reason,
                     failing_controls=[f"{c.watch.name}: {c.availability.value} ({c.detail})" for c in broken],
-                    # THE ONE ARM THAT NAMES SOMETHING TO DO, and the conditional
+                    # THE TWO ARMS THAT NAME SOMETHING TO DO, and the conditional
                     # is the whole rule rather than a shortcut for it: `action`
-                    # defaults to empty on `Health`, so every arm above and every
-                    # arm added after this one is silent until somebody can write
-                    # down the remedy. `refused` and the breakage arm are not
-                    # omissions from a list — they have no remedy to state, which
-                    # is exactly why they no longer page.
-                    action=STORE_PIN_ACTION if store_gap else "",
+                    # defaults to empty on `Health`, so every other arm above and
+                    # every arm added after this one is silent until somebody can
+                    # write down the remedy. `refused` and the breakage arm are
+                    # not omissions from a list — they have no remedy to state,
+                    # which is exactly why they do not page.
+                    #
+                    # IT SAID "THE ONE ARM" UNTIL 2026-09-02 and that is recorded
+                    # rather than edited away: from 2026-08-12 to then, the store
+                    # pin was the only remedy this module could name. REQ-24 adds
+                    # the second, on the same precedent and under the same rule.
+                    # THE RULE DID NOT MOVE — a push still costs somebody writing
+                    # down what a person can DO — only the number did, which is
+                    # why nothing here is a list of pageable states.
+                    #
+                    # ORDERED AS THE ARMS ARE, not independently: `dead_control`
+                    # is checked first because it is checked first above, and two
+                    # orderings of one precedence rule is how they come to
+                    # disagree.
+                    action=(
+                        DEAD_CONTROL_ACTION
+                        if dead_control
+                        else STORE_PIN_ACTION
+                        if store_gap
+                        else ""
+                    ),
+                    dead_control=dead_control,
                 )
             )
         else:

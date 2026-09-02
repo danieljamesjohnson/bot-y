@@ -490,6 +490,63 @@ class Result:
     #: publishes nothing on its own, and it is not a prohibition on publishing
     #: one deliberately. Said here rather than by editing that paragraph.
     read_at: float | None = None
+    #: THE TARGET THIS WATCH NAMES DID NOT RESOLVE TO A PRODUCT — a fact about
+    #: `config/products.yaml`, not about the retailer and not about us. REQ-24.
+    #:
+    #: A CONTROL PRODUCT CAN BE DISCONTINUED OUT FROM UNDER THE MONITOR, and
+    #: until this field existed that was reported as a broken detector: the
+    #: diagnosis was written into `detail` at the one branch that knows it, and
+    #: `monitor.assess_health` is forbidden from reading prose. So the health
+    #: arm blamed the retailer for a line in our own YAML.
+    #:
+    #: A FIELD AND NOT A SUBSTRING MATCH, which is the decision rather than a
+    #: detail of it (`10-DECISIONS.md` § Collision 1). `_is_store_gap`'s
+    #: docstring already carries the argument for this exact class of choice:
+    #: *"Detected from FACTS, not from `detail` prose … Matching on the message
+    #: text would tie this to prose that is edited far more often than the
+    #: condition is — the anchoring lesson `scripts/mutation_check.py`'s M2
+    #: comment already paid for once."* M2 was re-anchored on 2026-08-04 when
+    #: the prose on its branch moved. A health arm keyed to a sentence would
+    #: fail the same way and be SILENT about it.
+    #:
+    #: WHAT THE DEFAULT MEANS: `False` is *"not established as unresolved"*. It
+    #: is NEVER *"this target resolves"*. Those are different claims and only
+    #: one of them is ever measured — a refusal, a timeout, a page nobody could
+    #: parse and a page that was never fetched all carry `False` here, and none
+    #: of them establishes that the product exists. This is `store`'s and
+    #: `read_at`'s rule in a boolean: the absence of a measurement must not
+    #: render as a measurement of absence.
+    #:
+    #: WHAT SETS IT, and it is deliberately narrow (`10-DECISIONS.md` §
+    #: Collision 2): the page was READ SUCCESSFULLY and named no product
+    #: matching the target. Markup that was present and could not be PARSED
+    #: never sets it — that is the 2026-08-04 false dead, when Best Buy served
+    #: three unparseable `ld+json` blocks and the control reported a live SKU as
+    #: unresolved. A page that could not be read establishes nothing about what
+    #: exists.
+    #:
+    #: THE INVARIANT, and it is asserted in `tests/test_models.py` rather than
+    #: only stated here: `refused` and this field are NEVER both True on one
+    #: `Result`. A refusal means no page came back, so nothing about resolution
+    #: could have been established — the same first line `_is_store_gap` opens
+    #: with, and the reason the `Blocked` arms are untouched by REQ-24.
+    #:
+    #: Declared LAST, after `read_at`, with a default, for the same reason
+    #: `rung`, `extraction`, `store`, `shipping` and `read_at` are: every
+    #: pre-existing construction site stays valid and keeps its meaning, because
+    #: none of them establishes anything about resolution.
+    #:
+    #: Deliberately NOT a new `Availability` member, and not folded into one.
+    #: Deadness is a fact about the TARGET, not a stock verdict; UNKNOWN is
+    #: still the only honest availability for a page that named no product, and
+    #: `cli.SYMBOL` is a dict indexed unconditionally by `availability`.
+    #:
+    #: Deliberately NOT published in `status.json` (§ Collision 8), on
+    #: `shipping`'s precedent: `status.write` builds its rows field by field, no
+    #: source artifact asks for the key, and the `reason` it feeds already
+    #: carries the diagnosis. Recorded so the absence is not read as an
+    #: omission.
+    unresolved: bool = False
 
     @property
     def delivered_total(self) -> float | None:
@@ -662,3 +719,35 @@ class Health:
     #: already published in full. Recorded so the absence is not read as an
     #: omission.
     action: str = ""
+    #: True when AT LEAST ONE of this retailer's failing controls names a target
+    #: that no longer resolves to a product — REQ-24's first state. A fact about
+    #: `config/products.yaml`, which is why the arm that sets it is the second in
+    #: this module to carry an `action`.
+    #:
+    #: `any`, WHILE `refused` STAYS `all`, AND THE DIFFERENCE IS ARGUED HERE SO
+    #: NOBODY "FIXES" THE INCONSISTENCY (`10-DECISIONS.md` § Collision 4).
+    #: `assess_health`'s existing reasoning is about a REFUSAL specifically —
+    #: *"if even one control failed for a reason that is NOT a refusal, something
+    #: may really be wrong and the louder reading is the safe one"* — and it does
+    #: not transfer. A refusal EXCLUDES KNOWLEDGE of everything else: no page
+    #: came back, so nothing about the store, the markup or the product could
+    #: have been established, and it is only honestly reportable when it is the
+    #: whole story.
+    #:
+    #: DEADNESS EXCLUDES NOTHING. It is established per-watch, off our own
+    #: config, from a page that WAS read successfully. It does not become less
+    #: established because a sibling control failed for another reason — one dead
+    #: control in a group of three is still one dead control, and the operator
+    #: still has one line to change.
+    #:
+    #: Declared LAST, after `action`, with a default, on the same precedent every
+    #: appended field in this module carries: every pre-existing construction
+    #: site stays valid and keeps its meaning.
+    #:
+    #: Deliberately NOT published in `status.json` (§ Collision 8), on
+    #: `Result.shipping`'s and `action`'s precedent: `status.write` builds its
+    #: rows field by field, no source artifact asks for the key, and `reason`
+    #: already carries the diagnosis in full. A plan that finds it needs this
+    #: published has discovered that something published changed shape, and must
+    #: reverse that decision in writing first.
+    dead_control: bool = False

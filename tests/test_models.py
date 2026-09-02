@@ -619,22 +619,62 @@ def test_a_result_built_without_a_stamp_has_no_age() -> None:
     assert r.read_at is None
 
 
-def test_read_at_is_declared_last_with_a_default_of_none() -> None:
-    """"Declared last, after `shipping`" is asserted statically, not described.
+def test_the_newest_field_is_declared_last_with_a_default() -> None:
+    """"Declared last" is asserted statically, not described.
 
     Every field added to `Result` since `rung` has been appended for one reason:
     every pre-existing construction site stays valid and keeps its meaning. That
     property is a fact about field ORDER, so a comment claiming it is a claim
     nothing measures — this is the measurement.
+
+    RENAMED AND RE-POINTED 2026-09-02 (`10-01`, REQ-24). The withdrawn text, in
+    full: this test was called
+    `test_read_at_is_declared_last_with_a_default_of_none`, its docstring opened
+    *"Declared last, after `shipping`" is asserted statically*, and it asserted
+    `fields[-1].name == "read_at"` and `fields[-2].name == "shipping"`.
+
+    What overruled it: `Result.unresolved` was appended after `read_at`, so the
+    literal pair moved. Nothing about the RULE moved.
+
+    What survives, and it is the whole of the test's subject: the CONVENTION
+    outlived the field this test was written about. Its subject was never
+    `read_at` specifically — it is that the newest field is last and carries a
+    default — so it now asserts that property of whatever the last field is, and
+    names the one it follows for the same positional-signature reason as before.
+    A future field appended after this one re-points these two literals again and
+    the docstring records that as a re-point, not as a rewrite.
     """
     fields = dataclasses.fields(Result)
 
-    assert fields[-1].name == "read_at"
-    assert fields[-1].default is None
-    # The field it follows, named: `shipping`'s own comment is the precedent
-    # this one extends, and an insertion between them would silently break the
-    # positional signature this rule exists to protect.
-    assert fields[-2].name == "shipping"
+    assert fields[-1].name == "unresolved"
+    # `is False`, not `is None`: this field's default is a MEANING — "not
+    # established as unresolved" — and a `None` here would reintroduce exactly
+    # the three-state ambiguity the boolean was chosen to avoid.
+    assert fields[-1].default is False
+    # The field it follows, named: an insertion between them would silently
+    # break the positional signature this rule exists to protect.
+    assert fields[-2].name == "read_at"
+
+
+def test_the_default_is_not_established_and_never_resolves() -> None:
+    """The default's MEANING, asserted rather than left in a comment.
+
+    `False` is "not established as unresolved". Four `Result`s that established
+    nothing about resolution — a refusal, a timeout-shaped UNKNOWN, an
+    out-of-stock reading and an in-stock reading — all carry `False`, and none of
+    them is a claim that the target resolves. This is the boolean form of
+    `read_at`'s hardest rule: the absence of a measurement must not render as a
+    measurement of absence.
+    """
+    watch = Watch(name="ctl", retailer="bestbuy", target="6216393", control=True)
+
+    for description, result in (
+        ("a refusal", Result(watch, Availability.UNKNOWN, refused=True)),
+        ("an unreadable page", Result(watch, Availability.UNKNOWN, detail="no structured data")),
+        ("an out-of-stock reading", Result(watch, Availability.OUT_OF_STOCK)),
+        ("an in-stock reading", Result(watch, Availability.IN_STOCK, price=59.99)),
+    ):
+        assert result.unresolved is False, f"{description} claimed to establish resolution"
 
 
 def test_the_stamp_changes_no_verdict() -> None:

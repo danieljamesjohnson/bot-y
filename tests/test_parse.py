@@ -19,6 +19,7 @@ from boty.parse import (
     _LDJSON_RE,
     TARGET_FIRST_PARTY_SELLER,
     add_to_cart_offers,
+    canonical_url,
     ldjson_offers,
     ldjson_read,
     nextdata_offers,
@@ -853,3 +854,88 @@ def test_healthy_markup_is_never_touched_by_the_repair(bestbuy_pikachu: str) -> 
     assert read.summary == ""
     assert read.offers is not None
     assert read.offers[0].available is True
+
+
+# --------------------------------------------------------------------------
+# canonical_url — the retailer's own statement about which page you are on
+#
+# REQ-24's third discriminator. `10-DECISIONS.md` § Collision 2 records why one
+# was needed at all: the two obvious predicates over `LdJsonRead` alone were
+# both measured wrong, one marking a reskin as a dead control and the other
+# making the dead state unreachable from the fixture the phase is built on.
+# --------------------------------------------------------------------------
+
+
+def test_the_two_best_buy_page_shapes_publish_different_canonicals(
+    bestbuy_pikachu: str,
+    bestbuy_unresolved_sku: str,
+) -> None:
+    """The measurement the predicate rests on, taken from the captures themselves.
+
+    Not "a canonical is present" — that is true of most pages and gates nothing.
+    The property is that Best Buy's two answers to a SKU DISAGREE about which
+    endpoint you landed on, which is what makes the link a discriminator rather
+    than a decoration.
+    """
+    resolved = canonical_url(bestbuy_pikachu)
+    unresolved = canonical_url(bestbuy_unresolved_sku)
+
+    assert resolved is not None
+    assert unresolved is not None
+    assert "/product/" in resolved
+    assert resolved.endswith("/sku/6216393")
+    assert "/site/searchpage.jsp" in unresolved, (
+        "the search-miss capture stopped saying it is a search page, which is "
+        "clause A of the predicate"
+    )
+    assert resolved != unresolved
+
+
+def test_a_page_carrying_no_canonical_returns_none(bestbuy_pikachu: str) -> None:
+    """`None` is the RESIDUAL case, not an error, and it must not be an exception.
+
+    A reskin, a partial render or a soft block can all arrive with no canonical
+    at all. The caller reads that as "this reader has nothing to say", never as
+    "no product resolved" — see `retailers._verdict_from_html`, where the
+    no-canonical-no-structure page keeps today's verdict.
+    """
+    assert canonical_url("<html><head><title>nothing here</title></head></html>") is None
+    assert canonical_url("") is None
+    # A `rel` that is not canonical must not be mistaken for one — this page
+    # HAS canonical markup and the negative case has to be reachable anyway.
+    assert canonical_url('<link rel="stylesheet" href="/x.css">') is None
+    assert canonical_url(bestbuy_pikachu) is not None, "the positive control still reads"
+
+
+def test_attribute_order_and_entities_do_not_change_the_answer() -> None:
+    """Two things the shipped captures happen not to exercise, so neither is assumed.
+
+    `href` before `rel` occurs in the wild and would silently return `None` under
+    a one-order regex — an absent canonical, which is the residual, so the
+    failure would present as "this page is ambiguous" rather than as a bug.
+
+    And the entity: the measured Best Buy search canonical reads
+    `…?id=pcat17071&amp;st=6577129` in the raw markup. It changes no PATH
+    comparison, and it is unescaped anyway so a reader of the query string is
+    not handed `&amp;` and a puzzle.
+    """
+    assert canonical_url('<link href="/a/b" rel="canonical">') == "/a/b"
+    assert canonical_url("<link rel='canonical' href='/a/b'>") == "/a/b"
+    assert (
+        canonical_url('<link rel="canonical" href="/s?id=x&amp;st=1">') == "/s?id=x&st=1"
+    )
+
+
+def test_the_href_is_handed_back_as_the_page_wrote_it(bestbuy_unresolved_sku: str) -> None:
+    """No parsing, no base resolution, no normalisation. Comparing is the caller's job.
+
+    The caller compares on PATH and the reason is measured: the request is
+    `…/site/searchpage.jsp?st=<sku>` and this canonical adds a category
+    parameter the request does not carry, so a whole-string comparison would
+    have been false on the day it was written. Asserting the full string here is
+    what keeps that fact visible in the test suite rather than only in a comment.
+    """
+    assert (
+        canonical_url(bestbuy_unresolved_sku)
+        == "https://www.bestbuy.com/site/searchpage.jsp?id=pcat17071&st=6577129"
+    )
