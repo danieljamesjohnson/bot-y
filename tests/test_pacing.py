@@ -115,17 +115,53 @@ def test_a_genuinely_broken_control_still_says_so_loudly() -> None:
     )
 
 
-def test_one_non_refusal_among_refusals_is_treated_as_breakage() -> None:
+def test_one_non_refusal_among_refusals_is_not_swallowed_and_both_causes_are_named() -> None:
     """`all`, not `any` — the louder reading is the safe one.
 
     If a retailer's controls are mostly walled but one failed for a reason that
     is NOT a refusal, something may really be broken, and calling the whole
     retailer 'just rate-limited' would bury it.
+
+    RENAMED AND ITS EXPECTED SENTENCE MOVED ON 2026-09-02 (`10-02`, REQ-24
+    criterion 2), in the dated form. The withdrawn text, quoted in full: the test
+    was called `test_one_non_refusal_among_refusals_is_treated_as_breakage` and
+    it asserted `"IN_STOCK" in health.reason and CAUSE_UNKNOWN in health.reason`
+    about the breakage arm's sentence.
+
+    What overruled it: `10-DECISIONS.md` § Collision 6. The breakage arm says the
+    controls *"did not read IN_STOCK **and was not refused**"* — false about this
+    group, one of whose controls WAS refused. A group whose causes can be
+    enumerated now gets a reason that names each of them and claims no single
+    one, so this group reaches the mixed arm rather than the breakage arm.
+
+    WHAT SURVIVES IS THE `all`/`any` RULE, which is what the name was always
+    about: `Health.refused` is still False here, and the group is still not
+    reported as merely rate-limited. What moved is only which sentence says so.
+
+    AND HOW THE MOVE WAS FOUND, because running this test did not find it. Both
+    of its substring assertions SURVIVED the arm change by coincidence — the
+    mixed sentence happens to contain "IN_STOCK" and `CAUSE_UNKNOWN`, since one
+    of this group's two causes genuinely is unestablished — so it went on passing
+    while its name and its subject became false. Measured, not assumed:
+    `10-02-SUMMARY.md` records the full-suite run in which it stayed green. The
+    check that found it was reading the arm, not running the test. That is the
+    second time in this phase; the first is in `tests/test_alert_text.py`.
+
+    WHERE THIS TEST LIVES IS ALSO NOT WHERE A READER WOULD LOOK. Six
+    `assess_health` tests sit in a file named for the pacer, and this one is the
+    only one of them REQ-24 had to move. They are left here — relocating them is
+    a diff about nothing — and `tests/test_monitor.py`'s criterion-2 section
+    carries the general form of this rule for every shape of mixed group.
     """
     w1, w2 = _w("gamestop", "a"), _w("gamestop", "b")
     (health,) = assess_health([_refused(w1), _broken(w2)])
     assert not health.refused, "a non-refusal among refusals must not be swallowed"
+    # The non-refusal is still reported as an unestablished cause...
     assert "IN_STOCK" in health.reason and CAUSE_UNKNOWN in health.reason
+    # ...and the refusal beside it is no longer denied. This is the assertion the
+    # withdrawn version could not make, and it is what the arm change is for.
+    assert "refus" in health.reason, "the refusal in this group was silenced"
+    assert "was not refused" not in health.reason
 
 
 def test_a_healthy_retailer_is_unaffected() -> None:

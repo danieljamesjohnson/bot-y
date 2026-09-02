@@ -559,9 +559,50 @@ def assess_health(results: list[Result]) -> list[Health]:
             # knowledge of everything else and is only reportable as the whole
             # story; deadness excludes nothing and is established per-watch off
             # our own config.
+            #
+            # AND THE ARM THAT NAMES MORE THAN ONE CAUSE, ADDED 2026-09-02 FOR
+            # REQ-24 CRITERION 2 (`10-DECISIONS.md` § Collision 6). Every arm
+            # above answers "which single cause was this", and for a group whose
+            # controls failed for DIFFERENT reasons every one of those answers is
+            # partly false. The case criterion 2 names: a group of one dead
+            # control and one refused control satisfies no `all`, so it took the
+            # DEAD arm — whose sentence attributes the whole group to
+            # `config/products.yaml` and never mentions that a control was
+            # refused. A real refusal, silenced by a dead control.
+            #
+            # (Collision 6 predicted that group would fall to the BREAKAGE arm.
+            # That was written before `10-01` shipped the dead arm and stopped
+            # being true with it; measured 2026-09-02, the group takes the dead
+            # arm. The defect it describes is real either way — the sentence the
+            # group receives asserts a single cause it did not have — and the
+            # correction is recorded here rather than edited into that document.)
+            #
+            # LATENT, NOT LIVE, AND THE DIFFERENCE IS RECORDED RATHER THAN
+            # ROUNDED UP. This function groups by retailer and every retailer in
+            # `config/products.yaml` has EXACTLY ONE control, so a mixed group is
+            # NOT REACHABLE in the shipped configuration — it is a defect in this
+            # code, and it becomes reachable the moment any retailer gains a
+            # second control (which `10-03`'s reserve-candidate clause makes more
+            # likely, not less). Nobody has received a wrong alert from this.
+            #
+            # IT FIRES ONLY WHEN A REFUSAL IS PRESENT AND IS NOT THE WHOLE STORY,
+            # which is the narrowest form of the rule Collision 6 settles: the
+            # reason for a group containing a refusal must never assert that
+            # nothing was refused. A group of a dead control and an unestablished
+            # breakage keeps the dead arm, because "at least one target does not
+            # resolve" stays true of it and the `any` quantifier already says so.
+            #
+            # THE FLAGS DO NOT MOVE. `refused` keeps `all` — three consumers read
+            # it (`status.write`, `cli.watch_cycle`'s paging filter, `notify`)
+            # and `any` would mean something different at each. `dead_control`
+            # keeps the `any` REQ-24 gave it, so a mixed group still carries the
+            # fact AND still carries the action: one of its controls names a line
+            # somebody can change, and that does not become less true beside a
+            # refusal.
             refused = bool(broken) and all(c.refused for c in broken)
             dead_control = not refused and any(c.unresolved for c in broken)
             store_gap = not refused and not dead_control and all(_is_store_gap(c) for c in broken)
+            mixed = not refused and any(c.refused for c in broken)
             if refused:
                 # What is established: a challenge page or a 403 came back
                 # instead of a product page. Withdrawn 2026-08-10 (REQ-15), each
@@ -588,6 +629,50 @@ def assess_health(results: list[Result]) -> list[Health]:
                     f"the retailer is refusing us — a challenge page or a 403 came back "
                     f"instead of a product page, so the extractor was never reached and "
                     f"nothing here says whether it works; {CAUSE_UNKNOWN}"
+                )
+            elif mixed:
+                # NAMES EVERY CAUSE THAT WAS ESTABLISHED AND CLAIMS NO SINGLE
+                # ONE. Built from the controls rather than written as a sentence,
+                # in the SAME ORDER as the arms above, so the enumeration and the
+                # precedence cannot drift apart: refused, then unresolved, then a
+                # store gap, then whatever is left — which is the one class this
+                # function still cannot name, and it says so.
+                #
+                # A control is counted under the FIRST class it satisfies,
+                # matching how the arms above would have read it alone. That
+                # matters for the store-gap clause specifically: `_is_store_gap`
+                # is False for a refused reading by its own first line, so a
+                # refusal can never be double-counted as a config gap.
+                causes = []
+                if any(c.refused for c in broken):
+                    causes.append(
+                        "at least one control was refused — a challenge page or a 403 came "
+                        "back instead of a product page, so the extractor was never reached "
+                        "for it and nothing here says whether it works"
+                    )
+                if any(c.unresolved for c in broken if not c.refused):
+                    causes.append(
+                        "at least one control's target no longer resolves to a product, "
+                        "which is a fact about config/products.yaml rather than about the "
+                        "retailer or the extractor"
+                    )
+                if any(_is_store_gap(c) for c in broken if not c.refused and not c.unresolved):
+                    causes.append(
+                        "at least one control reading cannot be shown to come from the store "
+                        "that watch is about"
+                    )
+                if any(
+                    not c.refused and not c.unresolved and not _is_store_gap(c) for c in broken
+                ):
+                    causes.append(
+                        f"at least one control did not read IN_STOCK for a reason that was "
+                        f"not established; for that one, {CAUSE_UNKNOWN}"
+                    )
+                reason = (
+                    "this retailer's controls failed for MORE THAN ONE reason, so no single "
+                    "one of them is the whole story: "
+                    + "; ".join(causes)
+                    + ". Each control below names what it did and what the page said"
                 )
             elif dead_control:
                 # REQ-24's first state, and until 2026-09-02 it was reported as

@@ -246,21 +246,63 @@ def _every_arm() -> dict[str, Health]:
     (store_gap,) = monitor.assess_health(
         [_control(Availability.UNKNOWN, retailer="walmart", store_id=None)]
     )
+    # The SIXTH arm, added 2026-09-02 (`10-02`, REQ-24 criterion 2): a group
+    # whose controls failed for MORE THAN ONE reason, which no single-cause
+    # sentence can describe without asserting something false about part of it.
+    #
+    # ONE REPRESENTATIVE OF A FAMILY, AND THAT IS A STATED LIMIT RATHER THAN AN
+    # OVERSIGHT. This arm composes its reason from the causes actually present,
+    # so it produces several sentences; the representative here is the pair
+    # criterion 2 is about (a dead control beside a refusal), whose causes are
+    # BOTH established. The other members — a refusal beside an unestablished
+    # breakage, and a refusal beside a store gap — are gated in
+    # `tests/test_monitor.py`'s criterion-2 section and in `tests/test_pacing.py`.
+    # A partition row per member would assert the same rule five times.
+    #
+    # NOT REACHABLE IN THE SHIPPED CONFIGURATION: `assess_health` groups by
+    # retailer and every retailer in `config/products.yaml` has exactly one
+    # control, so this state has to be constructed to exist. It is a property of
+    # the function, not an alert anybody has received.
+    (mixed,) = monitor.assess_health(
+        [
+            _control(Availability.UNKNOWN, refused=True),
+            _control(Availability.UNKNOWN, unresolved=True),
+        ]
+    )
     return {
         "no control": no_control,
         "refusal": refusal,
         "dead control": dead_control,
         "breakage": breakage,
         "store gap": store_gap,
+        "mixed": mixed,
     }
 
 
 def test_exactly_the_two_unknown_causes_say_so() -> None:
-    """The partition, across all FIVE arms of `assess_health`.
+    """The partition, across all SIX arms of `assess_health`.
 
-    Three of these failures have a cause the code measured and two do not, and
+    Four of these failures have a cause the code measured and two do not, and
     the difference has to survive an edit. Without this half, deleting every
     explanation would satisfy the absence gate above perfectly.
+
+    EXTENDED AGAIN, FROM FIVE ARMS TO SIX, ON 2026-09-02 (`10-02`, REQ-24
+    criterion 2). The withdrawn sentence, quoted in full: *"The partition, across
+    all FIVE arms of `assess_health`. Three of these failures have a cause the
+    code measured and two do not"*.
+
+    What overruled it: criterion 2 added a mixed arm for a group whose controls
+    failed for more than one reason — the arm exists because every single-cause
+    sentence asserts something false about part of such a group.
+
+    AND IT HAPPENED AGAIN, WHICH IS THE PART WORTH READING. This test did not go
+    red for the sixth arm either, and neither did
+    `test_the_partitions_cover_every_arm_this_module_can_produce` below — the
+    gate `10-01` added *because* this test could not fail. It counts what
+    `_every_arm` builds, and `_every_arm` is exactly the thing that falls behind
+    `monitor.py`. Measured on the day: the full suite ran 1020 passed with all
+    three of these assertions false. The check that found it was reading the new
+    arm, not running these tests.
 
     EXTENDED FROM FOUR ARMS TO FIVE ON 2026-09-02 (`10-01`, REQ-24). The
     withdrawn sentence, quoted in full: *"The partition, across all four arms of
@@ -295,18 +337,32 @@ def test_exactly_the_two_unknown_causes_say_so() -> None:
         "dead control": False,
         "breakage": True,
         "store gap": False,
+        # Both of this group's causes were established — one control was refused
+        # and one names a target that does not resolve — so claiming the cause is
+        # unknown would discard two measurements. A mixed group that CONTAINS an
+        # unestablished cause does carry the constant, for that member only, and
+        # `tests/test_pacing.py` pins that shape.
+        "mixed": False,
     }, (
         "the partition moved. A cause we measured must not be reported as "
         "unknown, and a cause we did not must not be reported as anything else"
     )
     # The name's own claim, asserted rather than left to the dict above: still
-    # exactly TWO, out of five rather than out of four.
+    # exactly TWO, out of six rather than out of five.
     assert sum(carries.values()) == 2
 
 
 def test_only_the_arms_with_a_measured_remedy_name_something_a_person_can_do() -> None:
-    """The 2026-08-12 partition, over the same five arms — and it is the *reason*
+    """The 2026-08-12 partition, over the same six arms — and it is the *reason*
     a push is allowed rather than a second description of the same split.
+
+    EXTENDED AGAIN, FROM FIVE ARMS TO SIX, ON 2026-09-02 (`10-02`, REQ-24
+    criterion 2), for the mixed arm. The withdrawn phrase, quoted: *"over the
+    same five arms"*. What overruled it is that arm's existence; what survives is
+    the rule, unchanged and still not a count — the mixed arm names a remedy
+    because one of its controls genuinely has one, not because two of six arms
+    are allowed to. Like every extension before it, this one did NOT make the
+    test go red; see the partition above.
 
     Dan, twice: *"we need to never hit the user unless its something they can buy
     or actually do"*. `Health.action` is empty by default, so this asserts which
@@ -359,6 +415,11 @@ def test_only_the_arms_with_a_measured_remedy_name_something_a_person_can_do() -
         "dead control": True,
         "breakage": False,
         "store gap": True,
+        # A remedy does not stop being one because a sibling control was refused:
+        # this group still holds a control whose target names a line somebody can
+        # change. `Health.dead_control` keeps its `any` quantifier for the same
+        # reason, so the fact and the action agree.
+        "mixed": True,
     }, (
         "the partition moved. A state with no remedy must not name one, and a "
         "state a person can close must not go quiet"
@@ -391,11 +452,30 @@ def test_the_partitions_cover_every_arm_this_module_can_produce() -> None:
     `_every_arm` and to both partitions, and correct both docstrings in the dated
     form. That is the whole procedure, and it is written here because the failing
     message arrives at the moment somebody is trying to finish something else.
+
+    IT DID NOT GO RED FOR THE VERY NEXT ARM, AND THAT IS RECORDED HERE RATHER
+    THAN QUIETLY FIXED. `10-02` added a sixth arm on 2026-09-02; this test went
+    on passing, because the count it compares against is `_every_arm`'s own dict
+    and that dict is precisely what falls behind `monitor.py`. Its own docstring
+    said as much — *"nothing here can see `assess_health`'s branches"* — so this
+    is the stated limit biting, not a surprise. What it caught in exchange is
+    still real: it is the reason all three of these tests were re-read when the
+    arm was added, and P-M3 in `10-02-SUMMARY.md` shows it CAN fail when two arms
+    collide on one sentence.
+
+    THE HONEST FIX IS NOT MORE CARE. A gate that reads `assess_health`'s branches
+    directly — an `ast` walk of the `reason` assignments, in the shape
+    `test_no_withdrawn_claim_survives_in_any_reachable_string` already uses on
+    this same module — would bind where this one cannot. It is NOT done here:
+    `10-02` owns criterion 2, and a test that reads the source's shape is a
+    decision with its own trade (it goes red on a refactor that changes nothing a
+    person receives), which belongs in a plan that argues it rather than in a
+    deviation at the end of one.
     """
     arms = _every_arm()
 
-    assert len(arms) == 5, "an arm was added or removed without both partitions moving"
-    assert len({h.reason for h in arms.values()}) == 5, (
+    assert len(arms) == 6, "an arm was added or removed without both partitions moving"
+    assert len({h.reason for h in arms.values()}) == 6, (
         "two arms produce the same reason, so the partitions above are asserting "
         "about fewer states than they name"
     )

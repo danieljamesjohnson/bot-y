@@ -293,13 +293,27 @@ def test_a_store_gap_beside_a_plain_breakage_is_reported_as_breakage() -> None:
     assert len(health.failing_controls) == 2
 
 
-def test_a_refusal_beside_a_store_gap_falls_to_the_louder_arm() -> None:
-    """The other mixed group, and it is not a refusal report.
+def test_a_refusal_beside_a_store_gap_names_both_causes_and_claims_neither_alone() -> None:
+    """The other mixed group, and it is still not a refusal report.
 
-    `refused` stays True only when EVERY broken control is a refusal, so this
-    group is not the refusal arm's. It is not the store arm's either — a refusal
-    is not a store gap, on the precedence above — so it lands on the breakage arm,
-    which is the reading that claims least about a mixed group.
+    RENAMED AND ITS EXPECTED SENTENCE MOVED ON 2026-09-02 (`10-02`, REQ-24
+    criterion 2), in the dated form. The withdrawn text, quoted in full: the test
+    was called `test_a_refusal_beside_a_store_gap_falls_to_the_louder_arm`, its
+    docstring ended *"so it lands on the breakage arm, which is the reading that
+    claims least about a mixed group"*, and it asserted
+    `CAUSE_UNKNOWN in health.reason`.
+
+    What overruled it: `10-DECISIONS.md` § Collision 6. The breakage arm's
+    sentence says the controls *"did not read IN_STOCK and was not refused"* —
+    false about a group containing a refusal — and `CAUSE_UNKNOWN` is false about
+    this group in particular, because BOTH of its causes were established: one
+    control was refused and the other has no store pinned. Claiming least is only
+    the honest reading when less is known; here it discarded two measurements.
+
+    WHAT SURVIVES IS THE HALF THE NAME WAS ALWAYS ABOUT: `refused` stays True
+    only when EVERY broken control is a refusal, so this group is not the refusal
+    arm's, and it is not the store arm's either — a refusal is not a store gap,
+    on the precedence above.
     """
     results = [
         _control(Availability.UNKNOWN, retailer="walmart", name="a", refused=True, store_id="0"),
@@ -308,7 +322,11 @@ def test_a_refusal_beside_a_store_gap_falls_to_the_louder_arm() -> None:
     (health,) = assess_health(results)
 
     assert health.refused is False
-    assert CAUSE_UNKNOWN in health.reason
+    assert CAUSE_UNKNOWN not in health.reason, (
+        "both causes here were measured — a refusal and an absent pin — so "
+        "reporting the cause as unestablished discards two measurements"
+    )
+    assert "refus" in health.reason and "store" in health.reason
 
 
 def test_a_page_that_never_arrived_is_not_reported_as_a_store_pin_gap() -> None:
@@ -752,6 +770,133 @@ def test_a_walmart_control_whose_page_read_fine_is_still_a_store_gap() -> None:
     assert health.action == STORE_PIN_ACTION
     assert "store_id" in health.reason
     assert CAUSE_UNKNOWN not in health.reason
+
+
+# --------------------------------------------------------------------------
+# REQ-24 CRITERION 2 — A CONJUNCTION, AND ITS TWO HALVES ARE ASSERTED APART
+#
+# The criterion is: a dead control must not describe the retailer as refusing
+# us, AND it must not silence a real refusal when both are true at once. Those
+# need different work and they fail for different reasons, so a single test
+# covering both would name the wrong one when it goes red.
+#
+# HALF TWO IS A DEFECT IN THE CODE AND IT IS LATENT, NOT LIVE. `assess_health`
+# groups by retailer and every retailer in `config/products.yaml` has EXACTLY
+# ONE control, so a mixed group cannot occur in the shipped configuration and
+# has to be constructed here to exist at all. It becomes reachable the moment
+# any retailer gains a second control, which `10-03`'s reserve-candidate clause
+# makes more likely rather than less. No claim is made here that a wrong alert
+# is being produced today.
+# --------------------------------------------------------------------------
+
+
+def test_criterion_2_half_one_a_dead_control_never_says_the_retailer_refused_us() -> None:
+    """HALF ONE, asserted directly rather than left as a construction-time
+    impossibility.
+
+    It holds today because a dead control carries no refusal and the refusal arm
+    is `all`-quantified — and *"it cannot happen by construction"* is exactly the
+    claim that stops being true after a refactor nobody re-checked. Two
+    perturbations were run against it on 2026-09-02 and are recorded in
+    `10-02-SUMMARY.md`: a refusal arm rewritten to `all(c.refused or
+    c.unresolved ...)` — the refactor a reader would actually write, folding
+    deadness into refusal — kills this test; changing the arm's quantifier from
+    `all` to `any` does NOT, because a group of one dead control has no refusal
+    for `any` to find.
+
+    A refusal is a fact about the RETAILER and a dead control is a fact about
+    OUR CONFIG. Reporting the second as the first sends somebody to back off
+    from a retailer that answered them perfectly.
+    """
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="bestbuy", unresolved=True)]
+    )
+
+    assert health.dead_control is True
+    assert health.refused is False, "nothing here was refused; the page came back and was read"
+    assert "refus" not in health.reason, (
+        f"a dead control is describing the retailer as refusing us: {health.reason!r}"
+    )
+    assert health.action == DEAD_CONTROL_ACTION
+
+
+def test_criterion_2_half_two_a_dead_control_does_not_silence_a_refusal() -> None:
+    """HALF TWO: a group holding one dead control and one refused control.
+
+    A PROPERTY OF THE FUNCTION, NOT AN ALERT ANYBODY HAS RECEIVED — see the
+    section comment above. Constructed by hand because the shipped configuration
+    cannot produce it.
+
+    Before 2026-09-02 this group took the DEAD-CONTROL arm (`refused` is `all`
+    and fails; `dead_control` is `any` and succeeds), and that arm's sentence
+    attributes the whole group to `config/products.yaml` and never mentions that
+    one of these controls was refused. A real refusal, silenced by a dead
+    control, which is exactly what this criterion forbids.
+
+    THE FACTS ARE ASSERTED BEFORE THE PROSE. A test that only greps the reason
+    text is a test of the sentence, which is the anchoring mistake
+    `scripts/mutation_check.py`'s M2 comment already paid for.
+    """
+    dead = _control(Availability.UNKNOWN, retailer="gamestop", name="dead", unresolved=True)
+    refused = _control(Availability.UNKNOWN, retailer="gamestop", name="walled", refused=True)
+
+    (health,) = assess_health([dead, refused])
+
+    # The facts. `refused` keeps its `all` meaning for its three consumers —
+    # `status.write`, `cli.watch_cycle`'s paging filter and `notify` — and
+    # `dead_control` keeps the `any` meaning `10-01` gave it, so the group is
+    # expressible in facts rather than in prose alone.
+    assert health.ok is False
+    assert health.refused is False, "not every control here was refused"
+    assert health.dead_control is True, "one of them names a target that does not resolve"
+    # Then the prose: both established causes named, neither claimed as the whole
+    # story.
+    assert "refus" in health.reason, "the refusal was silenced"
+    assert "config/products.yaml" in health.reason, "the dead control was silenced"
+    assert "was not refused" not in health.reason, (
+        "a group containing a refusal is being told that nothing was refused"
+    )
+    # The remedy survives: one of these controls still names a line somebody can
+    # change, and that is what makes the state worth a push.
+    assert health.action == DEAD_CONTROL_ACTION
+    # Every failing control still carries its own detail — that is where the
+    # per-watch specifics live and they must stay there.
+    assert len(health.failing_controls) == 2
+
+
+@pytest.mark.parametrize(
+    ("second", "label"),
+    [
+        ({"unresolved": True}, "a dead control"),
+        ({}, "an unestablished breakage"),
+        ({"store_id": None, "retailer": "walmart"}, "a store gap"),
+    ],
+)
+def test_no_group_containing_a_refusal_is_ever_told_nothing_was_refused(
+    second: dict[str, object], label: str
+) -> None:
+    """The general form of half two, over every shape of mixed group there is.
+
+    The rule `10-DECISIONS.md` § Collision 6 settles is not about one pair: it is
+    that the reason for a group CONTAINING a refusal never asserts that nothing
+    was refused. The third row is the one that is not new — a refusal beside an
+    unestablished breakage is what `tests/test_pacing.py`'s
+    `test_one_non_refusal_among_refusals_is_treated_as_breakage` has pinned since
+    2026-08-04, and it received the breakage arm's *"and was not refused"* about
+    a group containing a refusal.
+    """
+    retailer = str(second.pop("retailer", "gamestop"))
+    refused = _control(Availability.UNKNOWN, retailer=retailer, name="walled", refused=True)
+    other = _control(Availability.UNKNOWN, retailer=retailer, name="other", **second)  # type: ignore[arg-type]
+
+    (health,) = assess_health([refused, other])
+
+    assert health.refused is False, "`all`, not `any` — a non-refusal must not be swallowed"
+    assert "was not refused" not in health.reason, (
+        f"a group of one refusal and {label} is being told nothing was refused: "
+        f"{health.reason!r}"
+    )
+    assert "refus" in health.reason, f"the refusal beside {label} was silenced"
 
 
 def test_a_refusal_still_outranks_a_dead_control() -> None:
