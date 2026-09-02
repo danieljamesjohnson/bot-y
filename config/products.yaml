@@ -245,21 +245,39 @@ watches:
   # An evergreen first-party catalogue title, restocked routinely and never a
   # buy-box fight. Not the house-brand cable the rule would suggest: that page
   # is one of the ones Best Buy reproducibly refuses to render.
-  # DURABILITY — CONTROL — Pokémon Let's Go, Pikachu! (Switch): D1 SATISFIED · D2 NOT SATISFIED · D3 NOT SATISFIED · D4 NOT SATISFIED · D5 PARTIAL
+  # DURABILITY — CONTROL — Pokémon Let's Go, Pikachu! (Switch): D1 SATISFIED · D2 NOT SATISFIED · D3 NOT SATISFIED · D4 NOT SATISFIED · D5 NOT SATISFIED
   # NAMED AND UNREPAIRED — D2: a game title is released, not replenished; it
   # has a print run and a discontinuation. D3: it is a title for one console
   # generation, which is the clause the ROADMAP's own sentence is about. D4:
   # the reserve recorded in docs/retailer-evidence.md § Best Buy is another
   # title for the same generation, so it fails D2 and D3 exactly as this one
-  # does — a fallback off the same shelf inherits the same end of life. D5
-  # PARTIAL: the resolution predicate covers the search redirect and the
-  # foreign-product page; a page with neither a canonical link nor parseable
-  # structure is not distinguishable from a reskin and keeps today's verdict,
-  # pinned by test_the_residual_no_canonical_and_no_structure_is_not_a_dead_control.
+  # does — a fallback off the same shelf inherits the same end of life. D5 NOT
+  # SATISFIED, downgraded from PARTIAL on 2026-09-02 by a live reading: this SKU
+  # resolves and reads IN_STOCK, and the configured path called it unresolved
+  # anyway, twice. Best Buy's SKU search now answers with a CLIENT-side redirect
+  # (NEXT_REDIRECT ... 308 plus a meta refresh) where the fixtures capture a
+  # server-side one, so the browser snapshots the announcing search shell — no
+  # ld+json, canonical on the search endpoint — which is clause A exactly. A
+  # live target reading as a dead control is the inverse of what D5 asks for, so
+  # an `unresolved` from Best Buy carries no information in either direction
+  # until the transport follows the redirect. NAMED AND UNREPAIRED: the remedy
+  # is in boty/browser.py or boty/retailers.py, the phase that found it had spent
+  # its authorised reads establishing it, and a transport fix no live reading has
+  # confirmed is a recommendation rather than a repair.
   #
-  # THIS ENTRY IS NOT ASSERTED DEAD. The evidence is absent-then-stale: last
-  # read in stock in early August, unmeasured since. See 10-DECISIONS.md
-  # § Collision 10.
+  # THIS ENTRY IS NOT ASSERTED DEAD — AND AS OF 2026-09-02 IT IS MEASURED ALIVE.
+  # Read live that day on its product page: IN_STOCK, $59.99, one offer, seller
+  # "Best Buy", ld+json blocks 3 / unparseable 0, 1,157,107 B. Do not swap this
+  # control on account of the false dead above: the defect is in the resolution
+  # path, not in the product, and any replacement SKU meets the identical clause
+  # A on the identical page shape. See docs/retailer-evidence.md § Best Buy,
+  # reads 1-3.
+  #
+  # (This note read "The evidence is absent-then-stale: last read in stock in
+  # early August, unmeasured since. See 10-DECISIONS.md § Collision 10." That was
+  # true when written and the reading above is what changed it. Collision 10's
+  # finding — that the control had never been shown dead — is confirmed, not
+  # withdrawn.)
   - name: CONTROL — Pokémon Let's Go, Pikachu! (Switch)
     retailer: bestbuy
     target: "6216393"

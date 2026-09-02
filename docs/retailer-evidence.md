@@ -1312,6 +1312,33 @@ incumbent control reads IN_STOCK, first-party, on 2026-09-02.
 
 **Budget: 3 of 3 spent. There is no fourth request, and none was made.**
 
+#### What moved on the strength of these reads, and what deliberately did not
+
+**The control was NOT swapped, and swapping it would have been the wrong repair.** The plan's
+reads 2 and 3 were allocated to finding and confirming a **replacement** SKU. That allocation was
+reversed before read 2 (recorded above) and the reversal is vindicated by what read 2 and read 3
+returned: the incumbent is alive and reads IN_STOCK first-party, and the defect is in the
+**resolution path**, not in the product. Any replacement SKU is reached through the same
+`bestbuy_product_url` search and meets the identical clause A on the identical page shape — so a
+replacement would have inherited the false dead, and would have been *confirmed* by a read taken
+against the product page it redirects to, exactly as read 3 was. The candidate-class search was
+therefore **not performed**, and the reserve candidate recorded above
+(`Pokémon: Let's Go, Eevee! - Nintendo Switch`) stands unchanged and still fails `D2` and `D3`.
+
+**What did move:**
+
+| record | from | to | on what |
+|---|---|---|---|
+| `docs/adding-a-retailer.md`, applied table, `bestbuy`/`D5` | PARTIAL | **NOT SATISFIED** | a live target read as a dead control — the inverse of what `D5` asks for |
+| the same document's failing-cell count | twelve of thirty | **thirteen of thirty** | the cell above; the earlier figure is kept beside it |
+| `config/products.yaml`, the Best Buy control's durability line and prose | `D5 PARTIAL`, *"absent-then-stale"* | `D5 NOT SATISFIED`, **measured alive 2026-09-02** | reads 1–3, quoted beside the withdrawn sentence rather than over it |
+| `README.md`, the Best Buy **Status** cell | *"⚠️ Working, `[degraded]`"* | the same, plus the dated measurement that the control does not resolve through the configured path | read 1, read 2 and read 3 |
+| `README.md`, the Best Buy **robots.txt** and **Terms** cells | `unread` | **unchanged** | a rung-3 product read measures neither document, and reading them would have cost a fourth navigation |
+
+**`config/products.yaml`'s Best Buy control target is byte-unchanged.** No control is shipped that
+has not been confirmed by a live reading; the one configured here now has one, taken today.
+
+
 
 
 ---

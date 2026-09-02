@@ -359,7 +359,11 @@ def test_the_rule_condemns_something_which_is_the_point_of_applying_it() -> None
     assertion the other tests need: every rule above is satisfied by a table of
     thirty SATISFIED cells, and such a table would be exactly what a rule
     written to describe six controls chosen before it existed produces. Twelve
-    of the thirty cells were not SATISFIED on 2026-09-02.
+    of the thirty cells were not SATISFIED on 2026-09-02 when this was written;
+    THIRTEEN were by the end of the same day, because `10-04` spent its live
+    reads and moved `bestbuy`/`D5` from PARTIAL to NOT SATISFIED on what came
+    back. Both figures are kept: the first was true when taken, and what changed
+    it was a measurement rather than a re-reading.
 
     If a future phase genuinely repairs every control, this test is the one that
     goes red, and the honest repair is to DELETE it with the measurement that

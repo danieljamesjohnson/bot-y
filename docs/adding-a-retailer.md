@@ -261,13 +261,16 @@ configuration is what vouches for every reading this project publishes.
 |---|---|---|---|---|---|---|
 | CONTROL — PS5 console | gamestop | SATISFIED | NOT SATISFIED | NOT SATISFIED | NOT SATISFIED | SATISFIED |
 | CONTROL — Great Value whole milk | walmart | SATISFIED | SATISFIED | SATISFIED | NOT SATISFIED | SATISFIED |
-| CONTROL — Pokémon Let's Go, Pikachu! (Switch) | bestbuy | SATISFIED | NOT SATISFIED | NOT SATISFIED | NOT SATISFIED | PARTIAL |
+| CONTROL — Pokémon Let's Go, Pikachu! (Switch) | bestbuy | SATISFIED | NOT SATISFIED | NOT SATISFIED | NOT SATISFIED | NOT SATISFIED |
 | CONTROL — Nintendo HDMI cable | nintendo | SATISFIED | SATISFIED | NOT SATISFIED | NOT SATISFIED | SATISFIED |
 | CONTROL — up&up microfiber dust cloths | target | SATISFIED | SATISFIED | SATISFIED | NOT SATISFIED | NOT SATISFIED |
 | CONTROL — Amazon Basics AA batteries (20-pack) | amazon | SATISFIED | SATISFIED | SATISFIED | NOT SATISFIED | SATISFIED |
 
-**Twelve of the thirty cells are not SATISFIED, and every one of the six controls fails at least one
-clause.** That is the deliverable, not the failure: a rule applied to six controls that were all
+**Thirteen of the thirty cells are not SATISFIED, and every one of the six controls fails at least
+one clause.** *(Twelve when this table was first written on 2026-09-02; `bestbuy`/`D5` moved from
+PARTIAL to NOT SATISFIED the same day, on the live readings recorded in `docs/retailer-evidence.md`
+§ Best Buy. The earlier figure is kept here rather than overwritten because what moved it was a
+measurement, not a re-reading.)* That is the deliverable, not the failure: a rule applied to six controls that were all
 chosen before it existed, and which condemned none of them, would be a rule that had been fitted to
 them. Every failure below is **named and unrepaired** — this document changes no control. Only Best
 Buy's is in scope for repair in this phase, and only against a live reading.
@@ -296,14 +299,40 @@ Buy's is in scope for repair in this phase, and only against a live reading.
   invent a status** — that would put a fabricated fact into the reading, and the browser module's own
   comment argues why. The honest route is the response object, and it belongs to a phase that argues
   for it.
-- **bestbuy, `D5` — PARTIAL.** Clauses A and B of the resolution predicate cover the two shapes that
-  can be established: the search redirect that resolves to nothing, and a page about somebody else's
-  product. A page carrying **neither** a canonical link **nor** parseable structure is not
-  distinguishable from a reskin, so it keeps today's verdict — pinned by
-  `test_the_residual_no_canonical_and_no_structure_is_not_a_dead_control` in `tests/test_retailers.py`,
-  so this cell rests on a gate rather than on this sentence. That residual claims less than the truth
-  in one case (broken markup on a product that is genuinely gone reads as a detector failure) and
-  claiming less is the direction to be wrong in.
+- **bestbuy, `D5` — NOT SATISFIED, downgraded from PARTIAL on 2026-09-02 by a live reading.** The
+  withdrawn cell said, in full:
+
+  > **bestbuy, `D5` — PARTIAL.** Clauses A and B of the resolution predicate cover the two shapes
+  > that can be established: the search redirect that resolves to nothing, and a page about somebody
+  > else's product. A page carrying **neither** a canonical link **nor** parseable structure is not
+  > distinguishable from a reskin, so it keeps today's verdict — pinned by
+  > `test_the_residual_no_canonical_and_no_structure_is_not_a_dead_control` in
+  > `tests/test_retailers.py`, so this cell rests on a gate rather than on this sentence. That
+  > residual claims less than the truth in one case (broken markup on a product that is genuinely
+  > gone reads as a detector failure) and claiming less is the direction to be wrong in.
+
+  Every sentence of that is still true of the fixtures it was written against. **What overruled it
+  is the wire.** Read against the live site on 2026-09-02, the configured Best Buy control — a SKU
+  that resolves, and which read `IN_STOCK $59.99 seller "Best Buy"` on its product page in the same
+  hour — came back `unresolved=True` through the configured path, **twice**, at a 3-second and at a
+  25-second settle. Best Buy's SKU search now answers with a **client-side** redirect
+  (`NEXT_REDIRECT;…;308;` plus a `<meta http-equiv="refresh">`) instead of the server-side one this
+  repository's fixtures capture, so `fetch_rendered` snapshots the *announcing* search shell: no
+  `ld+json`, and a canonical pointing at the search endpoint, which is clause A exactly. The full
+  measurement is in `docs/retailer-evidence.md` § Best Buy under reads 1 to 3.
+
+  So the clause fails in the direction that matters most. `D5` asks that a dead target read as a
+  **dead control**; on this page shape a **live** target reads as one, which means an `unresolved`
+  from Best Buy currently carries no information in either direction. PARTIAL described a clause
+  that covered two shapes out of three; NOT SATISFIED describes a clause whose signal is unusable,
+  and those are different claims.
+
+  **Named and unrepaired, deliberately.** The remedy is in `boty/browser.py` or
+  `boty/retailers.py` — follow the redirect the retailer announces, or read the resolution off the
+  `NEXT_REDIRECT` payload — and the plan that found this had spent its authorised read budget
+  establishing it. **A transport fix that no live reading has confirmed is a recommendation, not a
+  repair**, and shipping one here would be the fixture-confidence this clause exists to punish.
+
 - **all six, `D4`** — see below. It is the clause with the most to say.
 
 #### `D4` was failed by every control, and two of the reserves fail the clause they would rescue
