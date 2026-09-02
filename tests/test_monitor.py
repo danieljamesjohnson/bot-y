@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from boty import retailers
+from boty.fetch import FetchError
 from boty.models import Availability, Result, Rung, Watch
 from boty.monitor import (
     CAUSE_UNKNOWN,
@@ -511,6 +512,102 @@ def test_the_same_page_read_for_its_own_sku_is_healthy(bestbuy_pikachu: str) -> 
     assert reading.unresolved is False
     assert health.ok is True
     assert health.dead_control is False
+
+
+# --------------------------------------------------------------------------
+# REQ-24 — THE SECOND PRODUCER: an HTTP 404 at a URL-addressed retailer
+#
+# Best Buy is addressed by SKU, so the tracer above is a RESOLUTION fact read
+# off a page. Every other retailer here is addressed by URL, where the same
+# death arrives as an HTTP 404 — which `fetch.is_refusal` correctly declines to
+# call a refusal, so until 2026-09-02 it reached the breakage arm and was
+# reported as a probably-broken detector at FIVE retailers rather than one
+# (`10-DECISIONS.md` § Collision 3).
+#
+# GATED THROUGH THE HEALTH ARM, NOT AT THE ADAPTER, and per ADDRESSING STYLE
+# rather than per adapter. The claim is not "the field is set" — a test of that
+# would pass with `assess_health` never reading it. It is "a control at a URL
+# that no longer exists is reported as a dead control", so each case starts at
+# the transport and ends at a `Health`.
+#
+# THE TWO STYLES, taken from `config/products.yaml`'s six controls: URL +
+# structured markup (`check_html`, which serves the gamestop, walmart and
+# nintendo controls) and URL + dom (`check_amazon`, the amazon control). The
+# SKU style is Best Buy's and is the tracer above. Target's control is URL-
+# addressed but rung 3, which is the gap named at `fetch.UNRESOLVED_STATUSES`:
+# `browser.py` surfaces no status, so it is covered by NEITHER producer.
+# --------------------------------------------------------------------------
+
+
+def _dead_url_control(
+    monkeypatch: pytest.MonkeyPatch, adapter: str, retailer: str, status: int = 404
+) -> Result:
+    """A URL-addressed control whose target answers `status`, through the real adapter."""
+
+    def _gone(target: str, **kwargs: object) -> object:
+        raise FetchError(f"HTTP {status}", status=status)
+
+    monkeypatch.setattr(retailers, "get", _gone)
+    watch = Watch(
+        name="ctl", retailer=retailer, target=f"https://{retailer}.example/p", control=True
+    )
+    return getattr(retailers, adapter)(watch)
+
+
+@pytest.mark.parametrize(
+    ("adapter", "retailer"),
+    [
+        # structured extraction, rung 1 — the gamestop, walmart and nintendo controls
+        ("check_html", "gamestop"),
+        # dom extraction, rung 1 — the amazon control
+        ("check_amazon", "amazon"),
+    ],
+)
+def test_a_404_at_a_url_addressed_control_is_a_dead_control(
+    monkeypatch: pytest.MonkeyPatch, adapter: str, retailer: str
+) -> None:
+    """The second producer, end to end: a status from the wire to a Health.
+
+    404 means the retailer answered and the answer was that the thing this watch
+    names does not exist. That is a fact about `config/products.yaml`, and the
+    remedy is one line in it — which is why this arm carries an action at all.
+    """
+    reading = _dead_url_control(monkeypatch, adapter, retailer)
+
+    (health,) = assess_health([reading])
+
+    assert reading.unresolved is True, "the adapter did not record what the status said"
+    assert reading.refused is False, "a 404 is not a refusal; nobody turned us away"
+    assert health.dead_control is True
+    assert health.action == DEAD_CONTROL_ACTION
+    assert "config/products.yaml" in health.action
+    assert "readings from this retailer are unverified" not in health.reason, (
+        "a deleted target is still being reported as a probably-broken detector"
+    )
+    assert CAUSE_UNKNOWN not in health.reason
+
+
+@pytest.mark.parametrize("status", [403, 500])
+@pytest.mark.parametrize(
+    ("adapter", "retailer"), [("check_html", "gamestop"), ("check_amazon", "amazon")]
+)
+def test_a_refusal_or_a_fault_at_the_same_arm_is_not_a_dead_control(
+    monkeypatch: pytest.MonkeyPatch, adapter: str, retailer: str, status: int
+) -> None:
+    """The half with something to lose. A wiring that set the field on every
+    `FetchError` would satisfy the test above perfectly.
+
+    A 403 is a refusal — no page came back, so nothing about resolution was
+    established. A 500 is the retailer failing, and reading it as a dead control
+    would send somebody to edit our config about a product that is fine.
+    """
+    reading = _dead_url_control(monkeypatch, adapter, retailer, status=status)
+
+    (health,) = assess_health([reading])
+
+    assert reading.unresolved is False
+    assert health.dead_control is False
+    assert health.action != DEAD_CONTROL_ACTION
 
 
 # --------------------------------------------------------------------------

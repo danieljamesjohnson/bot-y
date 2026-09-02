@@ -20,7 +20,7 @@ from urllib.parse import quote_plus, urlsplit
 
 from . import parse
 from .browser import BROWSER_PATH_ENV, fetch_rendered
-from .fetch import Blocked, FetchError, get, is_refusal
+from .fetch import Blocked, FetchError, get, is_refusal, is_unresolved
 from .models import (
     STORE_SCOPED,
     Availability,
@@ -611,7 +611,14 @@ def check_html(watch: Watch, *, first_party_only: bool = True) -> Result:
         return Result(watch, Availability.UNKNOWN, detail=f"blocked: {exc}", url=watch.target, refused=True, store=None, shipping=None, read_at=None)
     except FetchError as exc:
         # Same inversion: the transport failed, so nothing came back to date.
-        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc), store=None, shipping=None, read_at=None)
+        # THE SECOND QUESTION, ASKED WHERE THE FIRST ALREADY IS (REQ-24,
+        # `10-DECISIONS.md` § Collision 3). `is_refusal` and `is_unresolved` are
+        # disjoint by assertion in `tests/test_fetch.py`, so this arm answers
+        # "were we turned away" and "is the target gone" from one exception
+        # without either answer being able to absorb the other. A 404 here used
+        # to reach `assess_health`'s breakage arm and be reported as a probably
+        # broken detector — a fact about our own config, said about theirs.
+        return Result(watch, Availability.UNKNOWN, detail=f"fetch failed: {exc}", url=watch.target, refused=is_refusal(exc), store=None, shipping=None, read_at=None, unresolved=is_unresolved(exc))
 
     return _verdict_from_html(
         watch,
@@ -688,6 +695,9 @@ def check_amazon(watch: Watch, *, first_party_only: bool = True) -> Result:
             extraction=Extraction.DOM,
             refused=is_refusal(exc),
             read_at=None,
+            # Amazon is addressed by `/dp/<ASIN>`, so a 404 here is Amazon
+            # saying that ASIN is not a product — REQ-24's second producer.
+            unresolved=is_unresolved(exc),
         )
 
     return _verdict_from_html(
@@ -820,6 +830,30 @@ def check_bestbuy_browser(watch: Watch, *, first_party_only: bool = True) -> Res
             rung=Rung.BROWSER,
             refused=is_refusal(exc),
             read_at=None,
+            # ASKED HERE TOO, AND TODAY IT CANNOT ANSWER — the gap, written
+            # where a reader meets it rather than only in a planning document.
+            # `boty/browser.py` returns `Page(status=200)` unconditionally and
+            # its own comment says why: *"the simple API does not surface the
+            # main frame's response status, so there is no real status to report
+            # and inventing one would be worse than saying so."* So a rung-3
+            # `FetchError` carries no status and this call is always False here.
+            #
+            # Best Buy is covered anyway, by the OTHER producer: it is addressed
+            # by SKU, so `_verdict_from_html` establishes non-resolution off the
+            # page (`10-DECISIONS.md` § Collision 2). **Target is covered by
+            # neither** — a delisted Target control renders Target's own
+            # not-found page, reads no offers, and is indistinguishable from a
+            # reskin at this layer. `10-03` carries that into the durability
+            # rule's own column as a named gap, never as a passing verdict.
+            #
+            # THE REMEDY THAT IS REFUSED, so it is not re-proposed as the cheap
+            # fix: inventing a status in `browser.py`. That would put a
+            # fabricated fact into a `Page` and every reader downstream would
+            # believe it. The honest route for a future phase is the response
+            # object. The wiring stays because the ARM is what it is attached
+            # to: a transport that starts surfacing a status must arrive at an
+            # arm that already knows the question.
+            unresolved=is_unresolved(exc),
         )
 
     return _verdict_from_html(
@@ -937,6 +971,13 @@ def check_target_browser(watch: Watch, *, first_party_only: bool = True) -> Resu
             extraction=Extraction.DOM,
             refused=is_refusal(exc),
             read_at=None,
+            # Always False today, for the reason written out in full at
+            # `check_bestbuy_browser`'s matching arm above: rung 3 surfaces no
+            # status. THIS is the retailer that reaches no producer at all —
+            # Target is URL-addressed, so the SKU-resolution producer does not
+            # apply either, and a delisted Target control is indistinguishable
+            # from a reskin here. Named, not closed.
+            unresolved=is_unresolved(exc),
         )
 
     return _verdict_from_html(
@@ -1035,6 +1076,11 @@ def check_bestbuy_api(watch: Watch, api_key: str) -> Result:
             rung=Rung.API,
             refused=is_refusal(exc),
             read_at=None,
+            # The API answers 404 for a SKU it does not carry, so this arm CAN
+            # establish it — unlike the browser arms above. It does not make the
+            # `"products": []` case below redundant: that one is a 200 carrying
+            # an empty list, which `_verdict_from_html`'s own guard reads.
+            unresolved=is_unresolved(exc),
         )
     except ValueError as exc:
         # STAMPED, AND THIS IS ONE OF THE TWO ARMS THE OBVIOUS RULE GETS WRONG.

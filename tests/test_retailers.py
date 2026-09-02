@@ -3216,6 +3216,101 @@ def test_a_transport_that_refused_took_no_reading(
     assert r.read_at is None, f"{adapter} stamped an arm where nothing came back"
 
 
+@pytest.mark.parametrize(
+    ("adapter", "transport"),
+    [
+        ("check_html", "get"),
+        ("check_amazon", "get"),
+        ("check_bestbuy_browser", "fetch_rendered"),
+        ("check_target_browser", "fetch_rendered"),
+        ("check_bestbuy_api", "get"),
+    ],
+)
+@pytest.mark.parametrize("status", [404, 410])
+def test_a_deleted_target_is_recorded_at_every_arm_that_asks_the_refusal_question(
+    monkeypatch: pytest.MonkeyPatch, adapter: str, transport: str, status: int
+) -> None:
+    """FIVE arms, and it is five because that is how many already ask the OTHER
+    question (`is_refusal`) about the same exception.
+
+    Each of these arms is already deciding "what kind of failure was this" from
+    a `FetchError`. REQ-24 adds the second question in the same place rather than
+    opening a new one, so an arm that learns about refusals and an arm that
+    learns about deletions cannot drift apart.
+
+    THE RUNG-3 ARMS ARE HERE AND THEIR REAL TRANSPORT CANNOT REACH THEM, which
+    is the gap named at `fetch.UNRESOLVED_STATUSES` rather than a hole in this
+    test: `browser.py` returns `Page(status=200)` unconditionally, so a live
+    rung-3 `FetchError` carries no status to read. The wiring is still asserted
+    at both browser arms because the arm is the thing under test — a future
+    transport that DOES surface a status must arrive at an arm that already
+    knows what to do with it.
+    """
+
+    def _gone(target: str, **kwargs: object) -> Page:
+        raise FetchError(f"HTTP {status}", status=status)
+
+    monkeypatch.setattr(retailers, transport, _gone)
+    watch = Watch(name="ctl", retailer="gamestop", target=GAMESTOP_URL, control=True)
+
+    if adapter == "check_bestbuy_api":
+        r = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY)
+    else:
+        r = getattr(retailers, adapter)(watch)
+
+    assert r.availability is Availability.UNKNOWN
+    assert r.unresolved is True, f"{adapter} did not record that the target is gone"
+    assert r.refused is False, "a deleted target is not a refusal"
+
+
+@pytest.mark.parametrize(
+    ("adapter", "transport"),
+    [
+        ("check_html", "get"),
+        ("check_amazon", "get"),
+        ("check_bestbuy_browser", "fetch_rendered"),
+        ("check_target_browser", "fetch_rendered"),
+        ("check_bestbuy_api", "get"),
+    ],
+)
+@pytest.mark.parametrize(
+    "exc",
+    [
+        Blocked("challenge page matched 'are you a human'"),
+        FetchError("HTTP 403", status=403),
+        FetchError("HTTP 503", status=503),
+        FetchError("Timeout: read timed out"),
+    ],
+)
+def test_a_refusal_a_fault_and_a_wall_establish_nothing_about_resolution(
+    monkeypatch: pytest.MonkeyPatch, adapter: str, transport: str, exc: Exception
+) -> None:
+    """The half with something to lose, at every arm the wiring touched.
+
+    A wiring that set the field on any `FetchError` would satisfy the test above
+    perfectly and report every outage as a config error. THE `Blocked` ARMS ARE
+    THE POINT OF THE `Blocked` ROW: a challenge page means no page came back, so
+    nothing about resolution was established, and those arms are deliberately
+    left exactly as they were.
+    """
+
+    def _fail(target: str, **kwargs: object) -> Page:
+        raise exc
+
+    monkeypatch.setattr(retailers, transport, _fail)
+    watch = Watch(name="ctl", retailer="gamestop", target=GAMESTOP_URL, control=True)
+
+    if adapter == "check_bestbuy_api":
+        r = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY)
+    else:
+        r = getattr(retailers, adapter)(watch)
+
+    assert r.availability is Availability.UNKNOWN
+    assert r.unresolved is False, (
+        f"{adapter} read a deleted target out of an exception that establishes none"
+    )
+
+
 def test_a_page_that_answered_is_stamped_with_the_moment_it_was_read(
     monkeypatch: pytest.MonkeyPatch, gamestop_goplusplus: str
 ) -> None:
