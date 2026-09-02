@@ -202,6 +202,7 @@ def _control(
     refused: bool = False,
     store_id: str | None = None,
     store: str | None = None,
+    unresolved: bool = False,
 ) -> Result:
     watch = Watch(
         name="ctl",
@@ -210,89 +211,197 @@ def _control(
         control=True,
         store_id=store_id,
     )
-    return Result(watch, availability, detail="synthetic", refused=refused, store=store)
+    return Result(
+        watch,
+        availability,
+        detail="synthetic",
+        refused=refused,
+        store=store,
+        unresolved=unresolved,
+    )
 
 
-def test_exactly_the_two_unknown_causes_say_so() -> None:
-    """The partition, across all four arms of `assess_health`.
+def _every_arm() -> dict[str, Health]:
+    """One `Health` per arm `assess_health` can produce — the partitions' domain.
 
-    Two of these failures have a cause the code measured and two do not, and the
-    difference has to survive an edit. Without this half, deleting every
-    explanation would satisfy the absence gate above perfectly.
+    ONE CONSTRUCTOR, SHARED BY BOTH PARTITIONS BELOW, and that is the repair for
+    the failure mode this section was found in on 2026-09-02: each partition
+    built its own four arms inline, so when a fifth was added NEITHER of them
+    saw it and BOTH went false WITHOUT GOING RED. Two lists of arms that must
+    agree with a third list in `monitor.py` is two chances to fall behind it.
+
+    It does not close the hole — nothing here can see `assess_health`'s branches
+    — which is why `test_the_partitions_cover_every_arm_this_module_can_produce`
+    exists below, and why the reviewer's check is mechanical rather than
+    "did it pass".
     """
     (no_control,) = monitor.assess_health(
         [Result(Watch(name="p", retailer="target", target="https://t/1"), Availability.OUT_OF_STOCK)]
     )
     (refusal,) = monitor.assess_health([_control(Availability.UNKNOWN, refused=True)])
+    (dead_control,) = monitor.assess_health(
+        [_control(Availability.UNKNOWN, retailer="bestbuy", unresolved=True)]
+    )
     (breakage,) = monitor.assess_health([_control(Availability.OUT_OF_STOCK)])
     (store_gap,) = monitor.assess_health(
         [_control(Availability.UNKNOWN, retailer="walmart", store_id=None)]
     )
-
-    carries = {
-        "no control": monitor.CAUSE_UNKNOWN in no_control.reason,
-        "refusal": monitor.CAUSE_UNKNOWN in refusal.reason,
-        "breakage": monitor.CAUSE_UNKNOWN in breakage.reason,
-        "store gap": monitor.CAUSE_UNKNOWN in store_gap.reason,
+    return {
+        "no control": no_control,
+        "refusal": refusal,
+        "dead control": dead_control,
+        "breakage": breakage,
+        "store gap": store_gap,
     }
+
+
+def test_exactly_the_two_unknown_causes_say_so() -> None:
+    """The partition, across all FIVE arms of `assess_health`.
+
+    Three of these failures have a cause the code measured and two do not, and
+    the difference has to survive an edit. Without this half, deleting every
+    explanation would satisfy the absence gate above perfectly.
+
+    EXTENDED FROM FOUR ARMS TO FIVE ON 2026-09-02 (`10-01`, REQ-24). The
+    withdrawn sentence, quoted in full: *"The partition, across all four arms of
+    `assess_health`. Two of these failures have a cause the code measured and
+    two do not"*.
+
+    What overruled it: REQ-24 added a dead-control arm between the refusal and
+    store-gap arms. There are five arms, and three of them now name a cause the
+    code measured.
+
+    WHAT SURVIVES IS THE RULE, and the rule is what this test's NAME is about: a
+    cause we measured must not be reported as unknown, and a cause we did not
+    must not be reported as anything else. EXACTLY TWO arms still carry
+    `CAUSE_UNKNOWN` — the count in the name did not move, only the denominator.
+
+    AND HOW THIS WAS FOUND, because it is the point of the correction rather
+    than a footnote to it. This test did not go red. It could not: it enumerated
+    its four arms BY NAME and never constructed the fifth, so it went on passing
+    while its docstring became false — the exact failure this repository's
+    standard exists to catch, and the reason `10-01` was told not to confirm
+    these two tests by running them. Green was the symptom. The check that found
+    it was mechanical: the number of arms the partition constructs must equal the
+    number of arms `assess_health` can produce.
+    """
+    arms = _every_arm()
+
+    carries = {name: monitor.CAUSE_UNKNOWN in h.reason for name, h in arms.items()}
 
     assert carries == {
         "no control": False,
         "refusal": True,
+        "dead control": False,
         "breakage": True,
         "store gap": False,
     }, (
         "the partition moved. A cause we measured must not be reported as "
         "unknown, and a cause we did not must not be reported as anything else"
     )
+    # The name's own claim, asserted rather than left to the dict above: still
+    # exactly TWO, out of five rather than out of four.
+    assert sum(carries.values()) == 2
 
 
-def test_exactly_one_arm_names_something_a_person_can_do() -> None:
-    """The 2026-08-12 partition, over the same four arms — and it is the *reason*
+def test_only_the_arms_with_a_measured_remedy_name_something_a_person_can_do() -> None:
+    """The 2026-08-12 partition, over the same five arms — and it is the *reason*
     a push is allowed rather than a second description of the same split.
 
     Dan, twice: *"we need to never hit the user unless its something they can buy
     or actually do"*. `Health.action` is empty by default, so this asserts which
-    arms deliberately fill it — and the answer has to stay ONE. Three of these
-    end in a fact about a retailer or in `CAUSE_UNKNOWN`, and neither is
-    something anybody can act on; the store gap ends in a value the operator
-    sets.
+    arms deliberately fill it. Three of these end in a fact about a retailer or
+    in `CAUSE_UNKNOWN`, and neither is something anybody can act on; the store
+    gap ends in a value the operator sets, and the dead control ends in a target
+    the operator chooses.
 
-    IT IS THE COMPLEMENT OF THE `CAUSE_UNKNOWN` PARTITION ABOVE AND MUST NOT BE
-    FOLDED INTO IT. They agree today for a reason — you cannot state a remedy for
-    a cause you have not established — but they answer different questions, and
-    the no-control arm is the case that proves it: its cause IS established (no
-    control is configured) and there is still nothing the person holding the
-    phone can do about it. A single test asserting one flag would go on passing
-    while the other rule quietly inverted.
+    RENAMED AND EXTENDED ON 2026-09-02 (`10-01`, REQ-24). The withdrawn text,
+    quoted in full: the test was called
+    `test_exactly_one_arm_names_something_a_person_can_do`, its docstring said
+    *"The 2026-08-12 partition, over the same four arms"* and *"this asserts
+    which arms deliberately fill it — and the answer has to stay ONE. Three of
+    these end in a fact about a retailer or in `CAUSE_UNKNOWN`"*.
+
+    What overruled it: REQ-24's dead-control arm carries an action, on this
+    arm's own precedent — its cause IS established and its remedy is one line in
+    `config/products.yaml`. The answer is TWO.
+
+    WHAT SURVIVES IS THE RULE, NOT THE NUMBER, and that distinction is the whole
+    correction. The rule is that a push costs somebody WRITING DOWN what a person
+    can DO, and that an arm added next year is SILENT BY DEFAULT until they can.
+    The number was only ever a consequence of how many remedies had been written
+    down. It is deliberately not asserted as a constant here: pinning it to two
+    would make the next honest arm a test failure, which is a blocklist wearing
+    an assertion's clothes — and `Health.action`'s own docstring rejects the
+    blocklist shape for exactly that reason. What IS asserted is the mapping,
+    arm by arm.
+
+    IT IS STILL THE COMPLEMENT OF THE `CAUSE_UNKNOWN` PARTITION ABOVE AND MUST
+    NOT BE FOLDED INTO IT. They agree today for a reason — you cannot state a
+    remedy for a cause you have not established — and REQ-24 made them agree
+    LESS, not more: the dead-control arm is now a third measured cause while only
+    two arms name a remedy. The no-control arm is still the case that proves the
+    point: its cause IS established (no control is configured) and there is still
+    nothing the person holding the phone can do about it.
+
+    AND HOW THIS WAS FOUND. Like the partition above, this test did not go red —
+    it enumerated four arms by name and never constructed the fifth, so its
+    docstring's *"has to stay ONE"* became false while every run stayed green.
+    The check was mechanical, not observational.
     """
-    (no_control,) = monitor.assess_health(
-        [Result(Watch(name="p", retailer="target", target="https://t/1"), Availability.OUT_OF_STOCK)]
-    )
-    (refusal,) = monitor.assess_health([_control(Availability.UNKNOWN, refused=True)])
-    (breakage,) = monitor.assess_health([_control(Availability.OUT_OF_STOCK)])
-    (store_gap,) = monitor.assess_health(
-        [_control(Availability.UNKNOWN, retailer="walmart", store_id=None)]
-    )
+    arms = _every_arm()
 
-    carries = {
-        "no control": bool(no_control.action),
-        "refusal": bool(refusal.action),
-        "breakage": bool(breakage.action),
-        "store gap": bool(store_gap.action),
-    }
+    carries = {name: bool(h.action) for name, h in arms.items()}
 
     assert carries == {
         "no control": False,
         "refusal": False,
+        "dead control": True,
         "breakage": False,
         "store gap": True,
     }, (
-        "the partition moved. A state with no remedy must not name one, and the "
-        "one state a person can close must not go quiet"
+        "the partition moved. A state with no remedy must not name one, and a "
+        "state a person can close must not go quiet"
     )
-    assert store_gap.action == monitor.STORE_PIN_ACTION
-    assert "store_id" in store_gap.action, "the action has to name the thing to set"
+    assert arms["store gap"].action == monitor.STORE_PIN_ACTION
+    assert "store_id" in arms["store gap"].action, "the action has to name the thing to set"
+    assert arms["dead control"].action == monitor.DEAD_CONTROL_ACTION
+    assert "config/products.yaml" in arms["dead control"].action, (
+        "the action has to name the file to edit"
+    )
+    # The two remedies are DIFFERENT sentences. One spelling for two states would
+    # send an operator to set a store pin about a product that does not exist.
+    assert monitor.DEAD_CONTROL_ACTION != monitor.STORE_PIN_ACTION
+
+
+def test_the_partitions_cover_every_arm_this_module_can_produce() -> None:
+    """The gate on the two partitions above, and the one that would have gone RED.
+
+    Both of them enumerate arms by NAME. That is what let a fifth arm falsify
+    both docstrings on 2026-09-02 without failing either test, and it is a shape
+    no amount of care fixes — the next arm will do it again.
+
+    So this asserts the DOMAIN rather than the mapping: the number of distinct
+    health states `assess_health` can reach must equal the number `_every_arm`
+    builds. It is not a perfect gate — it counts distinct REASONS, and two arms
+    that happened to share a sentence would hide from it — but it is a gate that
+    can fail, which is exactly what the two partitions above could not do.
+
+    IF THIS GOES RED, DO NOT DELETE AN ARM FROM THE COUNT. Add the new arm to
+    `_every_arm` and to both partitions, and correct both docstrings in the dated
+    form. That is the whole procedure, and it is written here because the failing
+    message arrives at the moment somebody is trying to finish something else.
+    """
+    arms = _every_arm()
+
+    assert len(arms) == 5, "an arm was added or removed without both partitions moving"
+    assert len({h.reason for h in arms.values()}) == 5, (
+        "two arms produce the same reason, so the partitions above are asserting "
+        "about fewer states than they name"
+    )
+    # And each one is genuinely unhealthy — a partition over arms that includes a
+    # green Health would be measuring something else entirely.
+    assert all(h.ok is False for h in arms.values())
 
 
 def test_a_state_with_nothing_to_do_about_it_is_silent_by_default() -> None:

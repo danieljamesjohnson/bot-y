@@ -153,7 +153,12 @@ def _control(
     refused: bool = False,
     store_id: str | None = None,
     store: str | None = None,
+    unresolved: bool = False,
 ) -> Result:
+    # `unresolved` defaults False for the reason the field itself does: "not
+    # established as unresolved", never "resolves". Every pre-existing caller in
+    # this file therefore keeps exercising the path where nothing about
+    # resolution was measured, which is the path the new arm must NOT fire on.
     watch = Watch(
         name=name,
         retailer=retailer,
@@ -161,7 +166,14 @@ def _control(
         control=True,
         store_id=store_id,
     )
-    return Result(watch, availability, detail="synthetic", refused=refused, store=store)
+    return Result(
+        watch,
+        availability,
+        detail="synthetic",
+        refused=refused,
+        store=store,
+        unresolved=unresolved,
+    )
 
 
 def test_a_refusal_names_the_refusal_and_claims_nothing_else() -> None:
@@ -499,6 +511,168 @@ def test_the_same_page_read_for_its_own_sku_is_healthy(bestbuy_pikachu: str) -> 
     assert reading.unresolved is False
     assert health.ok is True
     assert health.dead_control is False
+
+
+# --------------------------------------------------------------------------
+# REQ-24 criterion 1 — THREE STATES, DISTINCT, AND ASSERTED SEPARATELY
+#
+# "dead control", "refused" and "detector broken" are three different facts
+# about three different parties: our configuration, the retailer, and us. The
+# criterion's own word is DISTINCT, and three assertions sharing one body would
+# prove they are three LABELS rather than three STATES — so these are three
+# tests, not one parametrised sweep with three ids, and each one asserts what
+# the other two would have said is NOT what it says.
+# --------------------------------------------------------------------------
+
+
+def test_state_one_a_dead_control_is_a_fact_about_our_configuration() -> None:
+    """Our own file names a product that no longer exists. Nobody else is at fault."""
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="bestbuy", unresolved=True)]
+    )
+
+    assert health.ok is False
+    assert health.dead_control is True
+    assert "config/products.yaml" in health.reason
+    assert health.action == DEAD_CONTROL_ACTION
+    # NOT the refusal state: no challenge page came back.
+    assert health.refused is False
+    assert "refusing us" not in health.reason
+    # NOT the breakage state: the cause IS established, and this must not claim
+    # the retailer's readings are unverified on the strength of our own YAML.
+    assert CAUSE_UNKNOWN not in health.reason
+    assert "readings from this retailer are unverified" not in health.reason
+
+
+def test_state_two_a_refusal_is_a_fact_about_the_retailer() -> None:
+    """A challenge page came back. The extractor was never reached."""
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="bestbuy", refused=True)]
+    )
+
+    assert health.ok is False
+    assert health.refused is True
+    assert "refusing us" in health.reason
+    assert CAUSE_UNKNOWN in health.reason
+    # NOT the dead-control state: a refusal establishes nothing about
+    # resolution, and it must not name our config file as the remedy.
+    assert health.dead_control is False
+    assert "config/products.yaml" not in health.reason
+    assert health.action == ""
+    # NOT the breakage state either — that arm claims the reading was not
+    # refused, which is exactly the false sentence REQ-15 withdrew.
+    assert "was not refused" not in health.reason
+
+
+def test_state_three_a_page_that_could_not_be_read_is_a_fact_about_us() -> None:
+    """The page arrived and the extractor could not read it — the 2026-08-04 shape.
+
+    `unresolved` is False here BECAUSE the markup could not be read, which is
+    the producer's discriminator seen from the health end: this is the state the
+    dead-control arm must never absorb.
+    """
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="bestbuy", unresolved=False)]
+    )
+
+    assert health.ok is False
+    assert "unverified" in health.reason
+    assert CAUSE_UNKNOWN in health.reason
+    # NOT the dead-control state, and this is the assertion that matters most in
+    # this file: T-10-01 is telling an operator their config is broken when the
+    # retailer's markup is.
+    assert health.dead_control is False
+    assert "config/products.yaml" not in health.reason
+    # NOT the refusal state.
+    assert health.refused is False
+    assert "refusing us" not in health.reason
+    # And it stays silent, because there is nothing anybody can DO about it.
+    assert health.action == ""
+
+
+def test_the_three_states_produce_three_different_reasons() -> None:
+    """The complement of the three tests above: they must not converge.
+
+    Each of the three asserts a substring, and three assertions on substrings
+    can all pass against one sentence carrying all three. This is what makes
+    them distinct STATES rather than three readings of one message.
+    """
+    reasons = {
+        "dead": assess_health(
+            [_control(Availability.UNKNOWN, retailer="bestbuy", unresolved=True)]
+        )[0].reason,
+        "refused": assess_health(
+            [_control(Availability.UNKNOWN, retailer="bestbuy", refused=True)]
+        )[0].reason,
+        "broken": assess_health([_control(Availability.UNKNOWN, retailer="bestbuy")])[0].reason,
+    }
+
+    assert len(set(reasons.values())) == 3, f"two of the three states say the same thing: {reasons}"
+
+
+# --------------------------------------------------------------------------
+# REQ-24 — arm PRECEDENCE: dead ahead of the store gap
+#
+# `_is_store_gap` returns True whenever `watch.store_id is None`, which is true
+# in every process that does not load the daemon's EnvironmentFile — every test
+# and every dev shell. (QUESTIONS.md § 0f: the pin was supplied 2026-08-25 and
+# written to that file; it reaches the daemon at the next restart, which is
+# still deferred. Set on disk, not yet in effect.) So without the ordering, a
+# dead Walmart control reports as a store gap: the wrong remedy, in the right
+# file.
+# --------------------------------------------------------------------------
+
+
+def test_a_dead_walmart_control_with_no_pin_is_dead_and_not_a_store_gap() -> None:
+    """Both predicates match. A page about no product cannot be a page about the
+    wrong store, and deadness is the more specific fact as well as the one whose
+    remedy differs."""
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="walmart", store_id=None, unresolved=True)]
+    )
+
+    assert health.dead_control is True
+    assert health.action == DEAD_CONTROL_ACTION
+    assert health.action != STORE_PIN_ACTION
+    assert "store_id" not in health.reason, (
+        "a target that does not resolve was reported as an unpinned store — the "
+        "operator is sent to set a value that would change nothing"
+    )
+
+
+def test_a_walmart_control_whose_page_read_fine_is_still_a_store_gap() -> None:
+    """The half that makes the test above a PRECEDENCE test rather than a
+    store-gap regression.
+
+    Same retailer, same absent pin, same UNKNOWN — and nothing established about
+    resolution. The store arm must be exactly where it was.
+    """
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="walmart", store_id=None)]
+    )
+
+    assert health.dead_control is False
+    assert health.action == STORE_PIN_ACTION
+    assert "store_id" in health.reason
+    assert CAUSE_UNKNOWN not in health.reason
+
+
+def test_a_refusal_still_outranks_a_dead_control() -> None:
+    """The other side of the new arm's precedence, asserted rather than inferred.
+
+    `Result.unresolved` is never True on a refused reading, so this state is not
+    reachable through the producer — which is exactly why it is constructed by
+    hand here. The ORDERING is what has to hold after a future edit breaks the
+    invariant; a test that only relied on the invariant would gate nothing.
+    """
+    (health,) = assess_health(
+        [_control(Availability.UNKNOWN, retailer="bestbuy", refused=True, unresolved=True)]
+    )
+
+    assert health.refused is True
+    assert health.dead_control is False
+    assert "refusing us" in health.reason
+    assert health.action == ""
 
 
 # --------------------------------------------------------------------------

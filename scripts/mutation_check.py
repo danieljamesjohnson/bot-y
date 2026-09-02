@@ -697,9 +697,51 @@ MUTATIONS = (
     # test_a_health_state_nobody_has_written_yet_is_silent. M30: that section's
     # test_the_store_pin_gap_is_pushed_because_a_person_can_close_it, plus
     # tests/test_alert_text.py's
-    # test_exactly_one_arm_names_something_a_person_can_do. If either SURVIVES,
+    # test_only_the_arms_with_a_measured_remedy_name_something_a_person_can_do
+    # (renamed 2026-09-02 from test_exactly_one_arm_names_something_a_person_can_do
+    # — see the re-point note below; the OLD name is kept here so a reader
+    # searching the history for it lands somewhere true). If either SURVIVES,
     # the first thing to check is whether the paging decision acquired a second
     # gate somewhere — two gates on one rule means neither can be shown to bite.
+    #
+    # M30'S ANCHOR WAS RE-POINTED ON 2026-09-02 (10-01, REQ-24). It is the
+    # EIGHTH anchor in this registry to drift — after M2 (2026-08-04), M4
+    # (2026-08-11), M25 and M26 (both 2026-08-13), M33 (2026-08-17 and again
+    # 2026-08-28) and M36 (2026-08-17) — and the FOURTH to drift because the CODE
+    # it gates changed shape rather than because prose or a version literal
+    # moved.
+    #
+    # WHAT IT ANCHORED ON:
+    #     action=STORE_PIN_ACTION if store_gap else "",
+    # WHAT IT ANCHORS ON NOW — the `else` branch of the same conditional, which
+    # grew a second arm ahead of it:
+    #     else STORE_PIN_ACTION
+    #     if store_gap
+    #     else ""
+    #
+    # WHAT CHANGED AND WHY IT WAS UNAVOIDABLE. REQ-24 adds a dead-control arm
+    # that carries an action, so `action=` became a chained conditional and the
+    # old one-line literal matched nothing. `apply_mutation` RAISES on a missing
+    # anchor and this harness runs inside `make verify-offline`, so leaving it
+    # would have broken phase 10's own criterion-5 gate from wave 1 to wave 5 —
+    # and it would have read as that phase's regression rather than as an anchor
+    # that moved. It is therefore re-pointed in the SAME WAVE that moved it.
+    #
+    # NOTHING ABOUT WHAT M30 TESTS CHANGED. It still destroys exactly one
+    # behaviour: the STORE-PIN arm stops naming its remedy. The `replace` leaves
+    # the dead-control arm's action intact, so this stays a mutation about the
+    # store pin and does not silently become a mutation about "actions in
+    # general" — which would make its `breaks=` sentence false and its kill set
+    # somebody else's.
+    #
+    # ITS CITATION BELOW IS STILL TRUE AFTER THE RE-POINT, and that was checked
+    # rather than assumed: that test was renamed to
+    # `test_only_the_arms_with_a_measured_remedy_name_something_a_person_can_do`
+    # and extended to five arms in the same wave, and it still asserts that the
+    # store-gap arm carries `STORE_PIN_ACTION`, so it still dies when this
+    # mutation lands. What is no longer true is the OLD name's claim — the answer
+    # is now TWO, not one — and that correction is recorded in the test's own
+    # docstring in the dated form.
     Mutation(
         ident="M29",
         target="boty/cli.py",
@@ -710,8 +752,12 @@ MUTATIONS = (
     Mutation(
         ident="M30",
         target="boty/monitor.py",
-        search='                    action=STORE_PIN_ACTION if store_gap else "",',
-        replace='                    action="",',
+        search=(
+            "                        else STORE_PIN_ACTION\n"
+            "                        if store_gap\n"
+            '                        else ""\n'
+        ),
+        replace='                        else ""\n',
         breaks="the one health state a person can close stops saying so, so nothing reaches a phone at all — an unpinned or mismatched store leaves every Walmart reading UNKNOWN forever, silently, which is the suppression rule satisfied by deleting the monitor rather than the noise",
     ),
     # ------------------------------------------------------------------

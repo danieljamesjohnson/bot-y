@@ -872,6 +872,181 @@ def test_an_unresolved_sku_is_diagnosed_as_unresolved_not_as_our_parser(
     )
 
 
+# --------------------------------------------------------------------------
+# REQ-24 — the predicate that decides whether a target is UNRESOLVED
+#
+# A disjunction of two measured facts, and NEVER unparseable markup. Both
+# one-clause readings were measured wrong at planning time and the reasoning is
+# in `10-DECISIONS.md` § Collision 2; these are the gates that keep it settled.
+# --------------------------------------------------------------------------
+
+#: A page carrying `ld+json` that is PRESENT and cannot be parsed even after
+#: repair. The 2026-08-04 breakage was `\'` inside strings and a literal `\n`
+#: outside them, and `parse._repair_ldjson` now rescues exactly that — so
+#: rebuilding the episode byte-for-byte would produce a REPAIRED read and test
+#: the repair rather than the discriminator. This is the class the episode
+#: belongs to: markup the retailer served, which we could not read. That is the
+#: honest reconstruction and the difference is stated rather than glossed.
+_UNPARSEABLE_BEST_BUY_MARKUP = (
+    '<link rel="canonical" href="https://www.bestbuy.com/product/x/J7GSL4G7GQ/sku/6216393">'
+    + '<script type="application/ld+json">{"@type":"Product","sku":"6216393", NOPE</script>' * 3
+)
+
+
+def _bestbuy_verdict(html: str, sku: str, *, name: str = "ctl", control: bool = True):
+    """`_verdict_from_html` bound exactly as `check_bestbuy_browser` binds it."""
+    return retailers._verdict_from_html(
+        Watch(name=name, retailer="bestbuy", target=sku, control=control),
+        html,
+        url=retailers.bestbuy_product_url(sku),
+        first_party_only=True,
+        rung=Rung.BROWSER,
+        sku=sku,
+    )
+
+
+def test_the_2026_08_04_false_dead_is_not_a_dead_control() -> None:
+    """A page that could not be READ never establishes that a product does not EXIST.
+
+    On 2026-08-04 Best Buy's control went UNKNOWN with
+    "sku 6216393 did not resolve to a product page" while that SKU was
+    PERFECTLY ALIVE: three `ld+json` blocks present, zero parsed. That is
+    criterion 1's THIRD state (the page arrived and the extractor could not read
+    it) wearing the FIRST state's message, and it is this repository's own
+    precedent for the mistake REQ-24 could otherwise ship pointed the other way.
+
+    So the message is allowed to stay — it was true, and it is what the reader
+    needs — while the FACT is withheld. That split is the whole point of putting
+    the diagnosis on a field instead of leaving it in prose.
+    """
+    result = _bestbuy_verdict(_UNPARSEABLE_BEST_BUY_MARKUP, "6216393")
+
+    # It IS still a failing reading, and the summary still says why. An arm that
+    # met this test by reporting nothing at all would fail REQ-15 instead.
+    assert result.availability is Availability.UNKNOWN
+    assert "unparseable" in result.detail
+    assert result.unresolved is False, (
+        "unparseable markup was read as a dead control — T-10-01, and the "
+        "2026-08-04 episode repeated with our own mechanism"
+    )
+
+
+def test_clause_a_the_retailer_says_you_are_on_a_search_page(
+    bestbuy_unresolved_sku: str,
+) -> None:
+    """Best Buy's answer to a SKU matching nothing, from the capture of it.
+
+    This page carries ZERO `ld+json` blocks — measured, not assumed — so clause
+    B cannot reach it and clause A is the only thing that can. Without this test
+    the canonical half of the predicate could be deleted and everything else
+    here would stay green.
+    """
+    assert parse.ldjson_read(bestbuy_unresolved_sku, sku="6577129").blocks == 0, (
+        "this capture grew structured markup, so it no longer proves clause A "
+        "in isolation — re-measure before trusting this test"
+    )
+
+    result = _bestbuy_verdict(bestbuy_unresolved_sku, "6577129")
+
+    assert result.unresolved is True
+    assert result.availability is Availability.UNKNOWN
+
+
+def test_clause_b_a_real_product_page_read_for_a_foreign_sku(
+    bestbuy_pikachu: str,
+) -> None:
+    """The other half, from the other capture — and its canonical is a PRODUCT path.
+
+    So clause A cannot reach it either. The two clauses are proved by two
+    captures that each fail the other's condition, which is what makes the
+    disjunction a disjunction rather than one clause with a spare.
+    """
+    canonical = parse.canonical_url(bestbuy_pikachu)
+    assert canonical is not None and "/product/" in canonical
+
+    result = _bestbuy_verdict(bestbuy_pikachu, "6577129")
+
+    assert result.unresolved is True
+    assert parse.ldjson_read(bestbuy_pikachu, sku="6577129").blocks == 3
+
+
+def test_the_residual_no_canonical_and_no_structure_is_not_a_dead_control() -> None:
+    """THE NAMED RESIDUAL, pinned so `10-03` can cite it as Best Buy's D5 PARTIAL.
+
+    A page with neither a canonical link nor parseable structure is not
+    distinguishable at this layer from a reskin, a partial render or a soft
+    block that matched no known challenge phrase. It keeps today's verdict.
+
+    WHAT THAT COSTS, asserted rather than only admitted: a page whose markup is
+    broken AND whose product is genuinely gone reads as a detector failure. That
+    is the wrong answer and the right direction, because it CLAIMS LESS.
+    """
+    reskin = "<html><body><h1>Best Buy</h1><p>nothing structured here</p></body></html>"
+
+    result = _bestbuy_verdict(reskin, "6216393")
+
+    assert parse.canonical_url(reskin) is None
+    assert parse.ldjson_read(reskin, sku="6216393").blocks == 0
+    assert result.availability is Availability.UNKNOWN
+    assert result.unresolved is False, (
+        "a page this code cannot read anything off was reported as proof that "
+        "the product does not exist"
+    )
+
+
+def test_a_refusal_establishes_nothing_about_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The `Blocked` arm, untouched by REQ-24 and asserted to have stayed so.
+
+    A refusal means NO PAGE CAME BACK, so nothing about whether the target
+    resolves could have been established — the same first line `_is_store_gap`
+    opens with, and the reason the refusal arm keeps its precedence.
+    """
+    _raise_rendered(monkeypatch, Blocked("rendered challenge page matched 'robot or human'"))
+
+    result = retailers.check_bestbuy_browser(_bestbuy_watch())
+
+    assert result.refused is True
+    assert result.unresolved is False, (
+        "a refusal claimed to establish that a product does not exist"
+    )
+
+
+def test_refused_and_unresolved_are_never_both_true_on_one_result(
+    monkeypatch: pytest.MonkeyPatch,
+    bestbuy_pikachu: str,
+    bestbuy_unresolved_sku: str,
+) -> None:
+    """The invariant, as a general property over every path this adapter has.
+
+    Asserted across a refusal, a transport failure, a resolving read, a
+    non-resolving read and an unreadable page rather than at one site, because
+    the invariant is about the pair and a per-site assertion cannot see a pair.
+    """
+    _raise_rendered(monkeypatch, Blocked("challenge"))
+    refusal = retailers.check_bestbuy_browser(_bestbuy_watch())
+    _raise_rendered(monkeypatch, FetchError("chrome exited with status 127"))
+    transport = retailers.check_bestbuy_browser(_bestbuy_watch())
+
+    results = {
+        "a refusal": refusal,
+        "a transport failure": transport,
+        "a resolving read": _bestbuy_verdict(bestbuy_pikachu, "6216393"),
+        "a non-resolving read": _bestbuy_verdict(bestbuy_unresolved_sku, "6577129"),
+        "an unreadable page": _bestbuy_verdict(_UNPARSEABLE_BEST_BUY_MARKUP, "6216393"),
+    }
+
+    for description, result in results.items():
+        assert not (result.refused and result.unresolved), (
+            f"{description}: a Result claimed both that no page came back and "
+            "that the page named no matching product"
+        )
+    # And the pair is not vacuously satisfied by nothing ever being set.
+    assert results["a non-resolving read"].unresolved is True
+    assert results["a refusal"].refused is True
+
+
 def test_blocked_browser_render_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bot wall that renders is still a bot wall, not an out-of-stock reading."""
     _raise_rendered(monkeypatch, Blocked("rendered challenge page matched 'robot or human'"))

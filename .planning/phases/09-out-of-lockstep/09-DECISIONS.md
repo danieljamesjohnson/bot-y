@@ -697,6 +697,21 @@ Span is **7994 bytes** — from the newline before `    def current_interval(` u
 newline before the next `    def `, i.e. the decorator-free method block including its trailing blank
 line, hashed as UTF-8 with no normalisation.
 
+> **Correction recorded beside, 2026-09-02 (`10-01`), not edited away.** The span is **7994
+> CHARACTERS and 8018 BYTES**. `len(m.group(0))` is 7994; `len(m.group(0).encode())` is 8018 — the
+> block contains non-ASCII (em dashes, `é`), so the two differ by 24. The sentence above says
+> *bytes* about the character count.
+>
+> **The digest is unaffected and the recipe is exactly right.** `.encode()` is applied before
+> hashing in the code block above, so the hash was always taken over the 8018 bytes;
+> `6da39ac5d77ecd98cae80651c3b4d539253e88a1704fb4b1e814e6bf93449108` re-verified again on
+> 2026-09-02 from `10-01`'s working tree, unchanged.
+>
+> Recorded because the number is a *cross-check* — the one a future verifier reaches for when the
+> digest does NOT match, to find out whether they extracted the wrong span. A reader who measured
+> `len(...encode())` and got 8018 would have concluded the span had drifted and gone looking for a
+> change to `boty/pacing.py` that never happened.
+
 **Re-verified 2026-09-02 against the tree at the phase-9 close:
 `6da39ac5d77ecd98cae80651c3b4d539253e88a1704fb4b1e814e6bf93449108`** — identical to the literal
 09-02 recorded, and identical on every check made during waves 2, 3, 4 and 5. The gate was also
