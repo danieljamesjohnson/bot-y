@@ -910,10 +910,10 @@ after crossing a web form.
   mode 600 and a placeholder):
 
 ```
-BOTY_NOTIFY_URL=tgram://<new-bot-token>/8119711705
+BOTY_NOTIFY_URL=tgram://<new-bot-token>/<your-chat-id>
 ```
 
-The chat id `8119711705` is from your script and should still be valid.
+The chat id `<your-chat-id>` is from your script and should still be valid.
 
 Until this is set, `boty watch` runs and logs normally but sends nothing. The
 systemd unit is wired and will pick it up on next restart:

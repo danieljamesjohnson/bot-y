@@ -8,6 +8,11 @@ to be in stock, and its line is why you can believe the product's one.
 
 ## Why another one
 
+First, what it is: a personal notification tool for one product. It reads the
+pages a shopper would, defaults to first-party sellers only, polls every five
+minutes, and never adds to cart or checks out — see *Being a good citizen*
+below.
+
 The big-retailer monitors on GitHub stopped getting real commits in 2021–22,
 exactly when Akamai and PerimeterX got serious. bot-y is built around three
 things they get wrong.
