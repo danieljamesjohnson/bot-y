@@ -712,8 +712,28 @@ def watch_loop(
     *,
     cycles: int | None = None,
     sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> int:
-    """Poll forever. `cycles` and `sleep` exist so tests can bound and observe it.
+    """Poll forever. `cycles`, `sleep` and `monotonic` let tests bound and observe it.
+
+    `monotonic` IS INJECTABLE FOR THE SAME REASON `sleep` IS, and it was added on
+    2026-09-09 because leaving it un-injectable made a gate environment-dependent.
+    The cycle-duration term below is REAL WALL TIME — that is the point of it in
+    production, and it is why `due_at` stopped drifting behind `refused_at`. But a
+    test that drives a simulated DAY through a fake `sleep` then has a schedule
+    that depends on how fast the machine ran, and the same assertion passes here
+    and fails on a slower runner.
+
+    MEASURED, and this is the defect that forced the parameter:
+    `test_each_retailer_is_asked_the_same_number_of_times_a_day_as_before` passed
+    locally and failed in CI at `04cd831`, on `amazon: 49` against the recorded
+    `48`. Amazon at 1800 s over an 86 400 s day is EXACTLY 48 fires, so it sits on
+    a boundary any extra simulated time tips. Reproduced by injecting a synthetic
+    delay into `time.monotonic`: **0 ms passes; 5, 10, 20 and 50 ms all fail.**
+
+    So the term stays in production and the tests stop being timed by the host.
+    A test that wants to prove the term is ADDED injects a clock that advances;
+    a test that wants a deterministic schedule injects one that does not.
 
     `cycles=None` is the production behaviour — run until killed. Passing a
     number runs exactly that many polls and returns, which is what lets the
@@ -801,7 +821,7 @@ def watch_loop(
         # it burned. A failing cycle costs real seconds too, and charging the
         # clock only for cycles that succeeded would reintroduce the same drift
         # on exactly the path `FAILURES_BEFORE_GIVING_UP` is about.
-        cycle_started = time.monotonic()
+        cycle_started = monotonic()
         try:
             warned = watch_cycle(cfg, checker, state, warned, pacer=pacer, now=scheduled_now)
             consecutive_failures = 0
@@ -851,7 +871,7 @@ def watch_loop(
         # cost plus the wait. `sleep(delay)` under a fake sleep returns instantly,
         # so folding the sleep into a single monotonic delta would silently make
         # the delay term zero in every test in this file.
-        cycle_duration = time.monotonic() - cycle_started
+        cycle_duration = monotonic() - cycle_started
         # Jitter so we do not hammer on a fixed cadence, which is itself a signal.
         #
         # A TICK RATHER THAN A CADENCE SINCE 2026-09-01, REQ-23. This read

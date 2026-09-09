@@ -1768,20 +1768,32 @@ def test_the_pacer_clock_advances_by_the_time_the_check_pass_really_took(
     every window. `target` sat at 46 refusals on that date, past the threshold of
     30, so this bound on a real retailer rather than a hypothetical one.
 
-    WHY THIS TEST INJECTS A SLOW CYCLE RATHER THAN READING THE CONSTANT. The
-    defect is not a wrong number anywhere; it is a missing term. Only a cycle
-    that actually consumes wall time can tell `+= delay` apart from
-    `+= delay + duration`, which is why the pass below sleeps for real.
+    WHY THIS TEST DRIVES A CLOCK RATHER THAN READING THE CONSTANT. The defect is
+    not a wrong number anywhere; it is a MISSING TERM, and only a cycle that
+    consumes measurable time can tell `+= delay` apart from `+= delay + duration`.
+
+    IT DRIVES AN INJECTED CLOCK RATHER THAN SLEEPING FOR REAL — changed
+    2026-09-09, and the reason is this file's own bug. The first version of this
+    test called `time.sleep(0.05)` inside the cycle, which made it a test about
+    how fast the host is. That is exactly the property that made
+    `test_each_retailer_is_asked_the_same_number_of_times_a_day_as_before` pass
+    here and fail in CI. A gate against a timing defect must not itself be timed
+    by the machine, so the duration is now STATED (`_CYCLE_COST`) and the
+    assertion is an equality rather than a `>=` tolerance absorbing scheduler
+    noise. It also stops this test costing 0.15 s of real sleep.
     """
+    _CYCLE_COST = 0.05
+    ticks = iter(range(10_000))
+    clock = lambda: next(ticks) * _CYCLE_COST  # noqa: E731
+
     seen: list[float] = []
     real_cycle = cli.watch_cycle
 
-    def _slow_cycle(cfg_, checker, state_, warned, *, pacer, now):  # type: ignore[no-untyped-def]
+    def _cycle(cfg_, checker, state_, warned, *, pacer, now):  # type: ignore[no-untyped-def]
         seen.append(now)
-        time.sleep(0.05)
         return real_cycle(cfg_, checker, state_, warned, pacer=pacer, now=now)
 
-    monkeypatch.setattr(cli, "watch_cycle", _slow_cycle)
+    monkeypatch.setattr(cli, "watch_cycle", _cycle)
     delays: list[float] = []
     state = State.load(cfg.state_path)
 
@@ -1791,12 +1803,13 @@ def test_the_pacer_clock_advances_by_the_time_the_check_pass_really_took(
         state,
         cycles=3,
         sleep=lambda s: delays.append(s),
+        monotonic=clock,
     )
 
     assert len(seen) == 3, seen
     for i in range(len(seen) - 1):
         advance = seen[i + 1] - seen[i]
-        assert advance >= delays[i] + 0.04, (
+        assert advance == pytest.approx(delays[i] + _CYCLE_COST, abs=1e-9), (
             f"cycle {i}: the pacer's clock advanced {advance:.4f}s while the "
             f"cycle really consumed {delays[i] + 0.05:.4f}s of wall time — the "
             f"check pass's own duration was never added back, so `due_at` "
@@ -2125,6 +2138,29 @@ def configured_fleet_cfg(fleet_cfg: Config) -> Config:
     return replace(fleet_cfg, retailer_intervals=dict(_FLEET_OVERRIDES))
 
 
+#: A clock that does not move, injected into `watch_loop` wherever a test drives a
+#: SIMULATED span and asserts on the schedule that comes out.
+#:
+#: WHY THIS EXISTS, 2026-09-09. `watch_loop` advances the pacer by
+#: `delay + cycle_duration`, and `cycle_duration` is REAL WALL TIME. In production
+#: that is the whole point — it is what stopped `due_at` drifting behind
+#: `refused_at`. In a test driving 1728 wakes through a fake `sleep` it means the
+#: simulated schedule is timed by the host, and the same assertion passes on one
+#: machine and fails on another.
+#:
+#: MEASURED, and it is why this is a frozen clock rather than a tolerance:
+#: `test_each_retailer_is_asked_the_same_number_of_times_a_day_as_before` passed
+#: here and FAILED in CI at `04cd831` on `amazon: 49` against the recorded `48`.
+#: Amazon at 1800 s over an 86 400 s day is EXACTLY 48 fires, so it sits on a
+#: boundary any extra simulated time tips. Reproduced by injecting a synthetic
+#: delay into `time.monotonic`: 0 ms passed; 5, 10, 20 and 50 ms all failed.
+#:
+#: Widening the assertion to a range was available and is refused: the literals are
+#: `09-DECISIONS.md`'s recorded BEFORE-numbers, and a criterion that says counts are
+#: UNCHANGED is not answered by counts that are nearly unchanged.
+_FROZEN_CLOCK = lambda: 0.0  # noqa: E731
+
+
 def _asked_per_wake(cfg: Config, cycles: int, seed: int) -> list[int]:
     """Drive `watch_loop` and record how many retailers each wake actually asked.
 
@@ -2140,7 +2176,12 @@ def _asked_per_wake(cfg: Config, cycles: int, seed: int) -> list[int]:
 
     random.seed(seed)
     cli.watch_loop(
-        cfg, _checker(Availability.OUT_OF_STOCK), State.load(cfg.state_path), cycles=cycles, sleep=_count
+        cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        State.load(cfg.state_path),
+        cycles=cycles,
+        sleep=_count,
+        monotonic=_FROZEN_CLOCK,
     )
     return counts
 
@@ -2535,6 +2576,7 @@ def test_each_retailer_is_asked_the_same_number_of_times_a_day_as_before(
         State.load(configured_fleet_cfg.state_path),
         cycles=_WAKES_PER_DAY,
         sleep=_count,
+        monotonic=_FROZEN_CLOCK,
     )
 
     assert dict(sorted(counted.items())) == _BEFORE_PER_RETAILER_PER_DAY, (
