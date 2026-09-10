@@ -3498,3 +3498,91 @@ def test_a_numeric_sale_price_still_arrives_as_a_float(
     whole = retailers.check_bestbuy_api(_bestbuy_watch(), API_KEY).price
     assert whole == 59.0
     assert isinstance(whole, float)
+
+
+# --------------------------------------------------------------------------
+# The false dead: a document that never rendered is not a missing product
+# --------------------------------------------------------------------------
+
+
+def test_the_live_search_shell_is_not_reported_as_a_dead_control() -> None:
+    """The 2026-09-10 capture, as a gate. REAL bytes, not a synthetic shell.
+
+    `tests/fixtures/bestbuy/search-shell-2026-09-10.html` is what Best Buy's SKU
+    search actually returned through this project's rung-3 transport on
+    2026-09-10, under `QUESTIONS.md` § 0h: **23,292 bytes with no `<body>` at
+    all**, zero `ld+json` blocks, title `6216393 - Best Buy`, and no mention of
+    the product anywhere in it.
+
+    **THE SKU IS ALIVE.** Read 3 of § 0g read `IN_STOCK $59.99` off its product
+    URL eight days earlier. So every `unresolved=True` this document produced was
+    a false dead, said confidently about a product that is on sale.
+
+    WHY THE FIX WAS TO WITHDRAW CLAUSE A RATHER THAN REPAIR IT. Clause A asked
+    whether the page's canonical points at the search endpoint. A shell served AT
+    the search URL carries that canonical whether or not the product exists, so
+    the test cannot distinguish the two cases and never could. `10-04`
+    recommended rescuing it by following the `NEXT_REDIRECT` the shell announced
+    — and this capture contains **zero** occurrences of `NEXT_REDIRECT`,
+    `http-equiv` or `/product/`. That signal existed on 2026-09-02 and was gone
+    eight days later.
+
+    THIS GATE ASSERTS THE DIRECTION, NOT THE STOCK STATE. It does not claim the
+    control is in stock; the availability stays UNKNOWN, which is the honest
+    reading of a document that did not render. It asserts only that the monitor
+    does not say the product is GONE.
+    """
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "bestbuy"
+    html = (fixtures / "search-shell-2026-09-10.html").read_text()
+
+    assert "<body" not in html, "precondition: the captured shell never rendered a body"
+    assert "NEXT_REDIRECT" not in html, "precondition: 10-04's redirect signal is absent"
+
+    watch = Watch(name="CONTROL", retailer="bestbuy", target="6216393", control=True)
+    result = retailers._verdict_from_html(
+        watch,
+        html,
+        url="https://www.bestbuy.com/site/searchpage.jsp?id=pcat17071&st=6216393",
+        first_party_only=True,
+        rung=3,
+        sku="6216393",
+    )
+
+    assert result.unresolved is False, (
+        "a live sku was reported as a dead control off a document that never "
+        f"rendered — the false dead measured on 2026-09-02 and 2026-09-10: {result.detail!r}"
+    )
+    assert result.availability is Availability.UNKNOWN, (
+        "the honest reading of an unrendered page is UNKNOWN — not in stock, and "
+        "not out of stock"
+    )
+
+
+def test_a_rendered_search_page_with_no_product_is_still_a_dead_control() -> None:
+    """The other side of the gate, and why it is a gate and not a deletion.
+
+    Withdrawing clause A outright was available and is refused: it would have
+    cost Best Buy its dead-control signal entirely. `unresolved-sku.html` is a
+    FULLY RENDERED search-results page — 921,732 B, `<body>` present — carrying
+    no product for the sku asked about. That is real evidence of deadness, and it
+    has to survive the fix that removes the false one.
+    """
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "bestbuy"
+    html = (fixtures / "unresolved-sku.html").read_text()
+
+    assert "<body" in html.lower(), "precondition: this capture DID render"
+
+    watch = Watch(name="ctl", retailer="bestbuy", target="6577129", control=True)
+    result = retailers._verdict_from_html(
+        watch,
+        html,
+        url="https://www.bestbuy.com/site/searchpage.jsp?st=6577129",
+        first_party_only=True,
+        rung=3,
+        sku="6577129",
+    )
+
+    assert result.unresolved is True, (
+        "gating clause A on rendering also disarmed it on a page that DID "
+        f"render — dead-control detection is gone, not fixed: {result.detail!r}"
+    )

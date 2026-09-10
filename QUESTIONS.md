@@ -1,5 +1,70 @@
 # Blocked on Dan
 
+## 0h. Two live Best Buy reads to confirm the transport fix — ANSWERED 2026-09-10: **go ahead**
+
+**The question.** Phase 10 found that Best Buy's SKU search now answers with a **client-side**
+redirect (`NEXT_REDIRECT;replace;/product/…/sku/6216393;308;`), so `fetch_rendered` snapshots the
+announcing shell — no ld+json, canonical still on the search endpoint — which is clause A's exact
+predicate. **Clause A therefore returns a FALSE DEAD for every Best Buy SKU, alive or dead.** The
+remedy (follow the `NEXT_REDIRECT` payload to the product URL) was named and deliberately **not
+shipped**, because 0g's three reads were spent and this repository does not ship a control path on
+fixture confidence.
+
+**Dan's answer, 2026-09-10:** *"go ahead do it"* — authorising the two reads proposed to him:
+
+> "I'd want **2 reads** to confirm it: one against the incumbent control through the fixed
+> transport, one against a known-dead SKU to prove it still reports dead rather than reporting
+> everything alive."
+
+**The terms, binding on this work:**
+
+- **At most TWO live requests, Best Buy ONLY, spaced.** Not Amazon, Target, Walmart, GameStop or
+  Nintendo.
+- **Read ① — the incumbent control (6216393) through the FIXED transport.** Expect `IN_STOCK`;
+  read ③ of 0g already proved the product URL returns `IN_STOCK $59.99`, so this confirms the
+  *transport*, not the product.
+- **Read ② — a known-dead SKU.** This is the one that matters: it proves the fix reports **dead**
+  rather than reporting everything alive. A fix that turns a false dead into a false *alive* is
+  worse than the defect, because this project's core value is never saying "in stock" when the
+  truth is "I couldn't tell".
+- **Any navigation that leaves this host is SPENT**, whatever it returns. Only a pre-navigation
+  failure (no browser) is exempt, **once**.
+- **A refusal IS the measurement**, recorded as one rather than retried around.
+- **No `boty check`** (it requests every retailer and writes the daemon's live `status.json`), no
+  write to `state.json` / `pacer-state.json` / `served/boty/status.json`, no `systemctl restart`.
+
+**Why two and not one.** One read confirms the happy path and would ship a transport that might
+call every SKU alive. The second is the only one that distinguishes *fixed* from *inverted*.
+
+### OUTCOME, 2026-09-10 — both reads spent, and they overturned the fix they were meant to confirm
+
+**Read ① (13.8 s, spent): the proposed fix DID NOT WORK.** The incumbent control still came back
+`unresolved=True` through the "fixed" transport. The fix had been built against the evidence log's
+*transcription* of a `NEXT_REDIRECT`, not against a capture.
+
+**Read ② reallocated, and the reallocation was stated before it was spent.** Testing a dead SKU is
+pointless while the fix fails on a live one, so the last read was spent **capturing the shell** —
+the durable asset, since it lets this be worked offline forever instead of costing a read per
+attempt. Captured to `tests/fixtures/bestbuy/search-shell-2026-09-10.html`.
+
+**What the capture showed, and it overturns 10-04's remedy as well as mine:** 23,292 bytes, **no
+`<body>` at all**, 0 `ld+json` blocks, title `6216393 - Best Buy`, and **zero** occurrences of
+`NEXT_REDIRECT`, `http-equiv`, `refresh` or `/product/`. The redirect signal 10-04 measured on
+2026-09-02 was **gone eight days later**. Following it would have shipped the next false dead on the
+day it changed again.
+
+**The real defect was one level down.** Clause A asked where the canonical points; a document served
+AT the search URL carries that canonical whether or not the product exists, so it could never
+distinguish the two cases. The discriminator, measured across three captures, is **whether the page
+rendered at all** — `unresolved-sku.html` is 921,732 B *with* a body and no product (genuinely dead,
+still detected); the shell is 23,292 B with *no* body (never rendered, nothing concludable).
+
+**Shipped:** clause A gated on `<body>` presence. The false dead is gone, dead-control detection
+survives, and no speculative redirect-following code was shipped. **Zero further reads are
+authorised.**
+
+---
+
 ## 0g. Live Best Buy control reads for Phase 10 — ANSWERED 2026-09-02: **up to 3, Best Buy only**
 
 **The question, and why it had to be asked.** Phase 10's criterion 3 requires Best Buy's control to

@@ -448,6 +448,51 @@ def _verdict_from_html(
                 canonical is not None and urlsplit(canonical).path == urlsplit(url).path
             )
             markup_was_read = ld.blocks > 0 and ld.unparseable == 0
+            # CLAUSE A IS NOW GATED ON THE PAGE HAVING RENDERED — 2026-09-10.
+            # The paragraph above is left unedited: it was true when written and
+            # is still true of a document that rendered.
+            #
+            # WHAT WAS WRONG. Clause A asks whether the canonical points at the
+            # search endpoint rather than at a product. A document served AT the
+            # search URL carries that canonical whether or not the product
+            # exists — so on a document that never rendered it is not evidence of
+            # deadness, it is evidence of where the bytes came from. That is how
+            # a LIVE sku was reported as a dead control, twice on 2026-09-02 and
+            # again on 2026-09-10.
+            #
+            # THE DISCRIMINATOR, MEASURED ACROSS THREE CAPTURES rather than
+            # argued. This is what separates the two cases, and the canonical
+            # never could:
+            #
+            #   unresolved-sku.html            921,732 B   <body> YES   ld+json 0
+            #     a FULLY RENDERED search-results page carrying no product.
+            #     Genuinely dead, and it must stay detected.
+            #   pikachu-control.html         1,138,265 B   <body> YES   ld+json 3
+            #     the product page for a live sku.
+            #   search-shell-2026-09-10.html    23,292 B   <body> NO    ld+json 0
+            #     what Best Buy's search actually returned under QUESTIONS.md
+            #     § 0h. That sku is ALIVE — § 0g read `IN_STOCK $59.99` off its
+            #     product URL eight days earlier — so every `unresolved` taken
+            #     off this document was a false dead.
+            #
+            # A page with no `<body>` did not render, and a reading taken from it
+            # cannot support any claim about whether a product exists. The
+            # question is therefore not "where does the canonical point" but
+            # "did we see the page at all", and the second gates the first.
+            #
+            # 10-04's RECOMMENDED REMEDY IS WITHDRAWN UNSHIPPED, on the same
+            # capture. It proposed following the `NEXT_REDIRECT` the shell
+            # announced on 2026-09-02; the 2026-09-10 capture contains ZERO
+            # occurrences of `NEXT_REDIRECT`, `http-equiv`, `refresh` or
+            # `/product/`. That signal lasted eight days. Rescuing an unsound
+            # test with a signal that short-lived would have shipped the next
+            # false dead on the day it changed again, so the fix is the durable
+            # property (did it render) and not the transient one (what did it
+            # announce).
+            #
+            # CLAUSE B NEEDS NO GATE and is untouched: it requires
+            # `ld.blocks > 0`, which a document that never rendered cannot meet.
+            page_rendered = "<body" in html.lower()
             return Result(
                 watch,
                 Availability.UNKNOWN,
@@ -462,7 +507,7 @@ def _verdict_from_html(
                 store=store,
                 shipping=None,
                 read_at=read_at,
-                unresolved=canonical_is_the_search_endpoint or markup_was_read,
+                unresolved=page_rendered and (canonical_is_the_search_endpoint or markup_was_read),
             )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way
