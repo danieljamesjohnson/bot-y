@@ -1,7 +1,27 @@
 ---
 phase: 08-stop-knocking
 verified: 2026-08-31T14:10:00Z
-status: human_needed
+status: passed
+# status was `human_needed` from 2026-08-31 until 2026-09-11. Both human items are now
+# resolved and `08-UAT.md` is closed, so the frontmatter is advanced to match the record.
+#
+# IT IS NOT A CLEAN "BOTH PASSED", AND SAYING SO IS THE POINT. Item 1 — restart the daemon
+# and confirm the cool-off is in force — is PASSED in its load-bearing half: the restart
+# happened 2026-09-11 07:56:33, state migrated 13 -> 13 with zero lost, and the new code is
+# proved live (status.json rewritten twice inside 70 s, where the pre-phase-9 loop wrote
+# every ~300 s). The cool-off ITSELF is still unobserved on the wire: it needs 30 consecutive
+# refusals and the live counts are amazon 10 / target 18. Recorded as unobserved, not claimed.
+#
+# Item 2 — look at a live cool-off row on the dashboard — is NOT OBSERVABLE and is counted as
+# SKIPPED rather than passed. Best Buy's control is not being read at all (remembered row,
+# checked=false, ~24 000 min old: the unrendered-shell problem), so there is no live row to
+# look at. 2026-09-10's fix makes the monitor honest about that without making Best Buy
+# readable, and those are different claims.
+#
+# So `passed` here means "no human item is outstanding", which is what the field gates. It
+# does NOT mean every item was observed, and the two that were not are named above rather
+# than absorbed into the word.
+human_verification_resolved: 2026-09-11
 score: 6/6 must-haves verified — 4 MET AS WRITTEN, 2 MET IN PART (criteria 2 and 5)
 behavior_unverified: 0
 overrides_applied: 0
