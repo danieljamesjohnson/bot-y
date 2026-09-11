@@ -211,7 +211,7 @@ Full verdict table with citations: `09-05-SUMMARY.md`. Decisions: `09-DECISIONS.
 |---|---|---|
 | 1 | **MET AS WRITTEN** | **50.0 s** separation, written out at `_MIN_SEPARATION_SECONDS` and asserted on the *schedule* — never a wall clock. Hand-written rather than recomputed from the code under test, because a test that recomputes its expectation asserts only that the code agrees with itself |
 | 2 | **MET AS WRITTEN** | Independence in **both** directions, as two tests rather than one — the interval direction fails at `_standing_interval`/`slot_offset`, the backoff direction at `current_interval`, and a combined test would name the wrong one |
-| 3 | **MET AS WRITTEN** | **6 → 2** retailers in any 60 s window over a simulated day. 09-01 took the *before* against unmodified code in its own wave, because the number is unobtainable afterwards. **2 is also the arithmetic floor** — 6 × 60 s > 300 s forces some window to hold two — so a claim of 1 was never available |
+| 3 | **MET AS WRITTEN** *(see the 2026-09-11 correction below)* | **6 → 2** retailers in any 60 s window over a simulated day. 09-01 took the *before* against unmodified code in its own wave, because the number is unobtainable afterwards. **2 is also the arithmetic floor** — 6 × 60 s > 300 s forces some window to hold two — so a claim of 1 was never available |
 | 4a | **MET AS WRITTEN** | Per-retailer daily counts and the backoff/cool-off ladder unchanged under the new tick |
 | 4b | **MET IN PART** | `boty check`'s 2-minute REQ-08 budget is **BOUNDED, not re-measured** — `boty check` makes live retailer requests and writes the daemon's live `status.json`, and this phase makes none. **The verdict was committed in `09-DECISIONS.md` § Collision 8 BEFORE the attempt**, not promoted after one disappointed |
 | 5 | **MET AS WRITTEN** | **M43** registered and observed **CAUGHT** (5-test kill set); registry 38 → **39**, `M21`–`M24` still empty, `INTENTIONAL GAP` 8 → 9 |
@@ -251,6 +251,35 @@ count is the same class of error as a rounded-up verdict.
 
 **NOT ON THE WIRE.** Phase 9 reaches the daemon only at `sudo systemctl restart boty` — Dan's action,
 still deferred with Phase 8's.
+
+**VERIFIED INDEPENDENTLY 2026-09-11, LATE, AND IT FOUND THREE ERRORS IN THIS RECORD — ALL MINE.**
+`09-VERIFICATION.md`, status **gaps_found**, score **5/7**. This phase closed WITHOUT a verifier: the
+table above was the orchestrator's own assessment written from the wave summaries, and that is exactly
+why it needed checking. The goal as worded IS met — six-in-a-window is gone. Three claims beside it
+were not true as stated:
+
+1. **CRITERION 1 IS AMENDED TO MET IN PART.** The 50.0 s bound holds on `due_at` — the next-attempt
+   *position* — and only there. **At DISPATCH** it does not: under the loop's own ±15% jitter and
+   `due()`'s half-tick (25 s) grace, two retailers on the same 300 s cadence can still be asked at one
+   wake. The criterion says *"are not dispatched inside the same short window"*, so as worded it is
+   not met, and no test asserts a dispatch-level separation for a coinciding pair. Recorded here
+   rather than by rewording the criterion.
+2. **"2 is the arithmetic floor (6 × 60 > 300), so a claim of 1 was never available" IS FALSE.** Only
+   **four** of the six retailers are on the 300 s cadence, not six, so the arithmetic does not hold
+   and a schedule with max 1 and unchanged counts exists. I asserted an impossibility that is not
+   impossible. The measured **2** stands as a measurement; the *floor* argument beside it is withdrawn.
+3. **"6 → 2" drops a figure its own plans recorded.** 2 is the max per WAKE; over any rolling 60 s
+   window the measured figure is **3**, recorded by 09-02 and 09-05 and omitted here. The honest
+   summary is 6 → 2 per wake, 3 per 60 s.
+
+**One more weakness worth carrying, on criterion 4a.** The day-long count test matches 48/96/288 at
+**1 of 21 seeds — its own.** It has no denominator, and its "day" spans 86,107–86,702 s across 1728
+jittered wakes, so the equality depends on the seed. That is the same brittleness the 2026-09-08 CI
+failure exposed, one layer up, and it is recorded rather than repaired.
+
+**Criterion 4b's MET IN PART was confirmed correct**, including that the verdict was committed in
+`09-DECISIONS.md` *before* the attempt. Criteria 2, 3, 5 and the standing invariants all VERIFIED —
+the `current_interval` digest is byte-identical at the pre-phase commit, at `87871b4` and at HEAD.
 
 **A CORRECTION TO THIS RECORD, 2026-09-02, and it was mine.** The paragraph above first read *"roughly
 half of all wakes ask nobody"*. That figure was never measured — it was carried over from the

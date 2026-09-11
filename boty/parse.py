@@ -965,3 +965,46 @@ def add_to_cart_offers(html: str) -> list[Offer] | None:
             raw_availability="add-to-cart enabled" if available else "add-to-cart disabled",
         )
     ]
+
+
+#: A client-side redirect the document ANNOUNCES but has not performed. Two
+#: spellings, both measured on Best Buy's SKU search on 2026-09-02 and recorded in
+#: `docs/retailer-evidence.md` § Best Buy:
+#:
+#:     <meta id="__next-page-redirect" http-equiv="refresh" content="0;url=/product/…/sku/6216393">
+#:     NEXT_REDIRECT;replace;/product/…/sku/6216393;308;
+#:
+#: THIS WAS WRITTEN, DELETED AS UNREACHABLE, AND RESTORED ON 2026-09-11 — and the
+#: round trip is the lesson. It was removed because the 2026-09-10 capture contains
+#: none of these markers, which made it look like dead code. But 2026-09-02's read 2
+#: was a **rendered** 150,974-byte page that DID announce a redirect, and that shape
+#: is equally real and equally recorded. Deleting on the strength of the newest
+#: capture alone left the older measured shape unhandled — a false dead that a
+#: `<body>` gate cannot catch, because that page had a body.
+#:
+#: So Best Buy's search has produced TWO false-dead shapes and both need covering:
+#: a shell that never rendered, and a rendered shell on its way somewhere.
+_META_REFRESH_RE = re.compile(
+    r"""<meta[^>]*?\shttp-equiv=["']\s*refresh\s*["'][^>]*?\scontent=["']\s*\d+\s*;\s*url=([^"']+)["']""",
+    re.IGNORECASE,
+)
+_NEXT_REDIRECT_RE = re.compile(r"NEXT_REDIRECT;[^;]*;([^;]+);\s*30[178]\s*;")
+
+
+def announced_redirect(html: str) -> str | None:
+    """Where this document says it is going, or `None` if it says nothing.
+
+    A 30x is *moved* — the retailer is not saying there is no such product, it is
+    saying the product is elsewhere. That is the opposite of non-resolution, so an
+    announced redirect is positive evidence AGAINST deadness rather than merely an
+    absence of evidence for it.
+
+    Returns the raw target and judges nothing: whether it looks like a product URL
+    is the caller's question, because `parse` reads documents and does not know
+    what a product path looks like at any particular retailer.
+    """
+    for pattern in (_META_REFRESH_RE, _NEXT_REDIRECT_RE):
+        m = pattern.search(html)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+    return None

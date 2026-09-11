@@ -2681,7 +2681,17 @@ def test_every_verdict_path_carries_the_store_including_the_unknowns(
         watch, no_offers, url=WALMART_URL, first_party_only=True, rung=Rung.TLS, sku="6216393"
     )
     assert r.availability is Availability.UNKNOWN and r.store == "00000"
-    assert "did not resolve" in r.detail
+    # `"did not resolve"` UNTIL 2026-09-11, and the old string is quoted here rather
+    # than deleted. This test's SUBJECT is that every UNKNOWN path still carries the
+    # store — that is untouched and still asserted on the line above. What moved is
+    # only the diagnosis sentence: `no_offers` is a fragment with no `<body>`, so the
+    # adapter now says it could not ESTABLISH resolution instead of asserting
+    # non-resolution, because asserting it beside `unresolved: false` was two
+    # surfaces disagreeing one field apart.
+    assert "could not establish whether sku" in r.detail
+    assert r.unresolved is False, (
+        "a fragment that never rendered must not carry a non-resolution claim"
+    )
 
     # 3. An offer on a retailer with no first-party list configured.
     unknown_retailer = Watch(name="thing", retailer="nowhere", target=WALMART_URL)

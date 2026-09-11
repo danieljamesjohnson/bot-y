@@ -493,21 +493,57 @@ def _verdict_from_html(
             # CLAUSE B NEEDS NO GATE and is untouched: it requires
             # `ld.blocks > 0`, which a document that never rendered cannot meet.
             page_rendered = "<body" in html.lower()
+            # AND THE SECOND FALSE-DEAD SHAPE, added 2026-09-11 after an
+            # independent verifier caught that the `<body>` gate above covers only
+            # one of the two shapes Best Buy has actually produced.
+            #
+            # 2026-09-10's capture never rendered, and `page_rendered` catches it.
+            # But 2026-09-02's read 2 was a RENDERED 150,974-byte page that
+            # ANNOUNCED a redirect to the product — it had a body, so the gate above
+            # passes it straight through and it is still a false dead. Both shapes
+            # are measured and recorded; covering one was covering half the defect.
+            #
+            # A document that says where it is going has not told us the product is
+            # gone. It has told us the product is somewhere else.
+            announces_a_redirect = parse.announced_redirect(html) is not None
             return Result(
                 watch,
                 Availability.UNKNOWN,
                 detail=(
-                    f"sku {sku} did not resolve to a product page — no "
-                    f"schema.org Product on it carries that sku"
-                    + (f" ({ld.summary})" if ld.summary else "")
-                ),
+                    # THE PROSE MUST NOT OUTRUN THE FLAG — 2026-09-11, a verifier
+                    # finding. This sentence said "did not resolve to a product
+                    # page" unconditionally, including on the paths just above
+                    # where we have DECIDED nothing was established. A reader of
+                    # `status.json` saw a non-resolution claim beside
+                    # `unresolved: false`, which is the two-surfaces-disagreeing
+                    # defect this project exists to prevent, one field apart.
+                    (
+                        f"sku {sku} did not resolve to a product page — no "
+                        f"schema.org Product on it carries that sku"
+                    )
+                    if (page_rendered and not announces_a_redirect)
+                    else (
+                        f"could not establish whether sku {sku} resolves — "
+                        + (
+                            "the page announced a redirect and was not the page it "
+                            "is on its way to"
+                            if announces_a_redirect
+                            else "the page did not render"
+                        )
+                    )
+                )
+                + (f" ({ld.summary})" if ld.summary else ""),
                 url=url,
                 rung=rung,
                 extraction=extraction,
                 store=store,
                 shipping=None,
                 read_at=read_at,
-                unresolved=page_rendered and (canonical_is_the_search_endpoint or markup_was_read),
+                unresolved=(
+                    page_rendered
+                    and not announces_a_redirect
+                    and (canonical_is_the_search_endpoint or markup_was_read)
+                ),
             )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way
