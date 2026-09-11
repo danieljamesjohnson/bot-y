@@ -856,7 +856,7 @@ def test_a_store_number_never_reaches_the_notification_body(
     assert "store '" not in recorder.body and 'store "' not in recorder.body, (
         f"a quoted store number survived the redaction:\n{recorder.body}"
     )
-    assert "<redacted>" in recorder.body, "the redaction did not run at all"
+    assert "[redacted]" in recorder.body, "the redaction did not run at all"
     assert "pins store" in recorder.body, "the alert stopped saying a store disagreed"
 
 
@@ -887,3 +887,45 @@ def test_an_empty_send_is_still_false(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert notify.send_health_warning([], [Health("walmart", ok=False)]) is False
     assert notify.send_health_warning(["ntfy://example"], []) is False
+
+
+def test_a_redaction_never_emits_markup_a_transport_will_try_to_parse() -> None:
+    """The redaction must not break the message it is protecting.
+
+    MEASURED ON THE LIVE DAEMON, 2026-09-11. Every Walmart health warning since the
+    07:56:33 restart failed to deliver: Telegram answered
+    `Bad Request: can't parse entities: Unsupported start tag "redacted"` and the
+    loop retried every ~5 minutes, so none reached a phone. The placeholder was
+    `store <redacted>`, and a transport rendering HTML reads `<redacted>` as a tag.
+
+    WHY IT SURFACED ONLY THEN, because the cause is not a new bug: the store-number
+    redaction has been in the tree since the store-pin work, and the warning it
+    redacts is the store-DISAGREEMENT warning, which is unreachable until a store is
+    pinned. The pin went live with that restart. So this code path had never once run
+    in production, and the restart is what ran it.
+
+    THE SHAPE OF THE DEFECT IS THE POINT, and it is this project's own failure mode
+    turned inward: a safety measure that silences the alert it was protecting is
+    worse than the disclosure it prevents, because the monitor loses its only way to
+    say it has gone blind. `send_restock` is NOT in this path — measured, the
+    redaction is applied at two sites and both are inside `send_health_warning` — so
+    a restock alert was never at risk. That is luck about which function it landed
+    in, not a property anybody designed.
+
+    The assertion is on SHAPE, not on the word: any placeholder a transport could
+    read as markup fails this, so a future edit cannot reintroduce the class by
+    picking different angle-bracketed text.
+    """
+    # The regex matches a QUOTED store value — `store '<n>'` — which is the shape
+    # `assess_health` actually emits. An earlier draft of this test used an unquoted
+    # `store 12345` and its precondition failed, which is the precondition doing its
+    # job: it caught the test being wrong before the test could claim the code was.
+    redacted = notify._redact_store_numbers("walmart answered for store '12345'")
+
+    assert "12345" not in redacted, (
+        "precondition: the redaction still removes the store number"
+    )
+    assert "<" not in redacted and ">" not in redacted, (
+        "the redaction emitted angle brackets, which an HTML-rendering transport "
+        f"parses as a tag and rejects the whole message over: {redacted!r}"
+    )

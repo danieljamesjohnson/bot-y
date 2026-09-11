@@ -70,7 +70,26 @@ def _redact_store_numbers(text: str) -> str:
     this removes a value, it does not add a sentence, and it cannot make the
     alert claim anything `assess_health` did not.
     """
-    return _STORE_NUM_RE.sub("store <redacted>", text)
+    # SQUARE BRACKETS, NOT ANGLE BRACKETS — corrected 2026-09-11, and the reason is
+    # a measured production failure rather than a style preference.
+    #
+    # This read `store <redacted>`. Telegram renders HTML, so it read `<redacted>`
+    # as a start tag and rejected the WHOLE message:
+    # `Bad Request: can't parse entities: Unsupported start tag "redacted"`. Every
+    # Walmart health warning after the 2026-09-11 07:56:33 restart failed, retrying
+    # every ~5 minutes, and none reached a phone.
+    #
+    # WHY IT HAD NEVER FIRED BEFORE. The warning being redacted is the store
+    # DISAGREEMENT warning, which is unreachable until a store is pinned. The pin
+    # went live with that restart, so this line had never once run in production.
+    # It was not a new defect; it was a first execution.
+    #
+    # AND THE SHAPE IS THIS PROJECT'S OWN FAILURE MODE TURNED INWARD: a redaction
+    # that silences the alert it protects costs the monitor its only way to say it
+    # has gone blind, which is worse than the disclosure it prevents. The redaction
+    # itself was right and is unchanged in what it removes — only the placeholder
+    # moved, to a form no transport will try to parse.
+    return _STORE_NUM_RE.sub("store [redacted]", text)
 
 
 def _client(urls: list[str]) -> Any | None:
