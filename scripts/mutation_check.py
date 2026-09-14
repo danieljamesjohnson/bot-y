@@ -1876,6 +1876,29 @@ MUTATIONS = (
     #     largest overlap with any existing ident: 0 tests
     #     killers no existing ident reaches: all 5
     #
+    # RE-MEASURED 2026-09-14 AT `570df66`: **M43 NOW KILLS SIX, NOT FIVE.** The
+    # 2026-09-01 figures above are left exactly as they are — they were taken
+    # against that day's suite and they are what priced this ident. What changed
+    # is the suite, not the mutation:
+    #
+    #     A n=6   the sixth killer is
+    #             tests/test_cli_watch.py::test_each_retailer_is_asked_the_
+    #             same_number_of_times_a_day_as_before
+    #
+    # `e88a350` rewrote that test on 2026-09-14 — the day cut moved from 1728
+    # wakes to 86 400 seconds — and under M43 the OLD version PASSED while the new
+    # one FAILS. So repairing a seed-pinned gate also grew this mutation's kill
+    # set, which is the pleasant direction and is exactly the thing nobody thinks
+    # to re-measure. Three records went on saying five for half a day
+    # (`ROADMAP.md`, `CLAUDE.md`, and this block) until a phase-9 verifier
+    # re-ran it.
+    #
+    # **WHETHER THE SIXTH OVERLAPS ANY OTHER IDENT'S KILL SET IS NOT MEASURED**,
+    # and the disjointness claim below is therefore about the ORIGINAL FIVE only.
+    # Re-running all 40 idents to price the sixth was not done here and is not
+    # pretended: an unmeasured superset is exactly what M42's block exists to
+    # warn about.
+    #
     # SO M43 BUYS DETECTION AND NOT MERELY LOCALISATION, and that is the
     # opposite of what the same measurement said about M42 — whose 16 killers
     # are a proper subset of M33's 28, recorded in its own block above as a

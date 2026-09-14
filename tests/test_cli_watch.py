@@ -2155,6 +2155,20 @@ def configured_fleet_cfg(fleet_cfg: Config) -> Config:
 #: boundary any extra simulated time tips. Reproduced by injecting a synthetic
 #: delay into `time.monotonic`: 0 ms passed; 5, 10, 20 and 50 ms all failed.
 #:
+#: THOSE FIGURES DESCRIBE THE OLD TEST AND NOT THIS ONE — re-measured 2026-09-14
+#: by a phase-9 verifier, after `e88a350` rewrote the day test. Against the current
+#: test: **0, 1, 2, 5 and 10 ms all PASS; 20 ms fails at 8 of 21 seeds; 50 ms fails
+#: at every seed**, and the real `time.monotonic` passes 3 of 3 runs on this host.
+#: So the threshold moved from "any creep at all" to somewhere between 10 and 20 ms.
+#:
+#: THAT READS LIKE A LOOSENING AND THE MEASUREMENT SAYS IT IS NOT. The old test had
+#: no threshold to loosen: with **zero** creep it already failed at 18 of 21 seeds.
+#: Its apparent 5 ms sensitivity was the seed defect, not clock sensitivity — a gate
+#: that fails almost everywhere fails under a creeping clock too, and looks exquisite
+#: while proving nothing. The new test has a real, measured threshold where the old
+#: one had none. **This clock is still load-bearing and is still injected for the
+#: reason below.**
+#:
 #: Widening the assertion to a range was available and is refused: the literals are
 #: `09-DECISIONS.md`'s recorded BEFORE-numbers, and a criterion that says counts are
 #: UNCHANGED is not answered by counts that are nearly unchanged.
@@ -2588,10 +2602,24 @@ def test_the_shipping_pacer_is_built_the_way_the_loop_builds_one(
 #: stopped being seed-dependent because the day stopped being a wake count.
 _DAY_SECONDS = 86400.0
 
-#: Enough wakes to be SURE `_DAY_SECONDS` is crossed at any seed — the loop's
-#: slowest jitter is 42.5 s a wake. The test asserts the crossing rather than
-#: trusting this number, so an under-run is loud instead of silently measuring
-#: three-quarters of a day and calling the counts low.
+#: Enough wakes to cross `_DAY_SECONDS` at every seed measured. The test asserts
+#: the crossing rather than trusting this number, so an under-run is loud instead
+#: of silently measuring three-quarters of a day and calling the counts low.
+#:
+#: THIS COMMENT SAID "SURE … at any seed" AND THE ARITHMETIC SAYS OTHERWISE —
+#: corrected 2026-09-14, a phase-9 verifier finding, the same day it was written.
+#: The loop's slowest jitter is 42.5 s a wake, and 1800 x 42.5 = **76,500 s**,
+#: which is short of 86,400. A worst case would need **2,033** wakes. Nothing is
+#: weakened — the `elapsed >= _DAY_SECONDS` assertion below catches a short run and
+#: names it — but "SURE" was a guarantee nobody derived, and the derivation refutes
+#: it. **1800 is enough in practice because the jitter is uniform over [0.85, 1.15]
+#: and averages 50 s**, which is a probabilistic argument, not a bound, and it is
+#: now labelled as one.
+#:
+#: The shape is exactly the "2 is the arithmetic floor" claim this phase spent the
+#: afternoon withdrawing from four separate files: an impossibility asserted from
+#: arithmetic nobody did. Writing it again, one screen above the withdrawal, is
+#: worth recording rather than quietly fixing.
 _WAKES_TO_CLEAR_A_DAY = 1800
 
 #: FOUR SEEDS, NOT ONE, AND THAT IS THE OTHER HALF OF THE FIX. A gate that runs at a

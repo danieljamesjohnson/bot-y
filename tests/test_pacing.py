@@ -2170,10 +2170,18 @@ _BEFORE_MAX_IN_ANY_60S = 6
 #: because 6 x 60 = 360 > 300, so some 60-second window must hold two of them.
 #: A phase claiming 1 would be claiming something unavailable.
 #:
-#: ^ WITHDRAWN AS AN ARGUMENT, 2026-09-14. The third and last of the three places
-#: this claim was written (`ROADMAP.md` corrected 2026-09-11, `boty/pacing.py`'s
-#: `loop_tick_seconds` and here on 2026-09-14). Kept unedited because it is the
-#: reasoning that was wrong, and because the literal below depends on none of it.
+#: ^ WITHDRAWN AS AN ARGUMENT, 2026-09-14. The third of FOUR places this claim was
+#: written (`ROADMAP.md` corrected 2026-09-11, `boty/pacing.py`'s
+#: `loop_tick_seconds` and here on 2026-09-14, and `09-02-SUMMARY.md` — twice —
+#: the same afternoon). Kept unedited because it is the reasoning that was wrong,
+#: and because the literal below depends on none of it.
+#:
+#: THIS COMMENT SAID "the third and last of the three places" FOR ONE AFTERNOON,
+#: and a phase-9 verifier found the fourth site within the hour. **A sweep that
+#: names its own denominator is asserting a count it did not take** — which is the
+#: same error as the claim being corrected, committed inside the correction. The
+#: earlier fix made it too: `57ea00b` repaired one of the sites and reported the
+#: correction done. Do not write "and last" unless you have counted.
 #:
 #: **The premise is false for the configured fleet: only FOUR of the six
 #: retailers are on 300 s.** amazon is 1800 and gamestop 900, so `6 x 60 > 300`

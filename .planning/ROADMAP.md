@@ -208,19 +208,19 @@ a single cycle does not fire six unrelated retailers inside one short window.
   4. **No regression in what already works**: per-retailer cadence and backoff still hold, and `boty check` — a deliberate full pass, which is a different thing from the daemon's schedule — still completes inside REQ-08's 2-minute budget, re-measured rather than assumed
   5. `make verify-offline` exits 0, with at least one new mutation registered and observed CAUGHT
 
-**CLOSING RECORD — Phase 9 COMPLETE 2026-09-01. Four MET AS WRITTEN, one MET IN PART; nothing reworded.**
+**CLOSING RECORD — Phase 9 COMPLETE 2026-09-01. ~~Four MET AS WRITTEN, one MET IN PART~~ → THREE MET AS WRITTEN, TWO MET IN PART; nothing reworded.** *(Count amended 2026-09-14, beside: criterion 1 moved to MET IN PART on 2026-09-11 and this headline was not carried with it. A verdict amended in a paragraph while the count above it still reports the old tally is a correction a reader can miss entirely — which is the failure this project's beside-not-over rule is meant to prevent, arriving through the rule rather than around it.)*
 
 Five plans, five waves, serialized on `boty/pacing.py` / `boty/cli.py` / `tests/test_pacing.py`.
 Full verdict table with citations: `09-05-SUMMARY.md`. Decisions: `09-DECISIONS.md`.
 
 | # | Verdict | Measurement |
 |---|---|---|
-| 1 | **MET AS WRITTEN** | **50.0 s** separation, written out at `_MIN_SEPARATION_SECONDS` and asserted on the *schedule* — never a wall clock. Hand-written rather than recomputed from the code under test, because a test that recomputes its expectation asserts only that the code agrees with itself |
+| 1 | ~~**MET AS WRITTEN**~~ → **MET IN PART** *(amended 2026-09-11, and the pointer added to this row 2026-09-14 — see the amendment below the table)* | **50.0 s** separation, written out at `_MIN_SEPARATION_SECONDS` and asserted on the *schedule* — never a wall clock. Hand-written rather than recomputed from the code under test, because a test that recomputes its expectation asserts only that the code agrees with itself. **AND IT HOLDS ON `due_at` ONLY.** Re-measured at `570df66` through `cli.watch_loop` over a full simulated day: two 300 s-cadence retailers are asked at the **same wake, minimum gap 0.0 s**, **17 times a day** at `_IDLE_SEED`, **11–30** across `_IDLE_SEED+0..20` and **13–29** across a disjoint set of 20. The criterion says *not dispatched inside the same short window*. The 2026-09-11 amendment named the mechanism and gave no magnitude; these are the magnitudes |
 | 2 | **MET AS WRITTEN** | Independence in **both** directions, as two tests rather than one — the interval direction fails at `_standing_interval`/`slot_offset`, the backoff direction at `current_interval`, and a combined test would name the wrong one |
 | 3 | **MET AS WRITTEN** *(see the 2026-09-11 correction below)* | **6 → 2** retailers in any 60 s window over a simulated day. 09-01 took the *before* against unmodified code in its own wave, because the number is unobtainable afterwards. **2 is also the arithmetic floor** — 6 × 60 s > 300 s forces some window to hold two — so a claim of 1 was never available |
 | 4a | **MET AS WRITTEN** | Per-retailer daily counts and the backoff/cool-off ladder unchanged under the new tick |
 | 4b | **MET IN PART** | `boty check`'s 2-minute REQ-08 budget is **BOUNDED, not re-measured** — `boty check` makes live retailer requests and writes the daemon's live `status.json`, and this phase makes none. **The verdict was committed in `09-DECISIONS.md` § Collision 8 BEFORE the attempt**, not promoted after one disappointed |
-| 5 | **MET AS WRITTEN** | **M43** registered and observed **CAUGHT** (5-test kill set); registry 38 → **39**, `M21`–`M24` still empty, `INTENTIONAL GAP` 8 → 9 |
+| 5 | **MET AS WRITTEN** | **M43** registered and observed **CAUGHT** (~~5~~ → **6**-test kill set, re-measured at `570df66` 2026-09-14); registry 38 → **39**, `M21`–`M24` still empty, `INTENTIONAL GAP` 8 → 9. **The sixth killer is the day test `e88a350` rewrote**: under M43 the OLD version passed and the new one fails, so repairing a seed-pinned gate also grew this mutation's kill set — and nobody noticed, so three records went on saying five. Whether the sixth overlaps any other ident's kill set is **NOT measured** |
 
 **The mechanism.** A deterministic per-retailer offset derived from the retailer name and the
 configured roster — never `hash()` (randomised per process), never a wall clock, never a pid, never

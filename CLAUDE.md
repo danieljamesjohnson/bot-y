@@ -264,7 +264,13 @@ that insufficient, the honest remedy is to delete the ident, not to reword it.
 **M43 is the other answer to the same question, and it is why the measurement is worth taking
 rather than assuming.** Registered by 09-05 on the de-lockstep's birth phase, its five killers
 are **disjoint from the union of all 38 idents that preceded it** — re-measured one sandbox
-each on 2026-09-01, largest overlap with any existing ident: zero tests. So M43 buys
+each on 2026-09-01, largest overlap with any existing ident: zero tests.
+**AND IT KILLS SIX AS OF 2026-09-14**, re-measured at `570df66` by a phase-9 verifier: `e88a350`
+rewrote `test_each_retailer_is_asked_the_same_number_of_times_a_day_as_before` (the day cut moved
+from 1728 wakes to 86 400 seconds) and under M43 the OLD version passed while the new one fails.
+**Repairing a seed-pinned gate grew a mutation's kill set** — the pleasant direction, and the one
+nobody thinks to re-measure. The disjointness claim above is about **the original five**; whether
+the sixth overlaps any other ident is **not measured**, and is not pretended to be. So M43 buys
 **detection**, not localisation: before it, criterion 1's separation, criterion 3's window
 maximum, the restart-phase test and the idle-wake test were gated by tests and ungated by this
 harness. Its block also records the anchor it did **not** take — the grid advance, 11 killers,

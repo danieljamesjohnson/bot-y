@@ -731,6 +731,14 @@ def watch_loop(
     a boundary any extra simulated time tips. Reproduced by injecting a synthetic
     delay into `time.monotonic`: **0 ms passes; 5, 10, 20 and 50 ms all fail.**
 
+    *(Those figures describe the test as it stood on 2026-09-09 and are kept as the
+    reason this parameter exists. Re-measured 2026-09-14 after `e88a350` rewrote
+    that test: **0–10 ms now pass, 20 ms fails at 8 of 21 seeds, 50 ms fails at
+    every seed.** Not a loosening — the old test failed at 18 of 21 seeds with NO
+    creep at all, so its 5 ms sensitivity was the seed defect wearing a clock
+    defect's clothes. The new test has a measured threshold where the old one had
+    none, and this parameter is still what keeps the schedule off the host clock.)*
+
     So the term stays in production and the tests stop being timed by the host.
     A test that wants to prove the term is ADDED injects a clock that advances;
     a test that wants a deterministic schedule injects one that does not.

@@ -626,7 +626,12 @@ def loop_tick_seconds(default_interval: float, roster: Iterable[str]) -> float:
     ^ THAT PARAGRAPH IS WITHDRAWN AS AN ARGUMENT, 2026-09-14, and is kept because
     it is the reasoning that was wrong rather than a typo. It was caught by phase
     9's verifier on 2026-09-11 and corrected in `ROADMAP.md` the same day; this is
-    the second of the three places it was written, found by `grep` on 2026-09-14.
+    the second of FOUR places it was written, found by `grep` on 2026-09-14.
+    *(This line said "of the three" until a phase-9 verifier found a fourth site in
+    `09-02-SUMMARY.md` the same afternoon. The grep that produced "three" was run
+    over `boty/` and `tests/` and did not reach `.planning/`, and its result was
+    then written down as a total. Corrected beside, because asserting an
+    uncounted denominator is the very thing this paragraph withdraws.)*
 
     **Its premise is false for the configured fleet. Only FOUR of the six
     retailers are on the 300 s cadence** — amazon is 1800 and gamestop 900 — so

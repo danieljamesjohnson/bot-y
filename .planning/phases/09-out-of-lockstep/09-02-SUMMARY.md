@@ -40,6 +40,7 @@ key-decisions:
   - "READING A of the advance rule, chosen deliberately: step from the previous due time to the first grid point strictly in the future. Reading B re-anchors to the cycle clock in exactly the case a fixed-rate schedule exists to survive"
   - "The tick is 50 s — `default_interval / len(roster)`, floored at MIN_TICK_SECONDS = 30 — chosen from a ten-row measured sweep. It is the largest tick whose slots are all distinct, and every smaller one costs more wake-ups for a smaller separation"
   - "2 is criterion 3's after-number AND the arithmetic floor: 6 x 60 s > 300 s, so some 60-second window must hold two retailers. A claim of 1 would be unavailable"
+  - "^ THE FLOOR HALF OF THAT IS WITHDRAWN, 2026-09-14, beside not over. Only FOUR of the six retailers are on the 300 s cadence (amazon 1800, gamestop 900), so 6 x 60 > 300 describes no fleet this project runs and max 1 WAS available — measured. The 2 is a measurement and stands; the impossibility argument beside it was wrong. This was the FOURTH site of that claim and the one two corrections on 2026-09-14 both missed while calling themselves the second and the third of three"
   - "The plan's ten-test enumeration is 7 right of 10: six exactly right, one right under the wrong reading, three that did not redden. Recorded as findings rather than smoothed over"
   - "boty/config.py's two superseded sentences are NOT landed here — this plan's files_modified excludes that file, and the outline assigns it to 09-04. Recorded as a discrepancy between 09-DECISIONS.md collision 6 and the outline"
 
@@ -77,7 +78,11 @@ E       assert 2 == 6
 
 **Rewritten in place, not beside.** The fleet table, the denominator assertion, the sliding-window
 computation, both tallies and the window model are byte-unchanged. What changed: the pacer is built
-and stepped the way `cli.watch_loop` builds and steps one, and `_ONE_DAY_OF_CYCLES` moved 288 → 1728
+and stepped the way `cli.watch_loop` builds and steps one *(**corrected 2026-09-14**: true of the
+CONSTRUCTION and false of the STEPPING — this test steps an UNJITTERED tick and the loop sleeps the
+tick times a `random.uniform(0.85, 1.15)` draw. That is why the two instruments give two answers:
+this test measures 2, the shipping loop measures **3**, re-measured at 41 seeds and still ungated)*,
+and `_ONE_DAY_OF_CYCLES` moved 288 → 1728
 (86 400 / 50 rather than 86 400 / 300) with the old value recorded beside it. The denominator
 assertion is what holds the two apart — 1728 × 50 s must still be 86 400 s.
 
@@ -85,6 +90,19 @@ assertion is what holds the two apart — 1728 × 50 s must still be 86 400 s.
 more than 60 s apart inside a 300 s cadence, because 6 × 60 = 360 > 300. A plan claiming 1 would be
 claiming something unavailable, and that is stated at `_AFTER_MAX_IN_ANY_60S` rather than left for a
 later reader to wonder about.
+
+> **WITHDRAWN AS AN ARGUMENT, 2026-09-14, and kept because it is the reasoning that was wrong.** Its
+> premise is false for the configured fleet: only **four** of the six retailers sit on 300 s —
+> amazon is 1800 and gamestop 900 — so `6 × 60 > 300` describes no fleet this project runs, and a
+> maximum of **1** was available and has been measured. **The 2 is a measurement and every assertion
+> resting on it is unchanged**; it is a floor on the chosen 50 s grid, not in arithmetic.
+>
+> **THIS IS THE FOURTH SITE, AND THE TWO CORRECTIONS THAT LANDED EARLIER TODAY BOTH MISSED IT WHILE
+> COUNTING THEMSELVES.** `57ea00b` fixed one of three and reported the correction done; `052f35d`
+> found two more by grep and called them "the second" and "the third and last of the three places".
+> A phase-9 verifier found this one the same afternoon. **A sweep that names its own denominator is
+> asserting a count it did not take** — which is the same error as the claim being corrected, in the
+> correction itself, twice.
 
 **And it is smaller, written out as a comparison rather than as a claim about one number:**
 `assert max_in_any_60s < _BEFORE_MAX_IN_ANY_60S` — the left side measured by the run, the right side
