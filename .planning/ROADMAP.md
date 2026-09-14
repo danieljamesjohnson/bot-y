@@ -289,6 +289,35 @@ were not true as stated:
 jittered wakes, so the equality depends on the seed. That is the same brittleness the 2026-09-08 CI
 failure exposed, one layer up, and it is recorded rather than repaired.
 
+> **REPAIRED 2026-09-14, and the repair changed the CUT rather than the assertion.** The paragraph
+> above stands; this is the outcome beside it.
+>
+> **The cause, measured before anything was changed:** the test's "day" was **1728 wakes**, and a
+> wake count is not a clock. At ±15% jitter 1728 wakes span **86,099.7–86,565.4 s** over seeds
+> `_IDLE_SEED + 0..20`, so a 300 s-cadence retailer lands on 287, 288 or 289 purely by where the
+> last wake falls.
+>
+> **One figure of the verifier's is not reproduced and neither is corrected away.** It reported
+> **1 of 21**; this re-measurement reads **3 of 21** over `_IDLE_SEED + 0..20`. `09-VERIFICATION.md`
+> does not record which seeds it swept, so the two are not comparable — both are kept, and they say
+> the same thing about the gate.
+>
+> **What shipped:** the window is now **86,400 simulated seconds**, the test runs at **four seeds**
+> instead of one, and the span it actually reached is **asserted** so an under-run is loud rather
+> than presenting as low counts. **The claim got stronger, not looser** — five of the six counts are
+> now exact at **21 of 21** seeds (bestbuy/nintendo/target/walmart 288, gamestop 96) where before
+> **none** of them was. The sixth, amazon, is 48 **or** 49 because 86,400 / 1,800 = 48 exactly, so
+> its 49th grid point *is* the day boundary: measured at **86,393.2 s** under one seed and
+> **86,426.0 s** under another, from 33 s of accumulated jitter. **That is a bound, not a
+> tolerance** — the test asserts the 49th fire is within one tick of the boundary, so a 49th
+> arriving from anywhere else still reddens.
+>
+> **Watched red, three ways, each reverted from a `cp` and `diff`-confirmed byte-identical:** the
+> tick returned to the standing interval (pre-REQ-23 wake rate) → red; `MIN_TICK_SECONDS` 30 → 60 →
+> red; and the `_FROZEN_CLOCK` replaced by the **50 ms-per-call creep that reproduced the
+> `04cd831` CI break** → red. That last one matters most: the injected clock is still load-bearing,
+> so the repair did not buy seed-independence by loosening the thing the clock was added for.
+
 **Criterion 4b's MET IN PART was confirmed correct**, including that the verdict was committed in
 `09-DECISIONS.md` *before* the attempt. Criteria 2, 3, 5 and the standing invariants all VERIFIED —
 the `current_interval` digest is byte-identical at the pre-phase commit, at `87871b4` and at HEAD.

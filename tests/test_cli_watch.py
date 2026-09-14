@@ -2158,6 +2158,20 @@ def configured_fleet_cfg(fleet_cfg: Config) -> Config:
 #: Widening the assertion to a range was available and is refused: the literals are
 #: `09-DECISIONS.md`'s recorded BEFORE-numbers, and a criterion that says counts are
 #: UNCHANGED is not answered by counts that are nearly unchanged.
+#:
+#: THAT REFUSAL STANDS AND WAS NOT WHAT THE 2026-09-14 REWRITE DID. The paragraph is
+#: left unedited because its rule is still the rule. What the rewrite changed is the
+#: WINDOW — 86 400 seconds instead of 1728 wakes — and the five non-amazon counts
+#: came out MORE exact for it, not less: seed-dependent before, identical at 21 of
+#: 21 seeds after. The one place a range now appears is amazon's 48-or-49, and that
+#: is not "nearly unchanged": 86 400 / 1800 = 48 exactly, so the 49th grid point IS
+#: the day boundary, the test asserts that the 49th fire is AT it, and a 49th from
+#: anywhere else still reddens. A bound of one fire at one measured position is a
+#: different object from a tolerance.
+#:
+#: This frozen clock is unaffected and still load-bearing: re-measured 2026-09-14,
+#: the rewritten test goes RED under the 50 ms-per-call creep that reproduced the
+#: `04cd831` CI break.
 _FROZEN_CLOCK = lambda: 0.0  # noqa: E731
 
 
@@ -2544,55 +2558,195 @@ def test_the_shipping_pacer_is_built_the_way_the_loop_builds_one(
     assert built[0].get("overrides") == dict(configured_fleet_cfg.retailer_intervals)
 
 
+#: A DAY IS 86 400 SECONDS, AND UNTIL 2026-09-14 THIS SECTION'S DAY WAS 1728 WAKES.
+#: They are not the same thing and the difference is what made the test below a
+#: seed-pinned gate — the finding phase 9's verifier raised as warning 3.
+#:
+#: THE DEFECT, MEASURED. 1728 wakes at a 50 s tick is 86 400 s only if the tick does
+#: not jitter, and it does: +/-15%, so 1728 wakes span **86 099.7 s to 86 565.4 s**
+#: over the 21 seeds `_IDLE_SEED + 0..20`. A retailer on a 300 s cadence therefore
+#: gets 287, 288 or 289 fires depending purely on where the last wake lands. The
+#: shipped assertion was exact equality against the BEFORE-numbers, so it passed at
+#: **3 of those 21 seeds** and one of the three was its own.
+#:
+#: (Phase 9's verifier reported **1 of 21** for the same claim on 2026-09-11. Its
+#: seed set is not recorded in `09-VERIFICATION.md`, so the two figures are not
+#: comparable and NEITHER is corrected away: 3/21 is this measurement, over
+#: `_IDLE_SEED + 0..20`, on 2026-09-14. Both say the same thing about the gate.)
+#:
+#: WHY THAT IS WORSE THAN A LOOSE TEST. It is not merely fragile — it is a gate that
+#: cannot fail for the reason it exists. Any future change that adds a `random` draw
+#: to the loop shifts the sequence and turns it red with NO regression behind it,
+#: and the natural response to a red with no cause is to distrust the test. That is
+#: exactly the shape `CLAUDE.md` records under the stale-`.pyc` trap.
+#:
+#: THE FIX IS THE CUT, NOT THE ASSERTION. The window is now a real day — count what
+#: the loop asked in the first 86 400 SECONDS of simulated time and let the wake
+#: count fall where it falls. Measured over the same 21 seeds, five of the six
+#: retailers then land on their BEFORE-number **exactly, at 21 of 21 seeds**:
+#: bestbuy 288, nintendo 288, target 288, walmart 288, gamestop 96. The counts
+#: stopped being seed-dependent because the day stopped being a wake count.
+_DAY_SECONDS = 86400.0
+
+#: Enough wakes to be SURE `_DAY_SECONDS` is crossed at any seed — the loop's
+#: slowest jitter is 42.5 s a wake. The test asserts the crossing rather than
+#: trusting this number, so an under-run is loud instead of silently measuring
+#: three-quarters of a day and calling the counts low.
+_WAKES_TO_CLEAR_A_DAY = 1800
+
+#: FOUR SEEDS, NOT ONE, AND THAT IS THE OTHER HALF OF THE FIX. A gate that runs at a
+#: single seed asserts something about that seed. These four were chosen from the
+#: 21-seed sweep to cover both amazon branches and both ends of the span
+#: distribution: 20260901 (amazon 48, the incumbent `_IDLE_SEED`), 20260902 (49),
+#: 20260920 (49, the SHORTEST span at 1728 wakes — the one most likely to expose an
+#: under-run), 20260916 (48, near the longest). Four rather than twenty-one for
+#: runtime; the sweep above is the evidence that four is representative, exactly as
+#: `_IDLE_SEED`'s own 20-seed sweep licenses it further up this file.
+_DAY_SEEDS = (20260901, 20260902, 20260920, 20260916)
+
+#: AMAZON IS THE ONE RETAILER THE SPAN CUT DOES NOT MAKE EXACT, and the reason is
+#: arithmetic rather than jitter noise. 86 400 / 1800 = **48 exactly**, so amazon's
+#: 49th grid point IS the day boundary. Measured: amazon fires at elapsed 0.0 and
+#: then every ~1800 s; its 49th fire lands at **86 393.2 s** under seed 20260902 and
+#: at **86 426.0 s** under 20260901 — one inside the window and one outside, from a
+#: 33 s difference in accumulated jitter.
+#:
+#: SO THE COUNT IS 48 OR 49 AND THE TEST SAYS SO. This is NOT a tolerance and it is
+#: NOT the range the section below refused: the ambiguity is bounded to ONE fire, at
+#: ONE known position, and the test asserts that position rather than accepting any
+#: 49th. A 49th arriving from anywhere other than the day boundary still reddens.
+#: `09-DECISIONS.md` and `boty/cli.py` both already record that amazon sits on this
+#: boundary — it is what broke CI at `04cd831`, on `amazon: 49` against `48`.
+_AMAZON_BOUNDARY_COUNTS = (48, 49)
+
+
+def _ask_counts_over_one_simulated_day(
+    cfg: Config, seed: int
+) -> tuple[dict[str, int], list[float], float]:
+    """Drive `cli.watch_loop` past a full simulated day and count what it asked.
+
+    A module-level function rather than a closure inside the loop below, which is
+    not only a `B023` fix: the counting rule IS the measurement here, and putting
+    it where it can be read once makes the half-open window visible instead of
+    buried in a comprehension four levels in.
+
+    Returns the per-retailer counts inside `[0, _DAY_SECONDS)`, the elapsed times
+    of amazon's fires inside that window, and the total span the loop actually
+    ran — which the caller asserts, because a short run reports every count as
+    low for a reason that has nothing to do with the schedule.
+    """
+    counted: dict[str, int] = {}
+    amazon_fires: list[float] = []
+    elapsed = 0.0
+
+    def _count(delay: float) -> None:
+        nonlocal elapsed
+        # The cut is on SIMULATED TIME, read BEFORE this wake's sleep is added,
+        # so the window is the half-open [0, 86 400) that a day actually is.
+        if elapsed < _DAY_SECONDS:
+            for row in json.loads(cfg.status_path.read_text())["retailers"]:
+                if row["checked"]:
+                    counted[row["retailer"]] = counted.get(row["retailer"], 0) + 1
+                    if row["retailer"] == "amazon":
+                        amazon_fires.append(elapsed)
+        elapsed += delay
+
+    random.seed(seed)
+    cli.watch_loop(
+        cfg,
+        _checker(Availability.OUT_OF_STOCK),
+        State.load(cfg.state_path),
+        cycles=_WAKES_TO_CLEAR_A_DAY,
+        sleep=_count,
+        monotonic=_FROZEN_CLOCK,
+    )
+    return counted, amazon_fires, elapsed
+
+
 def test_each_retailer_is_asked_the_same_number_of_times_a_day_as_before(
     configured_fleet_cfg: Config, sent: dict[str, list]
 ) -> None:
     """Criterion 4's first half, driven through `cli.watch_loop` over a whole day.
 
     NOT through a `Pacer` simulation. Every other statement of this claim in the
-    suite steps the pacer directly; this one runs the daemon's own loop for the
-    1728 wakes a 50 s tick makes in 86 400 s and counts what reached
-    `status.json` as `checked: true`. The literals are `09-DECISIONS.md`'s
-    recorded BEFORE-numbers, measured on 2026-09-01 against the pre-REQ-23 rule
-    at `87871b4` — so this is a comparison against the old schedule and not a
-    re-derivation from the new one.
+    suite steps the pacer directly; this one runs the daemon's own loop and counts
+    what reached `status.json` as `checked: true`. The literals are
+    `09-DECISIONS.md`'s recorded BEFORE-numbers, measured on 2026-09-01 against the
+    pre-REQ-23 rule at `87871b4` — so this is a comparison against the old schedule
+    and not a re-derivation from the new one.
 
     THE REDUCTION-BY-NOT-ASKING GUARD. 09-02 recorded that the max-in-60s literal
     is BLIND to a fleet asked half as often — it still read 2 while every count
     halved. The per-retailer counts are what is not blind to it, and criterion 4
     is the criterion they answer.
+
+    REWRITTEN 2026-09-14 AFTER PHASE 9'S VERIFIER FOUND IT SEED-PINNED. The day is
+    now 86 400 seconds rather than 1728 wakes, and it runs at four seeds rather
+    than one. See `_DAY_SECONDS` above for the measurement and for what it cost the
+    old form. **The claim got STRONGER, not looser:** five of six counts are now
+    exact at every seed tried where before none of them was, and the sixth's
+    residual is one fire at one named position.
     """
-    counted: dict[str, int] = {}
+    for seed in _DAY_SEEDS:
+        counted, amazon_fires, elapsed = _ask_counts_over_one_simulated_day(
+            configured_fleet_cfg, seed
+        )
 
-    def _count(_delay: float) -> None:
-        for row in json.loads(configured_fleet_cfg.status_path.read_text())["retailers"]:
-            if row["checked"]:
-                counted[row["retailer"]] = counted.get(row["retailer"], 0) + 1
+        # THE SPAN IS ASSERTED, NOT ASSUMED. Without this a short run measures a
+        # partial day and reports every count as low — a red whose message points
+        # at the schedule when the cause is the harness.
+        assert elapsed >= _DAY_SECONDS, (
+            f"seed {seed}: the loop ran {elapsed:.1f} simulated seconds over "
+            f"{_WAKES_TO_CLEAR_A_DAY} wakes and never reached a full day. Every "
+            f"count below would be low for that reason and not for a scheduling one"
+        )
 
-    random.seed(_IDLE_SEED)
-    cli.watch_loop(
-        configured_fleet_cfg,
-        _checker(Availability.OUT_OF_STOCK),
-        State.load(configured_fleet_cfg.state_path),
-        cycles=_WAKES_PER_DAY,
-        sleep=_count,
-        monotonic=_FROZEN_CLOCK,
-    )
+        measured = dict(sorted(counted.items()))
+        amazon = measured.pop("amazon", None)
+        expected = {k: v for k, v in _BEFORE_PER_RETAILER_PER_DAY.items() if k != "amazon"}
 
-    assert dict(sorted(counted.items())) == _BEFORE_PER_RETAILER_PER_DAY, (
-        f"over a simulated day the loop asked {dict(sorted(counted.items()))}, "
-        f"against the {_BEFORE_PER_RETAILER_PER_DAY} the OLD rule produced. A "
-        f"schedule spread out by asking less often is coverage sold for a number"
-    )
-    assert sum(counted.values()) == 1296, (
-        f"{sum(counted.values())} requests over a simulated day against 1296 — "
-        f"the total the retailers can see, and the row 09-03 recorded as the one "
-        f"that did not move"
-    )
+        assert measured == expected, (
+            f"seed {seed}: over a simulated day the loop asked {measured}, against "
+            f"the {expected} the OLD rule produced. A schedule spread out by asking "
+            f"less often is coverage sold for a number"
+        )
+        assert amazon in _AMAZON_BOUNDARY_COUNTS, (
+            f"seed {seed}: amazon was asked {amazon} times against the 48 the old "
+            f"rule produced. 86400/1800 is exactly 48, so 49 is reachable at the day "
+            f"boundary and nothing else is"
+        )
+        # AND THE 49th HAS TO BE THE BOUNDARY FIRE. Bounding the count alone would
+        # accept an extra fire from anywhere — a doubled dispatch at t=0, say, which
+        # is a real defect wearing this boundary's clothes.
+        if amazon == 49:
+            assert abs(amazon_fires[-1] - _DAY_SECONDS) <= _FLEET_TICK_SECONDS, (
+                f"seed {seed}: amazon fired 49 times and the 49th was at "
+                f"{amazon_fires[-1]:.1f} s, not within one {_FLEET_TICK_SECONDS} s "
+                f"tick of the {_DAY_SECONDS} s boundary. That is an extra request, "
+                f"not the boundary"
+            )
+
+        total = sum(counted.values())
+        assert total == 1296 + (amazon - 48), (
+            f"seed {seed}: {total} requests over a simulated day against the 1296 "
+            f"09-03 recorded as the row that did not move, plus at most amazon's "
+            f"one boundary fire"
+        )
 
 
 #: 86 400 s of simulated day at the six-retailer fleet's 50 s tick. Written out
 #: rather than computed for `_FLEET_TICK_SECONDS`'s reason.
+#:
+#: NO LONGER THE CUT, AND KEPT ANYWAY — 2026-09-14. The day test above used to run
+#: exactly this many wakes and call the result a day. It is not one: jitter makes
+#: 1728 wakes span 86 099.7–86 565.4 s, which is what made that test pass at 3 of
+#: 21 seeds. `_DAY_SECONDS` and `_WAKES_TO_CLEAR_A_DAY` replaced it.
+#:
+#: This constant stays because **1728 is still the right answer to the question it
+#: asks** — how many times the loop wakes in a nominal day — and that number is
+#: quoted across `09-DECISIONS.md`, this file's own section comments and the
+#: closing record. Deleting it would leave those quotations pointing at nothing.
+#: What was wrong was never the number; it was using a wake count as a clock.
 _WAKES_PER_DAY = 1728
 
 #: PHASE 8'S THREE NUMBERS, WRITTEN OUT, AND THE SECOND DRAFT OF THIS SECTION
