@@ -19,6 +19,7 @@ from boty.parse import (
     _LDJSON_RE,
     TARGET_FIRST_PARTY_SELLER,
     add_to_cart_offers,
+    announced_redirect,
     canonical_url,
     ldjson_offers,
     ldjson_read,
@@ -939,3 +940,78 @@ def test_the_href_is_handed_back_as_the_page_wrote_it(bestbuy_unresolved_sku: st
         canonical_url(bestbuy_unresolved_sku)
         == "https://www.bestbuy.com/site/searchpage.jsp?id=pcat17071&st=6577129"
     )
+
+
+# --------------------------------------------------------------------------
+# announced_redirect — the second false-dead shape
+#
+# ADDED 2026-09-14, and its own history is the reason it exists. `announced_redirect`
+# shipped on 2026-09-11 (`57ea00b`) with NO test anywhere in the suite: `grep -rn
+# announced_redirect tests/` returned nothing. It was written, deleted as unreachable,
+# and restored — three edits to a predicate that decides whether a live product is
+# called gone, none of them gated. These tests are that gate.
+#
+# THE ORDERING IS NOT TDD AND THE RECORD SAYS SO. The implementation preceded these
+# tests by three days. They were watched red by perturbing the shipped code (recorded
+# beside the adapter-level test in `tests/test_retailers.py`), which establishes *the
+# gate bites* and NOT *the gate came first*. Phase 7's criterion 5 set that precedent
+# and its wording is reused deliberately.
+# --------------------------------------------------------------------------
+
+
+def test_the_two_measured_redirect_spellings_are_both_read() -> None:
+    """Both markers are transcribed from `docs/retailer-evidence.md` § Best Buy read 2.
+
+    That page was 150,974 rendered bytes announcing a 308 to the product, and it
+    was still called a dead control. Each spelling is asserted ALONE, because the
+    2026-09-02 document carried both and a reader of only that document cannot
+    tell which one the code is actually keyed on.
+    """
+    target = "/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393"
+
+    meta_only = (
+        f'<html><head><meta id="__next-page-redirect" http-equiv="refresh" '
+        f'content="0;url={target}"></head><body></body></html>'
+    )
+    assert announced_redirect(meta_only) == target
+
+    payload_only = f'<html><body><script>x("NEXT_REDIRECT;replace;{target};308;")</script></body></html>'
+    assert announced_redirect(payload_only) == target
+
+
+def test_a_document_that_announces_nothing_returns_none() -> None:
+    """The negative half, and it is what stops this predicate eating every UNKNOWN.
+
+    `unresolved-sku.html` is the genuinely dead rendered search page. If it
+    announced a redirect, gating deadness on this predicate would disarm
+    dead-control detection outright rather than narrow it.
+    """
+    assert announced_redirect("<html><head></head><body>nothing here</body></html>") is None
+    assert announced_redirect("") is None
+
+
+def test_a_redirect_to_nowhere_is_not_an_announcement(
+    bestbuy_unresolved_sku: str,
+) -> None:
+    """An empty target is an absence dressed as a signal, and it must not disarm the check.
+
+    `content="0;url="` parses, matches, and names no destination. Treating that as
+    "the product is somewhere else" would let a malformed page suppress a real
+    dead-control reading — the failure direction this project cares about, since a
+    suppressed dead control is a configuration fault reported as nothing at all.
+    """
+    assert announced_redirect('<meta http-equiv="refresh" content="0;url=   ">') is None
+    assert announced_redirect("NEXT_REDIRECT;replace;   ;308;") is None
+    assert announced_redirect(bestbuy_unresolved_sku) is None
+
+
+def test_only_a_moved_status_counts_as_moved() -> None:
+    """`30[178]` is not incidental strictness — a 302/303 is a different sentence.
+
+    The reasoning the adapter leans on is that a 301/307/308 says *the product
+    lives over there*. The regex was written that way; this pins it, so a later
+    widening is a decision somebody makes rather than a character somebody drops.
+    """
+    moved = "NEXT_REDIRECT;replace;/product/x/sku/1;308;"
+    assert announced_redirect(moved) == "/product/x/sku/1"
+    assert announced_redirect("NEXT_REDIRECT;replace;/product/x/sku/1;302;") is None

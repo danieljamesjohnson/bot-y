@@ -422,6 +422,55 @@ number below was read individually rather than copied from the outline.
 | the two most recent attempts are `no Chrome/Chromium binary found` — a **host** failure | L3482 (Phase 5 close, 2026-08-10), L4397 (Phase 7 close, 2026-08-17) | ✅ both read `fetch failed: no Chrome/Chromium` |
 | SKU `6577129` — the one that genuinely resolves to nothing — was a **product watch**, recorded as *unconfirmed and probably wrong*, and **never the control** | L822, L868, L901 | ✅ L822 *"SKU `6577129` is unconfirmed and probably wrong … a fixture value nobody has ever seen resolve, not an established fact"*; L868 the search-miss branch; L901 *"now has a direct disproof rather than an absence of evidence"* |
 
+### RE-MEASURED 2026-09-14 — every line number above has drifted, and one claim is now false
+
+**Nothing in the table above is edited.** Every figure in it was correct on 2026-09-02 against a
+5,015-line file, and this repository records a superseded measurement beside its original. What
+follows is where those same passages are today, and what re-measuring found that a re-pointing
+alone would have hidden.
+
+`docs/retailer-evidence.md` is now **5,500 lines**. The phase-10 verifier reported the drift as
+**+421** on 2026-09-11; this session's own additions to the log took it to **+485** for everything
+below the Best Buy section's insertion points. So the citations were wrong when the verifier read
+them and are wrong by a different amount now, which is the argument for the anchors in the last
+column rather than for a third set of numbers.
+
+| what the record says | cited 2026-09-02 | measured 2026-09-14 | a `grep` anchor that cannot drift |
+|---|---|---|---|
+| the four `make verify` transcripts reading `in_stock … $59.99` | L1642, L1884, L2286, L2413 | **L2127, L2369, L2771, L2898** (+485 each) | `grep -n "InStock from Best Buy" docs/retailer-evidence.md` → the four indented `in_stock      bestbuy   CONTROL` rows |
+| the SKU's search redirect, transcribed in full | L860 | **L860, unmoved** | `grep -n "Redirected to the product page"` |
+| the 2026-08-04 FALSE dead | L960 | **L960, unmoved** | `grep -n "no schema.org Product on it"` |
+| the two most recent attempts are a HOST failure | L3482 (Phase 5 close), L4397 (Phase 7 close) | **L3967, L4882** (+485 each) | `grep -n "no Chrome/Chromium" docs/retailer-evidence.md` |
+| SKU `6577129` was a product watch, never the control | L822, L868, L901 | **all three unmoved** | `grep -n "6577129" docs/retailer-evidence.md` |
+| `6577129` appears in config only in a comment | `config/products.yaml` L201 | **L241** | `grep -n "6577129" config/products.yaml` → still exactly one line, still a comment |
+| Best Buy's only `control: true` entry is `target: "6216393"` | L208–211 | **L281–284** | `grep -n '6216393' config/products.yaml` → still exactly one line |
+
+**The Best Buy section itself did not move.** Everything cited under L790–L972 is byte-for-byte
+where it was, because the reads and this session's entries were appended *after* it. The +485 lands
+only on the Phase 5 and Phase 7 closing records further down. That is worth saying because "all
+citations drifted by a constant" would have been the tidy answer and it is not the true one.
+
+#### ONE CLAIM IS NOW FALSE, and it is the uniqueness check
+
+> *"`grep -n "did not resolve" docs/retailer-evidence.md` returns **exactly one line, L960**"*
+
+**It now returns three: L960, L1067, L1242.** The claim was true when written and the finding it
+supported is **untouched** — L1067 is read 1's own transcription of the `Result.detail` string and
+L1242 is the prose explaining which branch produced it, so **both new lines are records of the
+2026-09-02 reads, not new dead readings.** The count moved; the evidence did not. Re-stated for
+today: *there is exactly one **reading** of `6216393` in this log that asserts non-resolution and is
+not itself part of the § 0g read record — L960, the documented false dead.*
+
+**This is the failure mode the check was built to catch, arriving from the other direction.** A
+grep-count assertion in a planning document is a measurement with a shelf life, and its expiry
+presents as a **stale true claim** rather than as an error — nothing goes red, nobody is told, and a
+future reader either trusts it or re-runs it and concludes the finding collapsed. It has not.
+
+**The `6216393` count moved the same way and for the same reason:** cited as **7 lines**
+(L790, L842, L860, L919, L920, L960, L972), it is **25** today. All seven originals are still at
+their original line numbers and still say what they said; the eighteen additions are the § 0g reads,
+the § 0h entry, and this session's corrections.
+
 **Two further checks this executor ran that the outline did not claim, because "the only" and "never
 the control" are the two assertions above that a single missed line would falsify:**
 

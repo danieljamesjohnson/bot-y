@@ -3528,14 +3528,30 @@ def test_the_live_search_shell_is_not_reported_as_a_dead_control() -> None:
     URL eight days earlier. So every `unresolved=True` this document produced was
     a false dead, said confidently about a product that is on sale.
 
-    WHY THE FIX WAS TO WITHDRAW CLAUSE A RATHER THAN REPAIR IT. Clause A asked
-    whether the page's canonical points at the search endpoint. A shell served AT
-    the search URL carries that canonical whether or not the product exists, so
-    the test cannot distinguish the two cases and never could. `10-04`
+    WHY THE FIX WAS TO GATE CLAUSE A RATHER THAN REPAIR IT IN PLACE. Clause A
+    asked whether the page's canonical points at the search endpoint. A shell
+    served AT the search URL carries that canonical whether or not the product
+    exists, so the test cannot distinguish the two cases and never could. `10-04`
     recommended rescuing it by following the `NEXT_REDIRECT` the shell announced
     — and this capture contains **zero** occurrences of `NEXT_REDIRECT`,
-    `http-equiv` or `/product/`. That signal existed on 2026-09-02 and was gone
-    eight days later.
+    `http-equiv` or `/product/`. That signal was absent from this capture eight
+    days after 2026-09-02.
+
+    TWO CORRECTIONS TO THE PARAGRAPH ABOVE, 2026-09-14, placed beside it because
+    it is the reasoning that was acted on and it was wrong in two places.
+
+    1. It said **WITHDRAW**. Clause A was not withdrawn: it is still evaluated,
+       gated. The code, the 09-10 commit and the sibling test below all say the
+       withdrawal was *refused* — withdrawing outright would have cost Best Buy
+       its dead-control signal entirely. Only this docstring said otherwise.
+    2. `10-04`'s remedy was NOT permanently declined. `announced_redirect` was
+       restored on 2026-09-11 and is shipped, because 2026-09-02's read 2 was a
+       **rendered** page announcing a 308 and the `<body>` gate passes it
+       straight through. See
+       `test_a_rendered_page_that_announces_a_redirect_is_not_a_dead_control`.
+       And "gone eight days later" overstates what was measured: this capture
+       took a 3 s settle and read 2 took 25 s, so an absent announcement is as
+       consistent with "had not arrived" as with "no longer sent".
 
     THIS GATE ASSERTS THE DIRECTION, NOT THE STOCK STATE. It does not claim the
     control is in stock; the availability stays UNKNOWN, which is the honest
@@ -3595,4 +3611,83 @@ def test_a_rendered_search_page_with_no_product_is_still_a_dead_control() -> Non
     assert result.unresolved is True, (
         "gating clause A on rendering also disarmed it on a page that DID "
         f"render — dead-control detection is gone, not fixed: {result.detail!r}"
+    )
+
+
+def test_a_rendered_page_that_announces_a_redirect_is_not_a_dead_control() -> None:
+    """THE SECOND FALSE-DEAD SHAPE, and it is the one the `<body>` gate lets through.
+
+    WHY THIS TEST EXISTS AT ALL, because the history is the argument. The
+    2026-09-10 `<body>` gate was chosen on THREE captures and contradicted by a
+    FOURTH measurement already in the tree: `docs/retailer-evidence.md` § Best Buy
+    read 2, 2026-09-02 at `settle_seconds=25`. That read returned **150,974 bytes
+    with a `<body>`**, zero `ld+json`, a canonical on the search endpoint — and a
+    `NEXT_REDIRECT;…;308;` plus a `<meta http-equiv="refresh">` naming the product
+    page. Every input the predicate reads was satisfied, so the gate passed it
+    through and it stayed a false dead about a SKU that read `IN_STOCK $59.99`.
+
+    `announced_redirect` covers it, was DELETED as unreachable on the strength of
+    the newest capture, and was restored on 2026-09-11. **It shipped with no test:
+    `grep -rn announced_redirect tests/` returned nothing until 2026-09-14.** A
+    predicate that decides whether a live product is called gone, edited three
+    times, ungated throughout. That is what this closes.
+
+    THE FIXTURE IS A RECONSTRUCTION AND IS NAMED AS ONE. Read 2's own bytes were
+    never saved — only its measured properties were — so
+    `search-shell-rendered-redirect-2026-09-02.html` is the REAL 2026-09-10 head
+    plus a `<body>` carrying read 2's two recorded markers verbatim. It is
+    synthetic in its filler and **not synthetic in anything the predicate reads**:
+    the predicate reads `<body` presence, the canonical's path, ld+json blocks, and
+    the redirect announcement, and all four carry read 2's recorded values. The
+    byte count does not match read 2 and no claim here rests on one.
+
+    THE ORDERING IS NOT TDD. The fix landed 2026-09-11, this test on 2026-09-14.
+    It was watched red by perturbation — `announces_a_redirect` forced to `False`
+    reddens this test and leaves its two siblings green — which establishes that
+    *the gate bites*, and NOT that *the gate came first*. Phase 7's criterion 5
+    qualification is the precedent and its wording is reused on purpose.
+    """
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "bestbuy"
+    html = (fixtures / "search-shell-rendered-redirect-2026-09-02.html").read_text()
+
+    # The preconditions ARE the measurement. If any of these stops holding, this
+    # file no longer reconstructs read 2 and its verdict says nothing about it.
+    assert "<body" in html.lower(), (
+        "precondition: read 2 RENDERED — that is the whole point, the `<body>` "
+        "gate cannot catch this shape"
+    )
+    assert "NEXT_REDIRECT" in html and "http-equiv" in html, (
+        "precondition: read 2 announced the redirect in both recorded spellings"
+    )
+    assert 'type="application/ld+json"' not in html, (
+        "precondition: read 2 carried `blocks 0` — the no-offers branch is entered"
+    )
+
+    watch = Watch(name="CONTROL", retailer="bestbuy", target="6216393", control=True)
+    result = retailers._verdict_from_html(
+        watch,
+        html,
+        url="https://www.bestbuy.com/site/searchpage.jsp?id=pcat17071&st=6216393",
+        first_party_only=True,
+        rung=3,
+        sku="6216393",
+    )
+
+    assert result.unresolved is False, (
+        "a rendered page that ANNOUNCES where the product lives was called a dead "
+        "control — this is 2026-09-02 read 2, measured, and it is a false dead "
+        f"about a sku that read IN_STOCK $59.99: {result.detail!r}"
+    )
+    assert result.availability is Availability.UNKNOWN, (
+        "we read the announcing document, not the product page — UNKNOWN is the "
+        "honest reading and this test does not claim stock"
+    )
+    # THE PROSE MUST NOT OUTRUN THE FLAG. `unresolved=False` beside a sentence
+    # saying the sku did not resolve is two surfaces disagreeing one field apart.
+    assert "did not resolve" not in result.detail, (
+        f"the flag says nothing was established and the text asserts deadness: {result.detail!r}"
+    )
+    assert "announced a redirect" in result.detail, (
+        "the detail must name WHICH of the two not-established reasons applies — "
+        f"a person reading this has one repair to make: {result.detail!r}"
     )

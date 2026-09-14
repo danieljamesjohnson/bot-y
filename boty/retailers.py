@@ -490,8 +490,34 @@ def _verdict_from_html(
             # property (did it render) and not the transient one (what did it
             # announce).
             #
+            # ^ THAT PARAGRAPH IS SUPERSEDED, 2026-09-11, AND KEPT BECAUSE IT IS
+            # THE REASONING THAT WAS WRONG. `announced_redirect` was restored
+            # fourteen lines below, so 10-04's signal is read after all and
+            # "WITHDRAWN UNSHIPPED" is no longer true of this file. What the
+            # paragraph got right is that the redirect signal is transient; what
+            # it got wrong is treating transient as a reason to handle NEITHER
+            # shape. The two are not alternatives. `page_rendered` covers the
+            # shell that never rendered and `announces_a_redirect` covers the one
+            # that rendered and was leaving, and both shapes are measured.
+            #
+            # Read 2's absence from the 2026-09-10 capture was also never
+            # established as the signal DISAPPEARING: that capture was taken at
+            # the shipped 3 s settle and read 2 at 25 s, so the announcement may
+            # simply not have arrived yet. An unmeasured difference was reported
+            # as a change over time. Recorded here because it is the step that
+            # made deletion look safe.
+            #
             # CLAUSE B NEEDS NO GATE and is untouched: it requires
             # `ld.blocks > 0`, which a document that never rendered cannot meet.
+            #
+            # ^ THE SECOND SENTENCE IS AN ARGUMENT, NOT A MEASUREMENT, and is
+            # corrected beside rather than deleted (2026-09-14, a verifier
+            # finding). `ld+json` is legal in `<head>`, so a document with no
+            # `<body>` CAN carry `ld.blocks > 0` and clause B is not unreachable
+            # on an unrendered page by construction. It has not been observed:
+            # all three Best Buy captures with no product carry `ld+json 0`. So
+            # the claim is "not seen", not "cannot happen" — and the difference
+            # matters, because only the second would justify leaving it ungated.
             page_rendered = "<body" in html.lower()
             # AND THE SECOND FALSE-DEAD SHAPE, added 2026-09-11 after an
             # independent verifier caught that the `<body>` gate above covers only

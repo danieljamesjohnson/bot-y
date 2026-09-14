@@ -1254,6 +1254,18 @@ document captured in August, and Best Buy replaced that page shape. Nothing in t
 noticed: the fixtures are the August pages, and this is the first time anybody asked the live site
 since 2026-08-04.
 
+**NARROWED 2026-09-14 — the sentence above was true on 2026-09-02 and is no longer true of the
+tree.** It is kept unedited because it is the measurement that opened phase 10's real finding, and
+because the sequence of repairs is only legible if the original claim stays put. Clause A is now
+gated twice: on `page_rendered` (2026-09-10) and on `not announces_a_redirect` (2026-09-11). Both of
+the measured shapes — the shell that never rendered, and the rendered shell announcing a `308` —
+are excluded, so clause A no longer fires on *every* Best Buy SKU. **What has not changed is the
+underlying mechanism:** Best Buy's SKU search still answers with a client-side redirect and
+`fetch_rendered` still snapshots the announcing document, so what clause A now does on a live SKU is
+decline to conclude, rather than read it correctly. **Declining is not reading.** The `unresolved`
+flag is honest and Best Buy is still not readable through SKU search, and those are two claims. See
+§ *2026-09-10 — the two § 0h reads* below.
+
 **What this does NOT establish, stated before anything is built on it.** That the product is
 IN_STOCK, its price, or its seller. No product page was read — only Best Buy's instruction to go
 and read one. Criterion 3's *"reads IN_STOCK, first-party"* is **not measured by read 2** and is
@@ -1420,6 +1432,58 @@ whether it could.
   inherited.
 - **Not that the false dead is fixed.** It is measured, named, and left in place with its remedy
   written down.
+
+### 2026-09-10 — the two § 0h reads, and the fix they overturned
+
+**Entered in this log on 2026-09-14, four days late, and the lateness is the finding.** These two
+reads existed only in `QUESTIONS.md` § 0h and in a commit message until now. This file is the
+**gated** record — `tests/test_evidence_check.py` reads it and nothing reads a commit message — so
+two live navigations and the code change they produced sat outside the record that is supposed to
+hold them. The phase-10 verifier caught it on 2026-09-11 as gap 3. Nothing below is re-measured;
+it is transcribed from § 0h, which was written on the day.
+
+**Authorised:** 2 (`QUESTIONS.md` § 0h, Dan, 2026-09-10, *"go ahead do it"*). **Spent: 2. Unspent:
+0. Pre-navigation failures: 0. Retailers contacted: Best Buy only.**
+
+| read | asked | outcome |
+|---|---|---|
+| ① | the incumbent control `6216393` through 10-04's PROPOSED redirect-following transport, 13.8 s | **`unresolved=True` again — the proposed fix did not work.** It had been built against this log's *transcription* of a `NEXT_REDIRECT`, not against a capture |
+| ② | **reallocated before it was spent**, and the reallocation was stated first: a dead-SKU read is pointless while the fix fails on a live one, so the last read captured the shell instead | `tests/fixtures/bestbuy/search-shell-2026-09-10.html` — **23,292 B, no `<body>` at all**, 0 `ld+json`, title `6216393 - Best Buy`, and **zero** occurrences of `NEXT_REDIRECT`, `http-equiv`, `refresh` or `/product/` |
+
+**Read ② is the durable asset and that is why the reallocation was worth it:** it makes this
+retailer's false dead workable offline forever instead of costing a live read per attempt. Both
+false-dead shapes have been reproduced against fixtures every day since, at zero further cost.
+
+**What shipped on the strength of it (2026-09-10):** clause A gated on `<body>` presence —
+`page_rendered`, `boty/retailers.py`. A document that never rendered cannot support a claim about
+whether a product exists, and the canonical never could distinguish the two cases.
+
+#### Two claims from § 0h are corrected here, beside and not over
+
+**§ 0h's OUTCOME says *"The false dead is gone."* It was not gone; it was halved.** The `<body>`
+gate covers read ②'s shape — a shell that never rendered. It does **not** cover **read 2 of § 0g,
+recorded above in this same file**: a RENDERED 150,974 B page, `<body>` present, `ld+json 0`,
+canonical on the search endpoint, announcing a `308` to the product. Every input the predicate reads
+was satisfied, so that page sailed through the gate and stayed a false dead about a SKU that read
+`IN_STOCK $59.99`. **The counterexample was already in this log when the claim was written.**
+Repaired 2026-09-11 (`57ea00b`) by restoring `parse.announced_redirect`, which had been written,
+deleted as unreachable, and restored. Gated 2026-09-14 by
+`test_a_rendered_page_that_announces_a_redirect_is_not_a_dead_control` and four `announced_redirect`
+tests in `tests/test_parse.py` — **the predicate had shipped with no test in the suite at all.**
+
+**§ 0h also says the redirect signal *"was gone eight days later."* That comparison is not sound**,
+and it is the step that made deleting `announced_redirect` look safe. § 0g read 2 was taken at
+`settle_seconds=25`; read ② was taken at the shipped `3.0`. An announcement absent at 3 s is as
+consistent with *had not arrived yet* as with *no longer sent*, and nothing measured distinguishes
+them. The honest statement is **absent from a 3 s capture, present in a 25 s read**, which is a
+statement about two settles and not about eight days. Deciding that a signal is extinct is what
+licensed deleting the code that read it.
+
+**What is NOT claimed by this entry.** That Best Buy reads. It does not: the daemon's Best Buy
+control row is still a remembered `in_stock` with `checked=false`, and **production has made zero
+observations of either fix.** Both are proved against fixtures and against nothing else. A monitor
+that is honest about an unreadable retailer is not a readable retailer, and this log keeps those
+two sentences apart.
 
 ---
 

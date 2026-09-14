@@ -1,0 +1,14 @@
+{
+  "url": "https://www.bestbuy.com/site/searchpage.jsp?id=pcat17071&st=6216393",
+  "retailer": "bestbuy",
+  "name": "search-shell-rendered-redirect-2026-09-02",
+  "status": 200,
+  "transport": "browser",
+  "reconstruction": true,
+  "note": "RECONSTRUCTION, NOT A CAPTURE — and it has no captured_at for that reason. The 'age unknown' warning this produces is TRUE and is not to be silenced by inventing a date. It reconstructs docs/retailer-evidence.md read 2 (2026-09-02, settle_seconds=25): a RENDERED search shell that ANNOUNCED a 308 to the product. Read 2's bytes were never saved; only its measured properties were. Built from the REAL search-shell-2026-09-10.html head plus a <body> carrying read 2's two recorded markers verbatim. Synthetic in its filler, NOT synthetic in anything the predicate reads: <body> present, canonical on the search endpoint, ld+json 0, NEXT_REDIRECT;replace;/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393;308; and the matching meta http-equiv=refresh. It is 23,923 B and read 2 was 150,974 B; no claim rests on the byte count.",
+  "reconstructed_from": [
+    "tests/fixtures/bestbuy/search-shell-2026-09-10.html (the head, real bytes)",
+    "docs/retailer-evidence.md — READ 2 table and the two quoted redirect markers"
+  ],
+  "why_it_exists": "The 2026-09-10 <body> gate covers the shell that never rendered. This is the OTHER measured false-dead shape: it has a body, so the gate passes it through. announced_redirect covers it, and shipped on 2026-09-11 with no test anywhere in the suite."
+}

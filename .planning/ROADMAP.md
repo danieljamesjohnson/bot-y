@@ -188,6 +188,12 @@ performed nor recommended here. That restart now carries more than this phase: `
 the loop to its configured cadence rather than ~6.8% slower, so the request rate goes **up** slightly.
 That trade was named and taken, not stumbled into.
 
+> **ON THE WIRE SINCE 2026-09-11 07:56:33** — dated note added beside 2026-09-14, not over. Dan
+> instructed the restart and phases 8, 9 and 10 went on together. **The cool-off has still never
+> fired in production**, so phase 8's central mechanism is deployed and unobserved: it needs 30
+> consecutive refusals and the live counts are amazon 10 / target 18. Recorded as unobserved rather
+> than claimed. Full record at phase 10's closing note below.
+
 ### Phase 9: Out of Lockstep
 
 **Goal**: The six retailers stop presenting as one coordinated crawler — independent schedules, so
@@ -251,6 +257,12 @@ count is the same class of error as a rounded-up verdict.
 
 **NOT ON THE WIRE.** Phase 9 reaches the daemon only at `sudo systemctl restart boty` — Dan's action,
 still deferred with Phase 8's.
+
+> **ON THE WIRE SINCE 2026-09-11 07:56:33** — dated note added beside 2026-09-14, not over. And
+> phase 9 is the one phase whose deployment was **proved rather than inferred**: `status.json` was
+> rewritten twice inside 70 s after the restart, which only happens at this phase's ~50 s tick. The
+> pre-phase-9 loop wrote every ~300 s. Per DoD item 2 that proves the loop is running this code and
+> **nothing about the schedule being correct** — the schedule is proved offline only.
 
 **VERIFIED INDEPENDENTLY 2026-09-11, LATE, AND IT FOUND THREE ERRORS IN THIS RECORD — ALL MINE.**
 `09-VERIFICATION.md`, status **gaps_found**, score **5/7**. This phase closed WITHOUT a verifier: the
@@ -364,6 +376,19 @@ than papered over.
 unconfirmed fix is a recommendation rather than a repair. The control was **not swapped** and
 `config/products.yaml`'s Best Buy target is byte-unchanged.
 
+> **SUPERSEDED 2026-09-10, corrected here 2026-09-14 — a fix IS shipped, and it is not the one this
+> paragraph declined.** The paragraph stands unedited: it was true for eight days and the reasoning
+> in it was sound. What changed is that Dan authorised two more reads (`QUESTIONS.md` § 0h,
+> 2026-09-10), and **they overturned the recommendation rather than confirming it.** Read ① proved
+> 10-04's redirect-following transport did **not** work; read ② was reallocated to capture the shell,
+> and the capture showed the real discriminator was whether the page rendered at all. **What shipped
+> is `page_rendered` (2026-09-10, `9e9b78c`), plus `announced_redirect` (2026-09-11, `57ea00b`) after
+> a verifier found the `<body>` gate covered only one of the two measured shapes.** The control is
+> still **not swapped** and `config/products.yaml` is still byte-unchanged — that half of the
+> paragraph never stopped being true. **Both fixes make the monitor honest about a retailer it still
+> cannot read**; neither makes Best Buy readable, and production has made **zero** observations of
+> either. Evidence: `docs/retailer-evidence.md` § *2026-09-10 — the two § 0h reads*.
+
 | # | Verdict | The half that is not met |
 |---|---|---|
 | 1 | **MET IN PART** | The three states are distinct and asserted apart — but one route INTO the dead-control state was measured **over-inclusive on the wire**, which is the false dead above |
@@ -388,6 +413,20 @@ verifier reaches for when the digest does *not* match.
 
 **NOT ON THE WIRE.** Phase 10 reaches the daemon only at `sudo systemctl restart boty` — Dan's action,
 still deferred, and now carrying Phases 8, 9 **and 10** together.
+
+> **ON THE WIRE SINCE 2026-09-11 07:56:33. Dated note added beside 2026-09-14, not over.** Dan
+> instructed the restart; `MainPID` 667833 → 746345, `ExecMainStatus=0`, `NRestarts=0`, pre-restart
+> copies of all three live documents taken first. Phases 8, 9 and 10 went on together, exactly as
+> the sentence above predicted they would. **Measured, not assumed:** `state.json` migrated 13 → 13
+> entries with zero lost; `status.json` 13 rows, `healthy` False → True; and the new loop was proved
+> live rather than inferred — `status.json` was rewritten twice inside 70 s, which only happens at
+> phase 9's ~50 s tick.
+>
+> **Two things shipped AFTER that restart and are therefore in the tree and NOT on the wire:**
+> `57ea00b` (the second false-dead shape) and `17d3e5d` (the notify redaction, a live defect). The
+> next restart carries both. **And "on the wire" is still not "observed":** Best Buy has not read
+> since the deploy — its control row is a remembered `in_stock`, `checked=false` — so production has
+> made **zero** observations of phase 10's central fix. Three separate claims, kept apart.
 
 ### Phase 11: The Honest Ladder Position
 

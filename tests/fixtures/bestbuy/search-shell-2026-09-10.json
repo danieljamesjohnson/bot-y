@@ -1,0 +1,11 @@
+{
+  "url": "https://www.bestbuy.com/site/searchpage.jsp?id=pcat17071&st=6216393",
+  "retailer": "bestbuy",
+  "name": "search-shell-2026-09-10",
+  "captured_at": "2026-09-10T00:00:00Z",
+  "status": 200,
+  "bytes": 23292,
+  "note": "NOT a stock state — the FALSE DEAD itself. Best Buy's SKU search for the LIVE control 6216393 returned 23,292 B with NO <body>, 0 ld+json, title '6216393 - Best Buy', and zero NEXT_REDIRECT/http-equiv/refresh//product/. The sku is alive (0g read 3: IN_STOCK $59.99 off its product URL, 2026-09-02), so every unresolved=True taken off this document was a false dead. Read 2 of QUESTIONS.md 0h, settle_seconds=3.",
+  "transport": "browser",
+  "captured_at_is_the_day_not_the_instant": "0h records the date and not a UTC timestamp for this read; midnight is a placeholder for ordering and staleness only, and no claim here rests on the time of day"
+}

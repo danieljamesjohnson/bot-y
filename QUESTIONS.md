@@ -63,6 +63,29 @@ still detected); the shell is 23,292 B with *no* body (never rendered, nothing c
 survives, and no speculative redirect-following code was shipped. **Zero further reads are
 authorised.**
 
+#### CORRECTED 2026-09-11 and 2026-09-14 — two claims in the paragraph above are wrong, and they are left standing
+
+The OUTCOME above is **not edited**. It is what was believed on the day, it is the reasoning a fix
+was shipped on, and a record that quietly agrees with itself afterwards teaches nothing. Two
+corrections, beside:
+
+1. **"The false dead is gone" was rounded up. It was halved.** The `<body>` gate covers the shape
+   read ② captured. It does **not** cover § 0g's read 2 — a RENDERED 150,974 B page with a
+   `<body>`, `ld+json 0`, canonical on the search endpoint, announcing a `308` to the product. Every
+   input the predicate reads was satisfied, so it passed straight through the gate and stayed a
+   false dead about a SKU that had read `IN_STOCK $59.99`. **The counterexample was already in
+   `docs/retailer-evidence.md` when this outcome was written**; an independent verifier found it on
+   2026-09-11. Repaired the same day (`57ea00b`) by restoring `parse.announced_redirect`. **It
+   shipped with no test anywhere in the suite** and was gated on 2026-09-14.
+2. **"The redirect signal … was gone eight days later" compares two different settles.** § 0g read 2
+   was taken at `settle_seconds=25`; read ② at the shipped `3.0`. An announcement absent at 3 s is
+   as consistent with *had not arrived* as with *no longer sent*. Nothing measured distinguishes
+   them. This is the step that made deleting `announced_redirect` look safe, so it is the one worth
+   naming: **an unmeasured difference was reported as a change over time.**
+
+**Zero further reads are still authorised** — that part stands, and nothing in either correction
+needed one. Both shapes are now worked entirely against fixtures.
+
 ---
 
 ## 0g. Live Best Buy control reads for Phase 10 — ANSWERED 2026-09-02: **up to 3, Best Buy only**
