@@ -521,7 +521,21 @@ repairs.
 | 3 | **MET AS WRITTEN** | Four matrix rows moved; `tests/test_support_matrix.py` **44 passed** throughout, both directions |
 | 4 | **MET AS WRITTEN, in both directions** | **Padding up removed:** *"Six working retailers"* → **three of six read.** **Padding down refused:** Target and Walmart are NOT recorded as rung 4 — rung 4 here means *dropped, with evidence* (Pokémon Center's precedent, a **Terms** finding), and a retailer refusing a client is a reputational state. `config/products.yaml` is byte-unchanged; dropping either is Dan's call and REQ-25 says so |
 | 5 | **MET AS WRITTEN** | Cap **0 per retailer**, stated in `COVERAGE.md` before the first plan ran. Actual **0**. No `boty check`, no write to any daemon-owned file, no restart |
-| 6 | *see the gate line below* | |
+| 6 | **MET AS WRITTEN** | `make verify-offline` **EXIT 0**, `VERIFY: PASS (OFFLINE — live controls were NOT run…)`. **1047 passed / 0 skipped**, mypy clean, ruff clean, identity **PASS over 288 files**, **40/40 mutations caught, survivors 0**, `M21`–`M24` still the intentional gap, `M45` still free |
+
+**THE GATE RUN IS A CLEAN ONE, AND THAT SENTENCE HAD TO BE EARNED.** `mutation_check.py` builds
+each mutation's sandbox by copying the **live working tree at that moment**, so a run taken while
+files are being edited measures something that is not any commit — the phase-10 re-verifier caught
+an earlier transcript of mine doing exactly that (its W5: per-ident kill counts inflated by 27–30
+because phase 11's uncommitted edits landed mid-run). **This run was taken at committed `2508f3c`
+with `git status --porcelain` captured before and after it: empty both times.** Two files were
+committed during it (`b5304c1`) and neither is inside `SANDBOX_CONTENTS`, so no sandbox saw them;
+`identity_check` does scan every tracked file, so it was **re-run at `b5304c1` and reads 288 files,
+PASS** — the same figure.
+
+**A green here still says nothing about the retailers.** The verdict line is the OFFLINE pass, live
+controls were not run, and phase 11's whole subject is that two of six retailers stopped reading
+while every offline gate stayed green.
 
 ### Two claims already in this tree that the measurement contradicted
 
