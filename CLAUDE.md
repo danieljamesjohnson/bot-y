@@ -191,13 +191,26 @@ and have to be re-taken — say so beside them rather than keeping the first num
 
 - `WALMART_STORE_ID` lives in `/home/dan/.config/boty/env` (mode 600, outside the repo).
   **Never read, derive, infer or print it.** Its presence may only ever be measured as a
-  count. **It is SET ON DISK and NOT YET IN EFFECT** — Dan supplied it on 2026-08-25 after two
-  deferrals and it was written to that file; the running daemon picks it up at the next restart,
-  which is still deferred. Any process that does not load that env file — a test, a dev shell —
-  still sees no pin, so a Walmart reading there is store-gapped for a reason that is not a config
-  defect. *(This bullet read "it is currently unset, deliberately" until 2026-09-02. That was true
-  from 2026-08-10 to 2026-08-25 and stale for eight days after; it is corrected rather than deleted
-  because § 0f records the supply as the thing that changed it.)* See `QUESTIONS.md` § 0f.
+  count. **It is SET ON DISK AND IN EFFECT** — Dan supplied it on 2026-08-25 after two deferrals,
+  and the restart that activated it happened **2026-09-11 07:56:33**. Any process that does not
+  load that env file — a test, a dev shell — still sees no pin, so a Walmart reading there is
+  store-gapped for a reason that is not a config defect. *(This bullet read "it is currently unset,
+  deliberately" until 2026-09-02, and "SET ON DISK and NOT YET IN EFFECT … the next restart, which
+  is still deferred" until 2026-09-14. Each was true when written; each is corrected rather than
+  deleted, because § 0f records what changed it and a guide that quietly agrees with itself teaches
+  nothing.)*
+  - **IN EFFECT IS NOT THE SAME AS PRODUCING A READING, and the difference bit this project's own
+    records.** Measured 2026-09-14: all three Walmart rows in `state.json` carry `read_at: null` and
+    `checked: false`, so **no resolved Walmart reading has ever been recorded** — a stamp is written
+    only for a non-`UNKNOWN` verdict (`boty/monitor.py:417-418`, `:441`) and a refusal never writes
+    one. `STATE.md` and `08-UAT.md` both claimed on 2026-09-11 that Walmart's rows "carry real
+    verdicts after the restart"; those values are the migrated ledger's **memory**, read off the
+    dashboard and taken for fresh. Both are corrected beside. **`read_at` is the field that tells
+    them apart — use it.**
+  - **What the pin DID do, measured, is make the store-disagreement warning reachable for the first
+    time.** It fired 546 times between 2026-09-11 08:00:44 and 2026-09-13 05:26:07 and **not one
+    reached a phone** (`17d3e5d` fixes it; that fix is in the tree and not on the wire). See
+    `QUESTIONS.md` § 0f.
 - `.env*` reads are blocked by policy. Get env var *names* from docs, never values.
 - `datastore/secret.txt` belongs to a vendored changedetection.io datastore. Leave it be.
 

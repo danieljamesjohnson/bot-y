@@ -435,15 +435,30 @@ below the Best Buy section's insertion points. So the citations were wrong when 
 them and are wrong by a different amount now, which is the argument for the anchors in the last
 column rather than for a third set of numbers.
 
-| what the record says | cited 2026-09-02 | measured 2026-09-14 | a `grep` anchor that cannot drift |
-|---|---|---|---|
-| the four `make verify` transcripts reading `in_stock … $59.99` | L1642, L1884, L2286, L2413 | **L2127, L2369, L2771, L2898** (+485 each) | `grep -n "InStock from Best Buy" docs/retailer-evidence.md` → the four indented `in_stock      bestbuy   CONTROL` rows |
-| the SKU's search redirect, transcribed in full | L860 | **L860, unmoved** | `grep -n "Redirected to the product page"` |
-| the 2026-08-04 FALSE dead | L960 | **L960, unmoved** | `grep -n "no schema.org Product on it"` |
-| the two most recent attempts are a HOST failure | L3482 (Phase 5 close), L4397 (Phase 7 close) | **L3967, L4882** (+485 each) | `grep -n "no Chrome/Chromium" docs/retailer-evidence.md` |
-| SKU `6577129` was a product watch, never the control | L822, L868, L901 | **all three unmoved** | `grep -n "6577129" docs/retailer-evidence.md` |
-| `6577129` appears in config only in a comment | `config/products.yaml` L201 | **L241** | `grep -n "6577129" config/products.yaml` → still exactly one line, still a comment |
-| Best Buy's only `control: true` entry is `target: "6216393"` | L208–211 | **L281–284** | `grep -n '6216393' config/products.yaml` → still exactly one line |
+| what the record says | cited 2026-09-02 | 2026-09-14 **morning** | 2026-09-14 **afternoon** | an anchor that returns EXACTLY the cited lines |
+|---|---|---|---|---|
+| the four `make verify` transcripts reading `in_stock … $59.99` | L1642, L1884, L2286, L2413 | L2127, L2369, L2771, L2898 | **L2249, L2491, L2893, L3020** | `grep -nE '^ +in_stock +bestbuy +CONTROL' docs/retailer-evidence.md` → **exactly 4** |
+| the SKU's search redirect, transcribed in full | L860 | L860 | **L860, unmoved all day** | `grep -n "Redirected to the product page"` → **exactly 1** |
+| the 2026-08-04 FALSE dead | L960 | L960 | **L960, unmoved all day** | `grep -n "no schema.org Product on it"` → **2**; the cited one is the blockquote, the other is read 1's transcription of the same string |
+| the two most recent attempts are a HOST failure | L3482 (Phase 5 close), L4397 (Phase 7 close) | L3967, L4882 | **L4269, L5184** | `grep -n 'fetch failed: no Chrome/Chromium' docs/retailer-evidence.md \| grep -i bestbuy` → **exactly 2** |
+| SKU `6577129` was a product watch, never the control | L822, L868, L901 | unmoved | **unmoved all day** | `grep -n "6577129" docs/retailer-evidence.md` → **5**, of which the three cited are the argument; the other two are the `ERR_HTTP2_PROTOCOL_ERROR` probe rows |
+| `6577129` appears in config only in a comment | `config/products.yaml` L201 | L241 | **L241** | `grep -n "6577129" config/products.yaml` → **exactly 1**, still a comment |
+| Best Buy's only `control: true` entry is `target: "6216393"` | L208–211 | L281–284 | **L281–284** | `grep -n '6216393' config/products.yaml` → **exactly 1** |
+
+**A FOURTH COLUMN HAD TO BE ADDED SIX HOURS AFTER THE THIRD, and that is the finding rather than a
+tidy-up.** The "measured 2026-09-14" column was taken at ~08:20 and was stale by ~14:30 **the same
+day** — phase 11 added ~122 lines to the Best Buy section and every citation below it moved again.
+Three sets of line numbers for one set of passages, two of them produced inside a single session.
+**There is no version of this table that stays true**, which is the whole argument for the last
+column.
+
+**AND TWO OF THE ORIGINAL ANCHORS DID NOT DO THEIR JOB** — caught by the phase-10 re-verifier the
+same afternoon. `grep -n "InStock from Best Buy"` returns **7** lines, not 4, and
+`grep -n "no Chrome/Chromium"` returns **7**, not 2. An anchor that hands a reader a superset and a
+filtering job is a line-number citation with extra steps. Both are replaced above with patterns
+that return exactly what is claimed, and the two that genuinely cannot be narrowed
+(`6577129` → 5, `no schema.org Product on it` → 2) **say their real count and say what the extras
+are**, rather than quoting a number that only holds if you squint.
 
 **The Best Buy section itself did not move.** Everything cited under L790–L972 is byte-for-byte
 where it was, because the reads and this session's entries were appended *after* it. The +485 lands
