@@ -85,10 +85,10 @@ want to inform the user it's broken, really. we want to prevent a broken state"*
 change, and rung-2 API credentials. All three are argued in `REQUIREMENTS.md` § *What is
 deliberately NOT in this milestone*.
 
-- [x] **Phase 8: Stop Knocking** *(COMPLETE 2026-08-31 — in the tree, NOT on the wire)* — a persistently refused retailer is left alone for days, not knocked on twice a day forever
-- [x] **Phase 9: Out of Lockstep** *(COMPLETE 2026-09-01 — in the tree, NOT on the wire)* — six retailers stop being requested inside one short window from one origin
-- [x] **Phase 10: A Control That Cannot Die** *(COMPLETE 2026-09-02 — in the tree, NOT on the wire)* — a dead control is a fact about our config, never mistaken for a fact about the retailer
-- [ ] **Phase 11: The Honest Ladder Position** — what is actually true of Amazon, Target and Walmart, written down and gated
+- [x] **Phase 8: Stop Knocking** *(COMPLETE 2026-08-31 in the tree; ~~NOT on the wire~~ **ON THE WIRE since 2026-09-11 07:56:33** — noted 2026-09-14, see the phase's closing record)* — a persistently refused retailer is left alone for days, not knocked on twice a day forever
+- [x] **Phase 9: Out of Lockstep** *(COMPLETE 2026-09-01 in the tree; ~~NOT on the wire~~ **ON THE WIRE since 2026-09-11 07:56:33** — noted 2026-09-14, see the phase's closing record)* — six retailers stop being requested inside one short window from one origin
+- [x] **Phase 10: A Control That Cannot Die** *(COMPLETE 2026-09-02 in the tree; ~~NOT on the wire~~ **ON THE WIRE since 2026-09-11 07:56:33** — noted 2026-09-14, see the phase's closing record)* — a dead control is a fact about our config, never mistaken for a fact about the retailer
+- [x] **Phase 11: The Honest Ladder Position** *(COMPLETE 2026-09-14 — in the tree; it changed no production code, and it made ZERO live requests)* — what is actually true of Amazon, Target and Walmart, written down and gated
 
 ### Phase 8: Stop Knocking
 
@@ -422,7 +422,7 @@ unconfirmed fix is a recommendation rather than a repair. The control was **not 
 |---|---|---|
 | 1 | **MET IN PART** | The three states are distinct and asserted apart — but one route INTO the dead-control state was measured **over-inclusive on the wire**, which is the false dead above |
 | 2 | **MET AS WRITTEN** | Both halves of the conjunction asserted separately. Note the mixed group is **unreachable in today's config** (one control per retailer, grouped by retailer) — a latent defect in the code, reachable the moment any retailer gains a second control |
-| 3 | **MET IN PART** | The control was measured against a **real reading**, not a fixture — and there was nothing to repair. What is not met is a *repair*, because the premise was false; and the transport defect the read exposed is recommended, not fixed |
+| 3 | **MET IN PART** | The control was measured against a **real reading**, not a fixture — and there was nothing to repair. What is not met is a *repair*, because the premise was false; and the transport defect the read exposed is recommended, not fixed. **~~recommended, not fixed~~ — dated note, 2026-09-14 (re-verifier W3): it IS fixed, twice, and the row's verdict does not move.** `9e9b78c` (2026-09-10) gated clause A on the page having rendered; `57ea00b` (2026-09-11) added the redirect announcement after a verifier found the first covered only one of the two measured shapes; `c5b2fe4` (2026-09-14) gated both, and a re-verifier the same day found the redirect predicate was broader than its own docstring and the prose still outran the flag on a third path — both repaired. **MET IN PART stands and is not improvable by argument**: DoD item 3's first half asks for the repair to be confirmed against a real Best Buy control reading, and there has been none. Best Buy's control was last read **2026-08-25**, so production has observed NONE of it. Four offline fixes and zero live confirmations. |
 | 4 | **MET AS WRITTEN** | Rule numbered D1–D5, applied to all **six** controls (the loader's count; `grep -c` says 7 and the seventh is a comment). **D4 is failed by all six**, is **not** circular — it bounds the reserve at D1–D3, the stronger reading being an infinite regress — and duplicates D3 wherever a reserve exists. Target's D5 **NOT SATISFIED**: rung 3 surfaces no HTTP status and inventing one was refused |
 | 5 | **MET AS WRITTEN** | **M44** registered and observed CAUGHT (11-test kill set) on `boty/monitor.py`; registry 39 → **40**, survivors 0, `M21`–`M24` still empty, `INTENTIONAL GAP` 9 → 10 |
 
@@ -471,6 +471,84 @@ written down — including, where that is the answer, *dropped*.
   4. A retailer whose honest position is **rung 4** is recorded as rung 4. **The count of working retailers is not padded** — the Phase 2 rot, in the opposite sign, is not available here
   5. **The live probe budget is capped and the cap is stated**: no more than a stated number of requests per retailer for the whole phase, with the actual count recorded. Politeness is a hard constraint and a diagnosis is not a licence
   6. `make verify-offline` exits 0
+
+**Phase 11 — COMPLETE 2026-09-14, IN THE TREE. 2 of 2 plans. ZERO live retailer requests.**
+
+**The constraint it was executed under, first, because it changes how every line below should be
+read.** Dan authorised **no probe budget at all** (*"Work offline — no live retailer request is
+authorised"*), and both prior budgets (`QUESTIONS.md` § 0g, § 0h) were spent. Every earlier record
+in this project says this phase needs live requests — `STATE.md` says so four times. **That was the
+right reading of the phase as planned and it was not the only way to satisfy its criteria.**
+
+**WHAT REPLACED THE BUDGET: the daemon's own already-spent requests.** `boty` has been asking these
+retailers several times a day since 2026-09-11 07:56:33 on Dan's standing authority. Reading
+`journalctl -u boty`, `state.json` and `served/boty/status.json` costs nothing and asks nobody.
+**Observation is not probing** — a probe adds a request to a retailer already refusing us, which is
+the exact behaviour phases 8 and 9 exist to stop. **What it cannot do is vary anything**, which is
+why criterion 2 is unanswered and says so.
+
+**Window: 2026-09-11 07:56:33 → 2026-09-14 08:18:35, 3 d 0 h 22 m, one process, `NRestarts=0`.**
+
+### The three findings, none of which the phase went looking for
+
+**1. THE COOL-OFF FIRED IN PRODUCTION FOR THE FIRST TIME — `target`, 2026-09-14 02:00:00, at 30
+consecutive refusals, to `259200` s.** Phase 8 shipped that mechanism on 2026-08-31 and it reached
+the wire on 2026-09-11; it had never once been observed executing, and `STATE.md` recorded it as
+unobserved rather than claiming it. **`08-UAT.md` item 1 has been open since 2026-08-31 waiting for
+exactly this and is now discharged** — days-scale `skipped_reason` and all. Nobody did anything to
+make it happen; three days of waiting is what the evidence cost.
+
+**2. AMAZON IS NOT BLOCKED, and every record in this tree implied it was** — including this
+milestone's own opening sentence about *"three of six retailers"*. Its refusal counter climbed to 20
+and **RESET**, which happens only on a cycle where nothing was refused, and both watches carry
+readings stamped 2026-09-14. It is intermittently **and partially** reachable: one page answered
+while another was challenged in the same cycle. **No rate is claimed** — one reset in one window has
+no denominator, and phase 9's day test was repaired three days earlier for that exact error.
+
+**3. THE EVIDENCE LOG HAD NO SECTION FOR TWO SHIPPED RETAILERS**, and `11-01` fell into it looking
+for somewhere to write Walmart's verdict. GameStop and Walmart were configured, control-verified and
+advertised ✅ Working with nothing behind them. **It was a documented allowance, not an oversight** —
+argued in `evidence_check.py` rule 5 and pinned by a test named `…_is_deliberately_clean`. Reversed
+by **rule 7**, watched red first (2 problems, naming exactly those two), at a cost of 27 test-tree
+repairs.
+
+### Where the phase landed against the ROADMAP's six criteria
+
+| # | Verdict | What settles it |
+|---|---|---|
+| 1 | **MET AS WRITTEN** | Dated verdicts for all three in `docs/retailer-evidence.md`, each stating rung, extraction axis, what was tried, and the three-day measurement. Walmart's needed a section created first |
+| 2 | **MET AS WRITTEN — by recording it UNANSWERED**, which the criterion names as legitimate in its own text | New `## Phase 11 — the egress-vs-client question` section. What was tried, what could not be, and why: the instrument holds the independent variable fixed. **What the window narrows is recorded beside** — uniform blindness is dead (Amazon, GameStop, Nintendo and Best Buy were not all refused), so the blocks are per-retailer. That separates neither remaining answer |
+| 3 | **MET AS WRITTEN** | Four matrix rows moved; `tests/test_support_matrix.py` **44 passed** throughout, both directions |
+| 4 | **MET AS WRITTEN, in both directions** | **Padding up removed:** *"Six working retailers"* → **three of six read.** **Padding down refused:** Target and Walmart are NOT recorded as rung 4 — rung 4 here means *dropped, with evidence* (Pokémon Center's precedent, a **Terms** finding), and a retailer refusing a client is a reputational state. `config/products.yaml` is byte-unchanged; dropping either is Dan's call and REQ-25 says so |
+| 5 | **MET AS WRITTEN** | Cap **0 per retailer**, stated in `COVERAGE.md` before the first plan ran. Actual **0**. No `boty check`, no write to any daemon-owned file, no restart |
+| 6 | *see the gate line below* | |
+
+### Two claims already in this tree that the measurement contradicted
+
+Both are corrected **beside**, and both were mine.
+
+- **`STATE.md` / `08-UAT.md`, 2026-09-11: Walmart's rows "carry real verdicts after the restart".**
+  They do not. All three carry `read_at: null` and `checked: false`, and a stamp once written is
+  never removed by a refusal — so **no resolved Walmart reading has ever been recorded.** Those
+  values are the migrated ledger's memory. **A remembered verdict was read off the dashboard and
+  mistaken for a fresh one**, which is this project's core defect committed in its own UAT record.
+- **`STATE.md` and `REQUIREMENTS.md`: "gamestop's listing is HTTP 410 … the listing is gone".**
+  GameStop's GO Plus + watch carries a resolved `out_of_stock` stamped 2026-09-14 08:13:22. Both
+  records stand for their own dates; the 410 is no longer available as a present-tense fact.
+  `REQUIREMENTS.md`'s conclusion survives on a different premise, and that is said rather than
+  letting a right answer launder a stale reason.
+
+**`M45` IS STILL FREE and was deliberately not spent.** Rule 7 is gated by two tests and no
+mutation. Pricing an ident here means measuring its kill set against all 40 existing ones, and that
+was not done — phase 11's criteria require no new mutation, so registering one on a partial
+measurement would buy a denominator rather than a defence. Recorded as an open, priced hole with its
+anchor named.
+
+**NOT ON THE WIRE, and for once that phrase means almost nothing:** phase 11 changed no production
+code. What is in the tree and not on the daemon is `57ea00b` (the second false-dead shape) and
+`17d3e5d` (the notify redaction — **a live defect: 546 health warnings have failed Telegram
+delivery since the restart**). Both reach the daemon at the next `sudo systemctl restart boty`,
+which is Dan's call.
 
 ### Why no phase here proposes escalating a rung
 

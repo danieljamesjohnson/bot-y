@@ -62,22 +62,44 @@ rather than an answer the retailer gave us, or markup rather than a feed.
 
 | Retailer | Rung | Extraction | robots.txt | Terms | Method | Status |
 |---|---|---|---|---|---|---|
-| GameStop | 1 | structured | unread — `robots.txt` itself returned 403 | unread — not requested | `curl_cffi` + schema.org JSON-LD | ✅ Working |
-| Walmart | 1 | structured | permits `/ip/` | unread — challenge page, not the terms | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ✅ Working |
+| GameStop | 1 | structured | unread — `robots.txt` itself returned 403 | unread — not requested | `curl_cffi` + schema.org JSON-LD | ✅ Working — and the busiest row here: **39 refusals in the three days to 2026-09-14**, with the consecutive counter resetting **16 times** and never passing 5. It refuses individual requests, not this client; the backoff waits and GameStop answers. All five watches carry readings stamped minutes before that measurement was taken |
+| Walmart | 1 | structured | permits `/ip/` | unread — challenge page, not the terms | `curl_cffi` + `__NEXT_DATA__`, seller-aware | ⚠️ **NOT READING** — configured and control-verified, and it has produced **zero** resolved readings in the three days to 2026-09-14. The `in_stock` a reader sees on the dashboard is a **remembered** value, `checked: false`. It failed in two ways in sequence: 45 h answering with a store we did not ask about, then 9 consecutive refusals and counting. **Rung 1 refused AND rung 3 refused** (2026-08-27, `robot or human` in 3.8 s), so the ladder is exhausted rather than unclimbed. **Not recorded as rung 4** — rung 4 here means *dropped, with evidence*, and a retailer refusing a client is a reputational state, not a permanent one. See [`docs/retailer-evidence.md`](docs/retailer-evidence.md) § Walmart |
 | Nintendo | 1 | structured | permits `/us/store/products/` | forbids automated means | `curl_cffi` + schema.org JSON-LD | ✅ Working — the only first-party GO Plus + here, at its $54.99 MSRP. ⚠ disagree — `robots.txt` is `Allow: /`; the Terms bar automated means |
 | Best Buy | 3 (2 with a key) | structured | unread — refused at the connection layer | unread — same refusal | Headless browser + schema.org JSON-LD via SKU search redirect; official Products API when `BESTBUY_API_KEY` is set | ⚠️ Working, `[degraded]`, **and its control does not currently resolve through the configured path** — no credentials needed; a free but manually approved key upgrades it to rung 2 and drops the flag. Control-only: no GO Plus + listing. Measured live 2026-09-02: the control reads `IN_STOCK` `$59.99` first-party **on its product page**, and the very same SKU came back as a *dead control* through the configured SKU-search path twice in the same hour — Best Buy now redirects client-side and the browser snapshots the announcing shell. Named and unrepaired; see [`docs/retailer-evidence.md`](docs/retailer-evidence.md) § Best Buy, reads 1–3 |
 | Pokémon Center | 4 | — | permits `/product/` | forbids data mining | none — Imperva refuses `/product/*` at rung 1 (HTTP **200** `Pardon Our Interruption`) and at rung 3 | ❌ Dropped, with the evidence written down. Not configured, not padded into the count. ⚠ disagree — `/product/*` is not disallowed, but the Terms prohibit data gathering |
-| Amazon | 1 | dom | permits `/dp/` | forbids extraction | `curl_cffi` + the **add-to-cart control**, no browser — Amazon serves `/dp/<ASIN>` to impersonated HTTP and ships no structured data in it | ⚠️ Working, `[degraded]` `[dom]` — cheapest transport here, most fragile extraction: a buy-box redesign breaks it silently, so a control watch and mutation M8 both cover it. Its only GO Plus + offer is a **used** unit at **$219** from a reseller, suppressed twice over. ⚠ disagree — no rule matches `/dp/<ASIN>`; the Conditions of Use forbid extraction |
-| Target | 3 | dom | permits `/p/` | forbids extraction | Headless browser + the **add-to-cart button** — Target ships no structured data on `/p/` and renders stock client-side | ⚠️ Working, `[degraded]` `[dom]` — control-only, and the most fragile row here: degraded on both axes. Target **delisted** the GO Plus + (TCIN `88714054`), a disproof rather than an omission. Rendering the page makes Target's own JavaScript fetch three hosts publishing `Disallow: /` — measured, and recorded in [`QUESTIONS.md`](QUESTIONS.md) § 0d. ⚠ disagree — `robots.txt` does **not** disallow `/p/` |
+| Amazon | 1 | dom | permits `/dp/` | forbids extraction | `curl_cffi` + the **add-to-cart control**, no browser — Amazon serves `/dp/<ASIN>` to impersonated HTTP and ships no structured data in it | ⚠️ Working **intermittently**, `[degraded]` `[dom]` — cheapest transport here, most fragile extraction: a buy-box redesign breaks it silently, so a control watch and mutation M8 both cover it. **Measured over the three days to 2026-09-14: 14 refusals, and a consecutive counter that climbed to 20 and then RESET** — so Amazon answered every watch in some cycle. Both watches carry readings stamped 2026-09-14. It is partially reachable too: one page answered while another was challenged in the same cycle. **No rate is claimed** — one reset in one window has no denominator. Its only GO Plus + offer is a **used** unit at **$219** from a reseller, suppressed twice over. ⚠ disagree — no rule matches `/dp/<ASIN>`; the Conditions of Use forbid extraction |
+| Target | 3 | dom | permits `/p/` | forbids extraction | Headless browser + the **add-to-cart button** — Target ships no structured data on `/p/` and renders stock client-side | ⚠️ **NOT READING**, `[degraded]` `[dom]` — **zero** resolved readings in the three days to 2026-09-14; the `in_stock` on the dashboard is a **remembered** value, `checked: false`. **In cool-off since 2026-09-14 02:00:00** after 30 consecutive refusals — `current_interval_seconds: 259200`, the first time that mechanism has ever fired in production. Already AT rung 3 and refused there (`px-captcha`, 2026-08-27), so nothing is left to escalate to. **Not recorded as rung 4**, for the same reason as Walmart. Target **delisted** the GO Plus + (TCIN `88714054`), a disproof rather than an omission. Rendering the page makes Target's own JavaScript fetch three hosts publishing `Disallow: /` — measured, and recorded in [`QUESTIONS.md`](QUESTIONS.md) § 0d. ⚠ disagree — `robots.txt` does **not** disallow `/p/` |
 
-**Six working retailers — read them as a four and a two.** Best Buy and Target
-are control-only: live and control-verified, but neither lists the GO Plus +, a
-recorded disproof rather than an omission. **Four can page you:** GameStop,
-Walmart, Nintendo and Amazon. Pokémon Center is dropped and not padded into the
-count — walked down the whole ladder, refused at every rung. And a browser is not
-a strict upgrade: the same headless Chrome that reads Best Buy is served a
-Cloudflare wall by gamestop.com, so rung 3 is for a retailer that refuses HTTP
-*at the connection layer*, not for a fetch that failed once.
+**Six retailers are configured. THREE OF THEM READ.** Measured over the three
+days to 2026-09-14 from the running monitor's own ledger — `journalctl`,
+`state.json`, `served/boty/status.json` — at the cost of **zero** extra requests:
+
+| | |
+|---|---|
+| reading | **GameStop, Nintendo** — fresh readings, minutes old |
+| reading intermittently | **Amazon** — 14 refusals, but it answered on 2026-09-14 |
+| **not reading** | **Target** (in cool-off, 30 consecutive refusals), **Walmart** (9 and climbing), **Best Buy** (last resolved reading 2026-08-25) |
+
+**This paragraph used to read "Six working retailers — read them as a four and a
+two." It is corrected rather than quietly rephrased, because that sentence was a
+count of retailers that had *once* worked**, and this project exists to refuse
+exactly that substitution. Nothing was measured to have broken on 2026-09-14;
+what happened is that somebody finally looked.
+
+**TWO CAN PAGE YOU TODAY:** GameStop and Nintendo. Amazon can when it answers.
+Walmart carries the GO Plus + and is not currently reading it. Best Buy and
+Target are control-only — live-verified in August, and neither lists the
+GO Plus + anyway, a recorded disproof rather than an omission.
+
+**Not padded in either direction.** Pokémon Center is dropped and stays out of
+the count — walked down the whole ladder, refused at every rung. Target and
+Walmart are **not** recorded as rung 4, because rung 4 here means *dropped, with
+evidence*, and a retailer refusing a client is a reputational state that can end
+on its own. Overstating a refusal is the same error as overstating a success.
+
+And a browser is not a strict upgrade: the same headless Chrome that reads Best
+Buy is served a Cloudflare wall by gamestop.com, so rung 3 is for a retailer that
+refuses HTTP *at the connection layer*, not for a fetch that failed once.
 
 Every probe, position and reversal behind this table — URLs, statuses, dates — is
 in [docs/retailer-evidence.md](docs/retailer-evidence.md).

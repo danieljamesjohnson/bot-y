@@ -722,6 +722,57 @@ six that both lists the Pokémon GO Plus + and is a marketplace — which makes 
 the only place the seller filter and the price ceiling have anything to defend
 against. They are defending against something today: a used unit at $219.
 
+### 2026-09-14, Phase 11 — the ladder position, from three days of the daemon's own readings
+
+**Verdict unchanged: REACHABLE (rung 1), `dom` extraction. NOT rung 4, and this section says so
+because a measurement says so rather than because nothing forced the question.**
+
+**Zero live requests were made to establish this.** Phase 11 was authorised **no probe budget at
+all** (`.planning/phases/11-the-honest-ladder-position/COVERAGE.md`; cap **0 per retailer**, actual
+**0**). What follows is read off requests the running daemon had **already spent** on Dan's
+standing authority — `journalctl -u boty`, `state.json`, `served/boty/status.json`. Observing a
+ledger adds nothing to any retailer's view of us; a probe would have.
+
+**The window, fixed before the numbers were taken:** 2026-09-11 07:56:33 CDT → 2026-09-14 08:18:35
+CDT, **3 d 0 h 22 m**, one process (`MainPID=746345`, `NRestarts=0`). The lower bound is the
+restart that put phases 8, 9 and 10 on the wire. Nothing before it ran this code and nothing before
+it is quoted here as if it did.
+
+**What lets `read_at` carry weight, asserted from the code rather than assumed.**
+`monitor.State.transitioned_to_stock` returns early on `UNKNOWN` (`boty/monitor.py:417-418`) and the
+`read_at` write is below that guard (`:441`); the refusal path sets `read_at=None` at the producer
+(`boty/retailers.py:718`). **So a stamp is written only for a RESOLVED reading and a refusal can
+never write one.** That is what turns `read_at` from "when we last asked" into "when we last
+actually read something", and every claim below leans on it.
+
+| | |
+|---|---|
+| refusals logged in the window | **14** |
+| the counter's series | `10 … 20`, then **RESET**, then `1, 2, 3` |
+| resolved readings | **2, both stamped**: `Pokémon GO Plus +` → `out_of_stock` at **2026-09-14 02:26:22**; `CONTROL — Amazon Basics AA batteries` → `in_stock` at **03:26:17** |
+| published state at the window's end | `backing off after 3 refusal(s) — next attempt in ~70 min`, `current_interval_seconds: 14400.0` |
+
+**THE RESET IS THE FINDING.** A consecutive-refusal counter returns to zero only on a cycle where
+`any(x.refused for x in group)` was False — `boty/monitor.py:869`. So somewhere between 2026-09-13
+19:56:13 (20 in a row) and 2026-09-14 02:26:22 (1 in a row), **Amazon answered every watch it was
+asked**. The two stamps date it.
+
+**Amazon is intermittently and PARTIALLY reachable, and no record in this tree said so before
+today.** Partially, precisely: at 03:26:17 the control resolved `in_stock` and at 03:26:19 the
+retailer was recorded refused — the same cycle, because a retailer is marked refused if **any** of
+its watches was. One Amazon page answered while another was challenged.
+
+**What this does NOT establish, stated before anything is built on it.**
+
+- **Not a rate.** One reset in one window has no denominator. Dividing it would produce a duty
+  cycle with the same defect phase 9's day test was repaired for on 2026-09-14, three days after a
+  verifier caught it — a figure whose precision comes from nowhere.
+- **Not that the challenge is gone.** Amazon refused 14 times in the same window, and the last
+  three are after the reset.
+- **Not a cause.** Nothing here distinguishes an egress-attached block from a client-attached one;
+  that is § *Phase 11 — the egress-vs-client question* below, and it is recorded UNANSWERED.
+- **Not a fresh probe of any kind.** No request was made. This is the daemon's ledger, read.
+
 ---
 
 ## Best Buy
@@ -1452,7 +1503,17 @@ it is transcribed from § 0h, which was written on the day.
 
 **Read ② is the durable asset and that is why the reallocation was worth it:** it makes this
 retailer's false dead workable offline forever instead of costing a live read per attempt. Both
-false-dead shapes have been reproduced against fixtures every day since, at zero further cost.
+false-dead shapes are now reproducible against fixtures at zero further cost, and both have been
+reproduced — the bodyless shell on 2026-09-10 and continuously since by
+`test_the_live_search_shell_is_not_reported_as_a_dead_control`, the rendered-redirect shape by a
+verifier's synthetic input on 2026-09-11 and by a committed fixture from 2026-09-14.
+
+*(This sentence read "reproduced against fixtures **every day since**" for a few hours on
+2026-09-14, and a re-verifier struck it the same day as W4. Nothing records a reproduction on
+09-12 or 09-13, and the rendered-redirect fixture did not exist until 09-14 07:59. It was a
+throwaway flourish asserting a daily cadence nobody measured, in a file whose entire subject is
+not doing that. Corrected here rather than deleted, because the shape of the error — a rhetorical
+"every day" hardening into a claim — is the one worth recognising again.)*
 
 **What shipped on the strength of it (2026-09-10):** clause A gated on `<body>` presence —
 `page_rendered`, `boty/retailers.py`. A document that never rendered cannot support a claim about
@@ -1484,6 +1545,67 @@ control row is still a remembered `in_stock` with `checked=false`, and **product
 observations of either fix.** Both are proved against fixtures and against nothing else. A monitor
 that is honest about an unreadable retailer is not a readable retailer, and this log keeps those
 two sentences apart.
+
+---
+
+## GameStop (gamestop.com)
+
+**CREATED 2026-09-14, IN PHASE 11, for the reason stated at the top of § Walmart** — configured and
+control-verified since Phase 1, advertised as ✅ Working, and nowhere in this document. Rule 7 now
+forbids that state; it was watched going red on GameStop and Walmart before either section existed.
+
+**GameStop is not one of the three retailers phase 11 was scoped around** and it is written up
+anyway, because rule 7 applies to every shipped retailer and because **the daemon's three-day window
+shows GameStop failing in a way that is genuinely unlike Target's and Walmart's.** A contrast is
+what makes the other two mean anything.
+
+**Nothing below is a new measurement.** Phase 11 made ZERO live requests.
+
+**Verdict: REACHABLE (rung 1)**
+
+**Transport:** `curl_cffi` (rung 1) + schema.org JSON-LD.
+**Extraction axis:** `structured`.
+
+### What was measured, by date
+
+| when | what | result |
+|---|---|---|
+| 2026-08-03 | `robots.txt` | **unread** — the file itself returned **HTTP 403** from Cloudflare (L3241) |
+| 2026-08-03 | Terms of Use | **not requested.** The no-escalation rule moved on after the refusal above (L3335) — and this is one of the two rows the REQ-13 table records as *"no position to compare"* |
+| 2026-08-02 → 2026-08-17 | `CONTROL — PS5 console` | `in_stock … $549.99 … ld+json: InStock from GameStop` across the `make verify` transcripts |
+| 2026-08-02 | `Pokémon GO Plus +` fixture | `OutOfStock`, `$54.99`, via schema.org `ld+json` |
+
+### 2026-09-14, Phase 11 — **GameStop refuses constantly and reads anyway**, which is the shape neither Target nor Walmart has
+
+Same window and same method as § Amazon's 2026-09-14 subsection.
+
+| | |
+|---|---|
+| refusals logged in the window | **39** — nearly three times Amazon's and more than Target's and Walmart's combined |
+| the counter's series | `1 1 2 3 1 1 1 2 1 2 3 4 5 1 1 1 2 3 1 2 3 4 5 1 1 2 1 1 2 3 1 2 3 1 2 1 1 1 2` — **16 resets**, never above 5 |
+| resolved readings | **all five watches, stamped within minutes of the window's end**: control `in_stock` 08:13:25, `Pokémon GO Plus +` `out_of_stock` 08:13:22, three TRANSITION watches 08:13:27–08:13:30 |
+| published state at the window's end | `paced at 15 min — next attempt in ~12 min`, `current_interval_seconds: 900` |
+
+**THE COUNTER NEVER GETS PAST 5, AND THAT IS THE WHOLE DIFFERENCE.** Target went 19 → 30 monotonic
+and Walmart 1 → 9 monotonic; GameStop bounces off 1–5 sixteen times. A reset means a cycle in which
+nothing was refused, so **GameStop is refusing individual requests and not this client.** The
+backoff ladder catches it, waits, and GameStop answers — which is what the ladder is for, working
+exactly as phase 8 designed it and visible here only because the daemon's own ledger records it.
+
+**A CLAIM IN `STATE.md` THAT THIS WINDOW DOES NOT SUPPORT, recorded rather than propagated.**
+`STATE.md`'s v0.4 scoping sentence says *"gamestop's listing is HTTP 410"*, dated 2026-08-27, and
+`REQUIREMENTS.md` builds on it: *"GameStop's `HTTP 410`. The listing is gone."* **Measured
+2026-09-14: GameStop's `Pokémon GO Plus +` watch carries a RESOLVED `out_of_stock` reading stamped
+08:13:22 this morning.** A resolved reading is not a 410 — `monitor.State` writes a stamp only for a
+non-`UNKNOWN` verdict. So either the listing returned, or the 410 was about a different URL, or it
+was transient.
+
+**Neither record is edited.** The 410 was recorded as a measurement on 2026-08-27 and this is a
+measurement on 2026-09-14; both can be true of their own days. What is NOT available any more is
+building on the 410 as a present-tense fact — and `REQUIREMENTS.md` currently does, in a section
+explaining why there is *"nothing to build"*. That reasoning happens to survive: a watch that reads
+`out_of_stock` needs no work either. **The premise is stale and the conclusion is not, which is
+worth saying out loud rather than letting a right answer launder a wrong reason.**
 
 ---
 
@@ -2918,6 +3040,136 @@ number — and the roadmap criterion the shortfall was really about (Target repo
 stock *for the GO Plus +*) stands UNMET regardless, because Target no longer
 lists the product.
 
+### 2026-09-14, Phase 11 — the ladder position. **Target has not read once in three days.**
+
+**Verdict line unchanged at `REACHABLE (rung 3)` — and that line is now the oldest true thing in
+this section rather than a description of today.** It is kept, and this subsection is placed beside
+it, because 2026-08-03's reading was real and a measurement does not become false, it becomes
+superseded (§ 6). **A reader who stops at the verdict line will be wrong about Target today**, so
+this paragraph says it in the same breath.
+
+**Zero live requests.** Phase 11 had **no probe budget at all** — cap **0 per retailer**, actual
+**0**. Read off the running daemon's already-spent requests; see § Amazon's 2026-09-14 subsection
+for the method, the window and the `read_at` argument, which are the same here.
+
+| | |
+|---|---|
+| refusals logged in the window | **12** |
+| the counter's series | `19 → 30`, **monotonic, no reset** |
+| resolved readings | **ZERO.** `target:CONTROL — up&up microfiber dust cloths` carries `read_at: null` |
+| what the published `in_stock` is | a **remembered** value, `checked: false` — the ledger's memory, not a reading |
+| published state at the window's end | `cooling off after 30 refusal(s) — next attempt in ~2.7 days`, `current_interval_seconds: 259200` |
+
+**THE COOL-OFF FIRED HERE, AND IT IS THE FIRST TIME IN PRODUCTION.** 2026-09-14 02:00:00,
+`target refused us (30 in a row) — next attempt in ~4320 min, not 5`. Phase 8 shipped
+`REFUSALS_BEFORE_COOLOFF = 30` and `COOLOFF_SECONDS = 259200` on 2026-08-31, they went on the wire
+2026-09-11, and until this morning the mechanism had never once been observed executing —
+`08-UAT.md` item 1 has been open since 2026-08-31 waiting for exactly this, and `STATE.md` recorded
+it as unobserved rather than claiming it. **It is now observed, on the live daemon, at the exact
+threshold and the exact interval the phase fixed.** That is phase 8's central claim, discharged by
+the wire rather than by simulation.
+
+**Where the counter started matters and is not hidden.** Target entered the window at **19**, not
+at 0 — it had been refusing before the restart and `pacer-state.json` survived it. So the 30 is not
+30 refusals in three days; it is **12 in three days, on top of 18 carried across**. The cool-off
+fired on a total, which is what it is designed to do, and the three-day figure is the one this
+window can support.
+
+**The rung above is empty, and that was established before this window rather than inferred from
+it.** Target is already at rung 3 — a real headless browser — and refused there: `px-captcha`,
+2026-08-27. Rung 2 needs a credential only Dan can obtain (`REQUIREMENTS.md` § *What is
+deliberately NOT in this milestone*). **There is nothing left to escalate to.**
+
+**AND IT IS NOT RECORDED AS RUNG 4, deliberately.** Rung 4 in this project means **dropped, with
+evidence**, and the precedent is Pokémon Center — dropped on a **Terms** finding, a permanent
+property of the retailer that no amount of waiting changes. Target is refusing **a client**. That
+is a reputational state and it can end without anybody doing anything. Recording it as rung 4 would
+assert permanence that nothing measured supports, which is the same error as ✅ Working in the
+opposite direction. **The honest record is the one above: configured, refused at every rung tried,
+no resolved reading since a stated date.** Whether to drop Target is Dan's decision and REQ-25
+leaves it to him explicitly.
+
+---
+
+## Walmart (walmart.com)
+
+**THIS SECTION WAS CREATED 2026-09-14, IN PHASE 11, AND ITS ABSENCE UNTIL THEN IS THE FIRST THING
+IT HAS TO SAY.** Walmart has been configured, control-verified and advertised in `README.md` as
+✅ Working since Phase 1 — and this document, the one every other verdict in this project is
+written into, said **nothing about it at all**. Not a wrong thing: nothing. GameStop was in the same
+state and its section was written in the same commit.
+
+**It was not an oversight. It was argued and allowed**, in `scripts/evidence_check.py` rule 5's own
+comment block: *"Demanding one here would redden the shipped tree over a gap that is not a lie."*
+Phase 11 reversed that, added **rule 7** to require a section from every configured roadmap
+retailer, and watched it go red on exactly these two before writing them. See `11-02-PLAN.md` for
+the three reasons the allowance was overtaken.
+
+**Nothing below is a new measurement.** Every figure is gathered from records already in this tree
+and carries the date it was taken. **Phase 11 made ZERO live requests** — cap 0 per retailer,
+actual 0.
+
+**Verdict: REACHABLE (rung 1)**
+
+**AND THAT VERDICT IS ABOUT AUGUST. IT IS NOT A DESCRIPTION OF TODAY** — read the 2026-09-14
+subsection below before relying on it. It is worded this way, rather than moved, because Walmart
+genuinely is reachable at rung 1 in the sense the ladder means: no higher rung is needed and no
+policy forbids it. What has changed is that it is currently refusing this client.
+
+**Transport:** `curl_cffi` (rung 1), `__NEXT_DATA__` extraction, seller-aware.
+**Extraction axis:** `structured` — Walmart ships a real payload and we read it, so a reskin does
+not break us silently the way Amazon's and Target's `dom` readers would.
+
+### What was measured, by date
+
+| when | what | result |
+|---|---|---|
+| 2026-08-03 | `robots.txt` for `/ip/<slug>/<id>` | **permits** — no rule in the `*` group matches `/ip/`, and item-page sitemaps are published (L3242) |
+| 2026-08-03 | the Terms of Use URL | **unread** — served a `Robot or human?` challenge. Not a policy finding; a wall in front of the policy |
+| 2026-08-03 → 2026-08-17 | `CONTROL — Great Value whole milk` through four `make verify` transcripts | `in_stock … $2.42 … __NEXT_DATA__: IN_STOCK from Walmart.com`, first-party (L2177, L2419, L2821, and the Phase 7 gate) |
+| — | `Pokémon GO Plus +` | listed, but the offer is a **marketplace reseller at ~4× MSRP** — suppressed twice over, by the seller filter and by the price ceiling. This is the watch the whole alertability rule was built for |
+| **2026-08-27** | **this project's own rung-3 headless browser, driven at Walmart's control** | **`rendered challenge page matched 'robot or human'`, in 3.8 s.** Recorded in `.planning/ROADMAP.md`. **Rung 1 refused and rung 3 refused — the ladder is exhausted, not unclimbed**, and it is why no phase in v0.4 proposes escalating a rung |
+| 2026-09-11 07:56:33 | `WALMART_STORE_ID` reached the running process (REQ-14, deferred since v0.2) | the pin is live. Its value is recorded **as a count and never as a value**, `QUESTIONS.md` § 0f |
+
+### 2026-09-14, Phase 11 — the ladder position. **Walmart has not read once in three days either, and it failed in TWO different ways**
+
+Read off the running daemon's already-spent requests; the method, the window
+(2026-09-11 07:56:33 → 2026-09-14 08:18:35, one process, `NRestarts=0`) and the `read_at` argument
+are stated once in § Amazon's 2026-09-14 subsection and are the same here.
+
+| | |
+|---|---|
+| resolved readings | **ZERO.** All three Walmart rows carry `read_at: null`; the published `in_stock` / `out_of_stock` are **remembered** values, `checked: false` |
+| refusals logged | **9**, series `1 → 9`, monotonic, no reset |
+| **first refusal** | **2026-09-13 05:30:33** — i.e. **45 h 34 m into the window, not at the start of it** |
+| published state at the window's end | `backing off after 9 refusal(s) — next attempt in ~105 min`, `current_interval_seconds: 21600` (the 6 h ceiling) |
+
+**THE TWO FAILURE MODES ARE DIFFERENT AND THE SEQUENCE IS THE FINDING.** For the first 45.4 hours
+Walmart was **not refusing** — it was answering, and the answer was unusable. The daemon emitted
+`sending health warning for: walmart` **546 times**, every ~5 minutes, from **2026-09-11 08:00:44**
+to **2026-09-13 05:26:07**. That is the store-**disagreement** warning, which is unreachable until a
+store is pinned and became reachable for the first time with that morning's restart. Then, four
+minutes after the last one, at **05:30:33**, Walmart began refusing and has not stopped.
+
+**So "Walmart does not read" is one sentence covering two states**, and this record keeps them
+apart: *answering with a store we did not ask about* (2026-09-11 → 09-13) and *refusing* (2026-09-13
+→ now). Nothing measured says whether they are related.
+
+**AND THE HEALTH WARNING NEVER REACHED A PHONE.** All 546 attempts failed delivery with
+`Bad Request: can't parse entities: Unsupported start tag` — the redaction placeholder was
+angle-bracketed and Telegram renders HTML, so the safety measure silenced the alert it was
+protecting. Fixed in the tree at `17d3e5d` on 2026-09-11 and gated on shape rather than on the
+word. **That fix is NOT on the wire** — it reaches the daemon at the next restart, which is Dan's
+call. **Restock alerts were never at risk**, measured rather than assumed: the redaction is applied
+at exactly two sites and both are inside `send_health_warning`.
+
+**NOT RECORDED AS RUNG 4, for the reason stated in full under § Target's 2026-09-14 subsection.**
+Rung 4 here means **dropped, with evidence**, and the precedent (Pokémon Center) was dropped on a
+**Terms** finding — a permanent property. Walmart is refusing a client, which is a reputational
+state that can end without anybody doing anything. The honest record is the one above: configured,
+refused at both rungs tried, no resolved reading since a stated date. **Dropping it is Dan's
+decision and REQ-25 leaves it to him explicitly.**
+
 ---
 
 ## What was built on both of these (2026-08-02, 02-04 tasks 2 and 3)
@@ -2974,6 +3226,56 @@ list prevents.
 
 Imperva sits in front of a great many retailers. Phase 3's two are prime
 candidates, and when one of them refuses us it will now say so.
+
+---
+
+## Phase 11 — the egress-vs-client question: **EXPLICITLY UNANSWERED (2026-09-14)**
+
+**REQ-25 asks whether each block is attached to this EGRESS or to this CLIENT. This phase did not
+establish it, and this section exists so that fact is written down rather than implied by its
+absence.** Phase 11's criterion 2 names an unanswered verdict as a legitimate outcome in its own
+text — *"The decisive test needs a second egress, which needs Dan; an unanswered verdict is a
+legitimate outcome of this phase and is not a failure"* — so this is a decision recorded with its
+reason, not a gap discovered at the end.
+
+**What would settle it, and why it was not done.** The same three requests from a second egress:
+if Amazon, Target and Walmart answer a different IP running the identical client, the block is
+attached to the egress; if they refuse it too, it is attached to the client — the fingerprint, the
+request pattern, or the ASN class. **There is no second egress on this host**, arranging one is
+Dan's to do, and the test also costs live requests. **Phase 11 was authorised zero.**
+
+**What was tried instead, and what it could and could not reach.** Three days of the running
+daemon's own readings (2026-09-11 07:56:33 → 2026-09-14 08:18:35, one process). That instrument can
+see *what* each retailer did. **It cannot vary the egress, so it cannot see WHY** — every reading in
+it comes from one IP, one client and one request pattern, which is precisely the variable the
+question is about. **An instrument that holds the independent variable fixed cannot answer a
+question about it**, and no amount of additional observation through it will change that.
+
+### What the window DOES narrow, which is less than an answer and is not nothing
+
+**One uniform-blindness hypothesis is dead.** If a single reputational event had burned this egress
+for everyone — the failure mode the whole of v0.4 exists to prevent — then no retailer would answer.
+**Amazon answered on 2026-09-14, GameStop answers constantly, Nintendo and Best Buy were never
+refused at all.** So whatever is happening to Target and Walmart is **per-retailer**, not a property
+of the egress as such.
+
+**That is compatible with both remaining answers and separates neither.** A per-retailer block can
+be attached to this egress *at that retailer* (its own reputation list) or to this client *at that
+retailer* (its own fingerprinting). The window cannot tell them apart, and nothing in this project
+currently can.
+
+**Two things that are NOT evidence for either, named because they look like they might be:**
+
+- **Target and Walmart both use commercial bot-management vendors** (`px-captcha` at Target,
+  `Robot or human?` at Walmart — both 2026-08-03/08-27). A shared vendor is a plausible story about
+  a shared cause and it is a story, not a measurement. Nothing here tested it.
+- **Walmart's 45-hour store-disagreement phase preceding its first refusal** (§ Walmart, 2026-09-14)
+  is suggestive of a sequence and establishes no causal link. It is recorded as a sequence.
+
+**So: UNANSWERED, deliberately, with the decisive test named and costed.** It needs a second egress
+and a handful of live requests, both of which are Dan's to authorise. `REQUIREMENTS.md` already
+says the decision this evidence would feed is out of scope: *"REQ-25 produces the evidence that
+decision needs; the decision itself is Dan's."*
 
 ---
 

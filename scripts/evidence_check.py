@@ -795,6 +795,58 @@ def check_phase(
                 "failed request. If a rung was not walked, the honest verdict is not a refusal."
             )
 
+    # RULE 7 — A SHIPPED RETAILER MUST SAY WHAT WAS MEASURED ABOUT IT. Phase 11,
+    # 2026-09-14, and it is a REVERSAL of a documented allowance rather than the
+    # repair of an oversight. Rule 5's comment block, case 1, names the exact two
+    # retailers this rule reddens on and argues for letting them be:
+    #
+    #     "GameStop and Walmart are configured and have never had a section in
+    #      the evidence log … Demanding one here would redden the shipped tree
+    #      over a gap that is not a lie."
+    #
+    # That is left standing where it is. It was sound, and three things overtook
+    # it:
+    #
+    #   1. ITS PREMISE IS NOW FALSE. The objection was the cost — reddening a
+    #      shipped tree. `11-02` wrote both sections in the commit that adds this
+    #      rule, so the cost it was protecting against no longer exists.
+    #   2. PHASE 11'S CRITERION 1 OUTRANKS IT: "Each of Amazon, Target and
+    #      Walmart has a recorded verdict in docs/retailer-evidence.md citing a
+    #      measurement with a date." A requirement that the gap be filled beats a
+    #      rule saying it need not be.
+    #   3. "NOT A LIE" IS RULE 5's TEST, NOT THIS ONE'S. Rule 5 is about
+    #      self-contradiction, and it is true that a tree cannot contradict a
+    #      claim nobody made. But the tree was not silent about these two —
+    #      `README.md`'s support matrix advertises both as ✅ Working. Only the
+    #      EVIDENCE LOG was silent, which is this module's opening sentence about
+    #      the silent gap arriving at the one retailer class no rule looked at.
+    #
+    # WHAT THIS RULE DOES NOT ASK FOR, so it cannot be read as more than it is:
+    # not a fresh probe, not a recent one, and not a particular verdict beyond
+    # "not REFUSED" (rule 5 already owns that contradiction). It asks only that a
+    # retailer this project SHIPS has one place in the evidence log where a
+    # reader can find out what was measured about it. Silence is the failure.
+    #
+    # WATCHED RED BEFORE THE SECTIONS LANDED: on the tree as it stood at
+    # `052f35d`, this rule reported 2 problems, naming GameStop and Walmart —
+    # the two the allowance above named. It is green only because they were then
+    # written.
+    for retailer, display in sorted(ROADMAP_RETAILERS.items()):
+        if retailer not in configured:
+            continue
+        if len(sections_for(display, sections)) == 1:
+            continue
+        problems.append(
+            f"rule 7 (a shipped retailer must say what was measured): {config_path} configures "
+            f"{retailer!r} and {evidence_path} holds no `## {display}` section — so this tree "
+            f"ships a detector for {display}, advertises it in README.md's support matrix, and "
+            "records nowhere what was ever measured about it. Rule 2 asks this only of retailers "
+            "that are NOT configured, which left the shipped ones as the one class no rule looked "
+            "at. A reader asking 'what rung is this, and when did anyone last establish that' has "
+            "nowhere to go. Write the section from the measurements already in this file — this "
+            "rule asks for no new request, and a stale answer with a date on it is an answer."
+        )
+
     return problems
 
 

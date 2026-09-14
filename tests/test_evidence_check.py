@@ -101,6 +101,11 @@ _REFUSED = (
 )
 _REACHABLE = "Probed 2026-08-03. Reads clean.\n\n**Verdict: REACHABLE (rung 1)**\n"
 
+#: The two verdict LINES alone, for the one case that rewrites the real shipped
+#: document in place rather than building a synthetic one.
+_REACHABLE_VERDICT = "**Verdict: REACHABLE (rung 1)**"
+REFUSED_VERDICT = "**Verdict: REFUSED**"
+
 
 def _write_evidence(tmp_path: Path, sections: list[tuple[str, str]]) -> Path:
     """Build an evidence document from (heading, body) pairs."""
@@ -157,6 +162,21 @@ def _write_fixtures(tmp_path: Path, retailers: list[str]) -> Path:
 
 #: The four retailers that actually ship today.
 _SHIPPED = ["gamestop", "walmart", "bestbuy", "nintendo"]
+
+#: RULE 7'S TAX ON EVERY SYNTHETIC TREE IN THIS FILE, 2026-09-14. A configured
+#: roadmap retailer must now carry exactly one section, so a tree that configures
+#: `_SHIPPED` and writes sections for none of them is malformed under the new rule
+#: whatever else it is testing. 23 cases here were built that way — all of them
+#: about rules 1-6 — and without this they would have gone red carrying rule 7's
+#: message about a subject none of them has. Spliced in rather than special-cased
+#: inside `check_phase`, because a rule that exempts test trees is not the rule
+#: the shipped tree runs under.
+_SHIPPED_SECTIONS: list[tuple[str, str]] = [
+    ("GameStop (gamestop.com)", _REACHABLE),
+    ("Walmart (walmart.com)", _REACHABLE),
+    ("Best Buy", _REACHABLE),
+    ("Nintendo (store.nintendo.com)", _REACHABLE),
+]
 
 
 # --------------------------------------------------------------------------
@@ -312,9 +332,14 @@ def test_stripping_fences_leaves_the_real_documents_records_alone() -> None:
     ]
 
     assert len(headings) == len(set(headings)), f"duplicate headings: {headings}"
-    for display in ("Amazon", "Best Buy", "Nintendo", "Pokémon Center", "Target"):
+    for display in ("Amazon", "Best Buy", "GameStop", "Nintendo", "Pokémon Center", "Target", "Walmart"):
         assert len(evidence_check.sections_for(display, evidence_check.split_sections(text))) == 1
-    assert len(verdicts) == 5, verdicts
+    # 5 UNTIL 2026-09-14, and the old figure is named rather than replaced in
+    # silence: phase 11 added `## GameStop` and `## Walmart`, the two configured
+    # retailers the real document had never carried a section for. Rule 7 now
+    # requires them. The loop above is the assertion that matters — this count is
+    # its denominator, and a 7 that nobody has to re-derive is the point of it.
+    assert len(verdicts) == 7, verdicts
 
 
 def test_a_section_with_no_verdict_line_fails(tmp_path: Path) -> None:
@@ -400,6 +425,7 @@ def test_a_repeated_heading_does_not_let_the_last_record_win(tmp_path: Path) -> 
         evidence = _write_evidence(
             tmp_path / f"order{i}",
             [
+                *_SHIPPED_SECTIONS,
                 ("Pokémon Center (pokemoncenter.com)", _REFUSED),
                 ("Target (target.com)", _REFUSED),
                 *pair,
@@ -468,12 +494,24 @@ def test_the_failure_message_names_the_file_and_the_retailer(tmp_path: Path) -> 
 
 
 def _full_evidence(tmp_path: Path) -> Path:
-    """Sections for every roadmap retailer that is not in `_SHIPPED`."""
+    """Sections for every roadmap retailer, shipped or not.
+
+    WAS "every roadmap retailer that is NOT in `_SHIPPED`" UNTIL 2026-09-14, and
+    the change is rule 7's, not a tidy-up. Rule 7 requires a section from every
+    CONFIGURED roadmap retailer, so a tree that configures `_SHIPPED` and writes
+    sections for nobody in it is no longer a well-formed tree — and 27 cases in
+    this file were built that way, every one of them about a different rule.
+    Leaving them would have meant 27 reds carrying rule 7's message about a
+    subject none of them is testing, which is how a suite stops being read.
+
+    `GameStop` and `Walmart` are `_REACHABLE` here because that is what they are:
+    configured and control-verified. The two cases that are ABOUT the absent
+    section build their own documents and say so.
+    """
     return _write_evidence(
         tmp_path,
         [
-            ("Best Buy", _REACHABLE),
-            ("Nintendo (store.nintendo.com)", _REACHABLE),
+            *_SHIPPED_SECTIONS,
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Target (target.com)", _REFUSED),
             ("Amazon (amazon.com)", _REFUSED),
@@ -541,8 +579,7 @@ def test_an_unconfigured_roadmap_retailer_with_no_verdict_fails(tmp_path: Path) 
     evidence = _write_evidence(
         tmp_path,
         [
-            ("Best Buy", _REACHABLE),
-            ("Nintendo (store.nintendo.com)", _REACHABLE),
+            *_SHIPPED_SECTIONS,
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Amazon (amazon.com)", _REFUSED),
         ],
@@ -580,6 +617,7 @@ def test_an_unconfigured_retailer_recorded_as_REACHABLE_fails(tmp_path: Path) ->
     evidence = _write_evidence(
         tmp_path,
         [
+            *_SHIPPED_SECTIONS,
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Target (target.com)", _REACHABLE),
             ("Amazon (amazon.com)", _REFUSED),
@@ -595,11 +633,16 @@ def test_an_unconfigured_retailer_recorded_as_REACHABLE_fails(tmp_path: Path) ->
 def test_every_violation_is_reported_not_just_the_first(tmp_path: Path) -> None:
     """Fixing one gap only to be told about the next is how a gate gets muted."""
     config = _write_config(tmp_path, [*_SHIPPED, "microcenter"])
-    evidence = _write_evidence(tmp_path, [("Amazon (amazon.com)", _REFUSED)])
+    evidence = _write_evidence(
+        tmp_path, [*_SHIPPED_SECTIONS, ("Amazon (amazon.com)", _REFUSED)]
+    )
 
     problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
 
     # rule 1: microcenter out of scope. rule 2: pokemoncenter and target unrecorded.
+    # `_SHIPPED_SECTIONS` is spliced in so rule 7 stays silent — this case is about
+    # rules 1 and 2 reporting TOGETHER, and a third rule joining in would make the
+    # count pass for a reason the test is not making.
     assert len(problems) == 3
     joined = "\n".join(problems)
     assert "microcenter" in joined
@@ -624,6 +667,7 @@ def _scoped_tree(tmp_path: Path, body: str) -> tuple[Path, Path, Path]:
     evidence = _write_evidence(
         tmp_path,
         [
+            *_SHIPPED_SECTIONS,
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Amazon (amazon.com)", _REFUSED),
             ("Target (target.com)", body),
@@ -804,6 +848,7 @@ def test_the_rule_two_failure_names_the_honest_path(tmp_path: Path) -> None:
     evidence = _write_evidence(
         tmp_path,
         [
+            *_SHIPPED_SECTIONS,
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Amazon (amazon.com)", _REFUSED),
         ],
@@ -860,6 +905,13 @@ def test_a_short_count_with_a_hard_two_retailer_configured_fails(tmp_path: Path)
     evidence = _write_evidence(
         tmp_path,
         [
+            ("GameStop (gamestop.com)", _REACHABLE),
+            ("Walmart (walmart.com)", _REACHABLE),
+            ("Nintendo (store.nintendo.com)", _REACHABLE),
+            # Amazon is CONFIGURED here, so rule 7 requires its section. It is
+            # REACHABLE rather than REFUSED because rule 5 would otherwise fire
+            # too, and this case is about rule 3's count alone.
+            ("Amazon (amazon.com)", _REACHABLE),
             ("Best Buy", _REFUSED),
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Target (target.com)", _REFUSED),
@@ -893,6 +945,10 @@ def test_five_retailers_including_a_hard_two_one_passes(tmp_path: Path) -> None:
     evidence = _write_evidence(
         tmp_path,
         [
+            *_SHIPPED_SECTIONS,
+            # Target is configured in this scenario — it is the hard-two retailer
+            # that landed — so rule 7 requires its section too.
+            ("Target (target.com)", _REACHABLE),
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Amazon (amazon.com)", _REFUSED),
         ],
@@ -931,6 +987,8 @@ def test_a_retailer_dropped_from_the_config_but_still_fixtured_fails(tmp_path: P
     evidence = _write_evidence(
         tmp_path,
         [
+            ("Best Buy", _REACHABLE),
+            ("Nintendo (store.nintendo.com)", _REACHABLE),
             ("GameStop (gamestop.com)", _REFUSED),
             ("Walmart (walmart.com)", _REFUSED),
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
@@ -960,6 +1018,9 @@ def test_the_rule_four_message_names_the_captures_and_says_which_way_it_points(
     evidence = _write_evidence(
         tmp_path,
         [
+            ("Walmart (walmart.com)", _REACHABLE),
+            ("Best Buy", _REACHABLE),
+            ("Nintendo (store.nintendo.com)", _REACHABLE),
             ("GameStop (gamestop.com)", _REFUSED),
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Target (target.com)", _REFUSED),
@@ -1067,8 +1128,7 @@ def test_the_repo_as_it_stands_after_this_plan_names_target_as_the_only_gap(
     evidence = _write_evidence(
         tmp_path,
         [
-            ("Best Buy", _REACHABLE),
-            ("Nintendo (store.nintendo.com)", _REACHABLE),
+            *_SHIPPED_SECTIONS,
             ("Pokémon Center (pokemoncenter.com)", _REFUSED),
             ("Amazon (amazon.com)", _REFUSED),
         ],
@@ -1193,12 +1253,22 @@ def test_the_shipped_tree_would_fail_if_a_working_retailer_were_quietly_dropped(
     """
     config = _write_config(tmp_path, ["bestbuy", "nintendo", "target", "amazon"])
     evidence = tmp_path / "retailer-evidence.md"
-    evidence.write_text(
-        (REPO_ROOT / "docs" / "retailer-evidence.md").read_text(encoding="utf-8")
-        + "\n---\n\n## GameStop (gamestop.com)\n\nRefused.\n\n**Verdict: REFUSED**\n"
-        + "\n---\n\n## Walmart (walmart.com)\n\nRefused.\n\n**Verdict: REFUSED**\n",
-        encoding="utf-8",
-    )
+    # APPENDED TWO NEW SECTIONS UNTIL 2026-09-14; NOW FLIPS THE REAL ONES.
+    # Phase 11 gave GameStop and Walmart sections in the shipped document, so
+    # appending more produced TWO sections apiece and rule 2 fired about the
+    # duplication — a red for a reason this case is not about, and one that would
+    # have hidden the rule-2 silence it asserts below. Flipping the verdict in
+    # place builds the scenario the docstring describes: the retailer is gone from
+    # the config and the evidence log says it refused us.
+    real = (REPO_ROOT / "docs" / "retailer-evidence.md").read_text(encoding="utf-8")
+    for display in ("GameStop (gamestop.com)", "Walmart (walmart.com)"):
+        head = f"## {display}\n"
+        start = real.index(head)
+        before, after = real[:start], real[start:]
+        flipped = after.replace(_REACHABLE_VERDICT, REFUSED_VERDICT, 1)
+        assert flipped != after, f"no verdict line found under ## {display}"
+        real = before + flipped
+    evidence.write_text(real, encoding="utf-8")
 
     problems = evidence_check.check_phase(
         config, evidence, REPO_ROOT / "tests" / "fixtures"
@@ -1262,8 +1332,7 @@ def _w02_tree(tmp_path: Path, pokemoncenter_body: str) -> tuple[Path, Path, Path
     evidence = _write_evidence(
         tmp_path,
         [
-            ("Best Buy", _REACHABLE),
-            ("Nintendo (store.nintendo.com)", _REACHABLE),
+            *_SHIPPED_SECTIONS,
             ("Pokémon Center (pokemoncenter.com)", pokemoncenter_body),
             ("Target (target.com)", _REFUSED),
             ("Amazon (amazon.com)", _REFUSED),
@@ -1339,29 +1408,95 @@ def test_a_configured_retailer_recorded_unprobed_fails_the_phase_gate(
     assert "UNPROBED" in problems[0], problems[0]
 
 
-def test_a_configured_retailer_with_no_section_at_all_is_deliberately_clean(
+def test_a_configured_retailer_with_no_section_at_all_now_fails_under_rule_seven(
     tmp_path: Path,
 ) -> None:
-    """The GameStop/Walmart shape, and it must stay green.
+    """The GameStop/Walmart shape — and this test used to assert the OPPOSITE.
 
-    Both ship today and neither has ever had a section in the evidence log:
-    rule 2 requires one only from retailers that are NOT configured. If rule 5
-    demanded a section from every configured retailer it would redden the
-    shipped tree the moment it landed, and the fastest green would be two
-    hand-written sections for retailers nobody re-probed — inventing records to
-    satisfy a gate, which is the Phase 2 failure with the sign flipped.
+    **IT WAS NAMED `…_is_deliberately_clean` AND IT PINNED AN ALLOWANCE.** Rule 2
+    requires a section only from retailers that are NOT configured, so a shipped
+    retailer with no section passed every rule. That was deliberate and argued;
+    the old docstring is quoted in full below rather than deleted, because phase
+    11 REVERSED it and a reversal that erases the reasoning it overturned teaches
+    nothing:
 
-    Silence about a shipped retailer is a documentation gap. Rule 5 is about
-    self-contradiction, and a tree cannot contradict a claim nobody made.
+        "Both ship today and neither has ever had a section in the evidence log
+         … If rule 5 demanded a section from every configured retailer it would
+         redden the shipped tree the moment it landed, and the fastest green
+         would be two hand-written sections for retailers nobody re-probed —
+         inventing records to satisfy a gate, which is the Phase 2 failure with
+         the sign flipped. Silence about a shipped retailer is a documentation
+         gap. Rule 5 is about self-contradiction, and a tree cannot contradict a
+         claim nobody made."
+
+    **THE OBJECTION IS THE SERIOUS ONE AND IT IS ANSWERED BY WHAT WAS WRITTEN,
+    not by disagreeing with it.** `11-01` did not invent two sections to satisfy
+    this rule. Both were assembled from measurements already in the tree, each
+    carrying the date it was taken, plus three days of the running daemon's own
+    readings — and those readings are *more current* than anything any other
+    retailer section in that file holds. The feared failure mode is a section for
+    a retailer nobody looked at; somebody looked.
+
+    **WHAT CHANGED UNDERNEATH THE ALLOWANCE, in one sentence each.** Its stated
+    cost — reddening the shipped tree — stopped existing once the sections were
+    written. Phase 11's criterion 1 requires a recorded verdict for Walmart, and
+    a requirement to fill the gap outranks a rule saying it need not be filled.
+    And "a tree cannot contradict a claim nobody made" was true of rule 5's
+    subject and false of the tree as a whole: `README.md` claimed both retailers
+    were ✅ Working the entire time.
+
+    **THE LIMIT OF RULE 7, STATED HERE BECAUSE NOTHING ELSE STATES IT.** It asks
+    for a section with one verdict line and no more. Rule 6 makes a **REFUSED**
+    section cite an observation; nothing makes a **REACHABLE** one do that. So a
+    section invented out of nothing with a REACHABLE verdict still passes, and
+    the old docstring's worry is narrowed rather than eliminated. This rule buys
+    "somebody had to write a heading and a verdict", which is a low bar and is
+    higher than silence.
     """
     config = _write_config(tmp_path, _SHIPPED)
-    evidence = _full_evidence(tmp_path)
-
-    assert evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, [])) == []
+    # Every roadmap retailer EXCEPT the two shipped ones this rule is about.
+    evidence = _write_evidence(
+        tmp_path,
+        [
+            ("Best Buy", _REACHABLE),
+            ("Nintendo (store.nintendo.com)", _REACHABLE),
+            ("Pokémon Center (pokemoncenter.com)", _REFUSED),
+            ("Target (target.com)", _REFUSED),
+            ("Amazon (amazon.com)", _REFUSED),
+        ],
+    )
 
     sections = evidence_check.split_sections(evidence.read_text(encoding="utf-8"))
     for display in ("GameStop", "Walmart"):
         assert evidence_check.sections_for(display, sections) == [], display
+
+    problems = evidence_check.check_phase(config, evidence, _write_fixtures(tmp_path, []))
+
+    assert len(problems) == 2, problems
+    assert all(p.startswith("rule 7") for p in problems), problems
+    assert "gamestop" in problems[0] and "GameStop" in problems[0], problems[0]
+    assert "walmart" in problems[1] and "Walmart" in problems[1], problems[1]
+    # The message has to name the honest fix, and the honest fix must not be a
+    # live request: this whole phase ran on a budget of zero.
+    assert "no new request" in problems[0], problems[0]
+
+
+def test_rule_seven_is_satisfied_by_one_section_and_asks_for_nothing_more(
+    tmp_path: Path,
+) -> None:
+    """The other direction, and it is where rule 7's bar actually sits.
+
+    A one-directional rule nobody has seen go green for the right reason is half
+    a rule. Adding the two sections — and NOTHING else — must clear it, because
+    the rule's whole content is "a shipped retailer has somewhere a reader can
+    look". It does not ask for a recent probe, a particular rung, or a
+    measurement; rule 6 asks for the measurement, and only of a REFUSED section.
+    """
+    config = _write_config(tmp_path, _SHIPPED)
+
+    assert evidence_check.check_phase(
+        config, _full_evidence(tmp_path), _write_fixtures(tmp_path, [])
+    ) == []
 
 
 def test_the_w02_tree_reaches_a_shell_as_exit_1(tmp_path: Path, capsys: Any) -> None:

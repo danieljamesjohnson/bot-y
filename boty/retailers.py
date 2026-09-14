@@ -531,30 +531,82 @@ def _verdict_from_html(
             #
             # A document that says where it is going has not told us the product is
             # gone. It has told us the product is somewhere else.
-            announces_a_redirect = parse.announced_redirect(html) is not None
+            announced = parse.announced_redirect(html)
+            # AND IT HAS TO NAME *THIS* SKU — 2026-09-14, a re-verifier finding
+            # (W1), and the narrowing matters more than the feature did.
+            #
+            # This read `parse.announced_redirect(html) is not None` for three
+            # days. `announced_redirect`'s own docstring says it "judges nothing:
+            # whether it looks like a product URL is the caller's question,
+            # because `parse` reads documents and does not know what a product
+            # path looks like at any particular retailer." **The caller never
+            # asked.** So ANY announced redirect disarmed dead-control detection
+            # — including `content="0;url=/"`, a `NEXT_REDIRECT` back to the
+            # search endpoint, and a periodic `<meta refresh>` on a page that is
+            # not going anywhere. Reproduced offline: `unresolved-sku.html`, the
+            # genuinely dead rendered page, plus any of those three came back
+            # `unresolved=False`. **A real dead control could be kept out of its
+            # own health arm by a redirect that names no product at all.**
+            #
+            # The containment test is the measurement rather than a guess: read
+            # 2's announced target was
+            # `/product/pokemon-lets-go-pikachu-nintendo-switch/J7GSL4G7GQ/sku/6216393`,
+            # which ends in the sku we asked about. A redirect to `/` does not
+            # mention it, and neither does one back to the search endpoint —
+            # `/site/searchpage.jsp?id=pcat17071&st=<sku>` carries the sku in
+            # `st=`, so this is checked against the ANNOUNCED target and the
+            # search-endpoint case is handled by `canonical_is_the_search_endpoint`
+            # below, not here. The failure direction is the safe one: a real
+            # redirect we fail to recognise costs a false dead, which every gate
+            # above is watching for, while the version this replaces cost a
+            # SILENCED dead control, which nothing was watching for.
+            announces_this_sku = bool(announced and sku and sku in announced)
+            # ONE PREDICATE, COMPUTED ONCE, READ BY BOTH THE FLAG AND THE PROSE —
+            # 2026-09-14, and it is the rest of the same re-verifier finding.
+            #
+            # THE PROSE MUST NOT OUTRUN THE FLAG was written on 2026-09-11 and
+            # the code did not deliver it. The sentence was gated on
+            # `page_rendered and not announces_a_redirect` while `unresolved`
+            # ALSO required `canonical_is_the_search_endpoint or markup_was_read`
+            # — so a page that rendered, announced nothing, and had neither a
+            # search-endpoint canonical nor cleanly-parsed ld+json (the RESIDUAL
+            # named above; the 2026-08-04 false dead is of that class) printed
+            # "did not resolve to a product page" beside `unresolved: false`.
+            # **The same two-surfaces-disagreeing defect, moved one input over.**
+            # Two expressions that must agree will disagree; there is now one.
+            nothing_resolved = page_rendered and not announces_this_sku and (
+                canonical_is_the_search_endpoint or markup_was_read
+            )
             return Result(
                 watch,
                 Availability.UNKNOWN,
                 detail=(
-                    # THE PROSE MUST NOT OUTRUN THE FLAG — 2026-09-11, a verifier
-                    # finding. This sentence said "did not resolve to a product
-                    # page" unconditionally, including on the paths just above
-                    # where we have DECIDED nothing was established. A reader of
-                    # `status.json` saw a non-resolution claim beside
-                    # `unresolved: false`, which is the two-surfaces-disagreeing
-                    # defect this project exists to prevent, one field apart.
                     (
                         f"sku {sku} did not resolve to a product page — no "
                         f"schema.org Product on it carries that sku"
                     )
-                    if (page_rendered and not announces_a_redirect)
+                    if nothing_resolved
                     else (
                         f"could not establish whether sku {sku} resolves — "
                         + (
-                            "the page announced a redirect and was not the page it "
-                            "is on its way to"
-                            if announces_a_redirect
-                            else "the page did not render"
+                            "the page did not render"
+                            if not page_rendered
+                            else (
+                                "the page announced a redirect naming that sku and "
+                                "was not the page it is on its way to"
+                                if announces_this_sku
+                                # THE THIRD WORDING, and it exists because two
+                                # were not enough. This page rendered and is not
+                                # going anywhere; what it lacks is any statement
+                                # about the sku either way. Saying so is the whole
+                                # difference between an absence of evidence and
+                                # evidence of absence, which is the distinction
+                                # this retailer's whole section is about.
+                                else (
+                                    "the page carries neither a canonical we can "
+                                    "place nor markup we could read"
+                                )
+                            )
                         )
                     )
                 )
@@ -565,11 +617,7 @@ def _verdict_from_html(
                 store=store,
                 shipping=None,
                 read_at=read_at,
-                unresolved=(
-                    page_rendered
-                    and not announces_a_redirect
-                    and (canonical_is_the_search_endpoint or markup_was_read)
-                ),
+                unresolved=nothing_resolved,
             )
         # Neither structured source present. The page shape changed, or we got
         # a soft block that did not match a known challenge phrase. Either way

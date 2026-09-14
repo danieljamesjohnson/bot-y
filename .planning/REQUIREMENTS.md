@@ -81,3 +81,13 @@ window remains open at the end of this milestone by design, not by oversight.
   requirement of an autonomous milestone.
 - **GameStop's `HTTP 410`.** The listing is gone. The watch already reports *cannot read* correctly
   and recovers by itself if GameStop relists. There is nothing to build.
+
+  > **THE PREMISE IS STALE AND THE CONCLUSION SURVIVES — measured 2026-09-14, phase 11.** GameStop's
+  > `Pokémon GO Plus +` watch carries a **resolved `out_of_stock` reading stamped 2026-09-14
+  > 08:13:22**, and `monitor.State` writes a stamp only for a non-`UNKNOWN` verdict, so that is a
+  > reading and not a 410. Either the listing returned, or the 410 was about a different URL, or it
+  > was transient — nothing here distinguishes them. **The 410 was a real measurement on 2026-08-27
+  > and it is not edited away**; what is no longer available is treating it as present tense.
+  > *"There is nothing to build"* happens to remain true, on a different premise: a watch that reads
+  > `out_of_stock` needs no work either. Said out loud rather than letting a right answer launder a
+  > wrong reason. `docs/retailer-evidence.md` § GameStop carries the working.

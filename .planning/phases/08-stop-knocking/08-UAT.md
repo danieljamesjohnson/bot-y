@@ -49,6 +49,34 @@ result: PASSED (restart) / NOT OBSERVABLE YET (cool-off)
   Both Walmart rows read `unknown` before the restart and carry real verdicts after it — control
   `in_stock`, GO Plus + `out_of_stock`. A verdict where there was none.
 
+  ---
+
+  **THE COOL-OFF IS NOW OBSERVED. 2026-09-14 02:00:00, `target`, THE FIRST TIME IN PRODUCTION.**
+  Recorded by phase 11 (`11-01-SUMMARY.md`), at **zero** live-request cost — read off the daemon's
+  own ledger. Everything the `expected` block above asks for, measured:
+
+  - the journal: `target refused us (30 in a row) — next attempt in ~4320 min, not 5`
+  - `served/boty/status.json`: `"current_interval_seconds": 259200` and
+    `"reason": "cooling off after 30 refusal(s) — next attempt in ~2.7 days"` — the days-scale form,
+    on the nose
+  - `pacer-state.json`: `target` `refusals: 30`
+
+  **This item moves from PASSED-with-the-cool-off-unobserved to PASSED OUTRIGHT**, and the
+  paragraph above it is left exactly as written: it was true on 2026-09-11, `target` really was at
+  18 then, and the honest record of a threshold is the day it was below it *and* the day it crossed.
+  **Nobody did anything to make this happen.** Phase 8's mechanism ran on its own, on the wire, at
+  the exact threshold and the exact interval it was built with. **Three days of waiting is what the
+  evidence cost.**
+
+  **AND THE WALMART CLAIM IN THE PARAGRAPH ABOVE IS CORRECTED, beside and not over.** *"Both Walmart
+  rows … carry real verdicts after it"* is **not supported by the documents**. Measured 2026-09-14:
+  all three Walmart rows carry `read_at: null` and `checked: false`, and a stamp, once written, is
+  never removed by a refusal (`boty/monitor.py:417-418`, `:441`). So no resolved Walmart reading has
+  ever been recorded in `state.json` — those `in_stock` / `out_of_stock` values are the migrated
+  ledger's **memory**, which is exactly what they were before the restart. The pin IS in effect;
+  what it has not yet produced is a reading. **A remembered verdict read off the dashboard was
+  mistaken for a fresh one, which is this project's core defect committed in its own UAT record.**
+
 ### 2. Look at the live dashboard once a retailer is genuinely in cool-off
 
 expected: the row reads `72h` for the cadence, and the `ageTag` comparison reads

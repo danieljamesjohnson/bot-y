@@ -3528,19 +3528,29 @@ def test_the_live_search_shell_is_not_reported_as_a_dead_control() -> None:
     URL eight days earlier. So every `unresolved=True` this document produced was
     a false dead, said confidently about a product that is on sale.
 
-    WHY THE FIX WAS TO GATE CLAUSE A RATHER THAN REPAIR IT IN PLACE. Clause A
-    asked whether the page's canonical points at the search endpoint. A shell
-    served AT the search URL carries that canonical whether or not the product
-    exists, so the test cannot distinguish the two cases and never could. `10-04`
+    WHY THE FIX WAS TO WITHDRAW CLAUSE A RATHER THAN REPAIR IT. Clause A asked
+    whether the page's canonical points at the search endpoint. A shell served AT
+    the search URL carries that canonical whether or not the product exists, so
+    the test cannot distinguish the two cases and never could. `10-04`
     recommended rescuing it by following the `NEXT_REDIRECT` the shell announced
     — and this capture contains **zero** occurrences of `NEXT_REDIRECT`,
-    `http-equiv` or `/product/`. That signal was absent from this capture eight
-    days after 2026-09-02.
+    `http-equiv` or `/product/`. That signal existed on 2026-09-02 and was gone
+    eight days later.
 
     TWO CORRECTIONS TO THE PARAGRAPH ABOVE, 2026-09-14, placed beside it because
     it is the reasoning that was acted on and it was wrong in two places.
 
-    1. It said **WITHDRAW**. Clause A was not withdrawn: it is still evaluated,
+    **THE PARAGRAPH IS RESTORED TO ITS ORIGINAL WORDING TO MAKE THAT TRUE.** A
+    first attempt on 2026-09-14 edited `WITHDRAW`→`GATE` and `was gone eight days
+    later`→`was absent from this capture` **and then wrote corrections quoting
+    the words it had just removed** — so both corrections described an original
+    that no longer existed, in a docstring whose own subject is recording beside
+    rather than over. A re-verifier caught it the same day (W2). The lesson is
+    the cheap one and the mistake was not: *editing the text you are about to
+    quote makes the correction unreadable and the record worse than either
+    version alone.*
+
+    1. It says **WITHDRAW**. Clause A was not withdrawn: it is still evaluated,
        gated. The code, the 09-10 commit and the sibling test below all say the
        withdrawal was *refused* — withdrawing outright would have cost Best Buy
        its dead-control signal entirely. Only this docstring said otherwise.
@@ -3690,4 +3700,122 @@ def test_a_rendered_page_that_announces_a_redirect_is_not_a_dead_control() -> No
     assert "announced a redirect" in result.detail, (
         "the detail must name WHICH of the two not-established reasons applies — "
         f"a person reading this has one repair to make: {result.detail!r}"
+    )
+
+
+def test_a_redirect_that_names_no_product_does_not_silence_a_dead_control() -> None:
+    """W1, a re-verifier finding on 2026-09-14, and it is the dangerous direction.
+
+    `announced_redirect` returns the raw target and **judges nothing** — its own
+    docstring says so, and says whether the target looks like a product URL is
+    the caller's question. **For three days the caller did not ask.** The wiring
+    was `parse.announced_redirect(html) is not None`, so ANY announcement
+    disarmed clause A: `content="0;url=/"`, a `NEXT_REDIRECT` back to the search
+    endpoint, a periodic `<meta refresh>` on a page going nowhere.
+
+    WHY THAT IS WORSE THAN THE BUG IT WAS FIXING. A false dead says a live
+    product is gone, and four gates in this file watch for it. This says nothing
+    at all about a control that really is dead — it keeps it out of its own
+    health arm, so `assess_health` stops naming the one repair a person could
+    make and nothing anywhere goes red. **A silenced dead control is the failure
+    mode with no watcher**, which is exactly the asymmetry `M44`'s registry block
+    is about.
+
+    THE FIX IS CONTAINMENT OF THE SKU, and the threshold is a measurement rather
+    than a guess: read 2's announced target ended `/sku/6216393`, the sku asked
+    about. `/` does not contain it.
+    """
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "bestbuy"
+    dead = (fixtures / "unresolved-sku.html").read_text()
+    watch = Watch(name="ctl", retailer="bestbuy", target="6577129", control=True)
+
+    def verdict(html: str) -> object:
+        return retailers._verdict_from_html(
+            watch,
+            html,
+            url="https://www.bestbuy.com/site/searchpage.jsp?st=6577129",
+            first_party_only=True,
+            rung=3,
+            sku="6577129",
+        )
+
+    # The precondition: this page IS a dead control, before anything is added.
+    assert verdict(dead).unresolved is True, "precondition: the fixture is a dead control"
+
+    for label, marker in (
+        ("a redirect to the site root", '<meta http-equiv="refresh" content="0;url=/">'),
+        (
+            "a redirect back to the search endpoint",
+            "NEXT_REDIRECT;replace;/site/searchpage.jsp;308;",
+        ),
+        (
+            "a periodic refresh of the page itself",
+            '<meta http-equiv="refresh" content="300;url=/site/searchpage.jsp">',
+        ),
+    ):
+        result = verdict(dead.replace("<body", marker + "<body", 1))
+        assert result.unresolved is True, (
+            f"{label} silenced a genuinely dead control — the announcement names no "
+            f"product, so it says nothing about whether this sku exists: {result.detail!r}"
+        )
+
+    # And the positive half, so this is not a rule that simply never fires: an
+    # announcement that DOES name the sku still counts, on the same fixture.
+    named = dead.replace(
+        "<body", '<meta http-equiv="refresh" content="0;url=/product/x/sku/6577129"><body', 1
+    )
+    assert verdict(named).unresolved is False, (
+        "a redirect naming this very sku is the measured 2026-09-02 shape and must "
+        "still keep the page out of the dead-control state"
+    )
+
+
+def test_a_rendered_page_that_establishes_nothing_does_not_claim_the_sku_is_gone() -> None:
+    """THE RESIDUAL, and the third wording it needed. A 2026-09-14 re-verifier finding.
+
+    `unresolved` needs `canonical_is_the_search_endpoint or markup_was_read`. The
+    detail sentence was gated on `page_rendered and not announces_a_redirect`
+    alone — **two expressions that had to agree, and did not.** A page that
+    rendered, announces nothing, and carries neither a placeable canonical nor
+    readable markup printed *"sku X did not resolve to a product page"* beside
+    `unresolved: false`.
+
+    That is the same two-surfaces-disagreeing defect the 2026-09-11 fix was
+    written against, one input over — and the comment claiming it was fixed was
+    sitting directly above the code that still did it. The predicate is now
+    computed **once** and read by both.
+
+    The class is not hypothetical: the 2026-08-04 false dead, `docs/retailer-evidence.md`
+    L960, was a page with unparseable ld+json on a product canonical. That
+    particular page is repaired upstream by `ldjson_read`'s escape repair, so no
+    CURRENTLY measured wire page is known to land here — which is why this test
+    builds the shape rather than loading a capture, and says so.
+    """
+    html = (
+        "<html><head>"
+        '<link rel="canonical" href="https://www.bestbuy.com/product/thing/sku/999">'
+        "</head><body><p>a page about something else</p></body></html>"
+    )
+    watch = Watch(name="ctl", retailer="bestbuy", target="6216393", control=True)
+    result = retailers._verdict_from_html(
+        watch,
+        html,
+        url="https://www.bestbuy.com/site/searchpage.jsp?st=6216393",
+        first_party_only=True,
+        rung=3,
+        sku="6216393",
+    )
+
+    assert result.unresolved is False, (
+        "neither disjunct holds — the canonical is not the search endpoint and no "
+        f"markup was read — so nothing was established: {result.detail!r}"
+    )
+    assert "did not resolve" not in result.detail, (
+        "the flag says nothing was established and the sentence asserts the sku is "
+        f"gone. One field apart, disagreeing: {result.detail!r}"
+    )
+    assert "neither a canonical we can place nor markup we could read" in result.detail, (
+        "the third not-established reason must be named as itself — 'did not "
+        "render' and 'announced a redirect' are both false here, and a reader "
+        f"handed either would go and check the wrong thing: {result.detail!r}"
     )
