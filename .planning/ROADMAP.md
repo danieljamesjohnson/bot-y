@@ -521,7 +521,16 @@ repairs.
 | 3 | **MET AS WRITTEN** | Four matrix rows moved; `tests/test_support_matrix.py` **44 passed** throughout, both directions |
 | 4 | **MET AS WRITTEN, in both directions** | **Padding up removed:** *"Six working retailers"* → **three of six read.** **Padding down refused:** Target and Walmart are NOT recorded as rung 4 — rung 4 here means *dropped, with evidence* (Pokémon Center's precedent, a **Terms** finding), and a retailer refusing a client is a reputational state. `config/products.yaml` is byte-unchanged; dropping either is Dan's call and REQ-25 says so |
 | 5 | **MET AS WRITTEN** | Cap **0 per retailer**, stated in `COVERAGE.md` before the first plan ran. Actual **0**. No `boty check`, no write to any daemon-owned file, no restart |
-| 6 | **MET AS WRITTEN** | `make verify-offline` **EXIT 0**, `VERIFY: PASS (OFFLINE — live controls were NOT run…)`. **1047 passed / 0 skipped**, mypy clean, ruff clean, identity **PASS over 288 files**, **40/40 mutations caught, survivors 0**, `M21`–`M24` still the intentional gap, `M45` still free |
+| 6 | **MET AS WRITTEN — and read the second half of this cell, because the first half is the trap** | `make verify-offline` **EXIT 0**, `VERIFY: PASS (OFFLINE — live controls were NOT run…)`. **1047 passed / 0 skipped**, mypy clean, ruff clean, identity **PASS over 288 files**, **40/40 mutations caught, survivors 0**, `M21`–`M24` still the intentional gap, `M45` still free. **WHAT THIS GREEN DID NOT NOTICE, measured (verifier W7):** it stayed green throughout the sixteen days Walmart produced no resolved reading, throughout Target's climb to a cool-off, and while Best Buy went nineteen days unread. And it does not read the support matrix's Status column at all — **putting `✅ Working` and "Six working retailers" straight back keeps 119 tests green.** So this row certifies that the code does what its tests say, and certifies **nothing** about whether the monitor is still watching anything. Phase 11 exists because those two came apart |
+
+**AND ONE THING "CLEAN" STILL DOES NOT MEAN, recorded because the verifier pushed on it rather than
+accepting the word.** `served/` is inside `SANDBOX_CONTENTS`, so every sandbox also copied the
+daemon's **live, gitignored `served/boty/status.json`** as it stood at that instant. That file is in
+no commit and the daemon rewrites it every ~50 s. So the sandbox is **not** a pure function of the
+commit, and a clean `git status` cannot show it — no test reads that copy (`mutation_check.py`'s own
+comment block says so and explains why it is in the list at all), but *"the sandboxes copied
+committed `2508f3c`"* is true of everything except one runtime artifact, and that is the honest
+wording.
 
 **THE GATE RUN IS A CLEAN ONE, AND THAT SENTENCE HAD TO BE EARNED.** `mutation_check.py` builds
 each mutation's sandbox by copying the **live working tree at that moment**, so a run taken while
