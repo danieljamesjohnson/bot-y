@@ -623,6 +623,25 @@ def loop_tick_seconds(default_interval: float, roster: Iterable[str]) -> float:
     more than 60 s apart inside a 300 s cadence, because 6 x 60 = 360 > 300. A
     plan claiming 1 would be claiming something arithmetically unavailable.
 
+    ^ THAT PARAGRAPH IS WITHDRAWN AS AN ARGUMENT, 2026-09-14, and is kept because
+    it is the reasoning that was wrong rather than a typo. It was caught by phase
+    9's verifier on 2026-09-11 and corrected in `ROADMAP.md` the same day; this is
+    the second of the three places it was written, found by `grep` on 2026-09-14.
+
+    **Its premise is false for the configured fleet. Only FOUR of the six
+    retailers are on the 300 s cadence** — amazon is 1800 and gamestop 900 — so
+    "six retailers inside a 300 s cadence" describes no fleet this project runs,
+    6 x 60 > 300 establishes nothing about it, and a maximum of 1 WAS available.
+    Measured: offsets 0/60/120/180 for the 300 s four, gamestop 240 mod 900 and
+    amazon 540 mod 1800 give a maximum of **1** under the suite's own
+    `_max_in_any_window`, with every per-retailer count unchanged.
+
+    **The 2 above the table is a MEASUREMENT and it stands.** What is withdrawn
+    is only the impossibility claim beside it: 2 is the best row measured on the
+    50 s grid, and it is a floor ON THAT GRID, not in arithmetic. The tick choice
+    is unaffected — no row in the table moves — and this is a correction to a
+    justification, not to a number.
+
     THE FLOOR UNDER THE TICK IS `MIN_TICK_SECONDS` and is argued at its
     definition.
 

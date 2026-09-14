@@ -2169,6 +2169,23 @@ _BEFORE_MAX_IN_ANY_60S = 6
 #: retailers cannot be spread more than 60 s apart inside a 300 s cadence,
 #: because 6 x 60 = 360 > 300, so some 60-second window must hold two of them.
 #: A phase claiming 1 would be claiming something unavailable.
+#:
+#: ^ WITHDRAWN AS AN ARGUMENT, 2026-09-14. The third and last of the three places
+#: this claim was written (`ROADMAP.md` corrected 2026-09-11, `boty/pacing.py`'s
+#: `loop_tick_seconds` and here on 2026-09-14). Kept unedited because it is the
+#: reasoning that was wrong, and because the literal below depends on none of it.
+#:
+#: **The premise is false for the configured fleet: only FOUR of the six
+#: retailers are on 300 s.** amazon is 1800 and gamestop 900, so `6 x 60 > 300`
+#: describes no fleet this project runs and a maximum of 1 WAS available —
+#: measured, offsets 0/60/120/180 plus gamestop 240 mod 900 and amazon 540 mod
+#: 1800 give **1** under this file's own `_max_in_any_window`, with every
+#: per-retailer count unchanged.
+#:
+#: **The 2 is a MEASUREMENT and the assertion below is unchanged.** It is a floor
+#: on the chosen 50 s grid, not in arithmetic. Nothing about which tick was
+#: chosen moves; an impossibility argument was asserted where a measurement was
+#: the whole of the evidence, and only the argument is withdrawn.
 _AFTER_MAX_IN_ANY_60S = 2
 
 #: The global `interval_seconds` the fleet table below sits on, and the length
@@ -2263,6 +2280,21 @@ def test_the_max_retailers_in_any_sixty_seconds_over_a_day_is_a_stated_number() 
     tallies and the window model are untouched; the pacer is now built and
     stepped the way `cli.watch_loop` builds and steps one, which is the whole of
     the difference.
+
+    CORRECTED 2026-09-14, a phase-9 verifier finding: *"stepped the way
+    `cli.watch_loop` … steps one"* is **true of the construction and false of the
+    stepping**. This test steps an UNJITTERED tick; the daemon's loop sleeps the
+    tick times a `random.uniform(0.85, 1.15)` draw. That is not a detail — it is
+    the whole reason two instruments give two answers here. **This test measures
+    2. The shipping loop measures 3**, over 20/20 pacer seeds and 5/5
+    `watch_loop` seeds, and 09-02 and 09-05 both recorded the 3 beside the 2.
+    Criterion 3 asks for a stated maximum **below 6** and both figures clear it,
+    so the criterion holds either way — but *what this test measures* is the
+    unjittered schedule, and the sentence above claimed more than that. The **3
+    is ungated**: no assertion in this suite holds it, and that is recorded here
+    rather than quietly fixed, because pinning it would need this test's model to
+    become the loop's, which is `tests/test_cli_watch.py`'s job and not this
+    file's.
 
     THE BEFORE-LITERAL IS WITHDRAWN AS AN ASSERTION AND KEPT AS A RECORD. It
     read, in full:
