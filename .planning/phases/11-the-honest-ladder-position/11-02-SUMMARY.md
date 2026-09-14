@@ -111,3 +111,46 @@ that `make verify-offline` exits 0), so registering one on a partial measurement
 denominator rather than a defence. Recorded as an **open, priced hole**: the anchor is
 `if len(sections_for(display, sections)) == 1:` in rule 7, it is unique in the file, and `scripts/`
 is already in `SANDBOX_CONTENTS` so nothing needs adding to reach it.
+
+---
+
+## VERIFIED 2026-09-14, `gaps_found` at 8/12 — two findings land on this plan
+
+**Nothing above is edited.**
+
+### CRITERION 4 IS MET ONLY IN PART: THE README PADDED INSIDE ITS OWN ANTI-PADDING CORRECTION
+
+This plan's whole subject was that *"Six working retailers"* counted retailers that had **once**
+worked. The paragraph that replaced it said **"TWO CAN PAGE YOU TODAY: GameStop and Nintendo."**
+
+**Nintendo's GO Plus + watch — the only first-party listing of this product anywhere in the table —
+has had no resolved reading since 2026-09-09 15:25.** Its *control* reads every few minutes, which
+is what made the row look fresh. **A control reading proves the detector works. It does not prove
+the watch you care about is being read**, and counting a retailer as able to page you on the
+strength of its control is the same substitution one paragraph up, committed while correcting it.
+
+**One retailer can page you with confidence today: GameStop.** The matrix and the count paragraph
+both now say so, and Nintendo's row is `⚠️ Working — its CONTROL only` with the date.
+
+**Nothing here was measured to have broken.** Nintendo was **never refused** in the window — zero
+refusals logged — so this is not a block and **nothing establishes what it is.** Recorded as
+unexplained rather than diagnosed.
+
+### CRITERION 3 IS MET LITERALLY, AND THE VERIFIER PRICED WHAT THAT IS WORTH
+
+`tests/test_support_matrix.py` passes 44, and corrupting Walmart's **rung** cell reddens 14 tests.
+**But this plan changed no gated cell** — the Status cells and the count paragraph are prose, and
+the verifier measured that **putting `✅ Working` and "Six working retailers" straight back still
+passes 119 tests.** So the gate is real about rungs, extraction axes and the disagreement marker,
+and says **nothing** about whether the Status column tells the truth.
+
+**That is not a defect in this plan and it is a hole in the gate**, recorded here rather than
+quietly fixed: the honest options are a gate that binds a Status cell to a `read_at` staleness
+threshold, or leaving it ungated and saying so. **It is left ungated and said.**
+
+### AND THE PHASE-11 COMMIT DID CHANGE PRODUCTION CODE
+
+`2508f3c` also carries the phase-10 re-verification's fixes to
+`boty/retailers.py::_verdict_from_html`. Describing that commit as *"changed no production code"*
+was reading a two-part commit by one of its parts. **Three things are now in the tree and not on the
+daemon, not two.**

@@ -1582,12 +1582,15 @@ Same window and same method as § Amazon's 2026-09-14 subsection.
 | | |
 |---|---|
 | refusals logged in the window | **39** — nearly three times Amazon's and more than Target's and Walmart's combined |
-| the counter's series | `1 1 2 3 1 1 1 2 1 2 3 4 5 1 1 1 2 3 1 2 3 4 5 1 1 2 1 1 2 3 1 2 3 1 2 1 1 1 2` — **16 resets**, never above 5 |
+| the counter's series | `1 1 2 3 1 1 1 2 1 2 3 4 5 1 1 1 2 3 1 2 3 4 5 1 1 2 1 1 2 3 1 2 3 1 2 1 1 1 2` — **18 resets**, never above 5 |
 | resolved readings | **all five watches, stamped within minutes of the window's end**: control `in_stock` 08:13:25, `Pokémon GO Plus +` `out_of_stock` 08:13:22, three TRANSITION watches 08:13:27–08:13:30 |
 | published state at the window's end | `paced at 15 min — next attempt in ~12 min`, `current_interval_seconds: 900` |
 
 **THE COUNTER NEVER GETS PAST 5, AND THAT IS THE WHOLE DIFFERENCE.** Target went 19 → 30 monotonic
-and Walmart 1 → 9 monotonic; GameStop bounces off 1–5 sixteen times. A reset means a cycle in which
+and Walmart 1 → 9 monotonic; GameStop bounces off 1–5 **eighteen** times. *(This read "sixteen"
+for a few hours on 2026-09-14 and the verifier counted the printed series: 19 of its 39 entries are
+a `1`, and 18 of those follow another entry. Corrected here because the series is printed above and
+a reader who counts it must not find the prose disagreeing with it.)* A reset means a cycle in which
 nothing was refused, so **GameStop is refusing individual requests and not this client.** The
 backoff ladder catches it, waits, and GameStop answers — which is what the ladder is for, working
 exactly as phase 8 designed it and visible here only because the daemon's own ledger records it.
@@ -3145,23 +3148,49 @@ are stated once in § Amazon's 2026-09-14 subsection and are the same here.
 | published state at the window's end | `backing off after 9 refusal(s) — next attempt in ~105 min`, `current_interval_seconds: 21600` (the 6 h ceiling) |
 
 **THE TWO FAILURE MODES ARE DIFFERENT AND THE SEQUENCE IS THE FINDING.** For the first 45.4 hours
-Walmart was **not refusing** — it was answering, and the answer was unusable. The daemon emitted
-`sending health warning for: walmart` **546 times**, every ~5 minutes, from **2026-09-11 08:00:44**
-to **2026-09-13 05:26:07**. That is the store-**disagreement** warning, which is unreachable until a
-store is pinned and became reachable for the first time with that morning's restart. Then, four
-minutes after the last one, at **05:30:33**, Walmart began refusing and has not stopped.
+of this window Walmart was **not refusing** — it was answering, and the answer was unusable. Then,
+at **2026-09-13 05:30:33**, four minutes after the last health warning, it began refusing and has
+not stopped.
 
 **So "Walmart does not read" is one sentence covering two states**, and this record keeps them
-apart: *answering with a store we did not ask about* (2026-09-11 → 09-13) and *refusing* (2026-09-13
-→ now). Nothing measured says whether they are related.
+apart: *answering with a store we did not ask about*, and *refusing* (2026-09-13 → now). Nothing
+measured says whether they are related.
 
-**AND THE HEALTH WARNING NEVER REACHED A PHONE.** All 546 attempts failed delivery with
-`Bad Request: can't parse entities: Unsupported start tag` — the redaction placeholder was
-angle-bracketed and Telegram renders HTML, so the safety measure silenced the alert it was
-protecting. Fixed in the tree at `17d3e5d` on 2026-09-11 and gated on shape rather than on the
-word. **That fix is NOT on the wire** — it reaches the daemon at the next restart, which is Dan's
-call. **Restock alerts were never at risk**, measured rather than assumed: the redaction is applied
-at exactly two sites and both are inside `send_health_warning`.
+#### The two figures this section first published were BOTH WRONG, and the error was the window
+
+**Corrected 2026-09-14 by the phase-11 verifier, same day, before anything was built on them.** The
+first draft said the health warnings ran *"546 times … from 2026-09-11 08:00:44"* for *"45 h"*. Both
+numbers came from a `journalctl --since` bounded at the 2026-09-11 restart, and **then were reported
+as if they were totals.** Re-measured over the whole journal:
+
+| | first draft | measured over the full journal |
+|---|---|---|
+| undelivered Walmart health warnings | 546 | **4,305** |
+| first one | 2026-09-11 08:00:44 | **2026-08-27 20:07:54** |
+| last one | 2026-09-13 05:26:07 | 2026-09-13 05:26:07, unchanged |
+| the span | ~45 h | **16 days 9 h 18 m** |
+| Telegram's byte offset | — | **353 on all 4,305**, so it is one defect and not a family |
+
+**AND THAT MOVES A CLAIM THIS PROJECT HAS REPEATED IN FIVE PLACES: the Walmart store pin took
+effect on 2026-08-27, not 2026-09-11.** The store-**disagreement** warning is unreachable until a
+store is pinned, so the first one dates the pin. `boty` restarted **2026-08-27 07:23:34** and the
+first failure came **12 h 44 m later**, on Walmart's 6-hour backoff. The 2026-09-11 restart found
+the pin already live and changed nothing about it. Walmart's health warnings before 2026-08-27 are
+a different and much sparser shape — **five** of them between 2026-08-13 and 2026-08-26, none with
+this error.
+
+**So the notify defect had been silencing this alert for sixteen days, not two**, and every record
+that dated it to 2026-09-11 — `17d3e5d`'s own commit message, `STATE.md`, `CLAUDE.md`, `README.md`
+and `.planning/ROADMAP.md` — is corrected beside rather than over. **What does not change:** it is
+still a **first execution and not a regression** (the line had never run before the pin went live,
+whichever restart did it), the fix at `17d3e5d` is still correct and still **NOT on the wire**, and
+**restock alerts were never at risk** — measured, not assumed: the redaction is applied at exactly
+two sites and both are inside `send_health_warning`.
+
+**The shape of the error is worth more than the numbers.** A window was chosen for a good reason —
+the 2026-09-11 restart is where the current code starts — and then a count taken inside it was
+published as a total. **`--since` is an assumption wearing a measurement's clothes**, and this file
+exists because of that exact substitution.
 
 **NOT RECORDED AS RUNG 4, for the reason stated in full under § Target's 2026-09-14 subsection.**
 Rung 4 here means **dropped, with evidence**, and the precedent (Pokémon Center) was dropped on a

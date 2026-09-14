@@ -88,7 +88,7 @@ deliberately NOT in this milestone*.
 - [x] **Phase 8: Stop Knocking** *(COMPLETE 2026-08-31 in the tree; ~~NOT on the wire~~ **ON THE WIRE since 2026-09-11 07:56:33** — noted 2026-09-14, see the phase's closing record)* — a persistently refused retailer is left alone for days, not knocked on twice a day forever
 - [x] **Phase 9: Out of Lockstep** *(COMPLETE 2026-09-01 in the tree; ~~NOT on the wire~~ **ON THE WIRE since 2026-09-11 07:56:33** — noted 2026-09-14, see the phase's closing record)* — six retailers stop being requested inside one short window from one origin
 - [x] **Phase 10: A Control That Cannot Die** *(COMPLETE 2026-09-02 in the tree; ~~NOT on the wire~~ **ON THE WIRE since 2026-09-11 07:56:33** — noted 2026-09-14, see the phase's closing record)* — a dead control is a fact about our config, never mistaken for a fact about the retailer
-- [x] **Phase 11: The Honest Ladder Position** *(COMPLETE 2026-09-14 — in the tree; it changed no production code, and it made ZERO live requests)* — what is actually true of Amazon, Target and Walmart, written down and gated
+- [x] **Phase 11: The Honest Ladder Position** *(COMPLETE 2026-09-14 — in the tree; it made ZERO live requests. ~~changed no production code~~ — see the correction in its closing record: the commit that carried it also carried the phase-10 re-verification's code fixes)* — what is actually true of Amazon, Target and Walmart, written down and gated
 
 ### Phase 8: Stop Knocking
 
@@ -558,11 +558,29 @@ was not done — phase 11's criteria require no new mutation, so registering one
 measurement would buy a denominator rather than a defence. Recorded as an open, priced hole with its
 anchor named.
 
-**NOT ON THE WIRE, and for once that phrase means almost nothing:** phase 11 changed no production
-code. What is in the tree and not on the daemon is `57ea00b` (the second false-dead shape) and
-`17d3e5d` (the notify redaction — **a live defect: 546 health warnings have failed Telegram
-delivery since the restart**). Both reach the daemon at the next `sudo systemctl restart boty`,
-which is Dan's call.
+**NOT ON THE WIRE — and the first draft of this paragraph got that wrong in two ways, both caught
+by phase 11's own verifier the same day and both corrected here rather than over.**
+
+It read: *"phase 11 changed no production code. What is in the tree and not on the daemon is
+`57ea00b` … and `17d3e5d` … **a live defect: 546 health warnings have failed Telegram delivery since
+the restart**."*
+
+1. **"Changed no production code" is FALSE.** `2508f3c` — the phase-11 commit — also carries the
+   phase-10 re-verification's fixes to `boty/retailers.py::_verdict_from_html`, which change how a
+   dead control is decided and are covered by tests that go red when reverted. Bundling two pieces
+   of work in one commit and then describing the commit by one of them is the error, not the
+   bundling. **So there are THREE things in the tree and not on the daemon, not two.**
+2. **"546 … since the restart" is wrong by an order of magnitude and by fifteen days.** Measured
+   over the whole journal rather than since 2026-09-11: **4,305** undelivered, from **2026-08-27
+   20:07:54** to 2026-09-13 05:26:07 — **16 days 9 h**, all at Telegram's byte offset 353. And that
+   dates something else: the **Walmart store pin took effect at the 2026-08-27 restart**, not the
+   2026-09-11 one, because the store-disagreement warning is unreachable until a store is pinned.
+   Five records in this project said 2026-09-11; all are corrected beside. Full working in
+   `docs/retailer-evidence.md` § Walmart.
+
+**What still holds:** all three reach the daemon at the next `sudo systemctl restart boty`, which is
+Dan's call; the notify defect is a **first execution and not a regression**; and **restock alerts
+were never at risk** — the redaction is applied at two sites, both inside `send_health_warning`.
 
 ### Why no phase here proposes escalating a rung
 

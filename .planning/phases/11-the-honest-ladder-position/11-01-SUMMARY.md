@@ -79,3 +79,51 @@ shared bot-management vendor; Walmart's 45-hour prelude) are named as the storie
 `scripts/evidence_check.py --phase` **PASS**. `scripts/identity_check.py --all` **PASS, 282 files**
 — and it was run before the journal extracts were pasted, not after, because a syslog line carries a
 hostname and this checker has fired on this project's own prose four times.
+
+---
+
+## VERIFIED 2026-09-14, `gaps_found` at 8/12 — and the verifier found FIVE errors in this summary
+
+**Nothing above is edited.** Each correction is here, beside, because the *shape* of every one of
+them is the shape this phase was written to catch.
+
+**The method survived the attack, which is worth recording first.** The verifier's verdict on the
+zero-budget argument: *"it is not a dodge. The phase added no requests… Nothing it claims needed a
+request that wasn't made."* **Where it went wrong was not for lack of a request — it read the free
+sources too narrowly.** That is a better finding than a vindication.
+
+### 1. THE WALMART STORE PIN TOOK EFFECT 2026-08-27, NOT 2026-09-11
+
+Five records in this project had settled on 2026-09-11 without anyone checking, and this summary
+repeated it. **The pin is dated by the first store-DISAGREEMENT warning**, because that warning is
+unreachable until a store is pinned — and the first one is **2026-08-27 20:07:53**, twelve hours
+and forty-four minutes after that day's restart, on Walmart's six-hour backoff.
+
+### 2. THE FIGURES WERE A WINDOWED COUNT PUBLISHED AS A TOTAL
+
+| | this summary said | measured over the whole journal |
+|---|---|---|
+| undelivered Walmart health warnings | 546 | **4,305** |
+| span | ~45 h | **16 days 9 h 18 m** (2026-08-27 20:07:54 → 2026-09-13 05:26:07) |
+| Telegram byte offset | — | **353 on all 4,305** — one defect, not a family |
+
+**`journalctl --since` is an assumption wearing a measurement's clothes.** The window was chosen
+for a good reason — 2026-09-11 is where the current code starts — and then a count taken inside it
+was reported as if it were everything. **If you bound a query, say so beside the number.**
+
+### 3. GAMESTOP'S RESETS ARE 18, NOT 16
+
+And the series was printed in the table directly above the wrong count, so any reader who counted it
+would have found the prose disagreeing with the data on the same page.
+
+### 4. A RESET DOES NOT PROVE AMAZON ANSWERED
+
+It proves one cycle refused nothing. **The two dated stamps are what carry the claim** — this
+summary let the reset do work the stamps were already doing, which is an inference standing in for a
+measurement that was right there.
+
+### 5. `boty/retailers.py:718` IS NOW L766
+
+The line moved in the same commit that cited it. A line-number citation written against a file you
+are editing is stale before it is committed — the same lesson Collision 10's table has now learned
+three times in one day.

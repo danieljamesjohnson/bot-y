@@ -192,7 +192,12 @@ and have to be re-taken — say so beside them rather than keeping the first num
 - `WALMART_STORE_ID` lives in `/home/dan/.config/boty/env` (mode 600, outside the repo).
   **Never read, derive, infer or print it.** Its presence may only ever be measured as a
   count. **It is SET ON DISK AND IN EFFECT** — Dan supplied it on 2026-08-25 after two deferrals,
-  and the restart that activated it happened **2026-09-11 07:56:33**. Any process that does not
+  and the restart that activated it happened **2026-08-27 07:23:34**. *(This bullet said
+  **2026-09-11 07:56:33** for a few hours on 2026-09-14, which was wrong by fifteen days and was the
+  date five separate records in this project had settled on without checking. The pin is dated by
+  the first store-DISAGREEMENT warning, because that warning is unreachable until a store is pinned:
+  the first one is 2026-08-27 20:07:53, 12 h 44 m after that restart, on Walmart's 6-hour backoff.
+  Caught by phase 11's verifier.)* Any process that does not
   load that env file — a test, a dev shell — still sees no pin, so a Walmart reading there is
   store-gapped for a reason that is not a config defect. *(This bullet read "it is currently unset,
   deliberately" until 2026-09-02, and "SET ON DISK and NOT YET IN EFFECT … the next restart, which
@@ -208,9 +213,13 @@ and have to be re-taken — say so beside them rather than keeping the first num
     dashboard and taken for fresh. Both are corrected beside. **`read_at` is the field that tells
     them apart — use it.**
   - **What the pin DID do, measured, is make the store-disagreement warning reachable for the first
-    time.** It fired 546 times between 2026-09-11 08:00:44 and 2026-09-13 05:26:07 and **not one
-    reached a phone** (`17d3e5d` fixes it; that fix is in the tree and not on the wire). See
-    `QUESTIONS.md` § 0f.
+    time — and it has been silently failing ever since.** **4,305** warnings between **2026-08-27
+    20:07:54** and 2026-09-13 05:26:07, **sixteen days**, every one rejected by Telegram at byte
+    offset 353, **not one reaching a phone**. `17d3e5d` fixes it and that fix is **in the tree and
+    not on the wire**. *(A first draft of this bullet said "546 times … from 2026-09-11" — a count
+    taken inside a `journalctl --since` window and then published as a total. **`--since` is an
+    assumption wearing a measurement's clothes**; if you bound a query, say so beside the number.)*
+    See `QUESTIONS.md` § 0f.
 - `.env*` reads are blocked by policy. Get env var *names* from docs, never values.
 - `datastore/secret.txt` belongs to a vendored changedetection.io datastore. Leave it be.
 
