@@ -1519,6 +1519,39 @@ not doing that. Corrected here rather than deleted, because the shape of the err
 `page_rendered`, `boty/retailers.py`. A document that never rendered cannot support a claim about
 whether a product exists, and the canonical never could distinguish the two cases.
 
+#### 2026-09-15 15:57:15 — THE REDACTION FIX DELIVERED. First health warning to reach a phone since 2026-08-27
+
+**Recorded in § Best Buy's neighbourhood because it is the same restart, but the subject is
+Walmart.** `17d3e5d` was written on 2026-09-11 against a defect that had, at that point, been
+silencing this alert for fifteen days. It shipped to the wire at the 2026-09-15 07:52:47 restart and
+**had never executed**, because the only path that reaches it is Walmart's store-disagreement
+warning and Walmart had to answer rather than refuse.
+
+It answered at **15:57:15**. Measured on the daemon's own journal:
+
+| | |
+|---|---|
+| failures in the 16 days BEFORE the restart | **4,539**, every one `Unsupported start tag … at byte offset 353`, HTTP 400 |
+| failures since the restart | **0** |
+| warnings sent since the restart | **1** |
+| retries of that warning | **0** |
+
+**The zero-retries figure is the second half of the proof and it is not redundant.** The old
+behaviour logged `detector health warning NOT delivered for walmart — will retry next cycle` within
+~0.4 s of every send and then re-sent every ~5 minutes forever; that is how one defect produced
+4,539 log lines. One send, no failure line, no retry.
+
+**AND THE ALERT IS NOW LEGIBLE, which is the point of the whole exercise.** It reports that
+Walmart's page answered for a **different store than the one pinned**, and names both — the pinned
+value is redacted at both sites inside `send_health_warning`, as designed, and **is not reproduced
+here or anywhere in this repository; its presence is a count and never a value.** That is the one
+health state `CLAUDE.md` calls actionable, and for sixteen days it could not be said out loud.
+
+**What this does NOT establish.** That Walmart reads — it does not, and this warning is precisely a
+reading that cannot be shown to be about the pinned store. That any *other* notification path was
+ever broken: restock alerts were never at risk, measured, and that measurement is unchanged. And it
+says nothing about Best Buy, Target or Amazon.
+
 #### Two claims from § 0h are corrected here, beside and not over
 
 **§ 0h's OUTCOME says *"The false dead is gone."* It was not gone; it was halved.** The `<body>`
