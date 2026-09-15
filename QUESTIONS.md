@@ -1,6 +1,37 @@
 # Blocked on Dan
 
-## 0i. Two projects want port 8821, and bot-y's dashboard has lost — OPEN, 2026-09-15
+## 0i. The dashboard is back on :8821 — and still not reachable from your phone — 2026-09-15
+
+**RESOLVED IN PART THE SAME DAY, on your instruction: *"kill the pos-facelift server and restart
+boty-web"*.** Done. PID 1177060 stopped (identity re-confirmed immediately before — same start time,
+same cwd — so it was not a recycled PID), `boty-web` restarted: `active (running)`,
+`Result=success`, `NRestarts` reset from **110102** to **0**, serving the real page, `status.json`
+200. Looked at in headless Chromium: renders correctly, zero console errors.
+
+**THE PART THAT IS NOT RESOLVED, and it is the part you will notice.** `boty-web` binds
+**`127.0.0.1`**, and **nothing proxies it** — measured, not assumed: no `caddy`/`nginx` rule mentions
+`8821`, and `tailscale serve` fronts five other loopback services (`:8090`, `:8770`, `:8765`,
+`:8099`, `:8123`) and **not this one**.
+
+**So `http://danserver:8821` from your phone is connection-refused right now.** For the thirteen
+days pos-facelift held the port it answered — with that project's kitchen tickets — because *that*
+server bound `0.0.0.0`. **Which means the bot-y dashboard has never been reachable off this host**,
+and the outage made it look reachable by putting the wrong page there.
+
+**The fix is one command in the house style, and it is yours because it changes what is exposed on
+your network:**
+
+```bash
+tailscale serve --bg --set-path /boty http://127.0.0.1:8821
+```
+
+Say the word and I'll run it and verify from the tailscale IP rather than from loopback — a 200 on
+`127.0.0.1` proves nothing about what your phone sees, which is the trap `CLAUDE.md` already records
+about serving pages here.
+
+*(The original question follows, unedited, because it is the measurement that found this.)*
+
+### The original entry — two projects want port 8821, and bot-y's dashboard has lost
 
 **This is a live outage, it is thirteen days old, and it is a one-line decision only you can make.**
 

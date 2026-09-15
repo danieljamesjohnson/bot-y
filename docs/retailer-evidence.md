@@ -1546,6 +1546,43 @@ observations of either fix.** Both are proved against fixtures and against nothi
 that is honest about an unreadable retailer is not a readable retailer, and this log keeps those
 two sentences apart.
 
+#### 2026-09-15 — THE FIX RAN IN PRODUCTION, and the sentence above is superseded in exactly one half
+
+**"Production has made zero observations of either fix" stopped being true at 2026-09-15 08:43:48
+CDT.** The restart at 07:52:47 put both on the wire, and Best Buy's control was checked. Captured
+from the daemon's own `served/boty/status.json` at the moment `checked` was `true` — that row is
+transient, so it was polled for rather than caught by luck:
+
+| | |
+|---|---|
+| `availability` | `unknown` |
+| `detail` | **`could not establish whether sku 6216393 resolves — the page did not render`** |
+| `failing_controls[0]` | the **same** sentence, verbatim |
+| health `reason` | *"…readings from this retailer are unverified and a real restock could be missed silently; **the cause is not established**"* |
+| `degraded` | `true` · `alertable` `false` · `rung` `browser` |
+
+**Every one of those is the new code and not the old.** Before 2026-09-10 this row said *"sku
+6216393 did not resolve to a product page — no schema.org Product on it carries that sku"* — a
+non-resolution claim about a SKU that read `IN_STOCK $59.99` five weeks ago. Before 2026-09-14 the
+`failing_controls` line said it too, beside a flag that said the opposite. **Both surfaces now say
+the same honest thing, which is the whole of what phases 10 and 11 were arguing about, observed
+rather than argued.**
+
+**AND IT STILL DOES NOT MEAN BEST BUY READS.** `state.json`'s Best Buy stamp is **unmoved at
+2026-08-25 15:53:56**, because an `UNKNOWN` writes no verdict. That is the two surfaces behaving
+exactly as designed and it is worth spelling out, because they look contradictory:
+
+- `served/boty/status.json`'s per-watch `read_at` = **when a page was last read**, set even for
+  `UNKNOWN`. It said 2026-09-15 08:43:48.
+- `state.json`'s `read_at` = **when a verdict was last obtained**. It says 2026-08-25.
+
+**A fresh timestamp on one and a three-week-old timestamp on the other is not a bug and is not a
+disagreement — it is the difference between *asked* and *answered*.** Every "zero resolved readings"
+verdict in § Amazon, § Target and § Walmart above is taken from `state.json` and is unaffected.
+
+**So the honest statement today is: the monitor is now demonstrably honest about Best Buy on the
+wire, and Best Buy is still unreadable.** Those were always two claims. Only the first moved.
+
 ---
 
 ## GameStop (gamestop.com)

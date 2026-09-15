@@ -308,7 +308,22 @@ sudo systemctl restart boty          # the watcher daemon
 `boty-web.service` separately serves `served/boty/` on `127.0.0.1:8821` (loopback), so
 page edits are live on next load without a restart.
 
-> ### THE DASHBOARD HAS BEEN DOWN SINCE 2026-09-02, AND `:8821` SERVES ANOTHER PROJECT
+> ### RESOLVED 2026-09-15 ON DAN'S INSTRUCTION — and the page is still loopback-only
+>
+> He said *"kill the pos-facelift server and restart boty-web"*. Done: PID 1177060 stopped (identity
+> re-confirmed immediately beforehand, so not a recycled PID), `boty-web` `active (running)`,
+> `Result=success`, `NRestarts` reset **110102 → 0**, serving the real page, zero console errors.
+>
+> **`boty-web` binds `127.0.0.1` and NOTHING PROXIES IT** — measured: no `caddy`/`nginx` rule for
+> `8821`, and `tailscale serve` fronts five other loopback services and not this one. So
+> `http://danserver:8821` is reachable **from this host only**, and the thirteen-day outage made it
+> *look* reachable off-host because the squatter bound `0.0.0.0`. **The dashboard has never been
+> reachable from a phone.** Exposing it is a one-line `tailscale serve` in the house style and is
+> Dan's call — `QUESTIONS.md` § 0i.
+>
+> **The block below is the measurement that found it, kept unedited.**
+>
+> ### THE DASHBOARD WAS DOWN FROM 2026-09-02 TO 2026-09-15, AND `:8821` SERVED ANOTHER PROJECT
 >
 > **Measured 2026-09-15.** `boty-web.service` is in a crash-loop: `ActiveState=activating`,
 > `Result=exit-code`, **`NRestarts=110102`**, dying every ~10 s on
