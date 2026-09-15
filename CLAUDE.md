@@ -308,6 +308,40 @@ sudo systemctl restart boty          # the watcher daemon
 `boty-web.service` separately serves `served/boty/` on `127.0.0.1:8821` (loopback), so
 page edits are live on next load without a restart.
 
+> ### THE DASHBOARD HAS BEEN DOWN SINCE 2026-09-02, AND `:8821` SERVES ANOTHER PROJECT
+>
+> **Measured 2026-09-15.** `boty-web.service` is in a crash-loop: `ActiveState=activating`,
+> `Result=exit-code`, **`NRestarts=110102`**, dying every ~10 s on
+> `OSError: [Errno 98] Address already in use`.
+>
+> **The port was taken by a different project and the timing is exact.** PID 1177060, started
+> **2026-09-02 06:34:58**, cwd `/home/dan/CodeProjects/pos-facelift`, running
+> `python3 -m http.server 8821 --bind 0.0.0.0 --directory served/tickets`. `boty-web` logged its
+> first `Address already in use` at **06:35:08** — **ten seconds later** — and has not served a page
+> since.
+>
+> **So anyone opening `http://danserver:8821` for the last two weeks got pos-facelift's kitchen
+> tickets, not the restock monitor**, and the squatter binds `0.0.0.0` where this unit binds
+> loopback, so it is reachable across the tailnet where the real dashboard never was.
+>
+> **THIS IS NOT AN AGENT'S TO FIX.** Two projects want one port and choosing between them is Dan's:
+> stop the other server, re-point one of the two units, or give bot-y a different port. **Do not
+> kill another project's process to free a port.** Recorded in `QUESTIONS.md`.
+>
+> **To look at the dashboard meanwhile**, serve it yourself on a free port and point the
+> `go-look-at` skill at loopback — that is how `08-UAT.md` item 2 was finally discharged on
+> 2026-09-15:
+>
+> ```bash
+> .venv/bin/python -m http.server 8831 --bind 127.0.0.1 --directory served/boty
+> ```
+>
+> **And note what this cost in evidence, not just in convenience.** Every record in this project has
+> described "a dashboard on the tailnet" throughout, including the sentence directly above this
+> block. **Nothing measured it**, because nothing gates a systemd unit's health — the same class of
+> gap as a monitor that reports green about a question nobody asked, arriving one layer below the
+> monitor.
+
 - **A restart is the user's call, not yours.** Ask; don't assume, and don't run it as a
   side effect of something else.
 - **Do not run `boty check` casually** — it makes live retailer requests *and* writes the

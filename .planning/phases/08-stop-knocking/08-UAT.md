@@ -93,14 +93,50 @@ result: NOT OBSERVABLE — Best Buy still does not read
   Best Buy readable. So there is no live cool-off row to judge. Recorded as not observable rather
   than passed.
 
+  ---
+
+  **LOOKED AT 2026-09-15, WITH A RETAILER GENUINELY IN COOL-OFF. PASSED IN PART, and the half that
+  cannot pass is structural rather than a defect.** Headless Chromium against the real
+  `served/boty/index.html` and the daemon's live `status.json`; **zero console errors.**
+
+  **The half that PASSED — the cadence renders in human terms.** The retailer banner reads
+  `target: cooling off after 31 refusal(s) — next attempt in ~3.0 days`. Not `259200`, not a raw
+  number of seconds. That is what the item asked for.
+
+  **The half that CANNOT be produced by a cool-off row, and this is the finding.** The item expected
+  the row's age tag to read *"`73h ago > 72h` rather than an apparent equality"*. Target's row reads
+  **`AGE ?`** — because `ageTag` compares a **`read_at`** against the cadence, and **target has never
+  produced a resolved reading in its life** (`read_at: null`, `checked: false`). A refusal writes no
+  stamp, and 30+ consecutive refusals are exactly what a cool-off is made of. **So a retailer driven
+  into cool-off from a standing start can never render that comparison.** Not a rendering bug: there
+  is no age, and `AGE ?` is the honest output.
+
+  **The comparison itself IS observable and reads correctly — on other rows.** Three forms, all on
+  the same screenshot: `496H AGO > 5M` (bestbuy), `16H AGO > 6H` (amazon control), `136H AGO > 5M`
+  (nintendo's GO Plus +) — each an age against that retailer's **own** current cadence, with the `>`
+  present only when the reading is genuinely past it. A fourth form is visible too: amazon's
+  GO Plus + shows a bare `9M AGO` with no comparison, because 9 minutes is not past a 6-hour cadence.
+  **So all four of `_age_tag`'s forms rendered on one page and each was right.**
+
+  **Item 2 is therefore discharged as far as it can be**, and the residue is recorded rather than
+  left pending: to see `Nh ago > 72h` on a cool-off row, a retailer would have to read successfully
+  and *then* be refused thirty times. None has.
+
 ## Summary
 
 total: 2
-passed: 1
+passed: 2
 issues: 0
 pending: 0
-skipped: 1
+skipped: 0
 blocked: 0
+
+*(Was `passed: 1 / skipped: 1` until 2026-09-15. Item 1's cool-off was observed on 2026-09-14 and
+item 2's dashboard on 2026-09-15, both at zero live-request cost. **`passed: 2` here means every
+item was looked at and written up, NOT that every expectation was met** — item 2 passed in part and
+the half that cannot pass is explained in its own block. This file has no field for "passed in
+part", which is worth saying out loud in a repository whose whole standard is that MET IN PART is a
+normal outcome.)*
 
 ## Gaps
 

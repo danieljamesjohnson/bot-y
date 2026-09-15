@@ -1,5 +1,39 @@
 # Blocked on Dan
 
+## 0i. Two projects want port 8821, and bot-y's dashboard has lost — OPEN, 2026-09-15
+
+**This is a live outage, it is thirteen days old, and it is a one-line decision only you can make.**
+
+**Measured 2026-09-15, not inferred:**
+
+| | |
+|---|---|
+| `boty-web.service` | `ActiveState=activating`, `Result=exit-code`, **`NRestarts=110102`** — dying every ~10 s on `OSError: [Errno 98] Address already in use` |
+| what holds `:8821` | PID 1177060, started **2026-09-02 06:34:58**, cwd `/home/dan/CodeProjects/pos-facelift`, `python3 -m http.server 8821 --bind 0.0.0.0 --directory served/tickets` |
+| when bot-y lost it | **2026-09-02 06:35:08** — ten seconds after the above |
+
+**So `http://danserver:8821` has served pos-facelift's kitchen tickets for thirteen days**, and it
+is reachable across the whole tailnet because that server binds `0.0.0.0` where `boty-web` binds
+loopback. The restock dashboard has been unreachable that entire time.
+
+**The decision, and it is three words either way:**
+
+- **stop the pos-facelift server** — it is a `nohup`'d one-off, not a unit, so it dies and stays
+  dead; or
+- **move bot-y to another port** (a one-line `ExecStart` edit in `boty-web.service`); or
+- **move pos-facelift**, which is the same edit in the other direction.
+
+**Why no agent took it.** Killing another project's running process to free a port is destructive
+and outside any one project's scope, and re-pointing a systemd unit changes a URL you may have
+bookmarked. Neither is an agent's call. **Nothing else about bot-y is blocked on this** — the
+daemon, the alerts and every gate are unaffected; it is the *page* that is dark.
+
+**In the meantime the dashboard is inspectable on demand** without touching either server:
+`.venv/bin/python -m http.server 8831 --bind 127.0.0.1 --directory served/boty`. That is how
+`08-UAT.md` item 2 was discharged on 2026-09-15.
+
+---
+
 ## 0h. Two live Best Buy reads to confirm the transport fix — ANSWERED 2026-09-10: **go ahead**
 
 **The question.** Phase 10 found that Best Buy's SKU search now answers with a **client-side**
