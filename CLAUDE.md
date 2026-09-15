@@ -368,6 +368,36 @@ page edits are live on next load without a restart.
   browser on PATH where systemd cannot — and the reverse also happens, so `make verify`
   reporting "no Chrome/Chromium binary found" may be *your shell*, not the service.
 
+### `RuntimeError: Event loop is closed` in the journal is NOISE, and it says so in its own first line
+
+**Observed once, 2026-09-15 17:53:50, twelve seconds after a rung-3 browser start.** An agent
+tailing `journalctl -u boty` sees the word `Traceback` and a `RuntimeError` and reaches for the
+wrong conclusion. It is the headless browser's asyncio subprocess transport being finalised after
+its event loop closed — `BaseSubprocessTransport.__del__` → `write_eof` → `call_soon` →
+`_check_closed`.
+
+**It cannot propagate**, and its own first line says so: `Exception ignored in: <function
+BaseSubprocessTransport.__del__ …>` — the interpreter's unraisable hook, printed and discarded.
+
+**Measured after it rather than assumed:** the daemon stayed `active (running)`, same `MainPID`,
+`NRestarts=0`, and `status.json` was rewritten **45 s later** on the ~50 s tick, `healthy: true`,
+2 of 13 watches checked. Nothing was lost.
+
+**TWO COUNTING TRAPS THIS ONE INCIDENT SET, AND BOTH CAUGHT ME INSIDE TEN MINUTES:**
+
+- **`grep -c "Event loop is closed"` returns 2 for ONE traceback.** The
+  `raise RuntimeError('Event loop is closed')` source line and the final `RuntimeError: …` line
+  both match. I reported "2 occurrences" off that count; it is one. **Count timestamps, not lines.**
+- **A gap between `status.json` writes is not a wedged loop.** `watch_loop` sleeps the tick *after*
+  the cycle, so a slow browser fetch pushes the next write past the 42.5–57.5 s jitter band. I
+  flagged 60 s of silence as marginal; the next write came at 45 s and was entirely normal.
+  **Wait for one more write before concluding anything.**
+
+**First occurrence in a journal reaching back to 2026-08-02** (29,051 lines), so *new* is a real
+observation rather than a retention artifact — **and why it is new is NOT established.** Nothing in
+this project's code appears in that stack, and one sample does not support an explanation.
+Recorded as unexplained rather than diagnosed.
+
 ---
 
 ## Git and records
