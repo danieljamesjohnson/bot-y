@@ -1,5 +1,53 @@
 # Blocked on Dan
 
+## 0j. Nintendo's GO Plus + page 404s — is it delisted, or did the URL move? — OPEN, 2026-09-16
+
+**This is the watch this whole project exists for.** Nintendo is the **only first-party GO Plus +
+listing** in the support matrix, at its $54.99 MSRP, and it is the one row that could page you with
+a restock you would actually want.
+
+**It has returned HTTP 404 for a week.** Measured 2026-09-16 at zero request cost, by polling the
+daemon's own `status.json` until the watch was mid-check:
+
+| | |
+|---|---|
+| `detail` | **`fetch failed: HTTP 404`** |
+| last verdict | **2026-09-09 15:25:05** (`out_of_stock`) — 6.7 days ago |
+| Nintendo refusals, ever | **0**, across the journal's whole six-week span |
+| its control | reading fine, every few minutes |
+
+**So this is a dead URL and not a block**, and nothing about Nintendo's willingness to serve us has
+changed.
+
+**NOTHING ALERTED, and that is your 2026-08-27 decision working as specified rather than a defect.**
+Health keys on **control** failures; Nintendo's control is healthy, so the retailer reports healthy
+while its product watch 404s. That is the residual blindness `REQUIREMENTS.md` records as staying
+open after you declined a lost-coverage alarm — *"we don't want to inform the user it's broken,
+really. we want to prevent a broken state."* **I am not re-litigating that.** I am telling you the
+window has a real thing in it.
+
+**What I cannot tell you, and why:** whether Nintendo **delisted** the product or **moved the URL**.
+A 404 distinguishes neither, and separating them needs a live request — a search on
+`nintendo.com`, or a fetch of a candidate URL — which is not authorised. **No live request was
+made.**
+
+**Three ways forward, all yours:**
+
+- **Authorise one or two live Nintendo requests** and I will establish which it is and either
+  re-point the watch or record a rung-4-style delisting with evidence. Nintendo has never refused
+  us, so the politeness cost is about as low as it gets here.
+- **Hand me the new URL** if you already know it — then it is a one-line config change and a fixture
+  re-capture, no live request needed beyond the capture.
+- **Decide it is genuinely gone**, in which case the honest move is to record the disproof the way
+  Target's delisting is recorded, and the matrix stops claiming a first-party listing exists.
+
+**Worth saying plainly:** with this 404, **no watch anywhere in this project currently reads the
+Pokémon GO Plus + from a first-party seller.** GameStop reads it (`out_of_stock`), Amazon's only
+offer is a $219 reseller unit that is suppressed twice over, Walmart's is a marketplace listing and
+Walmart is not reading, and Best Buy and Target do not carry it at all.
+
+---
+
 ## 0i. The dashboard is back on :8821 — and still not reachable from your phone — 2026-09-15
 
 **RESOLVED IN PART THE SAME DAY, on your instruction: *"kill the pos-facelift server and restart

@@ -1780,6 +1780,45 @@ fight over. Reserve candidate if it is ever discontinued: the AC adapter
 
 ---
 
+### 2026-09-16 — the GO Plus + page returns HTTP 404, and has for a week
+
+**This is the only first-party Pokémon GO Plus + listing this project watches.** It is the row the
+whole tool exists for, and it has produced no verdict since **2026-09-09 15:25:05** (`out_of_stock`).
+
+**Measured 2026-09-16 at zero request cost**, by polling the daemon's own `status.json` until the
+watch was mid-check — that row exists for a few seconds per cycle and a query a moment later shows
+the remembered value instead:
+
+| | |
+|---|---|
+| `availability` | `unknown` |
+| `detail` | **`fetch failed: HTTP 404`** |
+| `read_at` | `null` — no verdict, so `state.json`'s stamp correctly stays at 2026-09-09 |
+| `alertable` | `false` · `rung` `tls` · `degraded` `false` |
+
+**So it is a dead URL, not a block.** Nintendo has been refused **zero** times in this journal's
+entire six-week span, and its control (`hdmi-cable-104947`) reads every few minutes. Nothing about
+Nintendo's willingness to serve us has changed.
+
+**NOTHING ALERTED, AND THAT IS BY DESIGN RATHER THAN BY DEFECT.** `assess_health` keys on **control**
+failures; this retailer's control is healthy, so the retailer reports healthy while its product
+watch 404s. Three Nintendo health warnings exist in the whole journal and all three are from August.
+That is precisely the **residual undetected-blindness window** `REQUIREMENTS.md` records as staying
+open after Dan declined a lost-coverage alarm on 2026-08-27 — *"we don't want to inform the user
+it's broken, really. we want to prevent a broken state."*
+
+**The monitor is being honest about it, which is the part that worked.** It publishes `unknown` and
+not a stale `out_of_stock`, writes no verdict, marks it unalertable, and the dashboard renders
+`161H AGO > 5M` in amber — phase 7's age tag doing exactly its job. **But the disclosure is passive**,
+and the only surface carrying it is a dashboard that (§ `QUESTIONS.md` 0i) has never been reachable
+off this host. **Two independent gaps lined up: the watch that matters went dark quietly, and the one
+place that says so cannot be read from a phone.**
+
+**What is NOT established, and it needs a request nobody has authorised:** whether Nintendo delisted
+the product or moved the URL. A 404 distinguishes neither. **No live request was made.**
+
+---
+
 ## Pokémon Center (pokemoncenter.com)
 
 **Probed:** 2026-08-02, from danserver over a residential connection.
