@@ -188,6 +188,16 @@ performed nor recommended here. That restart now carries more than this phase: `
 the loop to its configured cadence rather than ~6.8% slower, so the request rate goes **up** slightly.
 That trade was named and taken, not stumbled into.
 
+> **AND OPERATING IT FOUND A HOLE IN ITS OWN GUARANTEE — 2026-09-18, recorded beside.** A restart
+> re-probes **every** backed-off retailer within seconds, discarding whatever wait remained, because
+> `Pacer.load` deliberately does not restore `due_at`. Reproduced on both restarts: amazon at +3 s and
+> +4 s, target and walmart within four minutes. **Target was 1 day 18 h into a three-day cool-off**, and
+> the refusal restarted that clock. Phase 8's goal says a refused retailer is *"not knocked on twice a
+> day forever"*; it is knocked on once per restart. The counter-persistence fix (CR-01) holds — 30 → 31,
+> never reset — this is the **scheduling** half of the same area and it was not covered. `refused_at` is
+> persisted and is wall-clock, so the remaining wait was derivable the whole time. Full working in
+> `docs/retailer-evidence.md`; deferred to v0.5 rather than hotfixed on a deployed daemon.
+>
 > **ON THE WIRE SINCE 2026-09-11 07:56:33** — dated note added beside 2026-09-14, not over. Dan
 > instructed the restart and phases 8, 9 and 10 went on together. **The cool-off has still never
 > fired in production**, so phase 8's central mechanism is deployed and unobserved: it needs 30

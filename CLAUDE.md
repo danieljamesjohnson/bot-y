@@ -359,6 +359,16 @@ page edits are live on next load without a restart.
 
 - **A restart is the user's call, not yours.** Ask; don't assume, and don't run it as a
   side effect of something else.
+- **AND A RESTART COSTS ONE LIVE REQUEST PER BACKED-OFF RETAILER, IMMEDIATELY.** Measured
+  2026-09-18 across both of this project's restarts: `Pacer.load` deliberately does not restore
+  `due_at` (*"it was measured against a clock that no longer exists"*), so every retailer mid-backoff
+  or mid-cool-off is due within seconds of start-up. 2026-09-11 probed amazon at **+4 s** and target
+  at +3 m 11 s; 2026-09-15 probed amazon at **+3 s**, walmart and target at +3 m 52 s. **Target was
+  1 day 18 h into a three-day cool-off**, and the resulting refusal restarted that clock — so the
+  restart both broke the politeness window and lengthened the blackout by ~1.2 days. Five
+  unnecessary requests across two restarts, all to retailers already refusing us. **Factor it into
+  the ask**, and do not restart repeatedly to test something. Full working and why it is not being
+  hotfixed: `docs/retailer-evidence.md` § *A restart re-probes every backed-off retailer*.
 - **Do not run `boty check` casually** — it makes live retailer requests *and* writes the
   live `served/boty/status.json` the daemon owns.
 - **Never write to `state.json`, `pacer-state.json` or `served/boty/status.json`.** The

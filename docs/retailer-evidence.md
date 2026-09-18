@@ -1682,6 +1682,76 @@ worth saying out loud rather than letting a right answer launder a wrong reason.
 
 ---
 
+## A RESTART RE-PROBES EVERY BACKED-OFF RETAILER IMMEDIATELY — measured 2026-09-18
+
+**This is a hole in REQ-22's guarantee, found by operating the thing rather than by reading it, and
+it is the opposite of what Phase 8 was built to do.** Phase 8's goal sentence is *"a retailer that
+has refused 30-odd times in a row stops being asked twice a day, not knocked on twice a day
+forever."* **It is knocked on once per restart, whatever its wait had left.**
+
+### Reproduced on both restarts, four days apart, at different refusal depths
+
+| restart | probed | delay after restart | refusal count |
+|---|---|---|---|
+| **2026-09-11 07:56:33** | amazon | **4 s** | 10th |
+| | target | 3 m 11 s | 19th |
+| **2026-09-15 07:52:47** | amazon | **3 s** | 6th |
+| | walmart | 3 m 52 s | 5th |
+| | target | 3 m 52 s | **31st — mid cool-off** |
+
+**Five unnecessary requests across two restarts, every one to a retailer already refusing us**,
+which is exactly the reputational behaviour this milestone exists to stop.
+
+### The worst case, costed to the second
+
+| | |
+|---|---|
+| cool-off fired | **2026-09-14 02:00:00** (30th refusal) |
+| next attempt due | **2026-09-17 02:00:00** — three days, the whole point of the mechanism |
+| restart | 2026-09-15 07:52:47 |
+| actual probe | **2026-09-15 07:56:39** — 3 m 52 s later |
+| **probed early by** | **1 day 18 h 03 m** |
+| and the refusal **restarted the clock** | cool-off now ends **2026-09-18 07:56:39** |
+
+**So the restart broke the politeness window AND lengthened the total blackout by ~1.2 days.** Both
+directions are wrong at once: we knocked when we had promised not to, and we then waited longer than
+we had to.
+
+### The cause is documented in the code, and it is the CONSEQUENCE that was never measured
+
+`Pacer.load`'s own docstring:
+
+> *"`due_at` is not read, and the module docstring says why: it was measured against a clock that no
+> longer exists."*
+
+**That reasoning is sound.** A monotonic clock does not survive a process, and restoring a `due_at`
+measured against a dead one would be restoring a number that means nothing. `load` restores
+`refusals` and `refused_at` and lets `slot_offset` place the retailer on the grid — which puts it
+due almost immediately.
+
+**What nobody checked is that `refused_at` IS persisted and IS wall-clock.** The remaining wait is
+therefore derivable — `refused_at + current_interval(retailer)` — and the information needed to
+keep the promise was on disk the whole time. **A documented decision with an unmeasured
+consequence**, which is this repository's most frequent failure shape and the one its evidence
+standard exists to catch.
+
+### What this does NOT mean
+
+- **Not that `refusals` is lost.** Phase 8's review finding CR-01 was that a restart *reset* the
+  counter to 0; that was fixed and the fix holds — 30 → 31 and 5 → 6 across these restarts, never
+  back to zero. **This is the scheduling half of the same area, and it was not covered.**
+- **Not that the cool-off does not work.** It fired correctly, at the right threshold, to the right
+  interval, and held for 1.2 days until a restart interrupted it.
+- **Not a crash, a wrong verdict, or anything a user sees.** It is a politeness defect, and
+  politeness is a hard constraint here rather than a preference.
+- **Not urgent to patch in place.** The fix touches core pacing on a deployed daemon and belongs in
+  a plan with a red-watch, not in a hotfix. Recorded for v0.5.
+
+**Severity scales with deploy frequency**, which is the uncomfortable part: the more often this
+project ships, the more it degrades toward the behaviour Phase 8 removed.
+
+---
+
 ## Nintendo (store.nintendo.com / nintendo.com/us/store)
 
 **Probed:** 2026-08-02, from danserver over a residential connection.
