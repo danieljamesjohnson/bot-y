@@ -1682,6 +1682,39 @@ worth saying out loud rather than letting a right answer launder a wrong reason.
 
 ---
 
+## Phase 8's exactly-one-probe property, observed in production — 2026-09-19
+
+**The last thing Phase 8 claimed that had only ever been proved offline.** `08-03`'s
+`test_a_cooled_off_retailer_is_probed_exactly_once_over_a_window` asserts a bound in **both**
+directions — a cool-off that leaked would probe repeatedly, and one that over-held would drop the
+retailer entirely. Both halves are now measured on the wire.
+
+**Target's cool-off ran to term and produced exactly one request:**
+
+| | |
+|---|---|
+| cool-off restarted | 2026-09-15 07:56:39 (31st refusal, the restart's probe) |
+| nominal expiry | `refused_at + 259200` = **2026-09-18 07:56:39** |
+| the probe | **2026-09-18 07:56:02** — **one** line in the journal, 32nd refusal |
+| probes in that 3-day window | **ONE.** Not a burst, not a retry, not zero |
+| after it | the cool-off restarted; `refusals: 32` |
+
+**The 37-second earliness is not an anomaly and is not evidence of drift.** `due_at` is **not**
+`refused_at + interval`: `record` advances the retailer along its own grid rather than re-anchoring
+on the refusal, which is `09-02`'s reading-A decision. So the two numbers are not the same quantity
+and a 37 s gap between them is the grid's placement, not a schedule error. `due_at` is not
+persisted, so it cannot be read back off disk to confirm the exact figure — **stated as a limit
+rather than papered over.**
+
+**So every claim Phase 8 made is now observed rather than simulated:** the threshold (30), the
+interval (259200 s), the days-scale published reason, the counter surviving a restart, and now the
+one-probe bound. **Four days of waiting is what the last one cost, and nobody had to do anything.**
+
+**It does not redeem the restart hole below.** That the mechanism works perfectly when left alone is
+exactly why interrupting it matters.
+
+---
+
 ## A RESTART RE-PROBES EVERY BACKED-OFF RETAILER IMMEDIATELY — measured 2026-09-18
 
 **This is a hole in REQ-22's guarantee, found by operating the thing rather than by reading it, and
