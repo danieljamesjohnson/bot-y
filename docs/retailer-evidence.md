@@ -3346,6 +3346,45 @@ not break us silently the way Amazon's and Target's `dom` readers would.
 | **2026-08-27** | **this project's own rung-3 headless browser, driven at Walmart's control** | **`rendered challenge page matched 'robot or human'`, in 3.8 s.** Recorded in `.planning/ROADMAP.md`. **Rung 1 refused and rung 3 refused — the ladder is exhausted, not unclimbed**, and it is why no phase in v0.4 proposes escalating a rung |
 | 2026-09-11 07:56:33 | `WALMART_STORE_ID` reached the running process (REQ-14, deferred since v0.2) | the pin is live. Its value is recorded **as a count and never as a value**, `QUESTIONS.md` § 0f |
 
+### 2026-09-21 — the store Walmart serves is STABLE, and the pin is simply a different shop
+
+**Why this was measured.** The store-disagreement health warning has fired ~once a day since the
+notify fix started delivering, and the obvious remedy — re-pin to whatever Walmart answers with —
+is only available if Walmart answers with the *same* store each time.
+
+**Method, at zero request cost.** A sampler read the daemon's own `status.json` every 20 s and
+recorded the Walmart control's `store` field whenever the row was mid-check. **Values were never
+printed or stored** — only a `sha256` prefix and a digit count, so *same* and *different* are
+distinguishable without handling the number.
+
+| | |
+|---|---|
+| readings carrying a store | **10 consecutive**, plus 4 earlier and one from 2026-09-15 |
+| **distinct stores seen** | **ONE** |
+| unreadable checks, excluded | a `curl (28)` timeout — no page, so no store |
+| span | 2026-09-15 → 2026-09-21 |
+
+**So re-pinning is available**, and the warning is not a formatting artefact: the answered store is
+**3 digits** and the pin is **4**, so these are two different shops rather than a zero-padding
+mismatch. *(Both values are deliberately absent from this file; `WALMART_STORE_ID` is measured as a
+count and never as a value.)*
+
+**AND THE MECHANISM MEANS RE-PINNING IS A TRADE, NOT A FIX.** `boty` never *asks* Walmart for a
+store — `retailers.py:360` reads which store the page answered for and compares it to the pin.
+Walmart geolocates by egress. So re-pinning silences the warning by agreeing with whatever store
+this connection is served, which is only correct if that shop is the one the user would actually
+visit. **If it is not, the warning is true and muting it would point the monitor at a shelf nobody
+will go to** — the substitution this project exists to refuse. Making `boty` *request* a store is a
+code change and is not scoped.
+
+**A CORRECTION TO THE INSTRUMENT, recorded because it is the session's own failure shape.** The
+sampler's first version treated any change in the sampled field as a change of store and carried
+that conclusion in its alert text — *"Walmart is NOT serving a stable store; re-pinning will not fix
+the warning."* It fired that sentence on the timeout above, where there was no store to read at all.
+**A missing store is not a different store**, and the conclusion had been written before the
+condition was checked. Rewritten to distinguish the two; the false alert is recorded rather than
+deleted.
+
 ### 2026-09-14, Phase 11 — the ladder position. **Walmart has not read once in three days either, and it failed in TWO different ways**
 
 Read off the running daemon's already-spent requests; the method, the window
