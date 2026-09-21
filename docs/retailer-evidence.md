@@ -3364,6 +3364,26 @@ distinguishable without handling the number.
 | unreadable checks, excluded | a `curl (28)` timeout — no page, so no store |
 | span | 2026-09-15 → 2026-09-21 |
 
+> **THE "ONE DISTINCT STORE" FIGURE AND THE "RE-PINNING IS AVAILABLE" VERDICT ARE BOTH WITHDRAWN —
+> 2026-09-21 17:32, hours after this section was committed.** After **109** consecutive identical
+> readings Walmart served a **different** store, then reverted to the first on the very next sample.
+> Re-measured over the full run: **110 readings of store A (3 digits), 1 of store B (4 digits), 112
+> total.** So it is **two** stores, not one — overwhelmingly A, with a rare excursion.
+>
+> **AND STORE B IS NOT THE PINNED STORE EITHER** — checked by fingerprint against the pin, no match.
+> The warning fired on that reading too.
+>
+> **What this does and does not change.** Re-pinning to A would silence roughly 99 % of the warnings
+> and is not the clean fix this section claimed. **But the instability was never the real objection
+> and leaning on it was the error** — the objection is that *no store this connection is served is
+> the pinned one*, which was true at 11 samples and is true at 112. The recommendation is unchanged;
+> the reasoning under it was weaker than stated.
+>
+> **THE METHOD WAS SOUND AND THE CONFIDENCE WAS NOT.** "Stable across six days" described what had
+> been seen and was then let stand as a prediction about what came next. 109 identical readings is a
+> lot, and it was not enough. **The detector was left running rather than the question closed at the
+> milestone that felt sufficient, and that is the only reason this was caught.**
+
 **So re-pinning is available**, and the warning is not a formatting artefact: the answered store is
 **3 digits** and the pin is **4**, so these are two different shops rather than a zero-padding
 mismatch. *(Both values are deliberately absent from this file; `WALMART_STORE_ID` is measured as a
