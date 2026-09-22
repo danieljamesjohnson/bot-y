@@ -1919,6 +1919,55 @@ place that says so cannot be read from a phone.**
 
 **What is NOT established, and it needs a request nobody has authorised:** whether Nintendo delisted
 the product or moved the URL. A 404 distinguishes neither. **No live request was made.**
+*(ESTABLISHED 2026-09-22 — see the section directly below. The paragraph stands unedited because the
+request it names is what finally answered it: **delisted**, not moved.)*
+
+### 2026-09-22 — DELISTED, not moved: the product is gone from Nintendo's own sitemap
+
+**Dan asked for this on 2026-09-22** — *"see if nintendo's link is still valid"* — which is the
+authorisation the paragraph above was waiting for. **Two live requests to Nintendo, both rung 1
+(`curl_cffi`/`chrome`, `boty.fetch.IMPERSONATE`), taken by hand outside the daemon; nothing was
+written to `state.json`, `pacer-state.json` or `served/boty/status.json`.**
+
+| # | Request | Result |
+|---|---|---|
+| 1 | `GET /us/store/products/pokemon-go-plus-plus-112387/` | **HTTP 404**, 217,735 B, `<title>Whoops! - Nintendo Official Site</title>`, `<link rel="canonical" href="https://www.nintendo.com/us/404/">`, **no `Location` header** (`allow_redirects=False`) |
+| 2 | `GET /us/store/sitemap.xml` | **HTTP 200**, 6,004,698 B, **37,919 `<loc>` entries** |
+
+**And the daemon says the same thing, independently and at zero request cost.** The 2026-09-16
+`status.json` poll was re-run alongside the two requests above and caught the watch mid-check at
+**2026-09-22 08:29:58**: `availability` `unknown`, `detail` **`fetch failed: HTTP 404`**, `read_at`
+`null`, `checked` `true`, `alertable` `false` — byte-identical in substance to the row measured six
+days earlier. So the hand request and the service agree, which is worth stating: they use the same
+transport but not the same process, and a 404 seen only from a developer shell would have been a
+weaker claim.
+
+**The 404 is unchanged and is now 13 days old**, not 7: still no verdict since 2026-09-09 15:25:05.
+And it is still not a block — the response is a rendered `Whoops!` page of the same shape this file
+already recorded for a *guessed* slug (§ Nintendo, 2026-08-03: HTTP 404, 217,381 B). A dead slug and
+a wrong slug are byte-comparable here.
+
+**The sitemap is what settles delisted-vs-moved, and it says delisted:**
+
+- **`112387` appears nowhere in 37,919 entries** — not under a new slug, not under an old one.
+- The only surviving `go-plus-plus` URL is **`pokemon-go-plus-plus-strap-119138/`** — the wrist
+  strap, a different product with a different ID. **It is not a replacement watch**: a strap in
+  stock says nothing about the device.
+- **Absence there is evidence rather than noise, because this sitemap carries exactly this class of
+  product.** Both hardware accessories this project already names are in it: the control
+  `hdmi-cable-104947/` and the recorded reserve `ac-adapter-104900/`. So the sitemap is not
+  hardware-blind, and the device's absence from it is a fact about the device.
+
+**What this does NOT establish.** Whether Nintendo has stopped selling the GO Plus + or has merely
+pulled the listing while out of stock — a delisting is a fact about the *page*, and this project
+cannot read an inventory decision off a sitemap. Also **not measured**: whether the strap listing is
+itself new, since no earlier snapshot of this sitemap was kept. The 37,919-entry count is today's
+only; `config/products.yaml:288` and `tests/test_retailers.py:1380` record **36,530** from
+2026-08-03, and the growth between them is unexamined.
+
+**No watch was changed on the strength of this.** The dead URL stays in `config/products.yaml` and
+keeps publishing `unknown`, which is the honest reading; replacing or removing it is Dan's call —
+`QUESTIONS.md`.
 
 ---
 

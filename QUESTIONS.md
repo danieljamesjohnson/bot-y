@@ -1,6 +1,6 @@
 # Blocked on Dan
 
-## 0j. Nintendo's GO Plus + page 404s — is it delisted, or did the URL move? — OPEN, 2026-09-16
+## 0j. Nintendo's GO Plus + page 404s — is it delisted, or did the URL move? — ANSWERED IN PART 2026-09-22: **DELISTED**. What to do with the dead watch is still OPEN.
 
 **This is the watch this whole project exists for.** Nintendo is the **only first-party GO Plus +
 listing** in the support matrix, at its $54.99 MSRP, and it is the one row that could page you with
@@ -40,6 +40,29 @@ made.**
   re-capture, no live request needed beyond the capture.
 - **Decide it is genuinely gone**, in which case the honest move is to record the disproof the way
   Target's delisting is recorded, and the matrix stops claiming a first-party listing exists.
+
+### ANSWERED 2026-09-22 — you took the first option: *"yeah see if nintendo's link is still valid"*
+
+**It is delisted, not moved.** Two live Nintendo requests, rung 1, by hand, nothing written to the
+daemon's files. Full working in `docs/retailer-evidence.md` § *2026-09-22 — DELISTED, not moved*.
+
+| | |
+|---|---|
+| the URL | **still HTTP 404**, now **13 days** without a verdict (last: 2026-09-09 15:25:05) |
+| a redirect? | **no** — no `Location` header, canonical points at `/us/404/` |
+| moved to a new slug? | **no** — `112387` appears **nowhere** in Nintendo's 37,919-entry store sitemap |
+| anything left? | only **`pokemon-go-plus-plus-strap-119138/`** — the wrist strap. Different product, **not a usable replacement watch** |
+| is absence meaningful? | **yes** — that sitemap carries this exact class of product, including our control (`hdmi-cable-104947`) and the recorded reserve (`ac-adapter-104900`) |
+| the daemon agrees | caught mid-check 08:29:58 the same morning, zero request cost: `unknown` / `fetch failed: HTTP 404` / `read_at null` |
+
+**What I still cannot tell you:** whether Nintendo has *stopped selling it* or merely pulled the
+listing while out of stock. A sitemap records pages, not inventory decisions, and no request
+distinguishes those two.
+
+**So the third option is now the live one, and it is still yours:** record the disproof the way
+Target's delisting is recorded and stop claiming a first-party listing exists — or leave the dead
+watch in place publishing `unknown`, which is honest but permanently amber. **I have changed no
+watch.** `config/products.yaml` is untouched.
 
 **Worth saying plainly:** with this 404, **no watch anywhere in this project currently reads the
 Pokémon GO Plus + from a first-party seller.** GameStop reads it (`out_of_stock`), Amazon's only
