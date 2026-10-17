@@ -141,6 +141,8 @@ watches:
   # The one that matters most. Nintendo MAKES this, lists it at $54.99 — MSRP to
   # the cent — and has no marketplace, so neither flipper defence has anything to
   # defend against here.
+  # (2026-10-17: now listed at $59.99, read by the daemon. The $54.99 above is
+  # kept as written; it was MSRP when measured.)
   #
   # NO DELIVERED TOTAL CAN BE ESTABLISHED HERE, and the measurement behind that
   # stands unchanged. Nintendo publishes `shippingDetails` as prose — "Standard
@@ -161,6 +163,19 @@ watches:
     retailer: nintendo
     target: https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-112387/
     max_price: 80
+
+  # Added 2026-10-17 on Dan's request — "can we put the Zelda switch 2 on here?"
+  # The console, not the Tears of the Kingdom Switch 2 Edition game (`121504`),
+  # which read InStock $79.99 the same morning and has nothing to restock.
+  # Measured 2026-10-17, one rung-1 request: HTTP 200, one ld+json offer,
+  # `OutOfStock`, $519.99, seller "Nintendo of America Inc." — so it needs no
+  # adapter code, exactly as the GO Plus + did not. The shipping caveat above
+  # applies unchanged. The ceiling sits ~$40 over list: anything above it is a
+  # reseller price, and Nintendo has no marketplace to sell one through.
+  - name: Nintendo Switch 2 — Zelda 40th Anniversary Edition
+    retailer: nintendo
+    target: https://www.nintendo.com/us/store/products/nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition-121642/
+    max_price: 560
 
   # ---- controls: known-good products that prove the detector works ------
   # If one of these stops reading in-stock, the detector is broken and you

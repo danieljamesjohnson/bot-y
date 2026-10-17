@@ -1,6 +1,21 @@
 # Blocked on Dan
 
-## 0j. Nintendo's GO Plus + page 404s — is it delisted, or did the URL move? — ANSWERED IN PART 2026-09-22: **DELISTED**. What to do with the dead watch is still OPEN.
+## 0k. `make verify-offline` is RED on the calendar alone — Target's UNPROBED verdict expired — OPEN, 2026-10-17
+
+**Measured 2026-10-17:** one failure in 1,047 tests,
+`test_evidence_check.py::test_the_strict_flag_reaches_check_phase_from_the_command_line`.
+Evidence-check rule 2: Target is recorded `UNPROBED (scoped 2026-08-03)`, **75 days ago, past
+the 60-day grace**. **Red at `HEAD` too** (checked by stashing the day's edits) — no commit caused it,
+the date did.
+
+**Not re-dated, deliberately** — the gate's own message calls that the one edit it cannot see.
+Your two honest options are to **probe it** (Target is in a three-day cool-off after 41 refusals,
+so a probe likely records a refusal, which is still a verdict) or to **drop it from
+`ROADMAP_RETAILERS`**. Until then every `make verify-offline` reads `FAIL (tests)`.
+
+---
+
+## 0j. Nintendo's GO Plus + page 404s — is it delisted, or did the URL move? — ANSWERED IN PART 2026-09-22: **DELISTED**. — **MOOT 2026-10-17: the page came back on its own, same URL, now $59.99, and the watch is reading again.**
 
 **This is the watch this whole project exists for.** Nintendo is the **only first-party GO Plus +
 listing** in the support matrix, at its $54.99 MSRP, and it is the one row that could page you with
@@ -63,6 +78,13 @@ distinguishes those two.
 Target's delisting is recorded and stop claiming a first-party listing exists — or leave the dead
 watch in place publishing `unknown`, which is honest but permanently amber. **I have changed no
 watch.** `config/products.yaml` is untouched.
+
+### 2026-10-17 — moot: the page is back
+
+The watch read **`out_of_stock`, $59.99, Nintendo of America** at 2026-10-17 13:40 — a fresh
+verdict at the original URL. Leaving the dead watch in place is what caught it. Nothing left to
+decide here. When it returned is not measured. Full record: `docs/retailer-evidence.md`
+§ *2026-10-17 — SUPERSEDED*.
 
 **Worth saying plainly:** with this 404, **no watch anywhere in this project currently reads the
 Pokémon GO Plus + from a first-party seller.** GameStop reads it (`out_of_stock`), Amazon's only

@@ -1969,6 +1969,27 @@ only; `config/products.yaml:288` and `tests/test_retailers.py:1380` record **36,
 keeps publishing `unknown`, which is the honest reading; replacing or removing it is Dan's call —
 `QUESTIONS.md`.
 
+### 2026-10-17 — SUPERSEDED: the page is back, at the same URL, at a new price
+
+**The section above was true when written and is kept unedited.** On 2026-10-17 the daemon's own
+`served/boty/status.json` — read, not written — carried this watch with a **fresh** verdict:
+
+| | |
+|---|---|
+| `availability` | `out_of_stock` |
+| `price` | **`59.99`** — not the $54.99 this file and `config/products.yaml` recorded |
+| `read_at` | **2026-10-17 13:40** — a real reading, not the remembered 2026-09-09 one |
+| `detail` | `ld+json: OutOfStock from Nintendo of America Inc.` |
+
+**Zero requests were spent on this:** the dead URL was left in the config rather than removed, and
+that is the only reason the return was noticed at all. **Pulled and re-listed, not delisted** — the
+2026-09-22 verdict read a page's absence as a product's, and the "what this does NOT establish"
+paragraph above named exactly that gap.
+
+**Not measured:** when the page returned. `state.json` keeps only the latest stamp and the journal
+does not log verdict transitions for a non-alertable watch, so the window is somewhere between
+2026-09-22 08:29 and 2026-10-17 13:40, and no narrower claim is made. **Nor why the price moved $5**.
+
 ---
 
 ## Pokémon Center (pokemoncenter.com)
