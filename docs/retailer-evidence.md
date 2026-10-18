@@ -1990,6 +1990,36 @@ paragraph above named exactly that gap.
 does not log verdict transitions for a non-alertable watch, so the window is somewhere between
 2026-09-22 08:29 and 2026-10-17 13:40, and no narrower claim is made. **Nor why the price moved $5**.
 
+### 2026-10-17/18 — the Zelda 40th Anniversary Switch 2: Nintendo watched, Amazon and Target not searched
+
+**Dan, 2026-10-17:** *"can we put the Zelda switch 2 on here?"*, then, asked whether it exists at
+Amazon or Target, *"Sure"* to looking there once their cool-offs ended.
+
+**Nintendo — two rung-1 requests by hand, 2026-10-17**, candidates taken from the 2026-09-22 sitemap
+snapshot at zero cost:
+
+| Slug | Result |
+|---|---|
+| `nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition-121642` | **HTTP 200**, 525,868 B, one ld+json offer: **`OutOfStock`, $519.99, Nintendo of America Inc.** — **watched**, `max_price: 560` |
+| `nintendo-switch-2-the-legend-of-zelda-tears-of-the-kingdom-nintendo-switch-2-edition-121504` | **HTTP 200**, 424,355 B — the *game*, `InStock` $79.99. Not a restock target; not watched |
+
+**Amazon and Target — ZERO requests, by a rule fixed before the outcome was known:** search only a
+retailer whose daemon probe at the end of its cool-off was **served**. Both were refused again, read
+from the journal and `pacer-state.json` without writing either:
+
+| Retailer | Cool-off ended | Daemon probe | Refusals | Next attempt |
+|---|---|---|---|---|
+| Target | 2026-10-18 07:56:38 | **refused** 07:56:41 | 41 → **42** | ~3 days |
+| Amazon | 2026-10-18 11:53:23 | **refused** 11:52:51 | 30 → **31** | ~3 days |
+
+**Amazon carries a detail worth keeping:** its control read **fresh** at 11:52:50, `in_stock`, one
+second before the refusal that restarted the clock. So Amazon served one page and refused the next in
+the same cycle — the refusal is per-request, not a wall. **This does not license a hand search:**
+the rule above was the refusal counter, and it rose.
+
+**Not established:** whether either retailer lists the console at all. Nobody asked them.
+
+
 ---
 
 ## Pokémon Center (pokemoncenter.com)
