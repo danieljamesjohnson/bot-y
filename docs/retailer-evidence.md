@@ -1618,6 +1618,24 @@ wire, and Best Buy is still unreadable.** Those were always two claims. Only the
 
 ---
 
+### 2026-10-18 — the control has not read for three days: the browser page "did not render"
+
+**Measured at zero request cost**, by polling `served/boty/status.json` through two of the daemon's
+own Best Buy checks, 16:59:14 and 17:03:59: both `unknown`, rung `browser`, detail **`could not
+establish whether sku 6216393 resolves — the page did not render`**. The control's last real reading
+is **2026-10-15 22:34** (`in_stock`).
+
+**Not a refusal** — `pacer-state.json` holds no Best Buy refusals and the pace is the normal 5 min.
+**Nothing was pushed, and that is Dan's 2026-08-12 rule working as written**: the arm carries no
+`Health.action`, so `cli.watch_cycle` records it at INFO and does not page. **What it costs today is
+small and should be said exactly:** Best Buy holds only a control — it does not carry the GO Plus +
+(§ above) — so no product watch went blind. It would matter for any Best Buy product watch added later.
+
+**Why the page stopped rendering is NOT established.** Two samples show the symptom, not the cause:
+a Best Buy change, the headless browser, and this host are all open. No request was made to find out.
+
+---
+
 ## GameStop (gamestop.com)
 
 **CREATED 2026-09-14, IN PHASE 11, for the reason stated at the top of § Walmart** — configured and
