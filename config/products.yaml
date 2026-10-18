@@ -96,6 +96,16 @@ watches:
     # total is $61.98 — under this ceiling. Anything near $140 is a flip.
     max_price: 80
 
+  # Added 2026-10-18 on Dan's request — "Is it at GameStop too?" Yes. Found with
+  # two rung-1 requests: a site search (HTTP 200, tiles rendered client-side, so
+  # only product IDs were readable; this one ranked first), then the ID through
+  # Product-Show, which redirected here. One ld+json offer: `OutOfStock`,
+  # $519.99, seller "GameStop". Same ceiling as the Nintendo watch.
+  - name: Nintendo Switch 2 — Zelda 40th Anniversary Edition
+    retailer: gamestop
+    target: https://www.gamestop.com/consoles-hardware/nintendo-switch-2/products/nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition/20037854.html
+    max_price: 560
+
   # ---- Walmart is pinned to ONE store, and you have to say which ---------
   # Walmart assigns a store per request, and both stock and price differ between
   # them. With nothing pinned, a Walmart reading is a statement about an

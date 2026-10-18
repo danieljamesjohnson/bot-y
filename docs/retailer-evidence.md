@@ -2037,6 +2037,16 @@ the rule above was the refusal counter, and it rose.
 
 **Not established:** whether either retailer lists the console at all. Nobody asked them.
 
+**GameStop — two rung-1 requests by hand, 2026-10-18**, on Dan's *"Is it at GameStop too?"*:
+
+| # | Request | Result |
+|---|---|---|
+| 1 | `GET /search/?q=nintendo+switch+2+zelda+40th+anniversary` | **HTTP 200**, 233,278 B, no block phrase. Tiles render client-side: names and links are empty in the HTML, only 13 `data-pid`s are readable. Position 1: **`20037854`** |
+| 2 | `GET /on/demandware.store/Sites-gamestop-us-Site/default/Product-Show?pid=20037854` | **HTTP 200**, 338,805 B, redirected to `…/nintendo-switch-2/products/nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition/20037854.html`. One ld+json offer: **`OutOfStock`, $519.99, seller `GameStop`** — **watched**, `max_price: 560` |
+
+**Worth keeping:** GameStop's search is usable at rung 1 for *IDs only*, and `Product-Show?pid=`
+turns an ID into its canonical URL in one request. Neither was known before today.
+
 
 ---
 
