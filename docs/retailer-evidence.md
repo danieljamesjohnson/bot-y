@@ -2047,6 +2047,13 @@ the rule above was the refusal counter, and it rose.
 **Worth keeping:** GameStop's search is usable at rung 1 for *IDs only*, and `Product-Show?pid=`
 turns an ID into its canonical URL in one request. Neither was known before today.
 
+**LIVE 2026-10-18.** Dan: *"Oh yes restart to turn in the Zelda stock."* `boty` restarted
+17:14:57 (`state.json`, `pacer-state.json`, `status.json` copied first). First readings, both
+`out_of_stock` $519.99, `alertable: false` (out of stock), `shipping: unknown`: **GameStop 17:17:08,
+Nintendo 17:17:11.** **The restart cost what § *A restart re-probes* predicts:** Amazon was probed at
+**+3 s** and refused (31 → 32), restarting its three-day cool-off. Target and Walmart were due within
+minutes of start-up and were not observed here.
+
 
 ---
 
