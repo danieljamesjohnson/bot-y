@@ -122,6 +122,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .models import Watch
+
 log = logging.getLogger(__name__)
 
 #: Multiplier applied per consecutive refusal.
@@ -740,6 +742,20 @@ def _next_on_the_grid(previous_due: float, wait: float, now: float) -> float:
     return previous_due + (math.floor((now - previous_due) / wait) + 1) * wait
 
 
+def _ladder_wait(interval: float, refusals: int) -> float:
+    """The backoff ladder, shared by a retailer and a page. Moved verbatim out of
+    `Pacer.current_interval` on 2026-10-19 so the two cannot drift apart."""
+    return max(
+        interval,
+        COOLOFF_SECONDS
+        if refusals >= REFUSALS_BEFORE_COOLOFF
+        else min(
+            interval * BACKOFF_FACTOR**refusals,
+            MAX_BACKOFF_SECONDS,
+        ),
+    )
+
+
 @dataclass
 class _RetailerState:
     interval: float
@@ -836,6 +852,13 @@ class Pacer:
     default_interval: float
     overrides: dict[str, float] = field(default_factory=dict)
     _state: dict[str, _RetailerState] = field(default_factory=dict, repr=False)
+    #: PER-PAGE BACKOFF, 2026-10-19, on Dan's *"I think per page makes sense to
+    #: me."* Keyed by `_page_key`. A page lands here only when it was refused
+    #: while its retailer ANSWERED other pages in the same cycle — Amazon's shape,
+    #: measured 2026-09-14 and 2026-10-18 — and leaves on its first answer. The
+    #: same `_RetailerState` and the same ladder as a retailer, so a page and a
+    #: store that refuse alike are paced alike. `tests/test_page_backoff.py`.
+    _pages: dict[str, _RetailerState] = field(default_factory=dict, repr=False)
     #: WHEN each paging episode began — retailer to wall clock. Not the paging
     #: decision, which `cli.watch_cycle` still owns and still passes through:
     #: this is the same thing `_RetailerState.refused_at` is for the other half
@@ -1180,14 +1203,66 @@ class Pacer:
         # schedule, stays counted, stays published with a cadence, and is probed
         # once per window. A wait that never expired would be a dropped retailer
         # wearing a row on the dashboard.
-        return max(
-            st.interval,
-            COOLOFF_SECONDS
-            if st.refusals >= REFUSALS_BEFORE_COOLOFF
-            else min(
-                st.interval * BACKOFF_FACTOR ** st.refusals,
-                MAX_BACKOFF_SECONDS,
-            ),
+        return _ladder_wait(st.interval, st.refusals)
+
+    # ---- per page ----------------------------------------------------------
+    # A retailer is the unit of a WALL; a page is the unit of a challenge. These
+    # four methods are the page half, and `monitor.run_once` decides which half
+    # a cycle's refusals belong to: every page asked refused is the retailer's,
+    # some of them refused is theirs.
+
+    @staticmethod
+    def _page_key(watch: Watch) -> str:
+        # The target, not the name: two watches on one URL are one page to the
+        # retailer, and the name is free text somebody may rename.
+        return f"{watch.retailer} {watch.target}"
+
+    def _page(self, watch: Watch) -> _RetailerState:
+        key = self._page_key(watch)
+        if key not in self._pages:
+            self._pages[key] = _RetailerState(interval=self._standing_interval(watch.retailer))
+        return self._pages[key]
+
+    def page_due(self, watch: Watch, now: float) -> bool:
+        """True unless this page is sitting out a backoff of its own.
+
+        The half-tick tolerance is `due`'s, for `due`'s reason: the retailer
+        fires up to half a tick early on its grid, and a page that became due on
+        the same grid point must not miss that firing by the same margin.
+        """
+        st = self._pages.get(self._page_key(watch))
+        if st is None or not st.refusals:
+            return True
+        return now + self._tolerance_interval() * 0.5 >= st.due_at
+
+    def page_interval(self, watch: Watch) -> float:
+        st = self._pages.get(self._page_key(watch))
+        if st is None:
+            return self._standing_interval(watch.retailer)
+        return _ladder_wait(st.interval, st.refusals)
+
+    def record_page(self, watch: Watch, *, refused: bool, now: float) -> None:
+        """Fold one page's outcome in. Only for a cycle its retailer ANSWERED.
+
+        Anchored on `now` rather than on a grid: a page has no slot of its own,
+        it rides its retailer's, and `page_due` only ever narrows that.
+        """
+        key = self._page_key(watch)
+        if not refused:
+            st = self._pages.pop(key, None)
+            if st is not None and st.refusals:
+                log.info("%s is answering again after %d refusal(s)", key, st.refusals)
+            return
+        st = self._page(watch)
+        st.refusals += 1
+        st.refused_at = time.time()
+        wait = self.page_interval(watch)
+        st.due_at = now + wait
+        log.warning(
+            "%s refused this page (%d in a row) while answering others — this page waits ~%.0f min",
+            key,
+            st.refusals,
+            wait / 60,
         )
 
     def skipped_reason(self, retailer: str, now: float) -> str:
@@ -1402,6 +1477,31 @@ class Pacer:
         # until 2026-08-28, corrected for the reason given at its twin above —
         # and "same window" is now load-bearing rather than incidental: one
         # constant governs both halves so they cannot age apart.)
+        # PAGES, the same validation as `retailers` above, entry for entry. A
+        # document written before pages existed has no such key and loads
+        # exactly as it did. `due_at` is not restored here either, for the
+        # reason this method's docstring gives; `page_due` treats a restored
+        # page as due, which is one probe per backed-off page at start-up —
+        # the same cost a restart already pays per backed-off retailer.
+        pages = doc.get("pages")
+        if isinstance(pages, dict):
+            for key, entry in pages.items():
+                if not isinstance(key, str) or not isinstance(entry, dict):
+                    continue
+                refusals = entry.get("refusals")
+                if not isinstance(refusals, int) or isinstance(refusals, bool) or refusals <= 0:
+                    continue
+                refused_at = entry.get("refused_at")
+                if not isinstance(refused_at, (int, float)) or isinstance(refused_at, bool):
+                    continue
+                if not 0.0 <= now - float(refused_at) <= STATE_MAX_AGE_SECONDS:
+                    continue
+                retailer = key.split(" ", 1)[0]
+                self._pages[key] = _RetailerState(
+                    interval=self._standing_interval(retailer),
+                    refusals=min(refusals, MAX_PERSISTED_REFUSALS),
+                    refused_at=float(refused_at),
+                )
         warned = doc.get("warned")
         if not isinstance(warned, dict):
             return set()
@@ -1499,6 +1599,11 @@ class Pacer:
                 "retailers": {
                     name: {"refusals": st.refusals, "refused_at": st.refused_at}
                     for name, st in self._state.items()
+                    if st.refusals
+                },
+                "pages": {
+                    key: {"refusals": st.refusals, "refused_at": st.refused_at}
+                    for key, st in self._pages.items()
                     if st.refusals
                 },
                 "warned": self._warned_since,

@@ -13,6 +13,13 @@ Your two honest options are to **probe it** (Target is in a three-day cool-off a
 so a probe likely records a refusal, which is still a verdict) or to **drop it from
 `ROADMAP_RETAILERS`**. Until then every `make verify-offline` reads `FAIL (tests)`.
 
+**IT ALSO SWITCHES OFF THE MUTATION GATE — measured 2026-10-19.** `make verify-offline` stops at the
+test stage, and `scripts/mutation_check.py` run directly refuses with `HARNESS ERROR — baseline
+FAILED in the unmutated sandbox`, on this same test. So **no mutation run has been possible since the
+grace expired (~2026-10-02)**. M45, registered today, was verified by hand instead — perturb, 3
+killers, restore from a copy, caches cleared — and **the other 40 idents are unverified since then**.
+This makes 0k more urgent than "one red test".
+
 ---
 
 ## 0j. Nintendo's GO Plus + page 404s — is it delisted, or did the URL move? — ANSWERED IN PART 2026-09-22: **DELISTED**. — **MOOT 2026-10-17: the page came back on its own, same URL, now $59.99, and the watch is reading again.**

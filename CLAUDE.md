@@ -228,7 +228,7 @@ and have to be re-taken — say so beside them rather than keeping the first num
 ## Registries and invariants
 
 **`scripts/mutation_check.py`** deliberately breaks source in a sandbox and asserts the
-suite notices. Currently **M1–M20 and M25–M44** — 40 idents, all 40 caught, survivors 0.
+suite notices. Currently **M1–M20 and M25–M45** — 41 idents, all 41 caught, survivors 0.
 
 > **M21–M24 are an intentional, documented gap. Never fill them.** Phase 6 recorded why:
 > `apply_mutation` cannot add a file, so the defect it would have covered is outside the
@@ -240,9 +240,16 @@ suite notices. Currently **M1–M20 and M25–M44** — 40 idents, all 40 caught
 > idents — so none of them needed anything added to reach its target. That is the test
 > M21–M24 failed.
 
-Next free ident is **M45**. Register one only when it defends something new — if every
+Next free ident is **M46**. Register one only when it defends something new — if every
 break is already caught by a second independent test, an ident raises the denominator
 without defending anything, and the registry records that reasoning too.
+
+**M45 defends per-page backoff** (2026-10-19). It turns the `all` back into `any` at the one
+comparison in `monitor.run_once` that decides whether a cycle's refusals belong to the retailer or
+to its pages. Three killers, all in `tests/test_page_backoff.py`; the suite was green with `any`
+there until that file existed, so it defends something nothing else did. *(The M44 paragraph below
+still says an `M45` at the dead-control producer "would defend something new" — that remains true
+of the producer; the ident number is now taken, so such a mutation would be M46.)*
 
 **M44 defends the sentence a dead control gets.** It empties the one assignment that decides
 whether a control whose target no longer resolves reaches its own health arm; under it the

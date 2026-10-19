@@ -20,7 +20,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **Backoff is per page until every page refuses** (2026-10-19). A retailer is now refused only when
+  every page asked of it in a cycle was refused; a page challenged while its retailer answered
+  others backs off on its own, on the same ladder, and clears on its first answer. Before, one
+  challenged page put the whole retailer on the ladder — measured twice on Amazon (2026-09-14,
+  2026-10-18), where the control read `in_stock` two seconds before the product page was challenged
+  and Amazon still went dark for three days. `tests/test_page_backoff.py`, mutation M45. Page
+  counts persist in `pacer-state.json` under a new `pages` key; a document without it loads as before.
+
+### Added
+
+- Watches for the Nintendo Switch 2 — Zelda 40th Anniversary Edition at Nintendo and GameStop
+  (2026-10-17/18), `max_price: 560`.
 
 ## [0.4.0] - 2026-08-27
 

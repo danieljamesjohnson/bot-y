@@ -857,7 +857,14 @@ def run_once(
         skipped = {w.retailer for w in watches} - {w.retailer for w in due}
         for retailer in sorted(skipped):
             log.info("%-9s skipped — %s", retailer, pacer.skipped_reason(retailer, now))
-        watches = due
+        # A due retailer can still have a PAGE sitting out its own backoff. It is
+        # skipped the same way a retailer is — no request and no result — so it
+        # keeps its remembered row and ages on the dashboard rather than being
+        # published as checked.
+        for w in due:
+            if not pacer.page_due(w, now):
+                log.info("%-9s %s skipped — this page is backing off on its own", w.retailer, w.name)
+        watches = [w for w in due if pacer.page_due(w, now)]
 
     results = [checker(w) for w in watches]
 
@@ -866,7 +873,21 @@ def run_once(
         for r in results:
             by_retailer.setdefault(r.watch.retailer, []).append(r)
         for retailer, group in by_retailer.items():
-            pacer.record(retailer, refused=any(x.refused for x in group), now=now)
+            # `all`, NOT `any`, SINCE 2026-10-19, and the change is the whole of
+            # per-page backoff. A retailer is refused when every page it was
+            # asked for refused — a wall. Under `any`, one challenged page put the
+            # whole retailer on the ladder: Amazon's control read `in_stock` and
+            # its GO Plus + page was challenged two seconds later, twice
+            # (2026-09-14, 2026-10-18), and Amazon went dark for three days at a
+            # time with a working page in it. When only some pages refused, the
+            # retailer answered, and each refused page climbs its own ladder.
+            # A wall charges no page: the retailer ladder owns it, and charging
+            # both would keep a page sitting out past the store's own probe.
+            wall = all(x.refused for x in group)
+            pacer.record(retailer, refused=wall, now=now)
+            if not wall:
+                for x in group:
+                    pacer.record_page(x.watch, refused=x.refused, now=now)
     for r in results:
         log.info(
             "%-9s %-26s %-13s %s",

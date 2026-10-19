@@ -2149,6 +2149,22 @@ MUTATIONS = (
         replace="            dead_control = False\n",
         breaks="a control whose target no longer resolves is reported as a probably-broken detector again, which is the misattribution REQ-24 exists to end and the state this repository spent four phases mistaking for a reskin. The fact is still established — `Result.unresolved` is set by the predicate exactly as before — and the arm that consumes it can no longer be reached, so the group falls past it to the breakage sentence: `a control product did not read IN_STOCK and was not refused, so readings from this retailer are unverified`, which asserts something about the RETAILER from something about `config/products.yaml`, and `Health.action` goes back to the empty string, so the one repair a person could make is never named. Every word around the mechanism still says otherwise: `DEAD_CONTROL_ACTION` is defined, the dead arm's comment still explains a state nothing can produce, the mixed arm still enumerates the dead cause in its prose so a group with a refusal beside it reads correctly, and `Health.dead_control` is still published, still False, and still believed. It is worst where it is least visible — a monitor that says the detector is probably broken sends its reader to debug an extractor that is working, which is the failure mode this project's evidence standard exists to make impossible",
     ),
+    # M45 — ONE CHALLENGED PAGE TAKES ITS WHOLE RETAILER DARK AGAIN. Registered
+    # 2026-10-19 with per-page backoff, on Dan's "I think per page makes sense to
+    # me." The anchor is the single comparison that decides whether a cycle's
+    # refusals belong to the RETAILER or to its PAGES. `boty/monitor.py` was
+    # already in SANDBOX_CONTENTS, so nothing was added to reach it — the test
+    # M21–M24 failed. DEFENDS SOMETHING NEW, measured rather than assumed: the
+    # suite ran green with `any` in this position up to the commit that
+    # registers this ident, so before `tests/test_page_backoff.py` no test in the
+    # repository could tell the two apart.
+    Mutation(
+        ident="M45",
+        target="boty/monitor.py",
+        search="            wall = all(x.refused for x in group)\n",
+        replace="            wall = any(x.refused for x in group)\n",
+        breaks="one challenged page puts its whole retailer back on the backoff ladder, which is the shape that kept Amazon dark for three days at a time while its control read in_stock in the same cycle (2026-09-14, 2026-10-18). Worse than the pre-2026-10-19 code it reverts to: a wall now skips the page ladders, so with `any` here a partial refusal is charged to the retailer AND never reaches the page that caused it — the retailer climbs, the page never sits out, and the next probe at the end of the cool-off asks the same challenged page again",
+    ),
 )
 
 
