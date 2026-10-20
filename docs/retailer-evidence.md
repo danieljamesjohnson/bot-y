@@ -2054,6 +2054,21 @@ Nintendo 17:17:11.** **The restart cost what § *A restart re-probes* predicts:*
 **+3 s** and refused (31 → 32), restarting its three-day cool-off. Target and Walmart were due within
 minutes of start-up and were not observed here.
 
+**2026-10-20 — per-page backoff (`91a00aa`) deployed, and Amazon searched.** Dan: *"Yeah restart"*.
+`boty` restarted **07:12:31** (the three files copied first). Amazon was probed at **+3 s** as
+predicted and **both pages answered** — control `in_stock` 07:12:34, GO Plus + `out_of_stock`
+07:12:37 — so its 32-refusal cool-off cleared and `pacer-state.json` holds no Amazon entry and an
+empty `pages`. Target was refused (43 → **44**, three-day cool-off restarted) and Walmart refused
+(**15**, 6 h), as the ask said they would be.
+
+Amazon answering met the rule above, so **one rung-1 search request** by hand, ~07:17 (exact second not logged):
+`GET /s?k=nintendo+switch+2+legend+of+zelda+40th+anniversary+edition+console` → **HTTP 200**,
+896,564 B, no block phrase. The first ~20 ASINs carry Switch 2 bundles (Mario Kart World, Pokémon
+Legends: Z-A, Choose Your Game), the TOTK Switch 2 Edition *game*, and Zelda accessories —
+**no 40th Anniversary Edition console**. Not watched. The page was not saved, so whether "40th"
+appears anywhere further down it is **not measured**, and a second request to find out was not made.
+Target: still **not searched** — refused at its probe.
+
 
 ---
 
