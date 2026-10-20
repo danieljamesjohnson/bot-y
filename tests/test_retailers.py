@@ -2541,6 +2541,7 @@ def test_an_amazon_watch_is_dispatched_to_the_rung_one_dom_path() -> None:
     Amazon is the one retailer here with BOTH a control and a real product watch
     on the GO Plus +, which is worth pinning: Best Buy and Target are
     control-only because neither carries the product any more, and Amazon does.
+    (2026-10-20: no longer — the GO Plus + watches are retired. See below.)
     """
     cfg = Config.load(_REPO_ROOT / "config" / "products.yaml")
     amazon_watches = [w for w in cfg.watches if w.retailer == "amazon"]
@@ -2549,10 +2550,11 @@ def test_an_amazon_watch_is_dispatched_to_the_rung_one_dom_path() -> None:
     assert any(w.control for w in amazon_watches), (
         "a configured retailer with no control watch fails control_check outright"
     )
-    assert any(not w.control and w.max_price == 80 for w in amazon_watches), (
-        "Amazon lists the GO Plus +, so it gets a real product watch with the "
-        "MSRP-anchored ceiling on it — unlike Best Buy and Target, which do not"
-    )
+    # This also asserted a GO Plus + product watch with the $80 ceiling. True
+    # until 2026-10-20, when Dan retired the GO Plus + watches ("Retire go
+    # plus."); Amazon is control-only since, and the Zelda console was not in its
+    # search results that morning (docs/retailer-evidence.md). The dispatch
+    # check below never depended on it: watches[0] has always been the control.
 
     seen: list[str] = []
 

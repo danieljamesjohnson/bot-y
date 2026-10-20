@@ -617,7 +617,10 @@ def test_both_walmart_watches_carry_a_store_pin_key() -> None:
     )
     walmart_blocks = [b for b in body.split("- name:") if "retailer: walmart" in b]
 
-    assert len(walmart_blocks) == 2, "expected exactly two Walmart watches"
+    # Two until 2026-10-20, when Dan retired the GO Plus + watches ("Retire go
+    # plus.") and Walmart became control-only. The rule below is unchanged: a
+    # Walmart product watch added later still has to carry the pin.
+    assert len(walmart_blocks) == 1, "expected exactly one Walmart watch, the control"
     for block in walmart_blocks:
         assert "store_id: ${WALMART_STORE_ID}" in block, (
             "a Walmart watch has no store pin. An unpinned Walmart reading is a "

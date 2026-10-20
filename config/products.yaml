@@ -89,12 +89,13 @@ watches:
   # an English sentence, and Amazon's reader is an add-to-cart button. Neither
   # can be turned into a number without guessing, and a guessed figure on a
   # phone is worse than a visible hole.
-  - name: Pokémon GO Plus +
-    retailer: gamestop
-    target: https://www.gamestop.com/consoles-hardware/nintendo-switch/gaming-accessories/controllers/products/pokemon-go-plus-plus/20003961.html
-    # MSRP is $54.99 and GameStop publishes $6.99 shipping, so the delivered
-    # total is $61.98 — under this ceiling. Anything near $140 is a flip.
-    max_price: 80
+  # (2026-10-20: the four were the GO Plus + watches, now retired. The same
+  # holds for the Nintendo Zelda watch; Amazon has none.)
+  #
+  # RETIRED 2026-10-20 on Dan's word — "Retire go plus." He owns his GO Plus +'s.
+  # The notes above are kept: they record what this page measured, and the
+  # Zelda watches lean on them.
+  # Was: gamestop, https://www.gamestop.com/consoles-hardware/nintendo-switch/gaming-accessories/controllers/products/pokemon-go-plus-plus/20003961.html, max_price 80.
 
   # Added 2026-10-18 on Dan's request — "Is it at GameStop too?" Yes. Found with
   # two rung-1 requests: a site search (HTTP 200, tiles rendered client-side, so
@@ -105,6 +106,15 @@ watches:
     retailer: gamestop
     target: https://www.gamestop.com/consoles-hardware/nintendo-switch-2/products/nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition/20037854.html
     max_price: 560
+
+  # Added 2026-10-20 on Dan's request — "this badboy yolo". One rung-1 request
+  # that day: HTTP 200, one ld+json offer, `InStock`, $99.99, seller "GameStop".
+  # GameStop's published $6.99 shipping makes the delivered total $106.98. The
+  # ceiling sits ~$20 over list; anything above it is a reseller price.
+  - name: Nintendo Switch 2 Pro Controller — Zelda 40th Anniversary Edition
+    retailer: gamestop
+    target: https://www.gamestop.com/gaming-accessories/controllers/nintendo-switch-2/products/nintendo-switch-2-pro-controller-the-legend-of-zelda---40th-anniversary-edition/451609.html
+    max_price: 125
 
   # ---- Walmart is pinned to ONE store, and you have to say which ---------
   # Walmart assigns a store per request, and both stock and price differ between
@@ -142,11 +152,10 @@ watches:
   # identity guard's config-key rule does not scan commented lines — measured —
   # so a number written up HERE would walk past the gate that catches one
   # written down there.
-  - name: Pokémon GO Plus +
-    retailer: walmart
-    target: https://www.walmart.com/ip/Pok-mon-GO-Plus-for-Nintendo-Switch/1203950273
-    max_price: 80
-    store_id: ${WALMART_STORE_ID}
+  # RETIRED 2026-10-20 on Dan's word — "Retire go plus." He owns his GO Plus +'s.
+  # The notes above are kept: they record what this page measured, and the
+  # Zelda watches lean on them.
+  # Was: walmart, https://www.walmart.com/ip/Pok-mon-GO-Plus-for-Nintendo-Switch/1203950273, max_price 80.
 
   # The one that matters most. Nintendo MAKES this, lists it at $54.99 — MSRP to
   # the cent — and has no marketplace, so neither flipper defence has anything to
@@ -169,10 +178,10 @@ watches:
   # this file: this is the only first-party listing of the product at MSRP, and
   # it is the restock most likely to be real. The ceiling is still deliberately
   # NOT raised or removed — the item price still has to clear it.
-  - name: Pokémon GO Plus +
-    retailer: nintendo
-    target: https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-112387/
-    max_price: 80
+  # RETIRED 2026-10-20 on Dan's word — "Retire go plus." He owns his GO Plus +'s.
+  # The notes above are kept: they record what this page measured, and the
+  # Zelda watches lean on them.
+  # Was: nintendo, https://www.nintendo.com/us/store/products/pokemon-go-plus-plus-112387/, max_price 80.
 
   # Added 2026-10-17 on Dan's request — "can we put the Zelda switch 2 on here?"
   # The console, not the Tears of the Kingdom Switch 2 Edition game (`121504`),
@@ -416,10 +425,10 @@ watches:
   # So this watch reads OUT_OF_STOCK today and that is the correct answer: there
   # is no first-party Amazon offer. It flips to IN_STOCK the day Amazon itself
   # sells one, which is the alert worth having.
-  - name: Pokémon GO Plus +
-    retailer: amazon
-    target: https://www.amazon.com/dp/B0BX2P43PX
-    max_price: 80
+  # RETIRED 2026-10-20 on Dan's word — "Retire go plus." He owns his GO Plus +'s.
+  # The notes above are kept: they record what this page measured, and the
+  # Zelda watches lean on them.
+  # Was: amazon, https://www.amazon.com/dp/B0BX2P43PX, max_price 80.
 
   # ---- Pokémon Center: NOT here, on purpose -----------------------------
   # There is no `retailer: pokemoncenter` entry and that is a finding, not a gap.

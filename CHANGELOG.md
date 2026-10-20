@@ -34,6 +34,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Watches for the Nintendo Switch 2 — Zelda 40th Anniversary Edition at Nintendo and GameStop
   (2026-10-17/18), `max_price: 560`.
+- A watch for the Nintendo Switch 2 Pro Controller — Zelda 40th Anniversary Edition at GameStop
+  (2026-10-20), `max_price: 125`. Read `InStock` $99.99, seller GameStop, the day it was added.
+
+### Removed
+
+- **The four Pokémon GO Plus + watches** (GameStop, Walmart, Nintendo, Amazon), 2026-10-20 — Dan owns
+  his. Their config notes are kept. Walmart and Amazon are control-only since.
 
 ## [0.4.0] - 2026-08-27
 
