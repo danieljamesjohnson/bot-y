@@ -228,7 +228,10 @@ and have to be re-taken — say so beside them rather than keeping the first num
 ## Registries and invariants
 
 **`scripts/mutation_check.py`** deliberately breaks source in a sandbox and asserts the
-suite notices. Currently **M1–M20 and M25–M45** — 41 idents, all 41 caught, survivors 0.
+suite notices. Currently **M1–M20 and M25–M46** — 42 idents. *(Read "41 idents, all 41 caught,
+survivors 0" at M45. The harness itself cannot run while QUESTIONS § 0k stands — its baseline fails
+on the Target expiry — so M45 and M46 were each verified by hand and the other 40 have not been
+re-run since about 2026-10-02.)*
 
 > **M21–M24 are an intentional, documented gap. Never fill them.** Phase 6 recorded why:
 > `apply_mutation` cannot add a file, so the defect it would have covered is outside the
@@ -240,16 +243,23 @@ suite notices. Currently **M1–M20 and M25–M45** — 41 idents, all 41 caught
 > idents — so none of them needed anything added to reach its target. That is the test
 > M21–M24 failed.
 
-Next free ident is **M46**. Register one only when it defends something new — if every
+Next free ident is **M47**. Register one only when it defends something new — if every
 break is already caught by a second independent test, an ident raises the denominator
 without defending anything, and the registry records that reasoning too.
+
+**M46 defends the "Coming Soon" overrule** (2026-10-23). GameStop served `InStock` in ld+json for
+the Zelda 40th Pro Controller while its only buy button was a disabled "Coming Soon", and the daemon
+pushed it to Dan as a restock. M46 removes the condition that lets the button overrule the structured
+data. One killer, in `tests/test_coming_soon.py`; nothing else in the suite noticed. **`data-available`
+is not the signal** — the in-stock PS5 fixture carries `data-available="false"` too.
 
 **M45 defends per-page backoff** (2026-10-19). It turns the `all` back into `any` at the one
 comparison in `monitor.run_once` that decides whether a cycle's refusals belong to the retailer or
 to its pages. Three killers, all in `tests/test_page_backoff.py`; the suite was green with `any`
 there until that file existed, so it defends something nothing else did. *(The M44 paragraph below
 still says an `M45` at the dead-control producer "would defend something new" — that remains true
-of the producer; the ident number is now taken, so such a mutation would be M46.)*
+of the producer; the ident number is now taken, so such a mutation would be M46.)* *(And M46 was
+taken 2026-10-23 by the Coming Soon overrule, so it would now be M47.)*
 
 **M44 defends the sentence a dead control gets.** It empties the one assignment that decides
 whether a control whose target no longer resolves reaches its own health arm; under it the

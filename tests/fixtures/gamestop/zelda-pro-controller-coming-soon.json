@@ -1,0 +1,9 @@
+{
+  "url": "https://www.gamestop.com/gaming-accessories/controllers/nintendo-switch-2/products/nintendo-switch-2-pro-controller-the-legend-of-zelda---40th-anniversary-edition/451609.html",
+  "retailer": "gamestop",
+  "name": "zelda-pro-controller-coming-soon",
+  "captured_at": "2026-10-23T12:22:33Z",
+  "status": 200,
+  "bytes": 422919,
+  "note": "NOT BUYABLE, and the ld+json says otherwise: one offer, InStock, $99.99, seller GameStop — while the page's only purchase button is a disabled 'Coming Soon' (data-test-id btn-coming-soon-disabled). The daemon alerted on this as a restock on 2026-10-23 07:19; Dan opened it and found 'coming soon'. Store pin redacted to 0, as in the other fixtures."
+}

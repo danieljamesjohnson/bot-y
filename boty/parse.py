@@ -565,6 +565,23 @@ def nextdata_offers(html: str) -> list[Offer] | None:
 _WALMART_STORE_PATH = (*_WALMART_PRODUCT_PATH, "location", "storeIds")
 
 
+#: GameStop's purchase control on a product that is listed but not yet for sale.
+#: Measured 2026-10-23 on the Zelda 40th Anniversary Pro Controller, whose ld+json
+#: said `InStock` while this was the only buy button on the page — and absent from
+#: both captured fixtures and from a live in-stock page read the same minute.
+_COMING_SOON_RE = re.compile(r'data-test-id="btn-coming-soon-disabled"')
+
+
+def coming_soon(html: str) -> bool:
+    """Whether the page's buy button is a disabled "Coming Soon".
+
+    Called with no retailer predicate, like `nextdata_store`: the marker is
+    GameStop's own test id, so every other page returns False because it is
+    absent, not because a second list says which retailers have one.
+    """
+    return _COMING_SOON_RE.search(html) is not None
+
+
 def nextdata_store(html: str) -> str | None:
     """Which store the page says answered (Walmart), or `None` if it did not say.
 

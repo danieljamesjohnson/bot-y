@@ -30,6 +30,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and Amazon still went dark for three days. `tests/test_page_backoff.py`, mutation M45. Page
   counts persist in `pacer-state.json` under a new `pages` key; a document without it loads as before.
 
+### Fixed
+
+- **A "Coming Soon" page is no longer reported in stock** (2026-10-23). GameStop's ld+json said
+  `InStock` $99.99 for the Zelda 40th Anniversary Pro Controller while its only buy button was a
+  disabled "Coming Soon"; the daemon pushed it as a restock and Dan found it unbuyable. A page with
+  that button now reads OUT_OF_STOCK and says why. `tests/test_coming_soon.py`, mutation M46.
+
 ### Added
 
 - Watches for the Nintendo Switch 2 — Zelda 40th Anniversary Edition at Nintendo and GameStop

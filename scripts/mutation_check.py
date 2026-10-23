@@ -2165,6 +2165,21 @@ MUTATIONS = (
         replace="            wall = any(x.refused for x in group)\n",
         breaks="one challenged page puts its whole retailer back on the backoff ladder, which is the shape that kept Amazon dark for three days at a time while its control read in_stock in the same cycle (2026-09-14, 2026-10-18). Worse than the pre-2026-10-19 code it reverts to: a wall now skips the page ladders, so with `any` here a partial refusal is charged to the retailer AND never reaches the page that caused it — the retailer climbs, the page never sits out, and the next probe at the end of the cool-off asks the same challenged page again",
     ),
+    # M46 — A "COMING SOON" PAGE PAGES DAN AS A RESTOCK AGAIN. Registered
+    # 2026-10-23, the morning the daemon did exactly that for the Zelda 40th
+    # Anniversary Pro Controller at GameStop: ld+json `InStock`, buy button a
+    # disabled "Coming Soon". The anchor is the condition that lets the button
+    # overrule the structured data. `boty/retailers.py` and `tests/` were already
+    # in SANDBOX_CONTENTS, so nothing was added to reach it. DEFENDS SOMETHING
+    # NEW: the suite was green with no overrule at all until
+    # `tests/test_coming_soon.py` existed.
+    Mutation(
+        ident="M46",
+        target="boty/retailers.py",
+        search="    if state is Availability.IN_STOCK and parse.coming_soon(html):\n",
+        replace="    if False:\n",
+        breaks="a GameStop page whose only buy button is a disabled \"Coming Soon\" reads IN_STOCK again because its ld+json says so, and with a price under the ceiling it is alertable — a restock push for an item nobody can buy, which is the exact reading Dan opened and refuted on 2026-10-23. `parse.coming_soon` still exists and still finds the button; nothing consults it",
+    ),
 )
 
 

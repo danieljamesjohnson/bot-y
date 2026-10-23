@@ -721,6 +721,14 @@ def _verdict_from_html(
             " — no shipping cost was read, so the ceiling was applied to the "
             "item price alone and no delivered total is stated"
         )
+    # A BUY BUTTON THAT SAYS "COMING SOON" OUTRANKS AN ld+json THAT SAYS InStock.
+    # GameStop published exactly that contradiction for the Zelda 40th Pro
+    # Controller on 2026-10-23, and this monitor paged Dan for an item nobody
+    # could buy. Out of stock rather than UNKNOWN: the page is not ambiguous
+    # about whether you can buy it today, only its structured data is wrong.
+    if state is Availability.IN_STOCK and parse.coming_soon(html):
+        state = Availability.OUT_OF_STOCK
+        detail += ' — overruled: the page\'s buy button is a disabled "Coming Soon"'
     return Result(
         watch,
         state,
