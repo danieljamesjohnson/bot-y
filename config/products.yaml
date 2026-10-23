@@ -66,6 +66,10 @@ settings:
 #   tgram://<bot-token>/<chat-id>     ntfy://<topic>     discord://<id>/<token>
 notify:
   - ${BOTY_NOTIFY_URL}
+  # Added 2026-10-23: Dan's Telegram app froze on open after an update and a
+  # restart ("telegram just seems to be busted. Let's do discord?"). A Discord
+  # webhook URL works as-is. Unset, it expands to empty and is skipped.
+  - ${BOTY_DISCORD_URL}
 
 watches:
   # ---- what we actually want -------------------------------------------
