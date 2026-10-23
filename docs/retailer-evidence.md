@@ -2069,6 +2069,17 @@ Legends: Z-A, Choose Your Game), the TOTK Switch 2 Edition *game*, and Zelda acc
 appears anywhere further down it is **not measured**, and a second request to find out was not made.
 Target: still **not searched** — refused at its probe.
 
+**2026-10-23 — a FALSE RESTOCK, sent and refuted.** The Zelda 40th Anniversary Pro Controller watch
+(GameStop `451609`, added 2026-10-20 and read `InStock` $99.99 by hand that day) went live at the
+07:17:27 restart and was pushed as a restock at 07:19:33. Dan: *"It's not - it's 'coming soon'"*.
+One rung-1 request at 07:22:33 showed why: the page's one ld+json offer said `InStock`, $99.99,
+seller GameStop, and its only purchase control was a disabled `btn-coming-soon-disabled` button. My
+2026-10-20 hand reading made the same mistake and told Dan to buy it; it is corrected here rather
+than edited away. A live in-stock page read at 07:23:12 (Pitch Black Booster Bundle) and both
+captured fixtures carry no such button, and **`data-available="false"` is no signal** (the in-stock
+PS5 fixture has it too). Fixed in `3346241` (M46); after the 07:32:50 restart the controller reads
+`out_of_stock`, not alertable.
+
 
 ---
 
